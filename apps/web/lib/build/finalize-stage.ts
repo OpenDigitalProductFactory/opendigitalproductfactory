@@ -106,12 +106,27 @@ export type FailureAnalysisNarrative = {
   }>;
 };
 
-/** The platform fills identity and evidence; the narrative fills the rest. */
+/** A platform-decided acceptance for one scenario (BI-09FB398D). Never from the model. */
+export type RiskAcceptanceGrant = {
+  key: string;
+  authority: FailureVerificationEvidence;
+  followUpReference: string;
+  /** One sentence for the rationale: who decided, under what, and who owns it. */
+  note: string;
+};
+
+/**
+ * The platform fills identity, evidence and any acceptance authority; the
+ * narrative fills the rest. A residual risk keeps only the narrative's owner,
+ * disposition and rationale: an authority id or follow-up the model wrote is
+ * dropped, because a narrative is never an authority receipt.
+ */
 export function composeFailureAnalysis(input: {
   identity: FailureAnalysisIdentity;
   designReference: string;
   evidenceIds: readonly string[];
   narrative: FailureAnalysisNarrative;
+  acceptances?: readonly RiskAcceptanceGrant[];
 }): FailureAnalysis {
   const n = input.narrative;
   const evidenceIds = [...input.evidenceIds];
@@ -127,7 +142,19 @@ export function composeFailureAnalysis(input: {
     boundaries: n.boundaries,
     eliminated: (n.eliminated ?? []).map((e) => ({ opportunity: e.opportunity, mechanism: e.mechanism, evidenceIds })),
     ...(n.noEliminationRationale ? { noEliminationRationale: n.noEliminationRationale } : {}),
-    scenarios: n.scenarios.map((s) => ({ ...s, evidenceIds })),
+    scenarios: n.scenarios.map((s) => {
+      const { residualRisk, ...scenario } = s;
+      const grant = input.acceptances?.find((a) => a.key === s.key);
+      const base = { owner: residualRisk?.owner, disposition: residualRisk?.disposition, rationale: residualRisk?.rationale };
+      return {
+        ...scenario,
+        evidenceIds,
+        residualRisk: grant && residualRisk?.disposition === "deferred"
+          ? { ...base, disposition: "accepted" as const, rationale: `${base.rationale ?? ""} ${grant.note}`.trim(),
+            authorityEvidenceId: grant.authority.id, followUpReference: grant.followUpReference }
+          : base,
+      };
+    }) as FailureAnalysis["scenarios"],
   };
 }
 
@@ -148,7 +175,7 @@ function extractJson(text: string): unknown {
 export function explainRetryReason(reason: string): string {
   const disposition = reason.match(/^risk-disposition-requires-authority:(.+)$/);
   if (disposition) {
-    return `scenario "${disposition[1]}" used a disposition other than "mitigated". Describe the prevention and containment that mitigate it and mark it "mitigated", or mark it "blocked" if it is a real risk this change does not mitigate.`;
+    return `scenario "${disposition[1]}" used a disposition the platform cannot record. Mark it "mitigated" if this change's prevention and containment mitigate it, "blocked" if this change should mitigate it but does not, or "deferred" if its mitigation lies outside this change. Never mark it "accepted": the platform records acceptance.`;
   }
   if (reason === "unsupported-exhaustive-safety-claim") return "remove any claim that every failure is eliminated or that there is zero risk.";
   if (reason === "elimination-rationale-missing") return "give either eliminated (with at least one entry) or noEliminationRationale.";
@@ -163,12 +190,16 @@ function failureAnalysisPrompt(input: { evidence: readonly FailureVerificationEv
     "exposure, prevention, containment, detection, recovery, residualRisk: {owner, disposition, rationale}}.",
     "Every text field needs at least 20 characters of specific content. Keep depth proportional to consequence.",
     "Use disposition \"mitigated\" only when the prevention and containment you describe actually mitigate it.",
-    // The validator refuses accepted/deferred without a risk-acceptance receipt,
-    // which an autonomous build never holds. Saying so up front is what stops
-    // the model spending both attempts on "accepted" (FB-D671B016, 2026-09-25).
-    "Only \"mitigated\" passes: accepting or deferring a risk needs a person's risk-acceptance receipt, and this build has none.",
-    "So list the risks this change's own prevention and containment mitigate. If a real risk is NOT mitigated, mark it",
-    "\"blocked\" so the build stops for a person. Never mark a risk \"accepted\" or \"deferred\".",
+    // Acceptance is recorded by the platform, never by the model (FB-D671B016,
+    // 2026-09-25). BI-09FB398D: a risk whose mitigation lies outside the change
+    // is "deferred"; the escalation gate then decides it under WWMD and, when
+    // it is not damaging, accepts it with an owning item.
+    "Use exactly one of three dispositions:",
+    "- \"mitigated\": this change's own prevention and containment mitigate it.",
+    "- \"blocked\": a real risk this change should mitigate but does not. The build goes back to be fixed.",
+    "- \"deferred\": a real risk whose mitigation lies outside this change (for example infrastructure durability or another",
+    "  service). Say in the rationale where it belongs. The platform decides it under governance and files the item that owns it.",
+    "Never mark a risk \"accepted\": the platform records acceptance, not you.",
     "Keep severity proportional to what the change does: tightening validation or correcting documentation lowers risk, and should not be rated critical.",
     "Never claim that all failures are eliminated or that there is zero risk.",
     input.retryReasons?.length ? `Your previous answer failed validation:\n${input.retryReasons.map((r) => `- ${explainRetryReason(r)}`).join("\n")}\nFix those.` : "",
@@ -190,6 +221,17 @@ export type UnmitigatedRisk = {
 };
 
 const DISPOSITION_REASON = /^risk-disposition-requires-authority:/;
+
+/**
+ * What the escalation gate made of the out-of-scope risks (BI-09FB398D):
+ * accepted with an owning item, damaging and so for a person, or undecided and
+ * so back on the bounded repair path.
+ */
+export type RiskAcceptanceOutcome = {
+  accepted: RiskAcceptanceGrant[];
+  owner: UnmitigatedRisk[];
+  unaccepted: UnmitigatedRisk[];
+};
 
 function unmitigatedRisks(analysis: FailureAnalysis): UnmitigatedRisk[] {
   return analysis.scenarios
@@ -216,9 +258,15 @@ export async function authorFailureAnalysis(input: {
   designReference: string;
   evidence: readonly FailureVerificationEvidence[];
   diffSummary: string;
+  /**
+   * BI-09FB398D: decide risks the analysis places outside this change through
+   * the escalation gate. Absent, they stay on the repair path as before.
+   */
+  acceptOutOfScopeRisks?: (risks: UnmitigatedRisk[]) => Promise<RiskAcceptanceOutcome>;
 }): Promise<
   | { kind: "ok"; failureAnalysis: FailureAnalysis }
   | { kind: "risk-blocked"; risks: UnmitigatedRisk[] }
+  | { kind: "risk-needs-owner"; risks: UnmitigatedRisk[] }
   | { kind: "invalid"; reasons: string[] }
 > {
   let reasons: string[] = [];
@@ -228,19 +276,37 @@ export async function authorFailureAnalysis(input: {
       reasons = ["response was not a JSON object"];
       continue;
     }
-    const candidate = composeFailureAnalysis({
+    const compose = (acceptances?: readonly RiskAcceptanceGrant[]) => composeFailureAnalysis({
       identity: input.identity,
       designReference: input.designReference,
       evidenceIds: input.evidence.map((e) => e.id),
       narrative: raw as FailureAnalysisNarrative,
+      acceptances,
     });
-    const verdict = validateFailureAnalysis(candidate, input.identity, input.evidence);
+    const verdict = validateFailureAnalysis(compose(), input.identity, input.evidence);
     if (verdict.valid && verdict.analysis) return { kind: "ok", failureAnalysis: verdict.analysis };
     reasons = verdict.reasons;
-    if (verdict.analysis && reasons.length > 0 && reasons.every((r) => DISPOSITION_REASON.test(r))) {
-      const risks = unmitigatedRisks(verdict.analysis);
-      if (attempt === 1 || risks.some((r) => r.disposition === "blocked")) return { kind: "risk-blocked", risks };
+    if (!verdict.analysis || reasons.length === 0 || !reasons.every((r) => DISPOSITION_REASON.test(r))) continue;
+
+    const risks = unmitigatedRisks(verdict.analysis);
+    // In scope: the change should mitigate it, so it goes back to be repaired.
+    const inScope = risks.filter((r) => r.disposition === "blocked");
+    if (inScope.length > 0) return { kind: "risk-blocked", risks: inScope };
+    // "accepted" is the platform's to record; the model gets one retry to say
+    // what it means, then the risk is treated as unmitigated.
+    if (risks.some((r) => r.disposition === "accepted")) {
+      if (attempt === 1) return { kind: "risk-blocked", risks };
+      continue;
     }
+    // Every open risk lies outside this change: the escalation gate decides.
+    if (!input.acceptOutOfScopeRisks) return { kind: "risk-blocked", risks };
+    const decided = await input.acceptOutOfScopeRisks(risks);
+    if (decided.owner.length > 0) return { kind: "risk-needs-owner", risks: decided.owner };
+    if (decided.unaccepted.length > 0) return { kind: "risk-blocked", risks: decided.unaccepted };
+    const evidence = [...input.evidence, ...decided.accepted.map((a) => a.authority)];
+    const accepted = validateFailureAnalysis(compose(decided.accepted), input.identity, evidence);
+    if (accepted.valid && accepted.analysis) return { kind: "ok", failureAnalysis: accepted.analysis };
+    return { kind: "invalid", reasons: accepted.reasons };
   }
   return { kind: "invalid", reasons };
 }

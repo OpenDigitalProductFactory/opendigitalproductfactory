@@ -7,7 +7,48 @@ import { readCommitTree } from "./review-artifact-source";
 export async function resolveFailureAnalysisEvidence(value: unknown, workroomId: string): Promise<FailureVerificationEvidence[]> {
   const parsed = failureAnalysisSchema.safeParse(value);
   if (!parsed.success) return [];
-  return resolveEvidenceByIds([...parsed.data.eliminated, ...parsed.data.scenarios].flatMap(s => s.evidenceIds), workroomId);
+  const [evidence, authorities] = await Promise.all([
+    resolveEvidenceByIds([...parsed.data.eliminated, ...parsed.data.scenarios].flatMap(s => s.evidenceIds), workroomId),
+    resolveRiskAcceptanceAuthorities(
+      parsed.data.scenarios.flatMap(s => s.residualRisk.authorityEvidenceId ? [s.residualRisk.authorityEvidenceId] : []),
+      workroomId,
+    ),
+  ]);
+  return [...evidence, ...authorities];
+}
+
+/** The Workroom activity kind a platform-decided risk acceptance is written as. */
+export const RISK_ACCEPTANCE_ACTIVITY_KIND = "risk-acceptance";
+
+/**
+ * BI-09FB398D: the risk-acceptance authorities a failure analysis cites,
+ * resolved from this Workroom's own log. Only platform code writes this
+ * activity kind (apps/web/lib/build/risk-acceptance.ts); no MCP evidence
+ * kind can produce it, so a caller cannot mint one. The validator still binds
+ * each to the scenario, the exact change and the owning item.
+ */
+export async function resolveRiskAcceptanceAuthorities(ids: readonly string[], workroomId: string): Promise<FailureVerificationEvidence[]> {
+  const unique = [...new Set(ids)];
+  if (unique.length === 0) return [];
+  const room = await prisma.workroom.findUnique({ where: { id: workroomId }, select: { capsuleId: true } });
+  if (!room) return [];
+  const rows = await prisma.workroomActivity.findMany({
+    where: { id: { in: unique }, workCapsuleId: workroomId, kind: RISK_ACCEPTANCE_ACTIVITY_KIND },
+    select: { id: true, payload: true, recordedAt: true },
+  });
+  return rows.flatMap(row => {
+    const p = isRecord(row.payload) ? row.payload : {};
+    if (typeof p.scenarioKey !== "string" || typeof p.headTreeHash !== "string" || typeof p.diffDigest !== "string"
+      || typeof p.followUpReference !== "string" || !p.followUpReference) return [];
+    return [{
+      id: row.id, kind: "risk-acceptance" as const, capsuleId: room.capsuleId, status: "accepted",
+      headTreeHash: p.headTreeHash, diffDigest: p.diffDigest,
+      expected: typeof p.consult === "string" ? p.consult : "escalation gate consult",
+      observed: typeof p.decision === "string" ? p.decision : "accepted",
+      completedAt: row.recordedAt.toISOString(),
+      scenarioKey: p.scenarioKey, followUpReference: p.followUpReference,
+    }];
+  });
 }
 
 /**

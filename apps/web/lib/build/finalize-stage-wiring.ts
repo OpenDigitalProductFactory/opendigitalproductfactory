@@ -86,6 +86,14 @@ export async function finalizeBuildForReview(build: FinalizeBuild): Promise<Fina
     log: (summary) => {
       prisma.buildActivity.create({ data: { buildId: build.buildId, tool: "finalize", summary: summary.slice(0, 1000) } }).catch(() => {});
     },
+    // BI-09FB398D: risks outside this change go through the escalation gate.
+    acceptOutOfScopeRisks: async (risks, { identity, workroomId }) => {
+      const { acceptOutOfScopeRisks, liveRiskAcceptanceDeps } = await import("./risk-acceptance");
+      return acceptOutOfScopeRisks(
+        { buildId: build.buildId, buildPk: build.id, identity, risks },
+        await liveRiskAcceptanceDeps(workroomId),
+      );
+    },
     // BI-FBA2FDBE: the latest gauntlet recorded for this exact gate identity.
     // A pass or a could-not-run is never reused: only a real failing verdict.
     priorFailure: async () => {
