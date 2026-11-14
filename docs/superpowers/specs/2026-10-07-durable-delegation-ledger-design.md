@@ -346,6 +346,12 @@ is now the process host only.
 - At boot, process-bound effects that no surviving process can run are
   retired first, so a stop decided just before a crash still revokes the
   session's credential.
+- A room message addressed to the session is handed over as one runtime
+  command per message (`room-message:<messageId>:deliver`). Its "woken" wake
+  state commits in the same transaction as the turn decision, which replaces
+  the old claim-before-turn guard (`claimPendingWake`). A retried or
+  concurrent dispatch hands it over once, and a crash before the hand-over
+  leaves the message pending for the sweep instead of marked delivered.
 
 An executor adapter contract with DPF-owned ids and provider ids as references:
 `openSession`, `ensureThread`, `resumeThread`, `startTurn`, `steerTurn`,

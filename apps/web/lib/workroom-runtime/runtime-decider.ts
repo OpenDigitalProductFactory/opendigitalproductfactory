@@ -52,8 +52,13 @@ export type Decision = {
   /** Retire unsettled process-bound effects of every generation but this one (null: all of them). */
   retire?: { keepGeneration: string | null; reason: string };
   settle?: EffectSettlement;
+  /** BI-C64EDA33 PR 2: the delivered room message's wake state, written in the same transaction. */
+  messageWake?: RoomMessageWakeWrite;
   reply: Record<string, unknown>;
 };
+
+/** A room message's structuredPayload with its wake decided, for the message row it belongs to. */
+export type RoomMessageWakeWrite = { messageRowId: string; structuredPayload: Record<string, unknown> };
 
 export type RoomSnapshot = { session: StoredRuntimeSession | null };
 
@@ -64,7 +69,7 @@ export type RuntimeCommand =
   | { type: "session.open"; provider: RuntimeProvider; threadId: string; tokenId: string; cwd: string; actor: SupervisionActor;
     addressedAs: string | null; generation: string; hostId: string; reattach: boolean; prompt: string | null; handoff?: RuntimeHandoff | null; at: string }
   | { type: "turn.request"; prompt: string; steer: boolean; supportsSteer: boolean }
-  | { type: "room-message.deliver"; prompt: string; deliveredCursor: string; at: string }
+  | { type: "room-message.deliver"; prompt: string; deliveredCursor: string; at: string; wake?: RoomMessageWakeWrite | null }
   | { type: "turn.interrupt" }
   | { type: "session.stop"; reason: string; at: string }
   | { type: "session.lost"; reason: string; wakeCoordinator: boolean; at: string }
@@ -310,6 +315,7 @@ export function decideRuntimeCommand(room: RoomSnapshot, commandId: string, comm
       return {
         activities: [runtime("action", "A room message addressed to this session was handed to it as a turn.", { outcome: turn.outcome })],
         session: { ...turn.session, lastHeartbeatAt: command.at }, effects: turn.effects, reply: { outcome: turn.outcome },
+        ...(command.wake ? { messageWake: command.wake } : {}),
       };
     }
     case "turn.interrupt":
