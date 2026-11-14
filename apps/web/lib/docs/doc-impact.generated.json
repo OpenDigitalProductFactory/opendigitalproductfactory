@@ -1446,6 +1446,9 @@
     "apps/web/lib/routing/rate-tracker.ts": [
       "docs/specs/routing-resilience-and-failure-observability-spec.md"
     ],
+    "apps/web/lib/routing/record-non-acting-failure.ts": [
+      "docs/specs/routing-resilience-and-failure-observability-spec.md"
+    ],
     "apps/web/lib/routing/request-contract.email.test.ts": [
       "docs/architecture/2026-06-14-ai-cockpit-sysml-architecture-note.md"
     ],
@@ -1602,6 +1605,12 @@
     ],
     "apps/web/lib/tak/native-mcp-executions.ts": [
       "docs/architecture/initiative-readiness-runbook.md"
+    ],
+    "apps/web/lib/tak/non-acting-answer-detector.ts": [
+      "docs/specs/routing-resilience-and-failure-observability-spec.md"
+    ],
+    "apps/web/lib/tak/non-acting-failover.ts": [
+      "docs/specs/routing-resilience-and-failure-observability-spec.md"
     ],
     "apps/web/lib/tak/precondition-ordering-types.ts": [
       "docs/architecture/mcp-tool-packs.md"
@@ -1833,6 +1842,9 @@
     ],
     "apps/web/tsconfig.json": [
       "docs/architecture/dependency-reduction-routine.md"
+    ],
+    "changes/non-acting-failover-tally.data-impact.json": [
+      "docs/specs/routing-resilience-and-failure-observability-spec.md"
     ],
     "config/ci-evidence-policy.json": [
       "docs/architecture/build-gate-runbook.md"
@@ -4478,7 +4490,11 @@
       "apps/web/lib/actions/coworker-tool-filter.ts",
       "apps/web/lib/ai-operations-map/project-routing-topology.ts",
       "apps/web/lib/routing/fallback.ts",
-      "apps/web/lib/routing/rate-tracker.ts"
+      "apps/web/lib/routing/rate-tracker.ts",
+      "apps/web/lib/routing/record-non-acting-failure.ts",
+      "apps/web/lib/tak/non-acting-answer-detector.ts",
+      "apps/web/lib/tak/non-acting-failover.ts",
+      "changes/non-acting-failover-tally.data-impact.json"
     ],
     "docs/strategy/2026-09-cada-architects-forum-deck.md": [
       "apps/web/lib/actions/sovereignty.ts",
