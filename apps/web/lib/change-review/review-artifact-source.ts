@@ -51,6 +51,26 @@ async function sourceRoots(): Promise<string[]> {
   return mergeSignalRoots();
 }
 
+async function commitTree(git: GitRunner, root: string, sha: string): Promise<string | null> {
+  try { return (await git(root, ["rev-parse", "--verify", "--quiet", `${sha}^{tree}`], 4096)).toString("utf8").trim() || null; }
+  catch { return null; }
+}
+
+/**
+ * The tree of a commit, read from this install's own source checkout, or null
+ * when no checkout holds it (BI-7430A9CC). Evidence is bound to bytes: a head
+ * rebuilt with the same tree is the same change, whatever its commit id.
+ */
+export async function readCommitTree(sha: string, options: { roots?: readonly string[]; git?: GitRunner } = {}): Promise<string | null> {
+  if (!SHA.test(sha)) return null;
+  const git = options.git ?? runGit;
+  for (const root of options.roots ?? await sourceRoots()) {
+    const tree = await commitTree(git, root, sha);
+    if (tree) return tree;
+  }
+  return null;
+}
+
 export async function readReviewArtifactFromSource(input: {
   source: ReviewArtifactSource;
   baseTreeHash: string;
@@ -64,11 +84,7 @@ export async function readReviewArtifactFromSource(input: {
   const maxBytes = input.maxBytes ?? REVIEW_ARTIFACT_SOURCE_MAX_BYTES;
   const { baseSha, headSha } = input.source;
   for (const root of input.roots ?? await sourceRoots()) {
-    const tree = async (sha: string) => {
-      try { return (await git(root, ["rev-parse", "--verify", "--quiet", `${sha}^{tree}`], 4096)).toString("utf8").trim(); }
-      catch { return null; }
-    };
-    const [baseTree, headTree] = await Promise.all([tree(baseSha), tree(headSha)]);
+    const [baseTree, headTree] = await Promise.all([commitTree(git, root, baseSha), commitTree(git, root, headSha)]);
     if (!baseTree || !headTree) continue;
     if (baseTree !== input.baseTreeHash || headTree !== input.headTreeHash) {
       return { ok: false, code: "review-source-tree-mismatch",
