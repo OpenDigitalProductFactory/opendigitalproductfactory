@@ -1,0 +1,20 @@
+{
+  "version": "1",
+  "decidedOption": "atlas-glyph-map-replaces-lists",
+  "decisionInteractionId": "DI-32100A466720",
+  "scope": {
+    "files": [
+      "apps/web/app/(shell)/area/[key]/page.tsx",
+      "apps/web/components/ops/workrooms/atlas/AtlasPortfolioLink.tsx",
+      "apps/web/components/ops/workrooms/atlas/WorkAtlas.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "atlas-glyph-map-replaces-lists",
+      "atlas-above-existing-lists",
+      "counts-and-filtered-list-only"
+    ]
+  }
+}
