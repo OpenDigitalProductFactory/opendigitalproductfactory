@@ -31,6 +31,7 @@ export const STANDING_SHAPE_REQUIRED_AGENT: Readonly<Record<string, string>> = O
   "issue-triage-watch": "portfolio-advisor",
   "backlog-steward-watch": "portfolio-advisor",
   "release-readiness-watch": "build-specialist",
+  "continual-improvement-register": "continual-improvement-manager",
 });
 
 export type RequiredRosterRole = {

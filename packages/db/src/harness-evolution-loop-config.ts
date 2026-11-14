@@ -13,8 +13,12 @@
 
 export const HARNESS_EVOLUTION_LOOP_TASK_ID = "harness-evolution-loop-daily";
 
-/** AI Ops Engineer: owns platform tool efficiency and its improvement signals. */
-export const HARNESS_EVOLUTION_LOOP_AGENT_ID = "platform-engineer";
+/**
+ * The Continual Improvement Manager (AGT-908, BI-CE564FBB) owns the register
+ * this job runs. It was the AI Ops Engineer until that owner was seeded; the
+ * seed's update branch re-points an existing install's task on its next run.
+ */
+export const HARNESS_EVOLUTION_LOOP_AGENT_ID = "continual-improvement-manager";
 
 export const HARNESS_EVOLUTION_LOOP_TASK_TITLE = "Record each Workroom's recurring misses as harness-edit candidates (daily)";
 

@@ -440,6 +440,21 @@ export const COWORKER_AGENT_SEEDS: readonly CoworkerAgentSeed[] = [
     valueStream: "evaluate",
     sensitivity: "internal",
   },
+  // AGT-908 (BI-CE564FBB, WWMD DI-942BE30F1B00): continual improvement is how
+  // the platform operates, so one accountable coworker owns the register end to
+  // end (ITIL 4 Continual Improvement, DMAIC). It owns the typed daily
+  // harness-evolution job; each room's own Process Overseer executes the edits.
+  {
+    agentId: "continual-improvement-manager",
+    slugId: "continual-improvement-manager",
+    name: "Continual Improvement Manager",
+    tier: 2,
+    type: "coworker",
+    description:
+      "Owns the continual improvement register (ITIL 4, DMAIC): records every room's recurring misses, applies the operating criteria, probes the worthwhile ones, and verifies each fix stays fixed",
+    valueStream: "cross-cutting",
+    sensitivity: "internal",
+  },
   // Internal developer security acumen (BI-CC44E74F, EP-413F2602), established
   // via the establish_coworker factory door; stays draft pending certification.
   {

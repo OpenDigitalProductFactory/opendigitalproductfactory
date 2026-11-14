@@ -8,6 +8,7 @@ import {
   HARNESS_EVOLUTION_LOOP_TASK_KIND,
 } from "./harness-evolution-loop-config";
 import { ensureHarnessEvolutionLoopScheduledTask } from "./seed-harness-evolution-loop";
+import { COWORKER_AGENT_SEEDS } from "./workforce-seed";
 
 // BI-49BC21C1 (AC-1): every install seeds the daily harness evolution loop as a
 // typed task, and re-seeding never overwrites an operator's budget or queue.
@@ -66,5 +67,21 @@ describe("ensureHarnessEvolutionLoopScheduledTask", () => {
     tasks.set(HARNESS_EVOLUTION_LOOP_TASK_ID, { ...tasks.get(HARNESS_EVOLUTION_LOOP_TASK_ID), taskConfig: tuned });
     await expect(ensureHarnessEvolutionLoopScheduledTask(client, new Date("2026-10-29T00:00:00Z"))).resolves.toEqual({ created: false });
     expect(tasks.get(HARNESS_EVOLUTION_LOOP_TASK_ID)!.taskConfig).toEqual(tuned);
+  });
+
+  // BI-CE564FBB: the Continual Improvement Manager owns the register this job
+  // runs, and an install seeded before it existed converges on its next seed.
+  it("is owned by the Continual Improvement Manager, a seeded roster coworker", () => {
+    expect(HARNESS_EVOLUTION_LOOP_AGENT_ID).toBe("continual-improvement-manager");
+    expect(COWORKER_AGENT_SEEDS.map((seed) => seed.agentId)).toContain(HARNESS_EVOLUTION_LOOP_AGENT_ID);
+  });
+
+  it("re-points an existing install's task from the AI Ops Engineer to the CI Manager", async () => {
+    const { client, tasks } = fakePrisma();
+    await ensureHarnessEvolutionLoopScheduledTask(client, new Date("2026-10-28T00:00:00Z"));
+    tasks.set(HARNESS_EVOLUTION_LOOP_TASK_ID, { ...tasks.get(HARNESS_EVOLUTION_LOOP_TASK_ID), agentId: "platform-engineer", ownerUserId: "u-kept" });
+    await ensureHarnessEvolutionLoopScheduledTask(client, new Date("2026-10-29T00:00:00Z"));
+    expect(tasks.get(HARNESS_EVOLUTION_LOOP_TASK_ID)!.agentId).toBe("continual-improvement-manager");
+    expect(tasks.get(HARNESS_EVOLUTION_LOOP_TASK_ID)!.ownerUserId).toBe("u-kept");
   });
 });

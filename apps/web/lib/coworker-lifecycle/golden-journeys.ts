@@ -147,6 +147,17 @@ export const CURATED_JOURNEYS: Readonly<Record<string, readonly Omit<GoldenJourn
         "Certification probe (read-only). Retrieve one recorded build or workroom on this install. Report its branch, its current status, and whether delivery evidence has been recorded against it. Say explicitly if evidence is absent rather than describing the build as complete. Do not create, modify, or delete anything. If every tool call fails, reply TOOL-FAILURE and name the tool you tried.",
     },
   ],
+  // The CI Manager's domain act is the Define screen (BI-F47DD4CF): a recurring
+  // miss is either eligible or skipped with a named reason. A generic read
+  // passes with zero improvement capability.
+  "continual-improvement-manager": [
+    {
+      journeyId: "continual-improvement-manager/recurring-miss-screen",
+      mode: "act",
+      prompt:
+        "Certification probe (read-only). Use query_backlog to retrieve one improvement item the harness evolution loop recorded on this install. Report the miss it describes, the room it recurs in, and whether that miss would be eligible under the operating criteria or skipped, and for what reason (single run, shape too rare, below the cost floor). If no such item is recorded, say so and name what you queried; an empty read is not a clean register. Do not create, modify, or delete anything. If every tool call fails, reply TOOL-FAILURE and name the tool you tried.",
+    },
+  ],
   "coo": [
     {
       journeyId: "coo/operating-posture-read",

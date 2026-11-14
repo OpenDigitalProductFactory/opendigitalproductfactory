@@ -325,6 +325,24 @@ export const HARDCODED_COWORKER_GRANTS: Record<string, readonly string[]> = {
     // path runs through this tool.
     "registry_read",
   ],
+  // Continual Improvement Manager (AGT-908, BI-CE564FBB). Eight grants, under the
+  // ten-tool specialization cap. registry_read reaches wiki_query and
+  // principle_decide (every edit is decided in its scope); backlog_read/write run
+  // the register (merge duplicates, reopen a fix that recurs); work_room_read/
+  // write and workroom_evidence_write record candidates, verdicts and control
+  // checks on the room; spec_plan_read and agent_control_read read the harness a
+  // candidate edits. No merge, release or grant authority: adoption goes
+  // through governed change. MATCHES agent_registry.json AGT-908 tool_grants.
+  "continual-improvement-manager": [
+    "registry_read",
+    "backlog_read",
+    "backlog_write",
+    "work_room_read",
+    "work_room_write",
+    "workroom_evidence_write",
+    "spec_plan_read",
+    "agent_control_read",
+  ],
   // Security Engineer — must match the establish_coworker factory-door grants
   // exactly (BI-CC44E74F). Files findings as backlog items (backlog_write);
   // holds no merge-blocking or release-gate authority by design.

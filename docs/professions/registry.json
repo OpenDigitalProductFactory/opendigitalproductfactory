@@ -457,7 +457,8 @@
         "incident-resolution-agent",
         "service-support-agent",
         "dispatcher",
-        "mailroom-coordinator"
+        "mailroom-coordinator",
+        "continual-improvement-manager"
       ],
       "contextSlugs": ["engineering-flow"],
       "sources": [

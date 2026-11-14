@@ -11,8 +11,17 @@ afterEach(async () => { if (client) { await client.query("ROLLBACK").catch(() =>
 
 describe("duplicate permission authority migration", () => {
   it("covers the existing identity map without inventing aliases", () => {
-    const map = JSON.parse(sql.match(/identities jsonb := '(.*?)'::jsonb/)![1]);
-    expect(map).toEqual(COWORKER_SLUG_TO_CANONICAL_AGENT_ID);
+    const map = JSON.parse(sql.match(/identities jsonb := '(.*?)'::jsonb/)![1]) as Record<string, string>;
+    // The migration is frozen at 2026-10-05. Every alias it retires must still be
+    // in the identity map unchanged; an identity seeded after it had no
+    // duplicate grant rows to retire, so it is listed here rather than edited in.
+    const seededAfterMigration = ["continual-improvement-manager"]; // AGT-908, BI-F47DD4CF
+    const live = { ...COWORKER_SLUG_TO_CANONICAL_AGENT_ID };
+    for (const slug of seededAfterMigration) {
+      expect(map, slug).not.toHaveProperty(slug);
+      delete live[slug];
+    }
+    expect(map).toEqual(live);
   });
   it("executes safely and idempotently against duplicate/conflicting/missing-owner states", async (ctx) => {
     // Runtime-bound proof runs in the leased shared CI database. No default

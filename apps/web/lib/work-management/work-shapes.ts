@@ -23,6 +23,7 @@
 
 import { validateStopExits } from "@dpf/validators/gpp/stop-exits";
 import { ACCEPTANCE_VERIFICATION_SHAPES } from "./acceptance-verification-shape";
+import { CONTINUAL_IMPROVEMENT_REGISTER_SHAPE_KEY } from "./continual-improvement-register-shape";
 import { COWORKER_STANDING_SHAPES } from "./coworker-standing-shapes";
 import { COWORKER_STANDING_SHAPES_CRAFT } from "./coworker-standing-shapes-craft";
 import { COWORKER_STANDING_SHAPES_OPERATE } from "./coworker-standing-shapes-operate";
@@ -161,8 +162,13 @@ const SHAPES: Record<string, WorkShapeDefinition> = {
  * activities. Each family names the improve layer its shapes inherit
  * (BI-CE564FBB).
  */
+// Two standing shapes register last: listWorkShapes() order seeds the drive
+// golden, so a new shape appends rather than reshuffling every later shape's
+// sequences. The backlog steward watch landed first; the continual improvement
+// register (BI-CE564FBB) appends after it.
 const {
   [BACKLOG_STEWARD_WATCH_SHAPE_KEY]: BACKLOG_STEWARD_WATCH_SHAPE,
+  [CONTINUAL_IMPROVEMENT_REGISTER_SHAPE_KEY]: continualImprovementRegister,
   ...PRE_EXISTING_STANDING_SHAPES
 } = STANDING_SHAPES;
 
@@ -179,6 +185,7 @@ const SHAPE_FAMILIES: readonly (readonly [ImproveLayer, Record<string, WorkShape
   ["ring-0", SOURCE_INQUIRY_SHAPES],
   // Registered last so listWorkShapes() keeps every pre-existing shape in its prior order.
   ["platform-operations", { [BACKLOG_STEWARD_WATCH_SHAPE_KEY]: BACKLOG_STEWARD_WATCH_SHAPE }],
+  ["platform-operations", { [CONTINUAL_IMPROVEMENT_REGISTER_SHAPE_KEY]: continualImprovementRegister! }],
 ];
 
 const ALL_SHAPES: Record<string, WorkShapeDefinition> = Object.assign({}, ...SHAPE_FAMILIES.map(([, family]) => family));

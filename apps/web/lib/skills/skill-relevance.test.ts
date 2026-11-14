@@ -209,6 +209,10 @@ describe("skill-eligibility ratchet (BI-8AD9D018, corrected by BI-4B0C27D4)", ()
     "soc-triage-analyst": 7,
     "storefront-advisor": 7,
     "ux-accessibility-agent": 7,
+    // New role, no prior entry (BI-F47DD4CF): the Continual Improvement Manager
+    // (AGT-908) holds exactly its own register-screen skill on top of the
+    // 6-skill wildcard tax. 6 wildcard + 1 authored = 7.
+    "continual-improvement-manager": 7,
     // Value-stream orchestrators + finance specialist, seeded from the IT4IT
     // lattice because each carries an authored persona. 6 wildcard + 1 authored
     // recurring skill = 7.

@@ -20,7 +20,12 @@ The phase is split so that no PR exceeds the reviewer size limit:
 2. improve activity;
 3. CI Manager seed, stacked on 2.
 
-The register-shape step in the table below is deferred to BI-F47DD4CF. It waits on BI-90F0863B.
+Steps 1 and 2 merged as #6895 and #6897. Step 3 (#6899) was closed unmerged: AGT-908 sat below four capability plane floors. The seed, the register shape and its binding now ship as one change under BI-F47DD4CF, with a self-task, the skill `continual-improvement-register-screen` and a curated golden journey (the last two rows below). BI-90F0863B is retired. Since #6908, reviews of this public repository route externally, so the 56 KB drive golden no longer blocks review.
+
+| Step | File | Test |
+| --- | --- | --- |
+| Self-task drives the register's Define stage weekly, after the daily job; the skill declares the same cadence | `coworker-standing-self-tasks.ts`, `packages/dpf-skill-pack/skills/continual-improvement-register-screen/SKILL.md` | `coworker-self-tasks.test.ts`, `check-self-task-cadence-parity` |
+| Curated golden journey: the Define screen on a recorded miss | `golden-journeys.ts` | `golden-journeys.test.ts`, `capability-completeness.test.ts` |
 
 | Step | File | Test |
 | --- | --- | --- |
@@ -55,11 +60,10 @@ Phase 2 waits for two things: slice 2 (BI-B8DAEB71) merges, and the install upgr
 - Decision: decomposed
 - Parent: BI-CE564FBB
 - Receipt: blocked-by: record_plan_backlog_coverage needs the spec-approval baseline for BI-CE564FBB, which has no independent spec-approval receipt yet (readiness SPEC_APPROVAL_REQUIRED / OBJECTIVE_BASELINE_REQUIRED)
-- Dependencies: BI-B8DAEB71 (slice 2 consumes the criteria and records the ledger); BI-90F0863B (unblocks BI-F47DD4CF)
+- Dependencies: BI-B8DAEB71 (slice 2 consumes the criteria and records the ledger); BI-90F0863B (retired; external review since #6908 replaced it)
 - Mappings:
   - Operating criteria, spec amendment and plan (AC-22, AC-24) -> BI-CE564FBB
   - Improve activity on every shape (AC-20) -> BI-CE564FBB
-  - CI Manager seed and job ownership (AC-21) -> BI-CE564FBB
-  - Register shape and coordination binding (AC-21) -> BI-F47DD4CF
+  - CI Manager seed, job ownership, register shape, coordination binding, self-task, skill and golden journey (AC-21) -> BI-F47DD4CF
   - Cycle ledger on the TaskRun (AC-23) -> BI-B8DAEB71
   - One DMAIC cycle on DEV (AC-25) -> BI-CE564FBB

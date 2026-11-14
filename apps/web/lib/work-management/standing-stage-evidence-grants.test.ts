@@ -46,6 +46,7 @@ describe("standing stage evidence writeback", () => {
     expect(standingDispatchedAgents()).toEqual([
       "build-specialist",
       "change-reviewer",
+      "continual-improvement-manager",
       "customer-advisor",
       "finance-controller",
       "platform-engineer",
