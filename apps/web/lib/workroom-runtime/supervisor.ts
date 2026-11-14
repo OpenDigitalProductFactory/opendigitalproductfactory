@@ -71,6 +71,8 @@ export type RuntimeSupervisorDeps = {
   mcpUrl: string;
   issueToken(input: { userId: string; agentId: string | null; capsuleId: string; runRef: string | null }): Promise<{ tokenId: string; plaintext: string }>;
   revokeTokens(input: { capsuleId: string; reason: string; tokenId?: string }): Promise<number>;
+  /** BI-1687CCD2: the handoff a session of another provider starts from (runtime-handoff.ts). */
+  buildHandoff?(input: { roomId: string; fromProvider: RuntimeProvider; toProvider: RuntimeProvider; since: string | null }): Promise<{ text: string; included: number; omitted: number; bytes: number }>;
   /** Held questions; defaults to CoworkerActionEnvelope rows. */
   held?: HeldRequestStore;
   /** The provider client's GAID, from which a session's address hangs. */
@@ -303,7 +305,17 @@ export function createRuntimeSupervisor(deps: RuntimeSupervisorDeps) {
         ? `Re-attached the supervised ${input.provider} runtime to its thread after a portal restart.${address}`
         : `Opened a supervised ${input.provider} runtime.${address}`,
       { provider: input.provider, threadId, tokenId: token.tokenId, addressedAs }, input.reattach ? runtimeActor(input.actor) : input.actor);
-      if (input.prompt?.trim()) await session.startTurn(input.prompt.trim());
+      // BI-1687CCD2: a thread only resumes in its own CLI; the other one starts from the room's log.
+      const handoff = stored && stored.provider !== input.provider && deps.buildHandoff
+        ? await deps.buildHandoff({ roomId: room.id, fromProvider: stored.provider, toProvider: input.provider, since: stored.openedAt || null })
+        : null;
+      if (handoff && handoff.included > 0) {
+        await log(room.id, "action", `Handed the runtime thread from ${stored!.provider} to ${input.provider}: ${handoff.included} log entries carried, ${handoff.omitted} left out.`,
+          { fromProvider: stored!.provider, fromThreadId: stored!.threadId, toProvider: input.provider, included: handoff.included, omitted: handoff.omitted, bytes: handoff.bytes },
+          runtimeActor(input.actor));
+      }
+      const firstTurn = [handoff && handoff.included > 0 ? handoff.text : "", input.prompt?.trim() ?? ""].filter(Boolean).join("\n\n");
+      if (firstTurn) await session.startTurn(firstTurn);
       return { success: true, message: `${input.provider} runtime open on ${input.capsuleId}.`, data: { capsuleId: input.capsuleId, provider: input.provider, threadId, addressedAs } };
     } catch (error) {
       await session.close().catch(() => {});
