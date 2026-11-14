@@ -534,6 +534,7 @@ enum WorkroomEffectKind {
   revoke_token              @map("revoke-token")
   announce_supervision_lost @map("announce-supervision-lost")
   record_plan_limit         @map("record-plan-limit")
+  ensure_workitem_anchor    @map("ensure-workitem-anchor")
 }
 
 enum WorkroomEffectStatus {

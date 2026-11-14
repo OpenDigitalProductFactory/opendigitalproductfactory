@@ -22,6 +22,8 @@ import type { RuntimeDecision, RuntimeEvent, RuntimeProvider, RuntimeRequest } f
 export const EFFECT_KINDS = [
   "start-turn", "steer-turn", "interrupt-turn", "answer-request", "hold-request",
   "close-session", "revoke-token", "announce-supervision-lost", "record-plan-limit",
+  // PR 3 (AC-5): a room's setup owed by its claim or adoption (room-setup-effects.server.ts).
+  "ensure-workitem-anchor",
 ] as const;
 export type EffectKind = (typeof EFFECT_KINDS)[number];
 
