@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   deriveSlug,
+  extractWikilinkOccurrences,
   extractWikilinks,
   kernelWikiPageSlug,
   parseFrontmatter,
@@ -120,5 +121,25 @@ describe("extractWikilinks — the one link extractor (BI-23900D0A)", () => {
 
   it("still ignores malformed brackets and slugs with spaces", () => {
     expect(extractWikilinks("[[ spaced slug ]] [[ok|label]] [[|no-slug]]")).toEqual(["ok"]);
+  });
+});
+
+describe("extractWikilinkOccurrences — the same extractor with line numbers (BI-2F7BE778)", () => {
+  it("reports every link with its 1-based line, labelled or plain, repeats included", () => {
+    const body = ["Intro [[a]].", "", "Then [[b|bee]] and [[a]] again."].join("\n");
+    expect(extractWikilinkOccurrences(body)).toEqual([
+      { slug: "a", line: 1 },
+      { slug: "b", line: 3 },
+      { slug: "a", line: 3 },
+    ]);
+  });
+
+  it("skips code exactly as extractWikilinks does, keeping line numbers true", () => {
+    const body = ["```", "[[fenced]]", "```", "Inline `see [[inline]]` and `[[sole]]`.", "Last [[real]]."].join("\n");
+    expect(extractWikilinkOccurrences(body)).toEqual([
+      { slug: "sole", line: 4 },
+      { slug: "real", line: 5 },
+    ]);
+    expect(extractWikilinks(body)).toEqual(["sole", "real"]);
   });
 });
