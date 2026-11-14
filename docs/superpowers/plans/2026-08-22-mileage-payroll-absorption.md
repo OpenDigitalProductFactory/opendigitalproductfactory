@@ -7,6 +7,7 @@ status: active
 > **For agentic workers:** REQUIRED: Use `dpf-platform:dpf-writing-plans` conventions and execute phase-by-phase. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Status:** planned
+**Backlog item:** BI-099EAE30 (current slice; earlier slices BI-3DD6EFEB, BI-2BC8D614)
 **Epics:** EP-MILEAGE-ABSORB (Phases 1–2), EP-PAYROLL-ABSORB (Phases 3–6)
 **Kernel decision:** DI-87A27C692B16 (`principle_decide`, profile `mark-dpf-platform`)
 **Related:** [finance-workforce-maturity-matrix](../../architecture/finance-workforce-maturity-matrix.md), [edge-adapter-to-native-convergence](../../architecture/edge-adapter-to-native-convergence.md), [tax-remittance-design](../specs/2026-04-23-tax-remittance-design.md), [tax-remittance-execution-automation](2026-04-30-tax-remittance-execution-automation.md)
@@ -218,6 +219,12 @@ tool-evaluation and provider decision (disbursement spec BI-DR-05). No agent mov
 payslip, with the reimbursement correctly excluded from taxable pay.
 
 ---
+
+## Backlog coverage
+
+- Decision: atomic
+- Receipt: `cmwgxx9fy0js50el7v8ax1ied`
+- Dependencies: BI-099EAE30 builds on BI-2BC8D614 (merged, #7106). BI-3DD6EFEB (mileage) is independent.
 
 ## Cross-cutting obligations
 

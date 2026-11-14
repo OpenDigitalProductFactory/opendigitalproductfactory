@@ -33,8 +33,15 @@ export interface RunPayrollInput {
   periodEnd: Date;
   payDate?: Date | null;
   employeeProfileIds: string[];
-  statutory: StatutoryDeductionFn;
+  /**
+   * One function for everyone, or one per employee (BI-099EAE30). US
+   * withholding depends on each employee's own W-4 and year-to-date wages, so
+   * a single shared function cannot be correct for more than one person.
+   */
+  statutory: StatutoryDeductionFn | ((employeeProfileId: string) => StatutoryDeductionFn);
   opts?: { periodsPerYear?: number; overtimeMultiplier?: number };
+  /** True when `statutory` is the per-employee form. */
+  statutoryPerEmployee?: boolean;
 }
 
 export interface RunPayrollResult {
@@ -87,11 +94,14 @@ export async function runPayroll(
   const skipped: RunPayrollResult["skipped"] = [];
 
   for (const employeeProfileId of input.employeeProfileIds) {
+    const statutory = input.statutoryPerEmployee
+      ? (input.statutory as (id: string) => StatutoryDeductionFn)(employeeProfileId)
+      : (input.statutory as StatutoryDeductionFn);
     const result = await computeEmployeePayslip(
       employeeProfileId,
       input.periodStart,
       input.periodEnd,
-      input.statutory,
+      statutory,
       input.opts,
     );
     if (!result.ok) {
