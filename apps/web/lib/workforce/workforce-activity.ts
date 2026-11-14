@@ -17,6 +17,7 @@
 // The loader (loadWorkforceActivity) only maps Prisma rows into that pure input.
 
 import { prisma } from "@dpf/db";
+import { ACTIVE_BUILD_WHERE } from "@/lib/build/wip-cap";
 
 // ---------------------------------------------------------------------------
 // Active work (what the workforce is actively working on)
@@ -274,7 +275,7 @@ export async function loadWorkforceActivity(input?: {
       },
     }) as Promise<RoleRow[]>,
     db.featureBuild.findMany({
-      where: { phase: { in: [...ACTIVE_BUILD_PHASES] }, abandonedAt: null },
+      where: { phase: { in: [...ACTIVE_BUILD_PHASES] }, ...ACTIVE_BUILD_WHERE },
       orderBy: { updatedAt: "desc" },
       select: {
         buildId: true,
@@ -287,7 +288,7 @@ export async function loadWorkforceActivity(input?: {
       },
     }) as Promise<BuildRow[]>,
     db.phaseHandoff.findMany({
-      where: { build: { phase: { in: [...ACTIVE_BUILD_PHASES] }, abandonedAt: null } },
+      where: { build: { phase: { in: [...ACTIVE_BUILD_PHASES] }, ...ACTIVE_BUILD_WHERE } },
       orderBy: { createdAt: "desc" },
       select: {
         buildId: true,

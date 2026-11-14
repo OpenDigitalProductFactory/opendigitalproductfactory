@@ -541,6 +541,11 @@ model FeatureBuild {
   calendarEventId             String?
   abandonedAt                 DateTime?
   abandonReason               String?
+  // Parked on an owner answer (BI-B6894001): set when a needs-human escalation
+  // parks the build instead of abandoning it. The build keeps its real phase,
+  // design and review; ACTIVE_BUILD_WHERE (lib/build/wip-cap.ts) excludes it
+  // from WIP and every autonomous sweep skips it. Clearing it resumes the build.
+  waitingOnOwnerSince         DateTime?
   draftApprovedAt             DateTime?
   // Design-time decomposition substrate (Phase 1). When non-null, this build
   // is a child of an execution-organizational Epic; its plan implements a
