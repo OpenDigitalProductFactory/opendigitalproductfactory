@@ -543,6 +543,7 @@
     ],
     "apps/web/instrumentation.ts": [
       "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md",
+      "docs/maintenance/staleness-report.md",
       "docs/testing/ci-evidence.md"
     ],
     "apps/web/lib/actions/agent-task-scheduler.ts": [
@@ -822,7 +823,8 @@
     ],
     "apps/web/lib/coworker/authorized-surface-runtime.ts": [
       "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md",
-      "docs/architecture/agent-standards-dpf-conformance.md"
+      "docs/architecture/agent-standards-dpf-conformance.md",
+      "docs/maintenance/staleness-report.md"
     ],
     "apps/web/lib/datetime.ts": [
       "docs/architecture/data-model-stewardship-runbook.md"
@@ -1204,7 +1206,8 @@
       "docs/user-guide/ai-workforce/coworker-proactivity.md"
     ],
     "apps/web/lib/mcp/packs/surface-pack.ts": [
-      "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md"
+      "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md",
+      "docs/maintenance/staleness-report.md"
     ],
     "apps/web/lib/mcp/packs/work-capsules-pack.ts": [
       "docs/architecture/mcp-tool-packs.md"
@@ -1368,8 +1371,7 @@
       "docs/specs/device-identification-and-portfolio-placement-spec.md"
     ],
     "apps/web/lib/queue/functions/index.ts": [
-      "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md",
-      "docs/maintenance/staleness-report.md"
+      "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md"
     ],
     "apps/web/lib/queue/functions/quiescence-run.ts": [
       "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md"
@@ -1563,7 +1565,9 @@
       "docs/prompts/a2a-coworker-substrate-prompt.md"
     ],
     "apps/web/lib/tak/agent-grants.ts": [
-      "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md"
+      "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md",
+      "docs/architecture/agent-standards-dpf-conformance.md",
+      "docs/architecture/contributor-procedure-runbook.md"
     ],
     "apps/web/lib/tak/agent-routing.ts": [
       "docs/architecture/agent-standards-dpf-conformance.md"
@@ -1996,6 +2000,7 @@
     "packages/db/prisma/schema/build-delivery.prisma": [
       "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md",
       "docs/architecture/dpf-patterns.md",
+      "docs/maintenance/staleness-report.md",
       "docs/user-guide/contributing/agent-dev-environments.md"
     ],
     "packages/db/prisma/schema/resource-scheduling.prisma": [
@@ -3462,6 +3467,7 @@
       "apps/web/lib/mcp/tool-tier.ts",
       "apps/web/lib/performance/business-analysis-watch-run.ts",
       "apps/web/lib/tak/agent-card-service.ts",
+      "apps/web/lib/tak/agent-grants.ts",
       "apps/web/lib/tak/agent-routing.ts",
       "apps/web/lib/tak/context-arbitrator.ts",
       "apps/web/lib/tak/context-economy-metrics.ts",
@@ -3628,6 +3634,7 @@
     "docs/architecture/contributor-procedure-runbook.md": [
       "apps/web/lib/actions/coworker-tool-filter.ts",
       "apps/web/lib/backlog.ts",
+      "apps/web/lib/tak/agent-grants.ts",
       "packages/db/data/approved_tools_registry.json",
       "packages/db/src/agent-identity.test.ts",
       "packages/db/src/agent-identity.ts",
@@ -4263,14 +4270,17 @@
     ],
     "docs/maintenance/staleness-report.md": [
       "apps/mobile/eas.json",
+      "apps/web/instrumentation.ts",
+      "apps/web/lib/coworker/authorized-surface-runtime.ts",
       "apps/web/lib/inference/routed-inference.ts",
-      "apps/web/lib/queue/functions/index.ts",
+      "apps/web/lib/mcp/packs/surface-pack.ts",
       "apps/web/lib/routing/cost-ranking.ts",
       "apps/web/lib/shared/markdown.ts",
       "apps/web/lib/tak/scheduled-task-runs.ts",
       "apps/web/lib/work-capsules/governed-work-claim.ts",
       "docker-compose.edge.macvlan.yml",
       "packages/db/prisma/schema/ai-coworker.prisma",
+      "packages/db/prisma/schema/build-delivery.prisma",
       "packages/db/prisma/schema/work-coordination.prisma",
       "packages/db/scripts/schema-regression-guard.mjs",
       "packages/validators/src/field-dispatch.ts",
