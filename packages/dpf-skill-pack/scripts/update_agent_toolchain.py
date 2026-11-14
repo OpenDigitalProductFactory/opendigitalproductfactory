@@ -1157,6 +1157,41 @@ def resolve_claude_binary() -> str | None:
     return None
 
 
+def claude_marketplace_mismatch(home: Path, claude: Optional[str] = None) -> Optional[str]:
+    """Why the `dpf-platform-local` marketplace is not the shared managed copy, or None.
+
+    Two writers used to own this one registration (BI-13A73D53, BI-3F313E66):
+    the updater, and a checked-in project setting that every Claude session
+    opened in a worktree applied, re-pointing it at that worktree's unstamped
+    pack. Whatever it points at is what `plugin install` and `plugin update`
+    deliver, so the source is read back rather than assumed.
+    """
+    claude = claude or resolve_claude_binary()
+    if not claude:
+        return "no Claude CLI to read the marketplace with"
+    expected = home / ".agents" / "plugins"
+    try:
+        completed = subprocess.run([claude, "plugin", "marketplace", "list", "--json"],
+                                   cwd=str(expected), capture_output=True, text=True)
+        listing = json.loads(completed.stdout or "null")
+    except (OSError, ValueError) as error:
+        return f"could not read the marketplace list ({error})"
+    if not isinstance(listing, list):
+        return "could not read the marketplace list"
+    for row in listing:
+        if isinstance(row, dict) and row.get("name") == MARKETPLACE_NAME:
+            path = row.get("path") or row.get("installLocation")
+            try:
+                if isinstance(path, str) and Path(path).resolve() == expected.resolve():
+                    return None
+            except OSError:
+                pass
+            return (f"marketplace {MARKETPLACE_NAME} points at {path}, not the shared copy {expected}; "
+                    "a Claude session opened in a checkout whose .claude/settings.json still declares "
+                    "extraKnownMarketplaces re-points it, so update that checkout's branch from main")
+    return f"marketplace {MARKETPLACE_NAME} is not registered"
+
+
 def install_claude_plugin(home: Path, dry_run: bool) -> str:
     claude = resolve_claude_binary()
     if not claude:
@@ -1164,8 +1199,14 @@ def install_claude_plugin(home: Path, dry_run: bool) -> str:
     marketplace_root = home / ".agents" / "plugins"
     if dry_run:
         return f"dry-run: would install {PLUGIN_NAME}@{MARKETPLACE_NAME}"
+    add = [claude, "plugin", "marketplace", "add", str(marketplace_root), "--scope", "local"]
+    result = subprocess.run(add, cwd=str(marketplace_root), capture_output=True, text=True)
+    if result.returncode != 0:
+        return f"failed: {' '.join(add[:3])} exited {result.returncode}"
+    mismatch = claude_marketplace_mismatch(home, claude)
+    if mismatch:
+        return f"failed: {mismatch}"
     commands = [
-        [claude, "plugin", "marketplace", "add", str(marketplace_root), "--scope", "local"],
         [claude, "plugin", "install", f"{PLUGIN_NAME}@{MARKETPLACE_NAME}", "--scope", "local"],
         [claude, "plugin", "update", f"{PLUGIN_NAME}@{MARKETPLACE_NAME}", "--scope", "local"],
     ]
@@ -1176,6 +1217,19 @@ def install_claude_plugin(home: Path, dry_run: bool) -> str:
     records = [entry for entry in claude_plugin_records(home) if entry.get("scope") == "local"]
     if not records or not all(claude_record_content_matches(home, entry) for entry in records):
         return "failed: Claude local cache content remains unverified after supported update; client-owned cache retained"
+    # The user-scope record loads in every session, beside whichever project or
+    # local record applies; left stale it is a second, different `dpf`
+    # connector and the desktop app refuses sign-in (BI-13A73D53). There is at
+    # most one, so `update --scope user` is unambiguous.
+    user = [entry for entry in claude_plugin_records(home) if entry.get("scope") == "user"]
+    if user and not all(claude_record_content_matches(home, entry) for entry in user):
+        command = [claude, "plugin", "update", f"{PLUGIN_NAME}@{MARKETPLACE_NAME}", "--scope", "user"]
+        result = subprocess.run(command, cwd=str(home), capture_output=True, text=True)
+        if result.returncode != 0:
+            return f"failed: claude plugin update --scope user exited {result.returncode}"
+        user = [entry for entry in claude_plugin_records(home) if entry.get("scope") == "user"]
+        if not all(claude_record_content_matches(home, entry) for entry in user):
+            return "failed: Claude user-scope cache content remains unverified after supported update; client-owned cache retained"
     return "installed and refreshed"
 
 
@@ -1208,24 +1262,121 @@ def claude_record_content_matches(home: Path, entry: dict[str, Any]) -> bool:
         return False
 
 
-def converge_claude_project_plugins(home: Path, version: str, dry_run: bool) -> dict[str, list[str]]:
+_PROJECT_SETTINGS_FILES = (".claude/settings.json", ".claude/settings.local.json")
+
+
+def _snapshot_project_settings(project: Path) -> dict[str, Optional[bytes]]:
+    snapshot: dict[str, Optional[bytes]] = {}
+    for name in _PROJECT_SETTINGS_FILES:
+        try:
+            snapshot[name] = (project / name).read_bytes()
+        except OSError:
+            snapshot[name] = None
+    return snapshot
+
+
+def _restore_project_settings(project: Path, snapshot: dict[str, Optional[bytes]]) -> None:
+    """Put back the settings bytes the CLI rewrote: they are the project's, often tracked."""
+    for name, content in snapshot.items():
+        path = project / name
+        try:
+            current = path.read_bytes() if path.exists() else None
+            if current == content:
+                continue
+            if content is None:
+                path.unlink()
+            else:
+                path.write_bytes(content)
+        except OSError:
+            continue
+
+
+def _withhold_project_marketplace(project: Path) -> None:
+    """Hide a checkout's own `dpf-platform-local` declaration while the CLI runs there.
+
+    A branch cut before BI-13A73D53 still declares the marketplace at `.` in
+    its .claude/settings.json; the CLI applies it when run in that folder,
+    re-points the shared registration and installs the checkout's unstamped
+    pack. The caller restores the file's bytes afterwards.
+    """
+    path = project / ".claude" / "settings.json"
+    try:
+        data = json.loads(path.read_text(encoding="utf-8-sig"))
+        declared = data["extraKnownMarketplaces"]
+    except (OSError, ValueError, KeyError, TypeError):
+        return
+    if not isinstance(declared, dict) or MARKETPLACE_NAME not in declared:
+        return
+    remaining = {name: value for name, value in declared.items() if name != MARKETPLACE_NAME}
+    if remaining:
+        data["extraKnownMarketplaces"] = remaining
+    else:
+        del data["extraKnownMarketplaces"]
+    path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+
+
+def ensure_claude_marketplace_source(home: Path, claude: str) -> Optional[str]:
+    """Point `dpf-platform-local` back at the shared copy if something moved it; None when it is there."""
+    mismatch = claude_marketplace_mismatch(home, claude)
+    if mismatch is None:
+        return None
+    root = home / ".agents" / "plugins"
+    try:
+        subprocess.run([claude, "plugin", "marketplace", "add", str(root), "--scope", "local"],
+                       cwd=str(root), capture_output=True, text=True)
+    except OSError:
+        return mismatch
+    return claude_marketplace_mismatch(home, claude)
+
+
+def reinstall_claude_project_record(claude: str, project: str) -> Optional[str]:
+    """Reinstall the project-scope record from inside its own folder; None on success.
+
+    `claude plugin update --scope project` (Claude Code 2.1.325, observed
+    2026-11-14) rewrites the first project record in installed_plugins.json
+    whatever folder it runs in, so it cannot refresh any other record
+    (BI-13A73D53). `uninstall --scope project` and `install --scope project`
+    do act on the folder they run in. Uninstall also drops `enabledPlugins`
+    from the folder's settings, which are usually tracked, so their bytes are
+    restored afterwards whatever happened.
+    """
+    snapshot = _snapshot_project_settings(Path(project))
+    try:
+        _withhold_project_marketplace(Path(project))
+        for step, command in (
+            ("uninstall", [claude, "plugin", "uninstall", CLAUDE_PLUGIN_ID, "--scope", "project", "--keep-data"]),
+            ("install", [claude, "plugin", "install", CLAUDE_PLUGIN_ID, "--scope", "project"]),
+        ):
+            try:
+                completed = subprocess.run(command, cwd=project, capture_output=True, text=True)
+            except OSError as error:
+                return f"claude plugin {step} could not run ({error})"
+            if completed.returncode != 0:
+                return f"claude plugin {step} exited {completed.returncode}"
+        return None
+    finally:
+        _restore_project_settings(Path(project), snapshot)
+
+
+def converge_claude_project_plugins(home: Path, version: str, dry_run: bool) -> dict[str, Any]:
     """Update project records whose version or delivered content is stale.
 
-    `install_claude_plugin` refreshes only the local-scope record. Claude Code
-    keeps one project-scope record per checkout the plugin was ever installed
-    from, and each keeps loading its own cached version: on 2026-10-07 the
-    D:\\DPF record still loaded 0.2.5's bearer descriptor beside the 0.2.8 OAuth
-    one (BI-B9F359AC). `claude plugin update --scope project` acts on the
-    record for its working directory, so it runs once per existing project.
-    A record whose projectPath is gone is reported as prunable and left alone:
-    Claude Code owns the file and drops it on its own uninstall.
+    `install_claude_plugin` refreshes the local- and user-scope records. Claude
+    Code keeps one project-scope record per checkout the plugin was ever
+    installed from, and each keeps loading its own cached version: on
+    2026-10-07 the D:\\DPF record still loaded 0.2.5's bearer descriptor beside
+    the 0.2.8 OAuth one (BI-B9F359AC). Each stale record is reinstalled from
+    its own folder (see `reinstall_claude_project_record`), and only after the
+    marketplace is confirmed to be the shared copy, since that is what gets
+    installed. A record whose projectPath is gone is reported as prunable.
+    `reasons` maps each failed project to why it failed.
     """
     from installed_copy_freshness import installed_version
 
-    result: dict[str, list[str]] = {"updated": [], "current": [], "pruned": [], "failed": []}
+    result: dict[str, Any] = {"updated": [], "current": [], "pruned": [], "failed": [], "reasons": {}}
     # Claude Code records the version from the plugin manifest, which the
     # delivery stamps with `+c.<digest>` (BI-4F9E3221). The shared copy is what
-    # `plugin update` installs, so its manifest is the expected version; a
+    # `plugin install` installs, so its manifest is the expected version; a
     # `+codex.<stamp>` on the argument is Codex's and is dropped.
     version = installed_version(shared_managed_plugin_path(home)) or version.split("+", 1)[0]
     claude = resolve_claude_binary()
@@ -1244,15 +1395,28 @@ def converge_claude_project_plugins(home: Path, version: str, dry_run: bool) -> 
             continue
         if not claude:
             result["failed"].append(project)
+            result["reasons"][project] = "no Claude CLI to update the record with"
             continue
-        command = [claude, "plugin", "update", CLAUDE_PLUGIN_ID, "--scope", "project"]
-        completed = subprocess.run(command, cwd=project, capture_output=True, text=True)
-        refreshed = [record for record in claude_plugin_records(home)
-                     if record.get("scope") == "project" and record.get("projectPath") == project]
-        verified = (completed.returncode == 0 and len(refreshed) == 1
-                    and refreshed[0].get("version") == version
-                    and claude_record_content_matches(home, refreshed[0]))
-        result["updated" if verified else "failed"].append(project)
+        # Re-checked per record: any Claude session or CLI call in an older
+        # checkout can move it again between records.
+        mismatch = ensure_claude_marketplace_source(home, claude)
+        if mismatch:
+            result["failed"].append(project)
+            result["reasons"][project] = mismatch
+            continue
+        reason = reinstall_claude_project_record(claude, project)
+        if reason is None:
+            refreshed = [record for record in claude_plugin_records(home)
+                         if record.get("scope") == "project" and record.get("projectPath") == project]
+            if not (len(refreshed) == 1 and refreshed[0].get("version") == version
+                    and claude_record_content_matches(home, refreshed[0])):
+                reason = (f"reinstall did not establish {version} with the shared copy's digest; "
+                          "client-owned cache retained")
+        if reason is None:
+            result["updated"].append(project)
+        else:
+            result["failed"].append(project)
+            result["reasons"][project] = reason
     return result
 
 
@@ -1442,7 +1606,7 @@ def converge_claude_project_connectors(
              f"current {len(plugins['current'])}, failed {len(plugins['failed'])}, "
              f"gone {len(plugins['pruned'])}"]
     lines += [f"    {verb} to {version}: {project}" for project in plugins["updated"]]
-    lines += [f"    FAILED to verify updated content: {project}; supported update did not establish the expected digest; client-owned cache retained"
+    lines += [f"    FAILED: {project}; {plugins['reasons'].get(project, 'supported update did not establish the expected digest; client-owned cache retained')}"
               for project in plugins["failed"]]
     lines += [f"    {row['action']} (projectPath gone): {row['project']}; {row['detail']}" for row in pruned]
     projects = {

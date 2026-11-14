@@ -98,7 +98,7 @@ The repo already contains most of the substrate this design depends on. The work
 
 ### Project-local Claude wiring
 
-- `.claude/settings.json` — `enableAllProjectMcpServers: true`, `enabledMcpjsonServers: ["dpf"]`, `enabledPlugins: { "dpf-platform@dpf-platform-local": true }`, `extraKnownMarketplaces: { "dpf-platform-local": { source: { source: "directory", path: "." } } }`, plus a `WorktreeCreate` hook calling `scripts/sync-mcp-worktrees.ps1` and `PostToolUse`/`SessionEnd` hooks calling `scripts/safety/transcript-snapshot.ps1`.
+- `.claude/settings.json` — `enableAllProjectMcpServers: true`, `enabledMcpjsonServers: ["dpf"]`, `enabledPlugins: { "dpf-platform@dpf-platform-local": true }`, plus a `WorktreeCreate` hook calling `scripts/sync-mcp-worktrees.ps1` and `PostToolUse`/`SessionEnd` hooks calling `scripts/safety/transcript-snapshot.ps1`.
 
 ### Install / worktree-bootstrap scripts (current state)
 
@@ -166,7 +166,7 @@ Per the `dpf-verify-substrate-first` skill:
 
 - `AGENTS.md` remains the operational rulebook and is loaded by pointer files, but it is turn text, not reflex memory.
 - `packages/dpf-skill-pack/README.md` correctly defines `dpf-platform` as the project-default plugin for Claude Code and Codex plus the seed source for in-portal coworkers.
-- `.claude/settings.json` correctly declares `extraKnownMarketplaces` and `enabledPlugins` for Claude Code; worktree hooks already sync MCP config.
+- `.claude/settings.json` declares `enabledPlugins` for Claude Code; worktree hooks already sync MCP config. It no longer declares `extraKnownMarketplaces` (BI-13A73D53): a `dpf-platform-local` entry pointing at `.` re-pointed the updater's shared marketplace at whichever worktree last opened a session, so the toolchain updater is the only writer of that registration.
 - PR #1204's contributor MCP readiness card should become the post-install status surface rather than a parallel token UI.
 
 ### Anti-patterns to reject
