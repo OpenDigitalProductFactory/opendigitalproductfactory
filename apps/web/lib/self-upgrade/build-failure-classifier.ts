@@ -108,9 +108,12 @@ export type BuildFailureClass =
   // (`install_state_envelope_state_changed`) or the envelope's TTL lapsed
   // (`install_state_envelope_expired`). Another host-side writer touched the
   // envelope during the quiescence drain (SUR-4758058F: the agent-toolchain
-  // bootstrap, BI-95DF1BFC). The signature still verified — not tampering —
-  // so the launcher now re-binds the handoff after the drain; a run that still
-  // lands here is a writer racing the promoter's own migrate step.
+  // bootstrap, BI-95DF1BFC), or the recovery point between preflight and the
+  // promoter consumed the window (SUR-4DC82F3C: 6m19s of a 10-minute TTL,
+  // BI-2074D622). The signature still verified — not tampering — so the
+  // launcher re-binds the handoff after the drain and re-stamps its TTL at
+  // launch; a run that still lands here is a writer racing the promoter's own
+  // migrate step, or a promoter whose own pre-migrate steps outlived a fresh TTL.
   | "install-state-envelope-changed"
   // promote.sh (#3282) requires a SIGNED install-state migration handoff
   // (DPF_INSTALL_STATE_MIGRATION_ENVELOPE + _SIGNATURE) that only a #3282+
@@ -410,8 +413,8 @@ export function classifyBuildFailure(
     return {
       class: "install-state-envelope-changed",
       summary: expired
-        ? "promote.sh refused the governed install-state migration because the signed handoff EXPIRED before the promoter reached its migrate step — the quiescence drain outlived the envelope TTL. Nothing was deployed; the running portal was left serving traffic. The launcher now re-binds the handoff after the drain, so retry the upgrade; if it expires again the drain itself is the problem (check the QuiescenceRun blockers), not this run's code."
-        : "promote.sh refused the governed install-state migration because /dpf-state/install-state.json changed after readiness signed the handoff — another host-side writer (a client-session agent-toolchain bootstrap, an installer re-run, a capability transition) touched the envelope while the portal drained. The signature still verified, so this is a lost race, not tampering, and nothing was deployed. The launcher now re-binds the handoff after the drain; a run that STILL lands here has a writer racing the promoter's own migrate step — find it via install-state.json's mtime against the run's install-state-migrate stamp in self-upgrade-steps.log, then retry the upgrade (BI-95DF1BFC).",
+        ? "promote.sh refused the governed install-state migration because the signed handoff EXPIRED before the promoter reached its migrate step. Nothing was deployed; the running portal was left serving traffic. The envelope's 10-minute window used to start at preflight, and the recovery-point backup between preflight and the promoter scales with the database (6m19s on SUR-4DC82F3C), so the promoter could receive a handoff with seconds left. The launcher now re-stamps the handoff immediately before launching the promoter, so its full window starts at launch (BI-2074D622). Retry the upgrade; a run that STILL lands here has a promoter whose own pre-migrate steps (release-identity, compose overlays, prepare, backup) took longer than 10 minutes — read the step stamps in self-upgrade-steps.log to see which one stalled."
+        : "promote.sh refused the governed install-state migration because /dpf-state/install-state.json changed after readiness signed the handoff — another host-side writer (a client-session agent-toolchain bootstrap, an installer re-run, a capability transition) touched the envelope while the portal drained. The signature still verified, so this is a lost race, not tampering, and nothing was deployed. The launcher re-binds the handoff after the drain; a run that STILL lands here has a writer racing the promoter's own migrate step — find it via install-state.json's mtime against the run's install-state-migrate stamp in self-upgrade-steps.log, then retry the upgrade (BI-95DF1BFC).",
       playbookLink: SPEC,
       failingTrace: traceAround(log, INSTALL_STATE_ENVELOPE_CHANGED),
       isMainDefectVsEnvironment: "environment",

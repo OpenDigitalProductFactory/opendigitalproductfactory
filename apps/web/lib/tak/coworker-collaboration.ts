@@ -22,6 +22,7 @@ import { agentEventBus } from "@/lib/agent-event-bus";
 import { resolveAgent } from "@/lib/tak/agent-resolution";
 import { spawnWorkThread } from "@/lib/actions/agent-coworker";
 import { isHandoffPermitted } from "@/lib/tak/collaboration-authority";
+import { coworkerAuthorityWhere } from "@/lib/coworker-identity";
 import { STANDING_COORDINATOR_IDS } from "@/lib/tak/coordinator-authority";
 import { coerceDataSensitivity } from "@dpf/db/principal-sensitivity";
 import {
@@ -93,8 +94,10 @@ async function enforceHandoffAuthority(
   userId: string,
 ): Promise<void> {
   if (!callerAgentId) return;
+  // BI-0104CCB9: authority comes from the caller's registry identity, not its
+  // execution alias: `coo` resolves to AGT-ORCH-000, whose delegates its persona names.
   const caller = await prisma.agent.findFirst({
-    where: { OR: [{ agentId: callerAgentId }, { slugId: callerAgentId }] },
+    where: coworkerAuthorityWhere(callerAgentId),
     select: { agentId: true, delegatesTo: true, escalatesTo: true },
   });
   if (!caller) return; // unknown caller — nothing to enforce against
