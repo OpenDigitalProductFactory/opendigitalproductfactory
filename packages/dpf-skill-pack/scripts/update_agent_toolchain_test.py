@@ -902,28 +902,73 @@ class GrokInstallTest(unittest.TestCase):
 
 
 class ClaudeInstallTest(unittest.TestCase):
-    def test_install_also_updates_an_existing_cached_plugin(self) -> None:
-        class _Result:
-            returncode = 0
-            stdout = ""
-            stderr = ""
+    class _Result:
+        def __init__(self, stdout: str = "") -> None:
+            self.returncode = 0
+            self.stdout = stdout
+            self.stderr = ""
 
+    def _runner(self, marketplace_path: str):
+        listing = json.dumps([{"name": "dpf-platform-local", "source": "directory", "path": marketplace_path}])
+
+        def run(command, **kwargs):
+            if command[2:4] == ["marketplace", "list"]:
+                return self._Result(listing)
+            return self._Result()
+        return run
+
+    def test_install_also_updates_an_existing_cached_plugin(self) -> None:
+        marketplace_root = str(Path("/tmp/home") / ".agents" / "plugins")
         with patch.object(updater, "resolve_claude_binary", return_value="/fake/claude"), patch.object(
             updater, "claude_plugin_records", return_value=[{"scope": "local"}]
         ), patch.object(updater, "claude_record_content_matches", return_value=True), patch(
-            "subprocess.run", return_value=_Result()
+            "subprocess.run", side_effect=self._runner(marketplace_root)
         ) as run:
             status = updater.install_claude_plugin(Path("/tmp/home"), dry_run=False)
         self.assertEqual(status, "installed and refreshed")
-        marketplace_root = str(Path("/tmp/home") / ".agents" / "plugins")
         self.assertEqual(
             [call[0][0] for call in run.call_args_list],
             [
                 ["/fake/claude", "plugin", "marketplace", "add", marketplace_root, "--scope", "local"],
+                ["/fake/claude", "plugin", "marketplace", "list", "--json"],
                 ["/fake/claude", "plugin", "install", "dpf-platform@dpf-platform-local", "--scope", "local"],
                 ["/fake/claude", "plugin", "update", "dpf-platform@dpf-platform-local", "--scope", "local"],
             ],
         )
+
+    def test_a_marketplace_left_on_a_checkout_fails_before_installing_from_it(self) -> None:
+        """BI-13A73D53: a worktree's settings re-pointed the shared marketplace at itself."""
+        with patch.object(updater, "resolve_claude_binary", return_value="/fake/claude"), patch(
+            "subprocess.run", side_effect=self._runner("/src/dpf/.claude/worktrees/other")
+        ) as run:
+            status = updater.install_claude_plugin(Path("/tmp/home"), dry_run=False)
+        self.assertTrue(status.startswith("failed:"), status)
+        self.assertIn("/src/dpf/.claude/worktrees/other", status)
+        self.assertNotIn("install", [call[0][0][2] for call in run.call_args_list])
+
+    def test_a_stale_user_scope_record_is_updated_in_user_scope(self) -> None:
+        """BI-13A73D53: the user record loads in every session beside the current one."""
+        marketplace_root = str(Path("/tmp/home") / ".agents" / "plugins")
+        state = {"user": False}
+        runner = self._runner(marketplace_root)
+
+        def run(command, **kwargs):
+            if command[2] == "update" and command[-1] == "user":
+                state["user"] = True
+            return runner(command, **kwargs)
+
+        def matches(home, entry):
+            return entry["scope"] == "local" or state["user"]
+
+        with patch.object(updater, "resolve_claude_binary", return_value="/fake/claude"), patch.object(
+            updater, "claude_plugin_records", return_value=[{"scope": "local"}, {"scope": "user"}]
+        ), patch.object(updater, "claude_record_content_matches", side_effect=matches), patch(
+            "subprocess.run", side_effect=run
+        ) as run_mock:
+            status = updater.install_claude_plugin(Path("/tmp/home"), dry_run=False)
+        self.assertEqual(status, "installed and refreshed")
+        self.assertIn(["/fake/claude", "plugin", "update", "dpf-platform@dpf-platform-local", "--scope", "user"],
+                      [call[0][0] for call in run_mock.call_args_list])
 
 
 class ClaudeProjectScopeConvergenceTest(unittest.TestCase):
@@ -933,6 +978,13 @@ class ClaudeProjectScopeConvergenceTest(unittest.TestCase):
         returncode = 0
         stdout = ""
         stderr = ""
+
+    def setUp(self) -> None:
+        # The marketplace read-back is its own subprocess; these tests start
+        # from a marketplace that already points at the shared copy.
+        patcher = patch.object(updater, "claude_marketplace_mismatch", return_value=None)
+        patcher.start()
+        self.addCleanup(patcher.stop)
 
     def _home(self, root: Path, entries: list[dict]) -> Path:
         home = root / "home"
@@ -977,7 +1029,7 @@ class ClaudeProjectScopeConvergenceTest(unittest.TestCase):
             self.assertEqual(result["current"], [])
             self.assertEqual(result["updated"], [])
             self.assertEqual(result["failed"], [str(project)])
-            self.assertEqual(run.call_count, 1)
+            self.assertEqual(run.call_count, 2)
             self.assertEqual((cache / "hook.mjs").read_text(), "old hook")
 
     def test_stale_project_records_are_updated_in_their_project(self) -> None:
@@ -1006,12 +1058,17 @@ class ClaudeProjectScopeConvergenceTest(unittest.TestCase):
                 result = updater.converge_claude_project_plugins(home, "0.2.8", dry_run=False)
         self.assertEqual(result["updated"], [str(stale)])
         self.assertEqual(result["current"], [str(current)])
-        self.assertEqual(run.call_count, 1)
+        # BI-13A73D53: `plugin update --scope project` rewrites the first
+        # project record whatever the folder, so the record is reinstalled
+        # from inside its own folder instead.
         self.assertEqual(
-            run.call_args[0][0],
-            ["/fake/claude", "plugin", "update", "dpf-platform@dpf-platform-local", "--scope", "project"],
+            [call[0][0] for call in run.call_args_list],
+            [
+                ["/fake/claude", "plugin", "uninstall", "dpf-platform@dpf-platform-local", "--scope", "project", "--keep-data"],
+                ["/fake/claude", "plugin", "install", "dpf-platform@dpf-platform-local", "--scope", "project"],
+            ],
         )
-        self.assertEqual(run.call_args[1]["cwd"], str(stale))
+        self.assertEqual({call[1]["cwd"] for call in run.call_args_list}, {str(stale)})
 
     def test_equal_version_refresh_requires_observed_new_bytes(self) -> None:
         import shutil
@@ -1032,7 +1089,7 @@ class ClaudeProjectScopeConvergenceTest(unittest.TestCase):
                 second = updater.converge_claude_project_plugins(home, "0.2.8", False)
             self.assertEqual(first["updated"], [str(project)])
             self.assertEqual(second["current"], [str(project)])
-            self.assertEqual(run.call_count, 1)
+            self.assertEqual(run.call_count, 2)
 
     def test_missing_cache_and_unreadable_digest_cannot_pass(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -1084,6 +1141,59 @@ class ClaudeProjectScopeConvergenceTest(unittest.TestCase):
             ):
                 result = updater.converge_claude_project_plugins(home, "0.2.8", dry_run=False)
         self.assertEqual(result["failed"], [str(stale)])
+
+    def test_reinstall_restores_the_project_settings_the_cli_rewrote(self) -> None:
+        """BI-13A73D53: uninstall drops enabledPlugins from tracked settings."""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            stale = self._project(root, "stale")
+            settings = stale / ".claude" / "settings.json"
+            settings.parent.mkdir()
+            original = '{\n  "enabledPlugins": {"dpf-platform@dpf-platform-local": true}\n}\n'
+            settings.write_text(original)
+            home = self._home(root, [{"scope": "project", "projectPath": str(stale), "version": "0.2.5"}])
+
+            def cli(command, **kwargs):
+                if command[2] == "uninstall":
+                    settings.write_text("{}\n")
+                return self._Result()
+            with patch.object(updater, "resolve_claude_binary", return_value="/fake/claude"), patch(
+                "subprocess.run", side_effect=cli
+            ):
+                result = updater.converge_claude_project_plugins(home, "0.2.8", dry_run=False)
+            self.assertEqual(settings.read_text(), original)
+        self.assertEqual(result["failed"], [str(stale)])
+        self.assertIn("did not establish", result["reasons"][str(stale)])
+
+    def test_a_failed_reinstall_names_the_step(self) -> None:
+        failed = self._Result()
+        failed.returncode = 3
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            stale = self._project(root, "stale")
+            home = self._home(root, [{"scope": "project", "projectPath": str(stale), "version": "0.2.5"}])
+            with patch.object(updater, "resolve_claude_binary", return_value="/fake/claude"), patch(
+                "subprocess.run", return_value=failed
+            ):
+                result = updater.converge_claude_project_plugins(home, "0.2.8", dry_run=False)
+        self.assertEqual(result["failed"], [str(stale)])
+        self.assertIn("uninstall exited 3", result["reasons"][str(stale)])
+
+    def test_a_marketplace_not_on_the_shared_copy_stops_project_convergence(self) -> None:
+        """BI-13A73D53: reinstalling from a hijacked marketplace installs a checkout's bytes."""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            stale = self._project(root, "stale")
+            home = self._home(root, [{"scope": "project", "projectPath": str(stale), "version": "0.2.5"}])
+            with patch.object(updater, "resolve_claude_binary", return_value="/fake/claude"), patch.object(
+                updater, "claude_marketplace_mismatch", return_value="points at /src/worktree"
+            ), patch("subprocess.run") as run:
+                result = updater.converge_claude_project_plugins(home, "0.2.8", dry_run=False)
+                lines = updater.converge_claude_project_connectors(home, "0.2.8", dry_run=False)
+        run.assert_not_called()
+        self.assertEqual(result["failed"], [str(stale)])
+        self.assertIn("points at /src/worktree", result["reasons"][str(stale)])
+        self.assertTrue(any("points at /src/worktree" in line for line in lines), lines)
 
     def test_dry_run_reports_without_running_or_writing(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
