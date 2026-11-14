@@ -6,6 +6,8 @@ import { claimNonprodEnvironmentLease, releaseNonprodEnvironmentLease } from "./
 import { settleTerminalGateLease } from "./environment-lease-terminal-evidence";
 import { derivedLocalCiPoolConfig, LOCAL_CI_POOL_CONFIG_KEY } from "./local-ci-pool-policy";
 import { settleObsoleteLeaseReleaseEnvelopes, type ObsoleteReleaseDb } from "../coworker/obsolete-lease-envelope";
+import { checkpointNonprodLeaseWait, settleNonprodLeaseWait } from "./durable-wait";
+import { fenceEndedPreviewRuntimes } from "./preview-runtime-fence";
 import { obsoleteEnvelope } from "../coworker/obsolete-lease-envelope.test-fixtures";
 
 // The real domain producer runs against private fixture rows. Its ancillary
@@ -15,7 +17,7 @@ const configured = process.env.DATABASE_URL;
 const leased = (() => { try { return process.env.DPF_NONPROD_LEASE_ID && configured
   && /^\/dpf_local_ci_\d+$/.test(new URL(configured).pathname) ? configured : undefined; } catch { return undefined; } })();
 const url = process.env.DPF_SQL_TEST_DATABASE_URL ?? process.env.DPF_LOCAL_CI_TEST_DATABASE_URL ?? leased;
-const tables = ["NonProductionEnvironmentLease", "CoworkerActionEnvelope", "ToolExecution", "TaskRun", "PlatformConfig"];
+const tables = ["NonProductionEnvironmentLease", "CoworkerActionEnvelope", "ToolExecution", "TaskRun", "PlatformConfig", "Workroom"];
 const schema = `review_admission_${randomUUID().replaceAll("-", "")}`;
 type Fixture = Awaited<ReturnType<typeof createReviewPostgresFixture>>;
 const attach = (f: Fixture) => f.pool.query(`CREATE TRIGGER "NonProductionEnvironmentLease_admission_history"
@@ -57,10 +59,74 @@ describe.skipIf(!url)("forward-only reservation admission history — isolated P
   let f: Fixture;
   beforeAll(async () => { f = await createReviewPostgresFixture({ url: url!, schema, tables }); await attach(f); });
   beforeEach(async () => {
-    await f.pool.query(`TRUNCATE "ToolExecution", "CoworkerActionEnvelope", "NonProductionEnvironmentLease", "TaskRun", "PlatformConfig"`);
+    await f.pool.query(`TRUNCATE "ToolExecution", "CoworkerActionEnvelope", "NonProductionEnvironmentLease", "TaskRun", "PlatformConfig", "Workroom"`);
     await f.db.platformConfig.create({ data: { key: LOCAL_CI_POOL_CONFIG_KEY, value: derivedLocalCiPoolConfig(1) } });
   });
   afterAll(async () => { await f?.close(); });
+
+  it.each([
+    { name: "database witness follows application admission", applicationOffset: -60_000, releaseDelta: 2_000 },
+    { name: "application terminal is ahead of the observer", applicationOffset: 60_000, releaseDelta: 2_000 },
+    { name: "application clock rolls back before terminal write", applicationOffset: 60_000, releaseDelta: -120_000 },
+  ])("fences a real queued-to-active preview when $name", async ({ applicationOffset, releaseDelta }) => {
+    const db = { ...domainDb(f), taskRun: f.db.taskRun };
+    const databaseNow = (await f.pool.query<{ now: Date }>("SELECT clock_timestamp() AS now")).rows[0]!.now;
+    const applicationNow = new Date(databaseNow.getTime() + applicationOffset);
+    const sha = "7".repeat(40), worktreePath = "/fixtures/clock-preview", branchName = "codex/clock-preview";
+    const pressure = (now: Date, queued: boolean) => ({ observedAt: now.toISOString(), totalMemoryBytes: 256 * 1024 ** 3,
+      availableMemoryBytes: queued ? 0 : 128 * 1024 ** 3, dockerAvailableMemoryBytes: queued ? 0 : 128 * 1024 ** 3,
+      builderMemoryUsageBytes: [0, 0], sustainedCpuPercent: 1, diskFreeBytes: 512 * 1024 ** 3, dockerHealthy: true,
+      convergenceActive: false, fencesHealthy: true, evidenceIsolationHealthy: true });
+    const claimInput = { db, environmentKey: "local-integration-ci" as const, ownerProvider: "codex" as const,
+      ownerSessionId: "clock-owner", authenticatedUserId: "clock-user", authenticatedAgentId: "codex",
+      claimKey: `preview-clock:${randomUUID()}`, purpose: `Contributor preview (:3001) bound to ${worktreePath} @ ${branchName} (${sha})`,
+      url: "http://localhost:3001", ports: [3001], worktreePath, branchName, requestedTtlMs: 120_000,
+      expiresAt: new Date(applicationNow.getTime() + 600_000), waitDeadlineAt: new Date(applicationNow.getTime() + 600_000) };
+    const queuedPressure = pressure(applicationNow, true);
+    const queued = await claimNonprodEnvironmentLease({ ...claimInput, hostPressure: queuedPressure,
+      capacityBroker: async () => queuedPressure, now: applicationNow });
+    expect(queued.status).toBe("queued");
+    expect(queued.lease).toMatchObject({ admissionHistoryVersion: 1, firstAdmittedAt: null, admittedAt: null });
+    // The same canonical checkpoint/settlement functions used by the MCP adapter
+    // retain actual private Task rows. No manually invented Task proof or stamp.
+    const wait = await checkpointNonprodLeaseWait({ db, userId: "clock-user", lease: queued.lease,
+      queuePosition: 1, waitDeadlineAt: claimInput.waitDeadlineAt, now: applicationNow });
+    const admissionNow = new Date(applicationNow.getTime() + 1_000), readyPressure = pressure(admissionNow, false);
+    const admitted = await claimNonprodEnvironmentLease({ ...claimInput, resumeLeaseId: queued.lease.leaseId,
+      hostPressure: readyPressure, capacityBroker: async () => readyPressure, now: admissionNow });
+    expect(admitted.status).toBe("admitted");
+    expect(admitted.lease.firstAdmittedAt).toBeInstanceOf(Date);
+    expect(admitted.lease.firstAdmittedAt!.getTime() > admitted.lease.admittedAt!.getTime()).toBe(applicationOffset < 0);
+    await settleNonprodLeaseWait({ db, taskRunId: wait.taskRunId, leaseId: admitted.lease.leaseId,
+      state: "admitted", now: admissionNow });
+    await f.db.workroom.create({ data: { capsuleId: "WC-CLOCK-FIXTURE", title: "Private clock fixture", objective: "Native fence integration",
+      source: "external-adoption", repositoryFullName: "fixture/repo", headSha: sha, headBranch: branchName, worktreePath } });
+    const released = await releaseNonprodEnvironmentLease({ db, leaseId: admitted.lease.leaseId, ownerSessionId: "clock-owner",
+      authenticatedUserId: "clock-user", authenticatedAgentId: "codex", now: new Date(admissionNow.getTime() + releaseDelta) });
+    expect(released.status).toBe("released");
+    expect(released.firstAdmittedAt).toEqual(admitted.lease.firstAdmittedAt);
+    const id = "c".repeat(64), container = { Id: id, Name: "/fixture-dev-portal", State: { Running: true },
+      Config: { Labels: { "com.docker.compose.project": "fixture", "com.docker.compose.service": "dev-portal",
+        "dpf.preview.lease": released.leaseId, "dpf.preview.sha": sha },
+        Env: ["DPF_ENVIRONMENT_CLASS=development", `DPF_PREVIEW_SOURCE_SHA=${sha}`, `DPF_PREVIEW_LEASE_ID=${released.leaseId}`] },
+      Mounts: [{ Type: "bind", Source: worktreePath, Destination: "/workspace" }],
+      NetworkSettings: { Ports: { "3000/tcp": [{ HostIp: "127.0.0.1", HostPort: "3001" }] } } };
+    const stop = vi.fn(async () => { container.State.Running = false; });
+    const result = await fenceEndedPreviewRuntimes({ selfHostname: "fixture-self", now: new Date(),
+      get: async path => {
+        if (path === "/containers/fixture-self/json") return { Config: { Labels: { "com.docker.compose.project": "fixture" } } };
+        if (path === "/info") return { OperatingSystem: "Docker Desktop" };
+        if (path.startsWith("/containers/json?")) return [{ Id: id }];
+        if (path === `/containers/${id}/json`) return structuredClone(container);
+        throw new Error("Unexpected private Docker request");
+      }, stop, readLease: leaseId => f.db.nonProductionEnvironmentLease.findUnique({ where: { leaseId } }),
+      readTask: taskRunId => f.db.taskRun.findUnique({ where: { taskRunId },
+        select: { taskRunId: true, userId: true, initiatingAgentId: true, progressPayload: true, status: true } }),
+      readSource: (lease, sourceSha) => f.db.workroom.findFirst({ where: { worktreePath: lease.worktreePath,
+        headBranch: lease.branchName, headSha: sourceSha }, select: { headSha: true, repositoryFullName: true } }) });
+    expect(result).toMatchObject({ stopped: 1, held: 0, pending: 0 });
+    expect(stop).toHaveBeenCalledExactlyOnceWith(id);
+  });
 
   it("the real queued claim and cancellation producer creates a genuinely eligible request", async () => {
     const claim = await realClaim(f, true);

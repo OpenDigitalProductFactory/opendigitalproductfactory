@@ -58,6 +58,33 @@ it("stops only a fully proven terminal preview by full ID and confirms the outco
   expect(f.get.mock.calls.every(([path]) => !path.includes(f.lease.cleanupCommand!))).toBe(true);
 });
 
+it.each([
+  { name: "database admission witness follows application admission by observed seven milliseconds", firstOffset: 7, terminalOffset: 550_000, observerOffset: 600_000 },
+  { name: "database clock is ahead of both application terminal and observer clocks", firstOffset: 3_600_000, terminalOffset: 550_000, observerOffset: 600_000 },
+  { name: "application clock rolls back before release and observer read", firstOffset: 7, terminalOffset: -3_600_000, observerOffset: -3_600_100 },
+])("fences committed terminal proof when $name", async ({ firstOffset, terminalOffset, observerOffset }) => {
+  const f = fixture();
+  const admitted = f.lease.admittedAt!.getTime();
+  f.lease.status = "released";
+  f.lease.firstAdmittedAt = new Date(admitted + firstOffset);
+  f.lease.releasedAt = new Date(admitted + terminalOffset);
+  f.deps.now = new Date(admitted + observerOffset);
+  expect((await fenceEndedPreviewRuntimes(f.deps)).stopped).toBe(1);
+  expect(f.stop).toHaveBeenCalledExactlyOnceWith(f.id);
+});
+
+it.each([null, new Date(Number.NaN)])("holds a missing or invalid database admission witness (%#)", async first => {
+  const f = fixture(); f.lease.firstAdmittedAt = first;
+  expect((await fenceEndedPreviewRuntimes(f.deps)).held).toBe(1);
+  expect(f.stop).not.toHaveBeenCalled();
+});
+
+it("holds an expired row that contradicts the expiry producer's coupled deadline/terminal write", async () => {
+  const f = fixture(); f.lease.expiresAt = new Date(f.lease.releasedAt!.getTime() + 1);
+  expect((await fenceEndedPreviewRuntimes(f.deps)).held).toBe(1);
+  expect(f.stop).not.toHaveBeenCalled();
+});
+
 it.each(["active", "queued", "unknown"])("never stops a %s lease even with an expired clock", async status => {
   const f = fixture(); f.lease.status = status;
   expect((await fenceEndedPreviewRuntimes(f.deps)).held).toBe(1);
