@@ -59,6 +59,7 @@ export const PERSON_FACING_WRITE_PRIMITIVES: readonly PersonFacingWritePrimitive
     rationale: "Files an issue report about something that happened (a stall, a failure, a regression, a user report); it offers no options to choose between.",
     callers: {
       "app/api/quality/report/route.ts": "user-submitted issue report",
+      "lib/build/plan-gate-stall-invariant.ts": "passed Build Studio plan still refused on PLAN_REQUIRED (BI-9FA1F9CF)",
       "lib/actions/feedback-support.ts": "support feedback report",
       "lib/actions/quality.ts": "quality issue report",
       "lib/govern/authority/route-to-human.ts": "the routeToHuman seam (BI-5E067004): build stalls, PR delivery, PR follow-through and the assurance merge gate file here after the escalation gate decides the route",
