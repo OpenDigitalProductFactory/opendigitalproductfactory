@@ -103,3 +103,31 @@ producer regression repeats the false green; regression alone leaves the
 installed failure. Operational acceptance is evidence, not another code unit.
 Original all332 desktop/mobile/70 dynamic fixture/persona/permission acceptance
 remains separately UNRUN until legitimately admitted and measured.
+
+## Observed verification before consumer correction
+
+Local unit RED: 3 failed /46 passed /49 total. First shared969 run repeated
+that RED but the new fixture incorrectly named physical Workroom rather than
+its canonical WorkCapsule mapping: all11 PostgreSQL cases were UNRUN. That
+fixture error is retained separately and was corrected before defect evidence.
+At unchanged consumer candidate4bf26fdbcffe53418472ee89b6db8d7696d5dae8,
+canonical shared2D (normal current-main identity handoff from B251) executed
+all11 real PostgreSQL cases: three reached the actual fence and failed held1 /
+stopped0; eight immutable-history/forgery/legacy controls passed. Combined with
+the three unit regressions, total60 =6 failed +54 passed, zero skipped. Native
+receipt cmwgozt5115qt0eqqsmfdnp5d. The real producer-to-consumer RED therefore
+precedes the consumer correction. GREEN and installed acceptance remain pending.
+
+Bounded source sweep found only preview-runtime-fence comparing firstAdmittedAt
+to application clocks; obsolete-lease-envelope already treats it as a finite
+admission witness, without such ordering. The retained expired deadline/terminal
+ordering follows environment-lease-admission.ts's expiresAt <= supplied now
+selection and environment-lease.ts's same-now locked terminal write.
+
+After the three real PostgreSQL RED cases, add a fourth expiry control for GREEN:
+the actual locked reaper must commit expired with expiresAt <= releasedAt and
+releasedAt equal to its supplied now, then the actual fence must accept that
+proof even when this application terminal time is ahead of the observer. This
+checks the retained chronology invariant through its real writer rather than
+only constructing dates in a unit fixture. No consumer GREEN is inferred until
+this additional case and the original three execute under the shared lease.

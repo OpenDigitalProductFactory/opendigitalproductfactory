@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { createReviewPostgresFixture } from "../../test-support/review-postgres-fixture";
-import { claimNonprodEnvironmentLease, releaseNonprodEnvironmentLease } from "./environment-lease";
+import { claimNonprodEnvironmentLease, releaseNonprodEnvironmentLease, reapExpiredNonprodEnvironmentLeases } from "./environment-lease";
 import { settleTerminalGateLease } from "./environment-lease-terminal-evidence";
 import { derivedLocalCiPoolConfig, LOCAL_CI_POOL_CONFIG_KEY } from "./local-ci-pool-policy";
 import { settleObsoleteLeaseReleaseEnvelopes, type ObsoleteReleaseDb } from "../coworker/obsolete-lease-envelope";
@@ -17,6 +17,7 @@ const configured = process.env.DATABASE_URL;
 const leased = (() => { try { return process.env.DPF_NONPROD_LEASE_ID && configured
   && /^\/dpf_local_ci_\d+$/.test(new URL(configured).pathname) ? configured : undefined; } catch { return undefined; } })();
 const url = process.env.DPF_SQL_TEST_DATABASE_URL ?? process.env.DPF_LOCAL_CI_TEST_DATABASE_URL ?? leased;
+// Workroom is the Prisma model; its canonical physical table remains WorkCapsule.
 const tables = ["NonProductionEnvironmentLease", "CoworkerActionEnvelope", "ToolExecution", "TaskRun", "PlatformConfig", "WorkCapsule"];
 const schema = `review_admission_${randomUUID().replaceAll("-", "")}`;
 type Fixture = Awaited<ReturnType<typeof createReviewPostgresFixture>>;
@@ -65,10 +66,11 @@ describe.skipIf(!url)("forward-only reservation admission history — isolated P
   afterAll(async () => { await f?.close(); });
 
   it.each([
-    { name: "database witness follows application admission", applicationOffset: -60_000, releaseDelta: 2_000 },
-    { name: "application terminal is ahead of the observer", applicationOffset: 60_000, releaseDelta: 2_000 },
-    { name: "application clock rolls back before terminal write", applicationOffset: 60_000, releaseDelta: -120_000 },
-  ])("fences a real queued-to-active preview when $name", async ({ applicationOffset, releaseDelta }) => {
+    { name: "database witness follows application admission", applicationOffset: -60_000, releaseDelta: 2_000, expiry: false },
+    { name: "application terminal is ahead of the observer", applicationOffset: 60_000, releaseDelta: 2_000, expiry: false },
+    { name: "application clock rolls back before terminal write", applicationOffset: 60_000, releaseDelta: -120_000, expiry: false },
+    { name: "actual expiry couples its deadline and terminal write despite observer clock offset", applicationOffset: -60_000, releaseDelta: 120_001, expiry: true },
+  ])("fences a real queued-to-active preview when $name", async ({ applicationOffset, releaseDelta, expiry }) => {
     const db = { ...domainDb(f), taskRun: f.db.taskRun };
     const databaseNow = (await f.pool.query<{ now: Date }>("SELECT clock_timestamp() AS now")).rows[0]!.now;
     const applicationNow = new Date(databaseNow.getTime() + applicationOffset);
@@ -101,9 +103,19 @@ describe.skipIf(!url)("forward-only reservation admission history — isolated P
       state: "admitted", now: admissionNow });
     await f.db.workroom.create({ data: { capsuleId: "WC-CLOCK-FIXTURE", title: "Private clock fixture", objective: "Native fence integration",
       source: "external-adoption", repositoryFullName: "fixture/repo", headSha: sha, headBranch: branchName, worktreePath } });
-    const released = await releaseNonprodEnvironmentLease({ db, leaseId: admitted.lease.leaseId, ownerSessionId: "clock-owner",
-      authenticatedUserId: "clock-user", authenticatedAgentId: "codex", now: new Date(admissionNow.getTime() + releaseDelta) });
-    expect(released.status).toBe("released");
+    const terminalNow = new Date(admissionNow.getTime() + releaseDelta);
+    if (expiry) {
+      expect(await reapExpiredNonprodEnvironmentLeases({ db, now: terminalNow })).toEqual({ reaped: 1 });
+    } else {
+      await releaseNonprodEnvironmentLease({ db, leaseId: admitted.lease.leaseId, ownerSessionId: "clock-owner",
+        authenticatedUserId: "clock-user", authenticatedAgentId: "codex", now: terminalNow });
+    }
+    const released = await f.db.nonProductionEnvironmentLease.findUniqueOrThrow({ where: { leaseId: admitted.lease.leaseId } });
+    expect(released.status).toBe(expiry ? "expired" : "released");
+    if (expiry) {
+      expect(released.expiresAt.getTime()).toBeLessThanOrEqual(released.releasedAt!.getTime());
+      expect(released.releasedAt).toEqual(terminalNow);
+    }
     expect(released.firstAdmittedAt).toEqual(admitted.lease.firstAdmittedAt);
     const id = "c".repeat(64), container = { Id: id, Name: "/fixture-dev-portal", State: { Running: true },
       Config: { Labels: { "com.docker.compose.project": "fixture", "com.docker.compose.service": "dev-portal",

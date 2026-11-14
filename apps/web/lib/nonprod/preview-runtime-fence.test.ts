@@ -73,10 +73,12 @@ it.each([
   expect(f.stop).toHaveBeenCalledExactlyOnceWith(f.id);
 });
 
-it.each([null, new Date(Number.NaN)])("holds a missing or invalid database admission witness (%#)", async first => {
-  const f = fixture(); f.lease.firstAdmittedAt = first;
-  expect((await fenceEndedPreviewRuntimes(f.deps)).held).toBe(1);
-  expect(f.stop).not.toHaveBeenCalled();
+it.each(["firstAdmittedAt", "admittedAt", "releasedAt", "expiresAt"] as const)("holds missing or invalid required %s proof", async field => {
+  for (const value of [null, new Date(Number.NaN)]) {
+    const f = fixture(); Object.assign(f.lease, { [field]: value });
+    expect((await fenceEndedPreviewRuntimes(f.deps)).held).toBe(1);
+    expect(f.stop).not.toHaveBeenCalled();
+  }
 });
 
 it("holds an expired row that contradicts the expiry producer's coupled deadline/terminal write", async () => {
