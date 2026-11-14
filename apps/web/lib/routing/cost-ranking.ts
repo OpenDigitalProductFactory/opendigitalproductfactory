@@ -7,6 +7,7 @@ import type { EndpointManifest } from "./types";
 import type { ModelCardPricing } from "./model-card-types";
 import type { RequestContract } from "./request-contract";
 import { getDimensionsForTask } from "./production-feedback";
+import { NON_ACTING_BRIDGE_CONFIG } from "./non-acting-bridge-config";
 
 // ── Quality Floors ──────────────────────────────────────────────────────────
 
@@ -105,12 +106,81 @@ export function estimateCost(
 // ── Estimated Success Probability ───────────────────────────────────────────
 
 /**
+ * DPF2-REMOVABLE BRIDGE INPUT.
+ *
+ * The aggregated non-acting penalty for *this exact endpoint and task*. The
+ * caller derives it from the failed non-acting RouteOutcome rows for the route
+ * (toolSuccess=false with NON_ACTING_BRIDGE_CONFIG.nonActingProviderErrorCode);
+ * this module only consumes failureCount + lastFailureAt to compute a
+ * time-decayed penalty. Remove at the DPF2 cutover together with the rest of
+ * the non-acting bridge (see non-acting-bridge-config.ts).
+ */
+export interface EndpointActionFailurePenalty {
+  /** Number of recorded non-acting failures for this endpoint+task. */
+  failureCount: number;
+  /** When the most recent non-acting failure was recorded. */
+  lastFailureAt: Date;
+}
+
+export interface EstimateSuccessProbabilityOptions {
+  /**
+   * Aggregated non-acting penalty for this candidate endpoint+task (derived
+   * from the route's non-acting RouteOutcome rows), or null/undefined when none
+   * is recorded. Only applied for `tool-action`-class contracts.
+   */
+  actionFailureTally?: EndpointActionFailurePenalty | null;
+  /** Reference time (ms epoch) for decay; defaults to Date.now(). Testability hook. */
+  now?: number;
+}
+
+/**
+ * DPF2-REMOVABLE. Time-decayed, endpoint-scoped penalty factor for a recorded
+ * non-acting failure. Returns a multiplier in [penaltyFloor, 1]:
+ *
+ *   factor = 1 - penaltyBaseWeight * failureCount
+ *              * exp(-ageMs * ln2 / penaltyDecayHalfLifeMs)
+ *
+ * The factor is 1 (no penalty) when the task type is not non-acting-eligible,
+ * when there is no tally, or when the recorded failure has fully decayed. It
+ * multiplies — never replaces — the base success probability, so the
+ * provider-wide recentFailureRate and the rankByCostPerSuccess formula are
+ * untouched; only this one endpoint's successProb moves, and it recovers on its
+ * own as the failure ages past the half-life.
+ */
+function endpointActionPenaltyFactor(
+  contract: RequestContract,
+  options: EstimateSuccessProbabilityOptions | undefined,
+): number {
+  const tally = options?.actionFailureTally;
+  if (!tally || tally.failureCount <= 0) return 1;
+
+  // Non-acting detection/penalty is restricted to tool-action-class tasks.
+  const eligible = NON_ACTING_BRIDGE_CONFIG.eligibleTaskTypes as readonly string[];
+  if (!eligible.includes(contract.taskType)) return 1;
+
+  const { penaltyBaseWeight, penaltyDecayHalfLifeMs, penaltyFloor } = NON_ACTING_BRIDGE_CONFIG;
+  const now = options?.now ?? Date.now();
+  const ageMs = Math.max(0, now - tally.lastFailureAt.getTime());
+  const decay = Math.exp((-ageMs * Math.LN2) / penaltyDecayHalfLifeMs);
+  const factor = 1 - penaltyBaseWeight * tally.failureCount * decay;
+
+  return Math.min(1, Math.max(penaltyFloor, factor));
+}
+
+/**
  * Estimate the probability that a model will succeed at a request.
  * Uses capability checks, quality floors, and historical failure rate.
+ *
+ * When a non-acting penalty is supplied (bridge, tool-action only; derived from
+ * the route's failed non-acting RouteOutcome rows), the base probability is
+ * further multiplied by a time-decayed, endpoint-scoped penalty so routing
+ * steers away from the exact endpoint that recently refused to act, and
+ * recovers automatically once the penalty decays.
  */
 export function estimateSuccessProbability(
   endpoint: EndpointManifest,
   contract: RequestContract,
+  options?: EstimateSuccessProbabilityOptions,
 ): number {
   // Hard capability check — missing required capability = 0
   // Use !== true (not !value) because ModelCardCapabilities fields are boolean | null.
@@ -138,7 +208,11 @@ export function estimateSuccessProbability(
     low: 0.85,
   };
   const confFactor = confidenceMultiplier[endpoint.profileConfidence] ?? 0.9;
-  return Math.max(1.0 - endpoint.recentFailureRate, 0.1) * confFactor;
+  const base = Math.max(1.0 - endpoint.recentFailureRate, 0.1) * confFactor;
+
+  // Endpoint-scoped, time-decayed non-acting penalty (bridge; tool-action only).
+  // Multiplies the base — leaves recentFailureRate and the ranker formula alone.
+  return base * endpointActionPenaltyFactor(contract, options);
 }
 
 // ── Cost-Per-Success Ranking ────────────────────────────────────────────────

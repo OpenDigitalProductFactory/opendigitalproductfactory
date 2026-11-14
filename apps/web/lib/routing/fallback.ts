@@ -427,8 +427,8 @@ export async function callWithFallbackChain(
             ? `The selected AI adapter cannot enforce this task's required governed writer. Using ${provider.name} instead.`
             : preferenceMiss
             ? unavailablePreference
-              ? `Preferred ${unavailablePreference.kind} "${unavailablePreference.value}" is unavailable. Using ${provider.name} instead. Check AI Workforce settings to fix.`
-              : `A configured AI routing preference is unavailable. Using ${provider.name} instead. Check AI Workforce settings to fix.`
+              ? `Preferred ${unavailablePreference.kind} "${unavailablePreference.value}" is unavailable. Using ${provider.name} instead.`
+              : `A configured AI routing preference is unavailable. Using ${provider.name} instead.`
             : `Switched to ${provider.name} after the preferred endpoint was unavailable.`
           : null,
         responseId: result.responseId,

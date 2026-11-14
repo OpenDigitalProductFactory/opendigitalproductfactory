@@ -19,6 +19,16 @@ export type PreferenceCandidate = {
   /** Lineage, when the manifest knows it; lets an unavailable preference find its family successor. */
   modelFamily?: string | null;
   qualityTier?: string | null;
+  /**
+   * Derived lifecycle status of the candidate's ModelProfile, when the caller
+   * carries it. Anything other than "active"/"degraded" (e.g. "retired",
+   * "disabled", "unconfigured") marks the candidate unavailable. Absent means
+   * the caller did not supply it, which is treated as available because the
+   * ranked set is already fenced.
+   */
+  modelStatus?: string | null;
+  /** Retirement timestamp of the candidate's ModelProfile; any value marks it unavailable. */
+  retiredAt?: Date | string | null;
 };
 
 export type EndpointPreferenceSelection<T extends PreferenceCandidate> = {
@@ -31,6 +41,49 @@ function request(
   value: string | undefined,
 ): { kind: RoutePreferenceKind; value: string } | null {
   return value ? { kind, value } : null;
+}
+
+/**
+ * A preference resolved to a candidate whose ModelProfile has retired or is
+ * otherwise not routable. Reuses the status reads already carried on the
+ * candidate (BI-7F2FBDA3 lineage): `retiredAt` set, or a `modelStatus` outside
+ * the routable set. An absent status is treated as available — the ranked set
+ * is already fenced, and legacy callers that do not carry status must keep
+ * honouring their pins.
+ */
+function isPreferenceUnavailable(candidate: PreferenceCandidate): boolean {
+  if (candidate.retiredAt != null) return true;
+  const status = candidate.modelStatus;
+  if (status == null) return false;
+  return status !== "active" && status !== "degraded";
+}
+
+/**
+ * Telemetry-only breadcrumb for a preferred/pinned endpoint that was skipped
+ * because its ModelProfile retired or went unavailable. Deliberately a
+ * console/telemetry log and nothing else: the skip must never surface
+ * owner-facing text, so no message string leaves this module. Policy-safe —
+ * only routing identifiers, never request content.
+ */
+function logSkippedUnavailablePreference(
+  kind: RoutePreferenceKind,
+  value: string,
+  candidate: PreferenceCandidate,
+  successorModelId: string | null,
+): void {
+  console.info("[preference-finalization] skipped unavailable preference", {
+    kind,
+    value,
+    endpointId: candidate.endpointId,
+    providerId: candidate.providerId,
+    modelId: candidate.modelId,
+    modelStatus: candidate.modelStatus ?? null,
+    retiredAt:
+      candidate.retiredAt instanceof Date
+        ? candidate.retiredAt.toISOString()
+        : candidate.retiredAt ?? null,
+    successorModelId,
+  });
 }
 
 /**
@@ -59,12 +112,19 @@ export function selectEndpointPreference<T extends PreferenceCandidate>(
   let winner = canonicalWinner;
   let preferredProvider: T | null = null;
 
+  // Only routable candidates may satisfy a preference, and only they may serve
+  // as a successor. A retired/unavailable candidate is skipped silently and
+  // logged; it never reaches the winner and never surfaces owner-facing text.
+  const availableRanked = ranked.filter(
+    (candidate) => !isPreferenceUnavailable(candidate),
+  );
+
   const pinnedEndpointId = preferences.pinnedEndpointId;
   if (pinnedEndpointId) {
     const pinned = ranked.find(
       (candidate) => candidate.endpointId === pinnedEndpointId,
     );
-    if (pinned) {
+    if (pinned && !isPreferenceUnavailable(pinned)) {
       winner = pinned;
       applied.push({
         kind: "endpoint",
@@ -82,15 +142,53 @@ export function selectEndpointPreference<T extends PreferenceCandidate>(
       };
     }
     unavailable.push({ kind: "endpoint", value: pinnedEndpointId });
+    if (pinned) {
+      // The pin resolved to a retired/unavailable ModelProfile. Skip it with a
+      // telemetry log only, then move to the newest eligible model in its
+      // family via the BI-7F2FBDA3 successor logic. No owner-facing text.
+      const successor = resolveModelSuccessor({
+        candidates: availableRanked,
+        preferredProviderId: pinned.providerId,
+        preferredModelId: pinned.modelId,
+        preferredModelFamily:
+          pinned.modelFamily ?? preferences.preferredModelFamily ?? null,
+      });
+      logSkippedUnavailablePreference(
+        "endpoint",
+        pinnedEndpointId,
+        pinned,
+        successor?.successor.modelId ?? null,
+      );
+      if (successor) {
+        winner = successor.successor;
+        applied.push({
+          kind: "endpoint",
+          value: pinnedEndpointId,
+          endpointId: successor.successor.endpointId,
+          successorOf: pinned.modelId,
+          successorBasis: successor.basis,
+        });
+        return {
+          winner,
+          resolution: {
+            requested,
+            applied,
+            unavailable,
+            fallbackUsed: true,
+          },
+        };
+      }
+      // No successor available — fall through to any provider/model preference,
+      // otherwise the canonical winner stands in for the skipped pin.
+    }
   }
 
   const preferredProviderId = preferences.preferredProviderId;
   if (preferredProviderId) {
-    const preferred = ranked.find(
-      (candidate) =>
-        candidate.endpointId === preferredProviderId ||
-        candidate.providerId === preferredProviderId,
-    );
+    const matcher = (candidate: T) =>
+      candidate.endpointId === preferredProviderId ||
+      candidate.providerId === preferredProviderId;
+    const preferred = availableRanked.find(matcher);
     if (preferred) {
       winner = preferred;
       preferredProvider = preferred;
@@ -101,6 +199,17 @@ export function selectEndpointPreference<T extends PreferenceCandidate>(
       });
     } else {
       unavailable.push({ kind: "provider", value: preferredProviderId });
+      // Log when the provider preference resolved only to retired/unavailable
+      // candidates, so the silent skip is still observable in telemetry.
+      const skipped = ranked.find(matcher);
+      if (skipped) {
+        logSkippedUnavailablePreference(
+          "provider",
+          preferredProviderId,
+          skipped,
+          null,
+        );
+      }
     }
   }
 
@@ -108,12 +217,12 @@ export function selectEndpointPreference<T extends PreferenceCandidate>(
   if (preferredModelId) {
     const modelCandidates = preferredProviderId
       ? preferredProvider
-        ? ranked.filter(
+        ? availableRanked.filter(
             (candidate) =>
               candidate.providerId === preferredProvider.providerId,
           )
         : []
-      : ranked;
+      : availableRanked;
     const preferred = modelCandidates.find(
       (candidate) => candidate.modelId === preferredModelId,
     );
@@ -180,9 +289,17 @@ export function withInferredPreferenceFamily(
   return known?.modelFamily ? { ...preferences, preferredModelFamily: known.modelFamily } : preferences;
 }
 
-/** Shape a ranked endpoint for preference selection, carrying its lineage and tier. */
+/** Shape a ranked endpoint for preference selection, carrying its lineage, tier and lifecycle status. */
 export function toPreferenceCandidate<E>(
-  endpoint: { id: string; providerId: string; modelId: string; modelFamily?: string | null; qualityTier?: string | null },
+  endpoint: {
+    id: string;
+    providerId: string;
+    modelId: string;
+    modelFamily?: string | null;
+    qualityTier?: string | null;
+    status?: string | null;
+    retiredAt?: Date | string | null;
+  },
   entry: E,
 ): PreferenceCandidate & { entry: E } {
   return {
@@ -191,6 +308,8 @@ export function toPreferenceCandidate<E>(
     modelId: endpoint.modelId,
     modelFamily: endpoint.modelFamily ?? null,
     qualityTier: endpoint.qualityTier ?? null,
+    modelStatus: endpoint.status ?? null,
+    retiredAt: endpoint.retiredAt ?? null,
     entry,
   };
 }
