@@ -277,3 +277,36 @@ describe("expandGraphNeighbourhood", () => {
     expect(mockQueryRawUnsafe).toHaveBeenCalledTimes(1);
   });
 });
+
+// BI-A63A9476 AC-KLR-7: the admin explorer is not a path around the shared
+// reader. It never lists MENTIONS edges or the gated reference nodes.
+describe("explorer excludes reference edges and gated nodes (AC-KLR-7)", () => {
+  const GATED = "ARRAY['BacklogItem', 'Epic', 'Document', 'Workroom', 'WorkroomMessage']";
+
+  it("names exactly the gated labels the reference writer owns", async () => {
+    const { GATED_REFERENCE_LABELS } = await import("@dpf/db/entity-reference-scope");
+    expect(GATED).toBe(`ARRAY[${GATED_REFERENCE_LABELS.map((l) => `'${l}'`).join(", ")}]`);
+  });
+
+  it("search, census and expansion filter both in SQL", async () => {
+    mockQueryRawUnsafe.mockResolvedValue([]);
+    await searchGraphNodes({ query: "BI-" });
+    expect(sqlOf(0)).toContain(`NOT (n.labels && ${GATED}::text[])`);
+
+    mockQueryRawUnsafe.mockReset().mockResolvedValue([{ count: 0 }]);
+    await getGraphCensus();
+    const census = mockQueryRawUnsafe.mock.calls.map((c) => String(c[0]));
+    expect(census.filter((sql) => sql.includes("graph_node")).every((sql) => sql.includes(GATED))).toBe(true);
+    expect(census.filter((sql) => sql.includes("graph_edge")).every((sql) => sql.includes("rel_type <> 'MENTIONS'"))).toBe(true);
+
+    mockQueryRawUnsafe.mockReset()
+      .mockResolvedValueOnce([node("a")])
+      .mockResolvedValueOnce([edge("a", "b")])
+      .mockResolvedValueOnce([node("b")])
+      .mockResolvedValueOnce([]);
+    await expandGraphNeighbourhood({ seedKeys: ["a"], depth: 1 });
+    const sqls = mockQueryRawUnsafe.mock.calls.map((c) => String(c[0]));
+    expect(sqls.filter((sql) => sql.includes("FROM graph_edge")).every((sql) => sql.includes("rel_type <> 'MENTIONS'"))).toBe(true);
+    expect(sqls.filter((sql) => sql.includes("FROM graph_node")).every((sql) => sql.includes(GATED))).toBe(true);
+  });
+});

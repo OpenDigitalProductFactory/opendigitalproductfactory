@@ -1176,6 +1176,8 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "--test",
         "scripts/lib/dev-portal-lease-claim-key.test.mjs",
         "scripts/lib/dev-preview-port-binding.test.mjs",
+        "scripts/lib/dev-preview-spawn-recovery.test.mjs",
+        "apps/web/lib/platform-runtime/docker-socket.test.mjs",
       ),
       node(
         "--test",

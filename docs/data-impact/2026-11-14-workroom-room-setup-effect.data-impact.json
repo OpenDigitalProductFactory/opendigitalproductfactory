@@ -1,0 +1,42 @@
+{
+  "version": "1",
+  "accountableOwner": "platform-architecture",
+  "summary": "BI-C64EDA33 PR 3 (AC-5, plan 2026-11-14-workroom-runtime-core). Migration 20261114080000_workroom_room_setup_effect adds the 'ensure-workitem-anchor' value to WorkroomEffectKind. Claim and adopt now owe a room its WorkItem anchor as a WorkroomEffect committed in the same transaction as the room (it used to be created after commit and could be lost to a crash); the effect worker runs and retries it. No new table or column.",
+  "affectedCopies": [
+    "WorkroomEffect rows of kind ensure-workitem-anchor: inserted by apps/web/lib/workroom-runtime/room-setup-effects.server.ts inside the claim (governed-work-claim afterClaimInTx) and adopt transactions; run by the effect worker; cascade with their Workroom."
+  ],
+  "privacyAssessment": {
+    "personalData": false,
+    "sensitivity": "internal: the room's capsule id, backlog item id and title.",
+    "dataSubjectRights": "No content about a person.",
+    "reviewDisposition": "Covered by the WorkroomEffect model's telemetry-bounded lifecycle (180 days on createdAt)."
+  },
+  "migration": {
+    "name": "20261114080000_workroom_room_setup_effect",
+    "backfill": "None. Rooms made before this change already have their anchor or get it from the existing anchor repair paths.",
+    "rollback": "Forward-only and additive; an enum value cannot be dropped without recreating the type, and nothing requires dropping it."
+  },
+  "tests": [
+    "apps/web/lib/workroom-runtime/room-setup-effects.server.test.ts",
+    "apps/web/lib/workroom-runtime/workroom-effect-store.pg.test.ts",
+    "apps/web/lib/work-capsules/claim-backlog-item-handler.test.ts",
+    "apps/web/lib/work-capsules/adopt-worktree-ownership.test.ts"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:workroom-effect",
+      "prismaModel": "WorkroomEffect",
+      "lifecycleDisposition": "Telemetry-bounded: settled rows are history of the room's runtime (180 days on createdAt); unsettled rows are live work. Cascades with its Workroom.",
+      "fields": [
+        {
+          "fieldId": "data:workroom-effect#kind",
+          "resolution": "not-applicable",
+          "reason": "Enum gains ensure-workitem-anchor, a room setup step.",
+          "provenance": "room-setup-effects.server.ts",
+          "flags": []
+        }
+      ]
+    }
+  ]
+}

@@ -14,7 +14,7 @@ import { resolveNonprodPoolPolicy, type HostResourceLeaseEvidence } from "./envi
 import type { HeavyResourceClass } from "./host-resource-policy";
 import { lockHostBackedClaimAdmission, resolveHostBackedClaimPolicy } from "./environment-lease-host-backed-reservation";
 import localCiSlotResources from "./local-ci-slot-resources.json";
-import { assertRenewalSlotBinding, type NonprodSlotBinding } from "./environment-lease-slot-binding";
+import type { NonprodSlotBinding } from "./environment-lease-slot-binding";
 import {
   emitLeaseTransitions,
   inLeaseTransaction,
@@ -30,9 +30,8 @@ import { isImmutableGateClaimKey } from "@/lib/gates/gate-run-identity";
 import { settleTerminalGateLease } from "./environment-lease-terminal-evidence";
 import { resolveResumeClaim, validateHostResourceClaim } from "./environment-lease-resume";
 import { admittedLeaseTtlMs, DEFAULT_LEASE_TTL_MS, resolveLeaseRequestTiming } from "./environment-lease-timing";
-import { decideRenewalHoldBound } from "./environment-lease-hold-bound";
+import { renewLeaseWithEnvironmentLock } from "./environment-lease-renewal";
 import {
-  boundedRenewalExpiry,
   explainQueue,
   SERVICE_LOOKBACK_MS,
   type HoldClass,
@@ -611,58 +610,11 @@ export async function renewNonprodEnvironmentLease(input: {
   | { status: "lost"; reason: "yielded"; holdClass: HoldClass; holdBoundAt: Date }
 > {
   const db = input.db ?? prisma;
-  const now = input.now ?? new Date();
-  const lease = await db.nonProductionEnvironmentLease.findUnique({
-    where: { leaseId: input.leaseId },
-  });
-  if (!lease) return { status: "lost", reason: "not-found" };
-  if (lease.status !== "active") return { status: "lost", reason: "not-active" };
-  if (lease.ownerSessionId !== input.ownerSessionId) return { status: "lost", reason: "not-owner" };
-  if (lease.expiresAt.getTime() <= now.getTime()) return { status: "lost", reason: "expired" };
-  // BI-218A4555 (generalises BI-995E9530): no hold outlives its class bound
-  // while another session waits. Past the bound the holder yields, and the
-  // yield is recorded on the lease; its supervisor treats lease_lost as
-  // authoritative and stops the work.
-  const holdBound = await decideRenewalHoldBound(db, lease, now);
-  if (holdBound.kind === "yield") {
-    await db.nonProductionEnvironmentLease.update({
-      where: { leaseId: input.leaseId },
-      data: { phase: holdBound.phase },
-    });
-    return { status: "lost", reason: "yielded", holdClass: holdBound.classification.holdClass,
-      holdBoundAt: holdBound.holdBoundAt };
-  }
-  if (input.slotBinding) {
-    assertRenewalSlotBinding(lease, input.slotBinding);
-  } else if (
-    lease.slotManifestVersion === 1
-    && lease.phase === "admitted-unbound"
-  ) {
-    throw new Error("nonprod_slot_binding_required");
-  }
-
-  const ttlMs = admittedLeaseTtlMs(
-    lease.environmentKey,
-    input.ttlMs ?? DEFAULT_LEASE_TTL_MS,
-  );
-  const updated = await db.nonProductionEnvironmentLease.update({
-    where: { leaseId: input.leaseId },
-    data: {
-      requestedTtlMs: ttlMs,
-      // While contended, a renewal never reaches past the class bound.
-      expiresAt: boundedRenewalExpiry(holdBound, new Date(now.getTime() + ttlMs)),
-      heartbeatAt: now,
-      phase: "running",
-      ...(input.slotBinding
-        ? {
-          url: input.slotBinding.url,
-          ports: input.slotBinding.ports,
-          cleanupCommand: input.slotBinding.cleanupCommand,
-        }
-        : {}),
-    },
-  });
-  const poolPolicy: ResolvedNonprodPoolPolicy = lease.environmentKey === "host-heavy-resource"
+  const renewal = await renewLeaseWithEnvironmentLock({ ...input, db });
+  if (renewal.status === "lost") return renewal;
+  const { lease: updated, environmentKey, renewedAt: now } = renewal;
+  // Capacity observation can perform external I/O; keep it outside the lock.
+  const poolPolicy: ResolvedNonprodPoolPolicy = environmentKey === "host-heavy-resource"
     ? {
       policyVersion: 1,
       source: "host-resource-profile",
@@ -682,7 +634,7 @@ export async function renewNonprodEnvironmentLease(input: {
     }
     : await resolveNonprodPoolPolicy({
       platformConfig: db.platformConfig,
-      environmentKey: lease.environmentKey,
+      environmentKey,
       hostPressure: input.hostPressure,
       capacityBroker: input.capacityBroker,
       manifestSlotCount: NONPROD_SLOT_KEYS.length,

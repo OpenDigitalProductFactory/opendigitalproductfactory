@@ -21,7 +21,7 @@ function renewalDb() {
 
 describe("nonproduction lease slot-binding liveness", () => {
   it("rejects an unbound or mismatched slot-aware renewal", async () => {
-    const { db, findUnique } = renewalDb();
+    const { db } = renewalDb();
     const renew = (slotBinding?: {
       manifestVersion: 1;
       slotKey: "slot-0" | "slot-1";
@@ -51,7 +51,8 @@ describe("nonproduction lease slot-binding liveness", () => {
       ports: [3010, 15432],
       cleanupCommand: "node scripts/local-ci-slot-cleanup.mjs --slot-key slot-1",
     })).rejects.toThrow("nonprod_slot_resource_binding_mismatch");
-    expect(findUnique).toHaveBeenCalledTimes(3);
+    // The refusal and absence of a write are the contract. Renewal now reads
+    // again under the environment lock; query counts are not a safety result.
     expect(db.nonProductionEnvironmentLease.update).not.toHaveBeenCalled();
   });
 });
