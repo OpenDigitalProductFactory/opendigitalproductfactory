@@ -1518,8 +1518,11 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
     }
     totalInputTokens += result.inputTokens;
     totalOutputTokens += result.outputTokens;
-    // Both ordinary completion policies consume the same native-call audit once.
-    if (!restricted && (params.terminalToolPolicy || readEvidencePolicy)) {
+    // Every non-restricted turn consumes the native-call audit once (BI-5B920631):
+    // the terminal and read-evidence policies, the INV-1 evidence count and the
+    // non-acting detector must see the calls a CLI ran itself. The fold is a
+    // no-op for adapters that do not run platform tools natively.
+    if (!restricted) {
       await (await import("./native-mcp-executions")).foldNativeMcpExecutions({ taskRunId, providerId: result.providerId, sinceMs: startTime, records: executedTools });
     }
     if (params.terminalToolPolicy) {
@@ -1556,7 +1559,8 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
         detectNonActingAnswer({
           taskType: taskType ?? "",
           attachedToolCount: result.toolsStripped ? 0 : tools.length,
-          toolCallCount: 0,
+          // Native-MCP calls arrive as folded records, not parsed toolCalls.
+          toolCallCount: executedTools.length,
           replyText: trimmed,
         })
       ) {
