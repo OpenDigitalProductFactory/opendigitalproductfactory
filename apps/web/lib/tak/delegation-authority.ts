@@ -53,6 +53,13 @@ export async function startChain(
   skillId: string | null,
   originUserId: string,
   originAuthority: string[],
+  /** What the delegated work needs (a skill's capability). Every entry must be in originAuthority. */
+  requiredCapabilities: string[],
+  /**
+   * The delegated agent's own grants, when known. The first hop never gives an
+   * agent more than it already holds, so this narrows further; it never widens.
+   */
+  targetCeiling?: string[],
 ): Promise<DelegationResult> {
   const chainId = randomUUID();
 
@@ -66,9 +73,33 @@ export async function startChain(
     };
   }
 
-  // Authority propagation — the delegated agent gets the intersection
-  // of the origin user's authority and the skill's required capabilities
-  const propagated = originAuthority; // Full authority on first hop
+  // Authority propagation (BI-FD00E416): the delegated agent gets the
+  // intersection of the origin's authority and what the work requires, capped by
+  // its own grants. A requirement the origin lacks is refused, never granted.
+  const missing = requiredCapabilities.filter((cap) => !originAuthority.includes(cap));
+  if (missing.length > 0) {
+    const reason = `Authority insufficient: missing ${missing.join(", ")}`;
+    const blocked = await prisma.delegationChain.create({
+      data: {
+        chainId,
+        depth: 0,
+        fromAgentId,
+        toAgentId,
+        skillId,
+        authorityScope: [],
+        originUserId,
+        originAuthority,
+        status: "blocked",
+        reason,
+        parentLinkId: null,
+      },
+    });
+    return { allowed: false, link: blocked as DelegationLink, reason, propagatedAuthority: [] };
+  }
+  const scoped = requiredCapabilities.length > 0
+    ? originAuthority.filter((cap) => requiredCapabilities.includes(cap))
+    : originAuthority;
+  const propagated = targetCeiling ? scoped.filter((cap) => targetCeiling.includes(cap)) : scoped;
 
   const link = await prisma.delegationChain.create({
     data: {

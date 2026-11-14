@@ -72,7 +72,18 @@ export async function spawnSubagentFanout(input: {
       continue;
     }
 
-    const delegation = await startChain(input.parentAgentId, sub.toAgentId, null, input.userId, input.originAuthority);
+    // BI-FD00E416: a child gets the parent's authority only where it already
+    // holds the same grant itself; delegation never widens the child.
+    const childGrants = await prisma.agentToolGrant.findMany({ where: { agentId: sub.toAgentId }, select: { grantKey: true } });
+    const delegation = await startChain(
+      input.parentAgentId,
+      sub.toAgentId,
+      null,
+      input.userId,
+      input.originAuthority,
+      [],
+      childGrants.map((grant) => grant.grantKey),
+    );
     if (!delegation.allowed || !delegation.link) {
       spawned.push({ ok: false, toAgentId: sub.toAgentId, reason: delegation.reason });
       continue;
