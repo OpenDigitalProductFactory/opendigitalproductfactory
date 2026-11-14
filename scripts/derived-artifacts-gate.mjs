@@ -13,6 +13,13 @@
 //                         `git add` the result. Prints exactly what it did,
 //                         itemized — mirrors the pre-commit Guard 2 (Prisma
 //                         client) precedent: loud, never silent, fast.
+//   regenerate-affected <baseRef>
+//                         Build Studio, after a build is refreshed onto
+//                         upstream (BI-A9E32D80): for every registered artifact
+//                         whose sources the change since baseRef touches, run
+//                         its generate command and `git add` the result. The
+//                         caller commits. Same plan as regenerate-staged, over
+//                         the branch's diff instead of the index.
 //   push-exempt <baseRef> pre-push gate: decide whether the diff since
 //                         baseRef needs the local-CI sandbox gate. Replaces
 //                         the old docs-only path-regex exemption — "docs
@@ -415,42 +422,59 @@ function stageArtifact(artifactPath) {
 // ── subcommands ──────────────────────────────────────────────────────────
 
 function cmdRegenerateStaged() {
-  const plan = planRegenerate(stagedFiles(), DERIVED_ARTIFACTS, binaryAvailable);
-  if (plan.length === 0) return 0;
+  return regenerate(planRegenerate(stagedFiles(), DERIVED_ARTIFACTS, binaryAvailable), "pre-commit")
+    ? 0
+    : rejectCommit();
+}
+
+function rejectCommit() {
+  console.error("");
+  console.error("Commit rejected. A derived-artifact generator failed — see errors above.");
+  console.error("");
+  return 1;
+}
+
+// BI-A9E32D80: a generator that fails here is not fatal to the caller's
+// refresh; the artifact stays stale and its guard names it in the gauntlet.
+function cmdRegenerateAffected(baseRef) {
+  if (!baseRef) {
+    console.error("[derived-artifacts] regenerate-affected requires a base ref argument.");
+    return 2;
+  }
+  return regenerate(planRegenerate(diffFiles(baseRef), DERIVED_ARTIFACTS, binaryAvailable), "derived-artifacts") ? 0 : 1;
+}
+
+/** Run a regenerate plan and stage what it wrote. Returns false when a generator failed. */
+function regenerate(plan, label) {
+  if (plan.length === 0) return true;
 
   let failed = false;
   for (const { entry, action } of plan) {
     if (action === "skip-missing-binary") {
-      console.log(`[pre-commit] derived-artifact "${entry.id}": sources changed but ${entry.requiresBinary} is not installed — SKIPPED (CI is the backstop via --check).`);
+      console.log(`[${label}] derived-artifact "${entry.id}": sources changed but ${entry.requiresBinary} is not installed — SKIPPED (CI is the backstop via --check).`);
       continue;
     }
     if (action === "advisory") {
-      console.log(`[pre-commit] derived-artifact "${entry.id}": sources changed (${entry.description}).`);
-      console.log(`[pre-commit]   This artifact requires a deliberate decision, not auto-regeneration. If needed, run:`);
-      console.log(`[pre-commit]     ${entry.generate.join(" ")}`);
-      console.log(`[pre-commit]   and review + stage ${entry.artifactPaths.join(", ")} yourself.`);
+      console.log(`[${label}] derived-artifact "${entry.id}": sources changed (${entry.description}).`);
+      console.log(`[${label}]   This artifact requires a deliberate decision, not auto-regeneration. If needed, run:`);
+      console.log(`[${label}]     ${entry.generate.join(" ")}`);
+      console.log(`[${label}]   and review + stage ${entry.artifactPaths.join(", ")} yourself.`);
       continue;
     }
-    console.log(`[pre-commit] derived-artifact "${entry.id}": sources changed (${entry.description}) — regenerating...`);
+    console.log(`[${label}] derived-artifact "${entry.id}": sources changed (${entry.description}) — regenerating...`);
     try {
       runCommand(entry.generate);
     } catch (err) {
-      console.error(`[pre-commit] ERROR: "${entry.generate.join(" ")}" failed for derived-artifact "${entry.id}".`);
+      console.error(`[${label}] ERROR: "${entry.generate.join(" ")}" failed for derived-artifact "${entry.id}".`);
       console.error(String(err?.message ?? err));
       failed = true;
       continue;
     }
     for (const artifactPath of entry.artifactPaths) stageArtifact(artifactPath);
-    console.log(`[pre-commit] derived-artifact "${entry.id}": regenerated and staged ${entry.artifactPaths.join(", ")}.`);
+    console.log(`[${label}] derived-artifact "${entry.id}": regenerated and staged ${entry.artifactPaths.join(", ")}.`);
   }
 
-  if (failed) {
-    console.error("");
-    console.error("Commit rejected. A derived-artifact generator failed — see errors above.");
-    console.error("");
-    return 1;
-  }
-  return 0;
+  return !failed;
 }
 
 function cmdPushExempt(baseRef) {
@@ -513,6 +537,9 @@ function main() {
     case "regenerate-staged":
       process.exit(cmdRegenerateStaged());
       break;
+    case "regenerate-affected":
+      process.exit(cmdRegenerateAffected(rest[0]));
+      break;
     case "push-exempt":
       process.exit(cmdPushExempt(rest[0]));
       break;
@@ -523,7 +550,7 @@ function main() {
       process.exit(cmdList());
       break;
     default:
-      console.error("Usage: node scripts/derived-artifacts-gate.mjs <regenerate-staged|push-exempt <baseRef>|check-all|list>");
+      console.error("Usage: node scripts/derived-artifacts-gate.mjs <regenerate-staged|regenerate-affected <baseRef>|push-exempt <baseRef>|check-all|list>");
       process.exit(2);
   }
 }

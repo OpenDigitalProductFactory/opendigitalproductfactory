@@ -83,7 +83,7 @@ async function packagedFixture(t, { reply, source = true, helper = true, legacyH
     writeFileSync(join(root, "AGENTS.md"), "# DPF source fixture\n");
   }
   if (helper) {
-    for (const relative of ["scripts/lib/workroom-bind.mjs", "scripts/lib/worktree-provision.mjs", "scripts/lib/entry-module.mjs", "scripts/lib/mcp-client.mjs", "scripts/lib/git.mjs",
+    for (const relative of ["scripts/lib/workroom-bind.mjs", "scripts/lib/staged-scope.mjs", "scripts/lib/worktree-provision.mjs", "scripts/lib/entry-module.mjs", "scripts/lib/mcp-client.mjs", "scripts/lib/git.mjs",
       "scripts/lib/mcp-credential.mjs", "scripts/lib/mcp-host-trust.mjs", "scripts/lib/foreground-gate-process.mjs", "scripts/lib/resolve-compose-install-context.mjs",
       "scripts/lib/script-argv.mjs", "packages/dpf-skill-pack/scripts/lib/client-credentials-exchange.mjs"]) {
       // Keep this literal copy loop visible to the shared fixture-import closure guard.

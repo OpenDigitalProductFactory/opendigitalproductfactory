@@ -39,6 +39,8 @@ import {
   buildSandboxBuildCloneAlignCommand,
   buildSandboxBuildCloneCommand,
   buildSandboxBuildCloneRebaseCommand,
+  buildSandboxRegenerateDerivedArtifactsCommand,
+  parseRegenerateDerivedArtifactsOutput,
   buildSandboxBuildCloneRemoveCommand,
   buildSandboxBuildCloneSyncCommand,
   buildSandboxPublishedHeadFetchCommand,
@@ -982,8 +984,18 @@ export async function refreshBuildBranchOntoUpstream(buildId: string): Promise<B
   );
   if (rebase.status === "conflict") return { ...rebase, ontoRef: identity.clientBranch };
   if (rebase.status === "unknown") return { status: "unknown", reason: rebase.output };
+  // BI-A9E32D80: the build's derived artifacts were generated on the old base.
+  // Not under the sandbox git lock: generators can take a minute and only the
+  // build's own clone is written.
+  const regenerated = await execInSandbox(
+    SANDBOX_CONTAINER,
+    [sandboxGitPrelude(), buildSandboxRegenerateDerivedArtifactsCommand(workdir, identity.clientBranch)].join(" && "),
+  ).then(parseRegenerateDerivedArtifactsOutput, (err: unknown) => {
+    console.warn(`[build-branch] derived-artifact regeneration skipped for ${JSON.stringify(buildId)}: ${JSON.stringify((err as Error).message?.slice(0, 200))}`);
+    return null;
+  });
   await execSandboxGit(buildSandboxBuildCloneSyncCommand(workdir, branchName));
-  return { status: "refreshed", headSha: rebase.headSha, clientSha: client.headSha };
+  return { status: "refreshed", headSha: regenerated ?? rebase.headSha, clientSha: client.headSha };
 }
 
 /**
