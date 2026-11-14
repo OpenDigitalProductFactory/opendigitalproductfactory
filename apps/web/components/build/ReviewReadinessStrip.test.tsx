@@ -74,6 +74,7 @@ describe("ReviewReadinessStrip chips", () => {
           }),
           verificationOut: {
             testsPassed: 1,
+            testsExecuted: true, testsApplicable: true, testCommandPassed: true, testSummariesComplete: true,
             testsFailed: 0,
             typecheckPassed: true,
             fullOutput: "",

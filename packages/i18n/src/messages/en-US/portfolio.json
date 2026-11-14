@@ -82,5 +82,17 @@
     "ownerRequired": "The recorded funding owner must authorize this change.",
     "installationLinkIntro": "Funding follows its owner and purpose.",
     "installationLink": "Review investment allocation"
+  },
+  "hostPosture": {
+    "heading": "How this computer keeps the platform running",
+    "notReported": "Not reported yet. The settings are read the next time the platform starts after someone signs in.",
+    "noChecks": "No checks exist yet for this kind of computer.",
+    "readAt": "Read at the last start:",
+    "adviceOnly": "Suggestions only. The platform never changes these settings.",
+    "state": {
+      "ok": "Good",
+      "attention": "Needs a change",
+      "unknown": "Unknown"
+    }
   }
 }

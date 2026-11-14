@@ -17,7 +17,7 @@ const NOW = new Date("2026-10-23T12:00:00Z");
 function database() {
   const room: Record<string, any> = { id: "row-1", capsuleId: "WC-1", executorKind: "claude-desktop", executorRef: "source-chat", leaseHolderPrincipalId: "human", leaseExpiresAt: new Date("2026-10-23T12:30:00Z"), featureBuildId: null, objective: "Deliver the plan", scopeClaims: [{ workShape: "delivery-large@1.0.0" }], createdByPrincipalId: "human", requestedByPrincipalId: "human" };
   const roster = [{ principalId: "human", roles: ["coordinator"], lifecycle: "active", principal: { kind: "human" } }, { principalId: "claude", roles: ["contributor"], lifecycle: "active", principal: { kind: "agent" } }, { principalId: "codex", roles: ["contributor"], lifecycle: "active", principal: { kind: "agent" } }];
-  const state = { now: NOW, sensitivity: "internal", policy: {} as Record<string, unknown> };
+  const state = { now: NOW, sensitivity: "internal", policy: {} as Record<string, unknown>, principalKinds: { human: "human", "other-human": "human", "build-specialist": "agent" } as Record<string, string> };
   const activities: any[] = [];
   const db = { workroom: {
     findUnique: vi.fn(async () => ({ ...room })), update: vi.fn(async ({ data }: { data: Record<string, unknown> }) => { Object.assign(room, data); return { ...room }; }),
@@ -25,7 +25,8 @@ function database() {
     create: vi.fn(async ({ data }: { data: Record<string, unknown> }) => { const row = { id: "activity-" + activities.length, ...JSON.parse(JSON.stringify(data)) }; activities.push(row); return row; }),
     findFirst: vi.fn(async ({ where, orderBy }: any) => (orderBy ? [...activities].reverse() : activities).find((row) => row.workCapsuleId === where.workCapsuleId && row.kind === where.kind && (!where.id || row.id === where.id) && (!where.commandScopeKey || row.commandScopeKey === where.commandScopeKey) && (!where.commandKey || row.commandKey === where.commandKey) && (!where.AND || where.AND.every((clause: any) => clause.payload.path.reduce((value: any, key: string) => value?.[key], row.payload) === clause.payload.equals))) ?? null),
     findMany: vi.fn(async ({ where, take }: any) => [...activities].reverse().filter(row => row.workCapsuleId === where.workCapsuleId && row.kind === where.kind && (!where.AND || where.AND.every((clause: any) => clause.payload.path.reduce((value: any, key: string) => value?.[key], row.payload) === clause.payload.equals))).slice(0, take)),
-  }, workroomParticipant: { findMany: vi.fn(async () => roster), create: vi.fn(), update: vi.fn() }, $queryRaw: vi.fn(async (sql: TemplateStringsArray) => sql.join("").includes("clock_timestamp") ? [{ now: state.now }] : []) };
+  }, workroomParticipant: { findMany: vi.fn(async () => roster), create: vi.fn(), update: vi.fn() }, $queryRaw: vi.fn(async (sql: TemplateStringsArray, ...values: unknown[]) => sql.join("").includes("clock_timestamp") ? [{ now: state.now }]
+    : sql.join("").includes('SELECT "kind" FROM "Principal"') ? (state.principalKinds[String(values[0])] ? [{ kind: state.principalKinds[String(values[0])] }] : []) : []) };
   mocks.access.mockImplementation(async ({ agentId }: { agentId: string }) => {
     const id = agentId === "AGT-EXT-CLAUDE" ? "claude" : "codex";
     const row = roster.find((entry) => entry.principalId === id);
@@ -183,5 +184,34 @@ describe("same-owner handover after the source session stood down", () => {
     const env = stoodDown(); alter(env);
     expect(await execute(env, lapsed)).toMatchObject({ success: false, error: code });
     expect(env.activities.filter((row) => row.kind === "action")).toHaveLength(0);
+  });
+});
+
+// BI-53BED66C: WC-1920C35F on production, 2026-11-13. The room's drive had
+// dispatched a stage to the Software Engineer coworker, whose lease then
+// lapsed. The owner's own same-scope handover raised approval
+// cmwfdcrs400580ep4k6we4wux with handoff-lease-expired.
+describe("same-owner handover of a room a platform coworker last held", () => {
+  const toCodex = { ...request, expectedLeaseHolderPrincipalId: "build-specialist" };
+  function coworkerLapsed() { const env = database(); env.room.leaseHolderPrincipalId = "build-specialist"; env.room.leaseExpiresAt = new Date(NOW.getTime() - 13 * 60 * 60_000); return env; }
+
+  it("requests, then the receiver acknowledges, with no approval and the owner holding the lease after", async () => {
+    const env = coworkerLapsed();
+    const requested = await execute(env, toCodex);
+    expect(requested).toMatchObject({ success: true, data: { handoff: { state: "pending-acknowledgement" } } });
+    const id = (requested.data as any).handoff.requestId as string;
+    // The completed record names the room's owner, never the coworker whose lease lapsed.
+    expect(await execute(env, ack(id), receiver)).toMatchObject({ success: true, data: { handoff: { state: "completed", receivingAgentId: "AGT-EXT-CODEX", ownerPrincipalId: "human" } } });
+    expect(env.room).toMatchObject({ executorKind: "codex-desktop", executorRef: "receiver-chat", leaseHolderPrincipalId: "human" });
+  });
+
+  it.each([
+    ["the coworker's lease is still live", (env: ReturnType<typeof database>) => { env.room.leaseExpiresAt = new Date(NOW.getTime() + 10 * 60_000); }, "handoff-source-changed"],
+    ["the lapsed holder is another person", (env: ReturnType<typeof database>) => { env.state.principalKinds["build-specialist"] = "human"; }, "handoff-lease-expired"],
+    ["the holder's kind cannot be read", (env: ReturnType<typeof database>) => { delete env.state.principalKinds["build-specialist"]; }, "handoff-lease-expired"],
+  ])("still refuses when %s", async (_, alter, code) => {
+    const env = coworkerLapsed(); alter(env);
+    expect(await execute(env, toCodex)).toMatchObject({ success: false, error: code });
+    expect(env.db.workroom.update).not.toHaveBeenCalled();
   });
 });

@@ -19,6 +19,15 @@ overrides:
   # event loop. css-tree and postcss resolve 1.2.1. The root floor does not
   # reach this standalone probe. Patch floor.
   'source-map-js@<1.2.2': '1.2.2'
+  # undici < 7.30.1: 29 advisories (Dependabot #270-#298; 10 high), among them
+  # GHSA-4w7w-5xrc-9h26 (#298), GHSA-2m5v-pch6-74hx (#297),
+  # GHSA-qrxm-fqhp-jwvm (#296), GHSA-xjj6-f33q-929c (#293),
+  # GHSA-rfgv-xxqx-mfg5 (#288), GHSA-w293-vg96-wgc3 (#284),
+  # GHSA-4cwx-7wf7-3272 (#277), GHSA-vxpw-j846-p89q (#274),
+  # GHSA-hm92-r4w5-c3mj (#273), GHSA-vmh5-mc38-953g (#271). Transitive in this
+  # standalone probe (resolves to 7.25.0); the root floor does not reach it.
+  # Floor the 7.x line to the patched 7.30.1, which clears every open alert.
+  'undici@<7.30.1': '^7.30.1'
 
 allowBuilds:
   "@google/genai@1.52.0": false

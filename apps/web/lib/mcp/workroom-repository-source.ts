@@ -1,3 +1,6 @@
+import { readWorkShapeClaimRef } from "@/lib/work-management/workroom-shape-claim";
+import { resolveAgentWorkroomAccess } from "@/lib/work-management/workroom-agent-access.server";
+import type { InitiativeArtifactRef } from "@/lib/backlog/initiative-readiness/receipt-schema";
 import { prisma, type Prisma } from "@dpf/db";
 import { canonicalJson } from "@dpf/integration-shared/canonical-json";
 import { resolveWorkroomReadSource } from "./backlog-workroom-read-source";
@@ -53,4 +56,37 @@ export async function prepareWorkroomRepositorySource(args: {
   if (!observation.evidence) return null;
   return { sourceAdmission: { ...binding.source, isCurrent: () => current(db) },
     admissionGuard: async store => observation.admissionGuard((store ?? db) as ArtifactObservationDb) };
+}
+
+/** Author research only. This proves room access, not provider bytes or write authority. */
+export async function prepareSourceInquiryResearch(args: {
+  workroomId: unknown; itemId: string; userId: string; agentId: string | null;
+  artifactRef: Extract<InitiativeArtifactRef, { kind: "repo-blob-at-commit" }>;
+}, db: Prisma.TransactionClient = prisma) {
+  if (typeof args.workroomId !== "string" || !args.userId || !args.agentId) return null;
+  const locator = { ...args.artifactRef };
+  const load = async (store: Prisma.TransactionClient) => {
+    const room = await store.workroom.findFirst({ where: { capsuleId: args.workroomId as string },
+      select: { id: true, capsuleId: true, backlogItemId: true, repositoryFullName: true,
+        status: true, archivedAt: true, scopeClaims: true, headBranch: true, headSha: true,
+        createdByPrincipalId: true } });
+    if (!room || room.capsuleId !== args.workroomId || room.archivedAt !== null
+      || ["abandoned", "archived", "superseded", "complete"].includes(room.status)
+      || readWorkShapeClaimRef(room.scopeClaims) !== "source-inquiry@1.0.0"
+      || room.headBranch !== null || room.headSha !== null || !room.createdByPrincipalId
+      || room.repositoryFullName !== locator.repositoryFullName || !room.backlogItemId) return { kind: "unavailable" as const };
+    const item = await store.backlogItem.findFirst({ where: { OR: [{ id: room.backlogItemId }, { itemId: room.backlogItemId }] },
+      select: { id: true, itemId: true } });
+    if (!item || item.itemId !== args.itemId
+      || (await resolveAgentWorkroomAccess({ userId: args.userId, agentId: args.agentId!, workroomId: room.id,
+        requested: "action" }, store)).decision.level !== "action") return { kind: "unavailable" as const };
+    return { kind: "bound" as const, itemRowId: item.id, room, locator };
+  };
+  const observation = await prepareCurrentArtifactObservation({ db, load: store => load(store as Prisma.TransactionClient),
+    read: async binding => binding, unbound: () => null, unavailable: null,
+    isUnavailable: value => value === null });
+  if (!observation.evidence) return null;
+  return { inquiryAdmission: { itemId: args.itemId, workroomId: args.workroomId,
+    artifactRef: locator, isCurrent: async () => canonicalJson(await load(db)) === canonicalJson(observation.evidence) },
+    admissionGuard: async (store: Prisma.TransactionClient) => Boolean(await observation.admissionGuard(store ?? db)) };
 }

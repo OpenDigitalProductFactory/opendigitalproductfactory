@@ -64,11 +64,12 @@ describe("backfillBacklogItemOutcomes", () => {
     expect(await backfillBacklogItemOutcomes(db, { limit: 2 })).toMatchObject({ filled: 0, remaining: 0 });
   });
 
-  it("never overwrites an outcome, and skips delivered and retired items", async () => {
+  it("never overwrites an outcome, and skips delivered, retired, and non-canonical legacy items", async () => {
     const rows = [
       row("r1", { outcome: "Stated by a person.", outcomeSource: "stated" }),
       row("r2", { status: "done" }),
       row("r3", { status: "retired" }),
+      row("r4", { status: "blocked" }),
     ];
     const { db, updates } = fakeDb(rows);
 

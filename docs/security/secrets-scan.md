@@ -1,6 +1,6 @@
 # Secrets scan — pre-PR gate (gitleaks)
 
-Companion to the [CodeQL inflow gate](README.md). gitleaks runs on every
+Companion to the [security findings overview](README.md). gitleaks runs on every
 pull request against `main` and on pushes to `main`, blocking the PR if
 it detects a secret in the diff.
 
@@ -21,7 +21,7 @@ anti-patterns), the coverage story is:
 |---|---|---|
 | **gitleaks** (this workflow) | Hardcoded credentials, tokens, keys | Every PR |
 | **CodeQL** ([`codeql.yml`](../../.github/workflows/codeql.yml)) | Code patterns, dataflow, framework rules | Every PR |
-| **CodeQL inflow gate** ([`security-inflow-gate.yml`](../../.github/workflows/security-inflow-gate.yml)) | Diff vs baseline (blocks NEW alerts) | After CodeQL completes |
+| **Repository security intake** ([operations guide](../user-guide/operations/index.md)) | Open CodeQL, Dependabot and secret-scanning alerts become prioritised backlog items | Every 4 hours |
 | **Per-domain audit scripts** (`audit-*.yml`) | Routing invariants, coworker grants, etc. | Every PR |
 
 ## What gitleaks catches

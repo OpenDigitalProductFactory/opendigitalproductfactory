@@ -109,6 +109,7 @@ const RESIDUE_LABEL: Record<ResidueReason, string> = {
   "policy-approval": "an agent action is awaiting your approval",
   "new-memory-note": "a coworker gained a new working-memory note",
   "no-self-heal": "a platform service is degraded and cannot repair itself",
+  "self-heals": "a provider limit lifts on its own at its reset while other providers carry the work",
 };
 
 /** Human label for the residue reason — the honest "why it's here" line. Pure. */

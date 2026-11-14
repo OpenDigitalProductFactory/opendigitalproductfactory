@@ -1,3 +1,4 @@
+import { canonicalJson } from "@dpf/integration-shared/canonical-json";
 import { createHash } from "node:crypto";
 
 import { prisma } from "@dpf/db";
@@ -430,6 +431,10 @@ function describeCapsuleHead(capsule: { capsuleId: string; headBranch: string | 
  */
 export type MergedRepairProof = { workroomId: string; commitSha: string };
 
+export type SourceInquiryAdmission = {
+  itemId: string; workroomId: string; artifactRef: RepositoryLocator; isCurrent: () => Promise<boolean>;
+};
+
 export async function resolveRepositoryArtifact(args: {
   /** A repository blob, or (BI-46E344FE) a merged repair's whole commit range. */
   locator: RepositoryLocator | RepoCommitRangeRef;
@@ -440,6 +445,7 @@ export async function resolveRepositoryArtifact(args: {
   /** Current baseline/coverage proof resolved internally by the receipt writer. */
   canonicalPlanProof?: CanonicalPlanSourceProof;
   sourceAdmission?: RepositorySourceAdmission;
+  inquiryAdmission?: SourceInquiryAdmission;
   db?: RepositoryArtifactDb;
   fetchImpl?: typeof fetch;
   transportFactory?: () => GithubReadTransport;
@@ -464,6 +470,12 @@ export async function resolveRepositoryArtifact(args: {
   // The commit the artifact is read at: the blob's commit, or the range's newest head.
   const locatorCommitSha = blob ? blob.commitSha : commitRangeHead(range!.ranges);
 
+  const inquiry = args.inquiryAdmission;
+  if (inquiry && (foreign || !blob || args.subject.kind !== "backlog-item"
+    || inquiry.itemId !== args.subject.id || canonicalJson(inquiry.artifactRef) !== canonicalJson(args.locator)
+    || args.workroomRef || args.mergedRepairProof || args.canonicalPlanProof || !await inquiry.isCurrent())) {
+    return { ok: false, code: "CANONICAL_DESIGN_AMBIGUOUS", error: "Read-only research binding is not current for this exact artifact." };
+  }
   const subjectWhere = args.subject.kind === "backlog-item"
     ? { backlogItemId: args.subject.id }
     : args.subject.kind === "epic"
@@ -529,7 +541,9 @@ export async function resolveRepositoryArtifact(args: {
   // anchored to the merged head; the writer's trunk proof is what admits it.
   const recordedHead = (candidate: (typeof candidates)[number]) => candidate.headSha
     ?? (mergedRepair && candidate.capsuleId === mergedRepair.workroomId ? mergedRepair.commitSha : null);
-  const capsules = candidates.filter((candidate) => boundRoom
+  const capsules = candidates.filter((candidate) => inquiry
+    ? candidate.capsuleId === inquiry.workroomId && candidate.headBranch === null && candidate.headSha === null
+    : boundRoom
     ? candidate.capsuleId === boundRoom.workroomId && candidate.headBranch === boundRoom.branchName
       && recordedHead(candidate)?.toLowerCase() === boundRoom.headSha.toLowerCase()
     : (candidate.headSha ?? "").toLowerCase() === locatorCommitSha.toLowerCase());
@@ -730,6 +744,8 @@ export async function resolveRepositoryArtifact(args: {
     if (foreign && !await currentSource(args.sourceAdmission, args.locator.repositoryFullName, locatorCommitSha)) {
       return { ok: false, code: "CANONICAL_DESIGN_AMBIGUOUS", error: "The selected source or actor admission changed during artifact verification." };
     }
+    if (inquiry && !await inquiry.isCurrent()) return { ok: false, code: "CANONICAL_DESIGN_AMBIGUOUS",
+      error: "Read-only research admission changed during provider verification." };
     return {
       ok: true,
       artifact: {

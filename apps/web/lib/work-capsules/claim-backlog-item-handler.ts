@@ -8,7 +8,7 @@ import {
   resolveDeliveryShape,
   type DeliveryShapeResolution,
 } from "@/lib/work-management/derive-delivery-shape";
-import { ensureCapsuleWorkItemAnchorWithPrisma } from "@/lib/work-capsules/capsule-workitem-anchor.server";
+import { kickRoomSetup, oweRoomSetup } from "@/lib/workroom-runtime/room-setup-effects.server";
 
 import { providerToExecutorKind } from "./external-session-capture";
 import { claimGovernedBacklogWorkspace } from "./governed-work-claim";
@@ -81,6 +81,26 @@ async function resolveClaimShape(args: {
   return { resolution, refusal: null };
 }
 
+/** Orchestrating harnesses DPF recognises (BI-53BED66C). Descriptive only: never an authority identity. */
+export const EXECUTOR_HARNESSES = ["t3-code"] as const;
+export type ExecutorHarness = (typeof EXECUTOR_HARNESSES)[number];
+
+/** A provider string that names only a harness, with no model client in it. */
+export function isHarnessOnlyProvider(provider: string): boolean {
+  const normalized = provider.trim().toLowerCase();
+  return /^t3(?:[-_ ]?code)?$/.test(normalized);
+}
+
+/** Record which harness runs the room's executor, keyed to the session it ran. */
+export async function persistExecutorHarness(db: CapsuleDb, capsuleId: string, harness: ExecutorHarness, sessionRef: string): Promise<void> {
+  const row = await db.workroom.findUnique({ where: { capsuleId }, select: { workspaceState: true } }) as { workspaceState?: unknown } | null;
+  if (!row) return;
+  const state = row.workspaceState && typeof row.workspaceState === "object" && !Array.isArray(row.workspaceState)
+    ? row.workspaceState as Record<string, unknown> : {};
+  await db.workroom.update({ where: { capsuleId },
+    data: { workspaceState: { ...state, executorHarness: { harness, executorRef: sessionRef, recordedAt: new Date().toISOString() } } } });
+}
+
 export async function persistClaimShape(db: CapsuleDb, capsuleId: string, resolution: DeliveryShapeResolution | null): Promise<void> {
   if (!resolution || (resolution.kind !== "declared" && resolution.kind !== "derived")) return;
   if (!db.workroom?.findUnique) return;
@@ -116,6 +136,15 @@ async function recordTwinOverride(
   });
 }
 
+/** Ask the item's home for the claim; the answer arrives with delivery. */
+async function requestHomeClaim(capsuleId: string): Promise<string> {
+  const { requestWorkClaimAtHome } = await import("@/lib/federation/work-claim-exchange.server");
+  const queued = await requestWorkClaimAtHome(capsuleId, "claim");
+  return queued.queued
+    ? "UNCONFIRMED: this item lives on the paired installation, which decides its claim. The request is queued and is sent as soon as that installation can be reached; until it answers, this Workroom is unconfirmed. If it refuses, stop before opening a pull request."
+    : `UNCONFIRMED: the claim could not be requested from the item's home (${queued.reason}).`;
+}
+
 export async function claimBacklogItemForWork(args: {
   params: Record<string, unknown>;
   userId: string;
@@ -144,6 +173,17 @@ export async function claimBacklogItemForWork(args: {
   const shas = await resolveSourceCommitShas(params, lazyResolverDeps(args.resolveCommitDeps, repositoryFullName));
   if (!shas.ok) return sourceCommitRefusal(shas, { tool: "claim_backlog_item_for_work", args: params });
   const { baseSha, headSha } = shas.data;
+  // BI-53BED66C: a harness (T3 Code) is not the authenticated client. Name the
+  // model client as provider and the harness separately; never let "t3" fall
+  // through to `human`, which hides who did the work.
+  const harness = stringParam(params, "harness");
+  if (harness && !EXECUTOR_HARNESSES.includes(harness as ExecutorHarness)) {
+    return { success: false, error: "invalid_harness", message: `harness must be one of: ${EXECUTOR_HARNESSES.join(", ")}.` };
+  }
+  if (isHarnessOnlyProvider(provider)) {
+    return { success: false, error: "provider_harness_only",
+      message: `"${provider}" names the harness, not the model client. Pass provider "codex" or "claude" (whichever T3 is driving) and harness "t3-code", with sessionRef set to the client thread id (CODEX_THREAD_ID or CLAUDE_CODE_SESSION_ID).` };
+  }
   const executorKind = providerToExecutorKind(provider);
   const shape = await resolveClaimShape({
     db: args.db,
@@ -183,6 +223,9 @@ export async function claimBacklogItemForWork(args: {
     overrideReason: stringParam(params, "overrideReason"),
   });
   if (twinGate.kind === "refused") return twinGate.result;
+  // The item lives on the paired installation (BI-30EDDB7F): the local
+  // Workroom is created unconfirmed and the claim is asked for at its home.
+  const claimAtHome = twinGate.kind === "home-claim" || (twinGate.kind === "overridden" && twinGate.homeClaim);
   try {
     const governed = await claimGovernedBacklogWorkspace({
       db: args.db,
@@ -199,9 +242,22 @@ export async function claimBacklogItemForWork(args: {
         force: params["force"] === true,
         overrideReason: stringParam(params, "overrideReason"),
         workShape: shape.resolution && (shape.resolution.kind === "declared" || shape.resolution.kind === "derived") ? shape.resolution.ref : null,
+        claimAtHome,
       },
       actor: await args.resolveActor(args.userId, args.context),
       workIntent: requestedIntent as WorkIntent | null,
+      // BI-C64EDA33 PR 3 (AC-5): the room's shape and harness, and the anchor it is owed, commit with the claim.
+      dependencies: {
+        afterClaimInTx: async (tx, claim) => {
+          await persistClaimShape(tx, claim.capsuleId, shape.resolution);
+          if (harness) await persistExecutorHarness(tx, claim.capsuleId, harness as ExecutorHarness, sessionRef);
+          const room = await tx.workroom.findUnique({ where: { capsuleId: claim.capsuleId }, select: { id: true } }) as { id: string } | null;
+          if (room && "$queryRaw" in tx) {
+            await oweRoomSetup(tx as never, { roomRowId: room.id, capsuleId: claim.capsuleId, backlogItemId: claim.backlogItemId,
+              title: `Work on ${claim.backlogItemId}`, source: "claim" });
+          }
+        },
+      },
     });
     if (!governed.ok) {
       return {
@@ -218,14 +274,9 @@ export async function claimBacklogItemForWork(args: {
     }
     const result = governed.data.claim;
     if (twinGate.kind === "overridden") await recordTwinOverride(twinDb as never, result.capsuleId, twinGate, await args.resolveActor(args.userId, args.context));
-    await persistClaimShape(args.db, result.capsuleId, shape.resolution);
-    await ensureCapsuleWorkItemAnchorWithPrisma({
-      capsuleId: result.capsuleId,
-      backlogItemId: result.backlogItemId,
-      title: `Work on ${result.backlogItemId}`,
-    }).catch((error) => {
-      console.warn(`[work-convergence] WorkItem anchor skipped for ${result.capsuleId}: ${error instanceof Error ? error.message : "unknown"}`);
-    });
+    const homeClaim = claimAtHome ? await requestHomeClaim(result.capsuleId) : null;
+    // The anchor the claim owes its room runs now on the effect worker, and is retried there if it fails.
+    kickRoomSetup();
     const base = `Bound ${result.backlogItemId} to ${result.headBranch} (${result.capsuleId}).`;
     const investment = await (await import("../portfolio/investment-balance-server")).projectItemInvestment(
       (await import("@dpf/db")).prisma, { itemId: result.backlogItemId, roomId: result.capsuleId },
@@ -241,10 +292,12 @@ export async function claimBacklogItemForWork(args: {
       entityId: result.capsuleId,
       message: (conflicts.length
         ? `${base} ADVISORY: ${conflicts.join("; ")}. Coordinate before pushing.`
-        : `${base} Claim-at-start recorded for this session.`) + (admissionWarning ? ` Warning: ${admissionWarning}` : ""),
+        : `${base} Claim-at-start recorded for this session.`) + (admissionWarning ? ` Warning: ${admissionWarning}` : "")
+        + (homeClaim ? ` ${homeClaim}` : ""),
       data: {
         ...result,
         admissionWarning,
+        ...(claimAtHome ? { homeClaim: { state: "requested", message: homeClaim } } : {}),
         investment,
         workShape: shape.resolution && (shape.resolution.kind === "declared" || shape.resolution.kind === "derived")
           ? { ref: shape.resolution.ref, source: shape.resolution.kind, ...(shape.resolution.kind === "derived" ? { reasonCode: shape.resolution.reasonCode, signals: shape.resolution.signals } : {}) }
@@ -252,6 +305,7 @@ export async function claimBacklogItemForWork(args: {
         workIntent: governed.data.workIntent,
         readiness: governed.data.readiness,
         readback: governed.data.readback,
+        ...(harness ? { executorHarness: harness } : {}),
       },
     };
   } catch (error) {

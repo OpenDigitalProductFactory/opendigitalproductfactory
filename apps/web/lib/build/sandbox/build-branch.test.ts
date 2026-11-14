@@ -281,7 +281,7 @@ describe("per-build worktree primitives (BI-98B723C0 Phase 2)", () => {
     // offline from the sandbox store first, so its @dpf/* packages resolve to
     // its own source and never into /workspace (BI-A900EA3F stale-root guard).
     expect(cmd).toContain(
-      "{ [ -d /workspace/.builds/FB-ABCD1234/node_modules/.pnpm ] || (cd /workspace/.builds/FB-ABCD1234 && { CI=true pnpm install --offline --frozen-lockfile",
+      "then (cd /workspace/.builds/FB-ABCD1234 && { CI=true pnpm install --offline --frozen-lockfile",
     );
     expect(cmd).toContain("|| CI=true pnpm install --frozen-lockfile");
     // nothing is linked into the canonical install any more
@@ -295,8 +295,8 @@ describe("per-build worktree primitives (BI-98B723C0 Phase 2)", () => {
     expect(reuseBranch).toContain(
       "{ [ ! -L /workspace/.builds/FB-ABCD1234/apps/web/node_modules ] || rm -f /workspace/.builds/FB-ABCD1234/apps/web/node_modules; }",
     );
-    // the install runs only when the worktree has none of its own
-    expect(reuseBranch).toContain("[ -d /workspace/.builds/FB-ABCD1234/node_modules/.pnpm ] ||");
+    // the install runs when the worktree has none of its own or its lockfile moved past it (BI-A78C0965)
+    expect(reuseBranch).toContain("[ ! -d /workspace/.builds/FB-ABCD1234/node_modules/.pnpm ] ||");
     expect(reuseBranch).toContain('grep -qx node_modules "$(git rev-parse --git-common-dir)/info/exclude"');
   });
 

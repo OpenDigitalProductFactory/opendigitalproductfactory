@@ -3,10 +3,10 @@
  * Spec: docs/superpowers/specs/2026-06-18-private-public-change-segregation-design.md
  * Plan: docs/superpowers/plans/2026-06-19-contribution-model-2state-suggest-confirm.md
  *
- * A change ships with a disposition: "private" (default, fail-closed) or
- * "shareable". Only "shareable" changes may leave at public-hive egress. The
- * AI suggests a disposition from signals DPF already computes; the human makes
- * the final call. This file holds the pure suggestion logic (unit-tested) and
+ * A change ships with a disposition: "private" or "shareable". A change a
+ * person marked "shareable" leaves at public-hive egress; so does an undecided
+ * change whose outbound diff carries no business-specific content (founder
+ * decision 2026-11-11, BI-ACAA91E5). A person's "private" always holds. This file holds the pure suggestion logic (unit-tested) and
  * the fail-closed gate predicate; callers (contribute_to_hive, create_portal_pr)
  * enforce the gate at public-hive egress only.
  */
@@ -166,9 +166,22 @@ export function suggestDisposition(inputs: SuggestionInputs): DispositionSuggest
  */
 export function mayShareToPublicHive(
   disposition: string | null | undefined,
-  context: { dispositionSource?: string | null; installationPurpose?: string | null } = {},
+  context: {
+    dispositionSource?: string | null;
+    installationPurpose?: string | null;
+    /** Must-fix hits from the sanitization scan of the outbound diff; null/undefined = not scanned. */
+    businessSpecificHits?: number | null;
+  } = {},
 ): boolean {
   if (disposition === "shareable") return true;
+  // A person's explicit "private" (source "operator") is never overridden below.
+  if (context.dispositionSource === "operator") return false;
+  // Founder decision (2026-11-11, BI-ACAA91E5): an undecided change shares by
+  // default once the outbound diff is proven free of business-specific
+  // content. 405 of 408 active builds had no decision and sat private, so
+  // finished platform fixes were refused at ship every hour. A scan that found
+  // content, or did not run, keeps the change private.
+  if (context.businessSpecificHits === 0) return true;
   // Founder decision (2026-09-25): an installation whose declared purpose is
   // developing the platform itself ("evolve-dpf") shares by default — its work
   // IS the public project. A person's explicit "private" (source "operator")
@@ -180,6 +193,7 @@ export function mayShareToPublicHive(
 export function privateDispositionBlockMessage(suggestionReason?: string | null): string {
   const base =
     "This change is set to stay on your system, so it was not shared with the community. " +
-    "To share it, mark it shareable (Admin > Platform Development, or ask the coworker to share this change).";
+    "A change shares by default only when a person has not kept it private and its outgoing diff carries no business-specific content. " +
+    "To share it anyway, mark it shareable (Admin > Platform Development, or ask the coworker to share this change).";
   return suggestionReason ? `${base}\n\n${suggestionReason}` : base;
 }

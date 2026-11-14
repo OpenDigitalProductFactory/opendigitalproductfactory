@@ -33,6 +33,7 @@ const SCREEN_CONTEXT_KEYS = new Set([
   "routeContext",
   "activityContract",
   "governedData",
+  "sourceCodeProvenance",
   "destinationClass",
   "purpose",
 ]);

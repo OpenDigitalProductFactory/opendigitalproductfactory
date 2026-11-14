@@ -672,35 +672,32 @@ async function stepRunTests(
   state: BuildExecutionState,
 ): Promise<BuildExecutionState> {
   const { prisma } = await import("@dpf/db");
-  const { runSandboxTests, diagnoseTestFailures } = await import("./coding-agent");
-
-  // Scope verification to the build's changed files so the feature's own tests
-  // gate the build and their output isn't truncated behind the full suite.
-  let changedFiles: string[] = [];
+  const { diagnoseTestFailures } = await import("./coding-agent");
+  const { verificationFromSandboxResult } = await import("./verification-output");
+  const { runDeterministicBuildVerificationFor } = await import("./deterministic-build-verification");
+  // The saved projection may precede intended WIP. Use the same actual isolated
+  // source discovery and qualification as initial and repair verification.
+  let results: import("./coding-agent").SandboxTestResult;
+  let observed: import("./deterministic-build-verification").DeterministicVerification;
   try {
-    const { getSandboxStateForBuild } = await import("@/lib/build/sandbox-state");
-    const sandboxState = await getSandboxStateForBuild(buildId);
-    changedFiles = sandboxState?.sourceDiffstat.map((entry) => entry.path) ?? [];
+    const deterministic = await runDeterministicBuildVerificationFor(buildId, [], state.containerId!);
+    results = deterministic.result;
+    observed = deterministic.verification;
   } catch (err) {
     console.warn("[stepRunTests] could not resolve changed files for scoping:", (err as Error)?.message);
+    results = { passed: false, typeCheckPassed: false, scope: "none", testsExecuted: false,
+      testsApplicable: null, testsPassed: 0, testsFailed: 0, testSummariesComplete: false,
+      testOutput: `Current source could not be established; no checks ran. ${getErrorMessage(err)}`,
+      typeCheckOutput: "" };
+    observed = { ...verificationFromSandboxResult(results), typecheckPassed: null };
   }
-
-  // Run verification in the build's working dir: its own worktree when isolation
-  // is on, else /workspace (default — byte-identical). BI-98B723C0 Phase 2c.
-  const { resolveBuildWorkdir } = await import("./sandbox/build-branch");
-  const results = await runSandboxTests(state.containerId!, {
-    changedFiles,
-    workdir: resolveBuildWorkdir(buildId),
-  });
   const diagnosis = results.passed ? null : diagnoseTestFailures(results);
 
   // Persist test results to the build record.
   // Property names must match what the gate in feature-build-types.ts checks:
   //   testsFailed (number), typecheckPassed (lowercase c)
   const verificationData = {
-    testsPassed: results.passed ? 1 : 0,
-    testsFailed: results.passed ? 0 : 1,
-    typecheckPassed: results.typeCheckPassed,
+    ...observed,
     testOutput: results.testOutput.slice(0, 5000),
     typeCheckOutput: results.typeCheckOutput.slice(0, 5000),
     ...(diagnosis ? { diagnosis: diagnosis.summary } : {}),

@@ -87,6 +87,39 @@ class in the file differs from what it declared. Installations that joined
 before classes were certified show **class not attested** until they join again
 with a new file.
 
+Once both sides are certified, each installation works out its relationship to
+the other. Your production installation is the **authority** for a certified
+development or test installation of the same estate, and that installation is
+its **companion**. **Ops → Installation** shows the relationship with the reason
+for it, and Connections states it in one line. The relationship only adds
+caution: it never gives anyone a permission they did not already have. If the
+paired installation saved on **Ops → Installation** points at a connection that
+was revoked, the page says so and offers to switch it to the installation
+actually connected.
+
+The authority sends its companion your organization's decision guidance: the
+stance you approved on the authority, signed by it and valid for fourteen days.
+It is refreshed automatically while the two can reach each other. On the
+companion, business decisions follow that guidance, and stance recorded on the
+companion can only add caution to it. If the companion has no valid guidance,
+or its guidance has expired while the authority was out of reach, it does not
+fall back to platform defaults. It records each business decision as a gap in
+guidance and says so in its installation briefing. Guidance that is unsigned,
+altered, older than the one held, or meant for another installation is refused,
+and the guidance already held stays in force.
+
+The two installations never work the same item. Each item is decided by the
+installation it was filed on, its **home**. When an assistant on the companion
+claims an item whose home is the authority, the companion opens its Workroom as
+**unconfirmed** and asks the home. The home runs its ordinary claim check and
+either holds the claim for the companion or refuses it and says who is working
+the item. Both installations then show the same holder and lease on the item.
+While the home cannot be reached the request waits and is sent when it can be;
+an unconfirmed Workroom whose claim is refused stops before it opens a pull
+request. The companion renews the claim while it works and releases it when its
+Workroom ends. A claim it stops renewing is released seven days later, so
+someone else can take the item over.
+
 If the candidate uses HTTP, its certificate cannot be verified, or discovery is
 unavailable, use the invitation controls on the same page. Never bypass the TLS
 warning: issue the one-time invitation on one installation and enter it with the

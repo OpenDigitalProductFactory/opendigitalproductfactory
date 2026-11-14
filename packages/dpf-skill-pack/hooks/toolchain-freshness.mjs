@@ -23,7 +23,7 @@
 // file. The hook only speeds things up; the server's toolchain verdict on each
 // DPF connection is the guarantee. DPF_SKIP_PLUGIN_COPY_CHECK=1 silences it.
 
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { request as httpRequest } from "node:http";
 import { request as httpsRequest } from "node:https";
@@ -208,49 +208,42 @@ export async function versionOnlyCheck(env, why) {
   return { status: "unknown", reference, reason: `${why}, so only versions were compared: no copy is older than ${want}, but content was not checked` };
 }
 
-// ── host agent backstop (BI-65C17737, spec 2026-10-27 M8) ──────────────────
+// ── host agent backstop (BI-65C17737, spec 2026-10-27 M8; BI-590DD63E) ──────
 //
-// The host agent (scripts/toolchain_agent.py) converges this machine on its
-// own. When a session finds a stale copy, the hook starts that agent once
-// (never waiting for it) or installs it on a pinned host that has none, and
-// says that no approval is needed: only a restart loads the result. It reads
-// the agent's state file for anything the operator must do. No network call.
+// The host agent (scripts/toolchain_agent.py) converges this machine. DPF
+// installs no operating-system scheduler for it (BI-590DD63E): the platform
+// owns scheduling. When a session finds a stale copy on a paired host, the
+// hook starts ONE agent run, detached and windowless, never waiting for it,
+// and says that no approval is needed: only a restart loads the result. It
+// reads the agent's state file for anything the operator must do.
 
-const AGENT_LABEL = "local.dpf.toolchain-agent";
-const AGENT_UNIT = "dpf-toolchain-agent";
-const AGENT_TASK = "DPF Toolchain Agent";
 const KICK_INTERVAL_MS = 10 * 60 * 1000;
 
 /** Plain-language next step for each agent problem code. */
 const OPERATOR_STEPS = {
   identity_changed: "this portal's identity changed since it was paired. Ask the user once whether to trust the new identity before any update",
   identity_mismatch: "the portal is signed by a different installation than the one paired. Ask the user before any update",
-  "not-paired": "this host has not been paired with a portal yet. One approved update from the portal pairs it and installs the agent",
+  "not-paired": "this host has not been paired with a portal yet. One approved update from the portal pairs it",
   "ambiguous-origin": "several portals are paired. The user chooses one in ~/.dpf/toolchain-agent/config.json ({\"origin\": \"https://…\"})",
-  "not-bootstrapped": "the DPF tools were never installed on this host. One approved update from the portal installs them and the agent",
+  "not-bootstrapped": "the DPF tools were never installed on this host. One approved update from the portal installs them",
 };
 
-function agentScheduled(home, platform) {
-  if (platform === "darwin") return existsSync(join(home, "Library", "LaunchAgents", `${AGENT_LABEL}.plist`));
-  if (platform === "win32") return existsSync(join(home, ".dpf", "toolchain-agent", "schedule.json"));
-  return existsSync(join(home, ".config", "systemd", "user", `${AGENT_UNIT}.timer`));
-}
-
-function kickCommand(platform, uid) {
-  if (platform === "darwin") return ["launchctl", ["kickstart", `gui/${uid}/${AGENT_LABEL}`]];
-  if (platform === "win32") return ["schtasks", ["/Run", "/TN", AGENT_TASK]];
-  return ["systemctl", ["--user", "start", "--no-block", `${AGENT_UNIT}.service`]];
+/** Start the agent and return at once: no console window, no wait, no schedule. */
+function startDetached(cmd, args) {
+  const child = spawn(cmd, args, { detached: true, stdio: "ignore", windowsHide: true });
+  child.on("error", () => {});
+  child.unref();
+  return { status: 0 };
 }
 
 /**
- * Lines to add after the freshness report. `options.run(cmd, args)` is the
- * process launcher (spawnSync by default), injected so tests never start a job.
+ * Lines to add after the freshness report. `options.start(cmd, args)` starts
+ * the agent (detached by default), injected so tests never start a process.
  */
 export function agentBackstop(report, env = process.env, options = {}) {
   const platform = options.platform ?? process.platform;
   const now = options.now ?? Date.now();
-  const uid = options.uid ?? (typeof process.getuid === "function" ? process.getuid() : 0);
-  const run = options.run ?? ((cmd, args) => spawnSync(cmd, args, { encoding: "utf8", timeout: 15000, windowsHide: true }));
+  const start = options.start ?? startDetached;
   const home = homeDir(env);
   const state = readJson(join(home, ".dpf", "toolchain-agent", "state.json")) ?? {};
   const lines = [];
@@ -267,24 +260,14 @@ export function agentBackstop(report, env = process.env, options = {}) {
   const pins = readJson(join(home, ".dpf", "trusted-installations.json"))?.installations;
   const paired = pins && typeof pins === "object" && Object.keys(pins).length > 0;
   const agentScript = join(home, ".agents", "plugins", "plugins", "dpf-platform", "scripts", "toolchain_agent.py");
-  if (agentScheduled(home, platform)) {
+  const [python, ...prefix] = pythonCandidates(env, platform)[0] ?? [];
+  if (paired && existsSync(agentScript) && python) {
     const lastCheck = Number(state.lastCheckAt ?? 0) * 1000;
-    if (now - lastCheck >= KICK_INTERVAL_MS) {
-      const [cmd, args] = kickCommand(platform, uid);
-      run(cmd, args);
-    }
+    if (now - lastCheck >= KICK_INTERVAL_MS) start(python, [...prefix, agentScript, "run"]);
     lines.push("The DPF host agent is updating these copies now; no approval is needed. When it finishes, the user only needs to restart this client (Claude Code: /reload-plugins).");
     return lines;
   }
-  if (paired && existsSync(agentScript)) {
-    const [python, ...prefix] = pythonCandidates(env, platform)[0] ?? [];
-    if (python) {
-      run(python, [...prefix, agentScript, "install"]);
-      lines.push("Installed the DPF host agent; it is updating these copies now, so no approval is needed. Afterwards the user only needs to restart this client (Claude Code: /reload-plugins).");
-      return lines;
-    }
-  }
-  lines.push("This host has no DPF host agent yet. Ask the user once to approve an update from the portal; that update also installs the agent, so later updates need no approval.");
+  lines.push("This host has no DPF host agent yet. Ask the user once to approve an update from the portal; that update pairs this host, so later updates need no approval.");
   return lines;
 }
 

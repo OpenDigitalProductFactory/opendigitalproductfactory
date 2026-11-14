@@ -1053,9 +1053,9 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
     // AdapterRequest. The Claude CLI execution adapter consumes it to mint a
     // short-lived JWT for `--mcp-config`, exposing platform tools as native
     // `mcp__dpf__*` tools instead of text-described prompt content. Other
-    // adapters ignore the field. The agentic loop is the only place with
-    // both userId and threadId in scope, so it is the natural source.
-    mcpSession: { userId, agentId, threadId, routeContext, taskRunId: taskRunId ?? null, taskExecutionFence: params.taskExecutionFence, ...(readEvidencePolicy ? {readOnlyToolNames: readEvidencePolicy.toolNames, mintReadOnlySession: readEvidencePolicy.mintReadOnlySession, recordImageInputDelivery: readEvidencePolicy.recordImageInputDelivery} : {}) },
+    // Other adapters ignore this server-owned context.
+    mcpSession: { userId, agentId, threadId, routeContext, taskRunId: taskRunId ?? null, taskExecutionFence: params.taskExecutionFence,
+      ...(taskRunId && params.tokenGrantScopes !== undefined && !readEvidencePolicy ? { admittedTokenGrantScopes: [...params.tokenGrantScopes] } : {}), ...(readEvidencePolicy ? {readOnlyToolNames: readEvidencePolicy.toolNames, mintReadOnlySession: readEvidencePolicy.mintReadOnlySession, recordImageInputDelivery: readEvidencePolicy.recordImageInputDelivery} : {}) },
   };
 
   // BI-2AC48661: persistent execution plan. When enabled, expose the two
@@ -1139,6 +1139,8 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
     completeAgenticResult(content, source, { totalInputTokens, totalOutputTokens, executedTools, suppliedSourceEvidence }, extra);
   const terminalFailure = (message: string, source = lastResult): AgenticResult =>
     completeResult(message, source, { failure: { kind: "terminal-writer-missing", message } });
+  const incompleteResult = (message: string, source: AgenticCompletionSource | null = lastResult): AgenticResult =>
+    completeResult(message, source, { failure: { kind: "unknown", message }, synthetic: true });
   let bestPreNudgeContent = ""; // Preserve content and its own producer together.
   let bestPreNudgeSource: RoutedInferenceResult | null = null;
   const startTime = Date.now();
@@ -1670,7 +1672,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
       // Don't nudge — break immediately with a clear error.
       if (trimmed.length === 0 && executedTools.length === 0) {
         console.warn(`[agentic-loop] Empty response from ${result.providerId}/${result.modelId} on iteration ${iteration}. Model may not support tool use. Breaking.`);
-        return completeResult(`The model (${result.modelId}) returned an empty response and did not use any tools. This typically means it does not support the tool format required for this task. Try a different model or provider.`, result, { synthetic: true });
+        return incompleteResult(`The model (${result.modelId}) returned no answer or tool result. The request needs a provider or capability check before continuing.`, result);
       }
 
       // Evidence-integrity gate (INV-1). When this turn's answer depends on live
@@ -1936,7 +1938,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
           console.warn(
             `[agentic-loop] local model produced text-only response for tool-backed turn; returning diagnostic instead of issuing a second nudge. agent=${JSON.stringify(agentId)} route=${JSON.stringify(routeContext)}`,
           );
-          return completeResult(buildLocalToolCallFailureMessage(result), result, { synthetic: true });
+          return incompleteResult(buildLocalToolCallFailureMessage(result), result);
         }
 
         if (shouldNudgeNow) {
@@ -2441,5 +2443,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
       // prefer a correct answer preserved before a nudge over discarding it.
       : (lastResult?.content?.trim() ? lastResult.content : (bestPreNudgeContent || exhaustedMessage));
   const exhaustedSource = fallbackContent || !bestPreNudgeContent ? lastResult : bestPreNudgeSource;
-  return completeResult(exhaustedContent, exhaustedSource ?? { providerId: "unknown", modelId: "unknown", downgraded: false, downgradeMessage: null }, { executionPlan, synthetic: fallbackIsRawToolUse || fallbackIsFabricated || (!fallbackContent && !bestPreNudgeContent) });
+  const keptConversationalAdvice = fallbackIsFabricated && !downgraded && !BUILD_ROUTE_PATTERN.test(routeContext);
+  if (fallbackIsRawToolUse || (fallbackIsFabricated && !keptConversationalAdvice) || (!fallbackContent && !bestPreNudgeContent)) return { ...incompleteResult(exhaustedContent, exhaustedSource), executionPlan };
+  return completeResult(exhaustedContent, exhaustedSource ?? { providerId: "unknown", modelId: "unknown", downgraded: false, downgradeMessage: null }, { executionPlan });
 }

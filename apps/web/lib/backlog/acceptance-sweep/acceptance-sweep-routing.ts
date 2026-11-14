@@ -75,6 +75,24 @@ export function isRoutingCandidate(ageDays: number | undefined, agedDays: number
   return ageDays !== undefined && ageDays >= agedDays && !projection.closable;
 }
 
+/**
+ * BI-1D5FCEBE (WWMD DI-29DB4468BA05): days before a failure-held item routes.
+ * Its newest same-kind evidence is a recorded failure, which only a fresh
+ * passing check clears, and the projection names the coworker that records
+ * it, so the aged wait adds nothing. One day lets the nightly deploy ship the
+ * fix before the check runs on the live install.
+ */
+export const FAILED_CHECK_ROUTE_DAYS = 1;
+
+const EXECUTION_CHECK_CODES: readonly string[] = ["DELIVERY_EVIDENCE_REQUIRED", "ACCEPTANCE_EVIDENCE_REQUIRED"];
+
+/** The owner owes a fresh check for a delivery-coordinator requirement whose newest evidence failed. */
+export function ownsFailedCheck(projection: OwedAcceptance): boolean {
+  const owned = new Set<string>(projection.owner?.codes ?? []);
+  return projection.owed.some((entry) => entry.state === "fail" && entry.accountableRole === "delivery-coordinator"
+    && EXECUTION_CHECK_CODES.includes(entry.code) && owned.has(entry.code));
+}
+
 const COUNTER = {
   routed: "routed",
   "already-routed": "alreadyRouted",

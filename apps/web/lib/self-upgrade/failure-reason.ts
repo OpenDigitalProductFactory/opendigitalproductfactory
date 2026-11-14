@@ -34,6 +34,12 @@ const EXPLANATIONS: Readonly<Record<string, FailureReasonExplanation>> = {
       "The update was built on this server and there wasn't enough memory to finish. Nothing was installed and the platform kept running the version you already had.",
     retryable: true,
   },
+  "host-network-unavailable": {
+    title: "The server lost its internet connection",
+    detail:
+      "The update needs to download its source and some components, and this server could not reach the internet for long enough to finish, even after retrying. Nothing was installed and the platform kept running the version you already had. Check the server's network connection and try again.",
+    retryable: true,
+  },
   "pnpm-install-failure": {
     title: "A software download failed",
     detail:

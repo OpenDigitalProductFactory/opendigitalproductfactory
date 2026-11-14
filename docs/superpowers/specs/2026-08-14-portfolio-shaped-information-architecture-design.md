@@ -25,6 +25,10 @@ Consequences (evidenced in the source analysis):
 
 **Goal:** make the primary navigation legible against the four-portfolio spine the platform already models, without regressing the coherence guarantees already shipped.
 
+**OBJ-WORKFORCE-001:** Give operators one canonical AI Coworkers journey that connects governed identities with current and retained recent work from roster, external-agent, specialist, Build Studio, and native-runtime executors without relabeling execution envelopes as coworker identities.
+
+**OBJ-WORKFORCE-002:** Preserve and expose enough governed context to explain AI work after live activity ends, including TaskRun, Workroom, actor, and status identities, while routing deeper cost and historical analysis to their canonical surfaces.
+
 **Non-goals:**
 - Not a rewrite of the nav model. `portal-navigation-model.ts` stays the single source; this changes the *section taxonomy* it maps into (`shellNav.sectionKey`), not the per-route records.
 - Not a change to the FPAW standard or `PortfolioDecomposition`.
@@ -54,9 +58,27 @@ Target rail spine (operator mode), each section keyed to an FPAW portfolio, plus
 
 The two cross-cuts (Workspace, Knowledge) stay first-class but are *labeled as cross-cuts*, not pretend-domains — this is the honest fix for "Workspace maps to no portfolio."
 
-### 4.2 First slice — unify Workforce (highest signal, lowest blast radius)
+### 4.2 First slice — one AI Coworkers home inside Workforce
 
-Bring `/employee`, `/platform/ai`, and `/coworker-decisions` under one **Workforce** rail section (people + AI coworkers = one portfolio in the model). Internally they remain distinct surfaces with section-scoped nav (per the coherence constraint); the change is the `shellNav.sectionKey` grouping and the section label, not the routes. This proves the reconciliation on the exact case that most violates the model, before touching the larger sections.
+The original “group the existing routes” slice is too weak. Live operator evidence on 2026-08-28 showed the failure mode: an operational message reported AI work in flight, its generic link opened a live-only activity page that was already empty, and identity versus operational details were split between the top-level **AI Coworkers** and **AI Workforce** destinations. Finding the complete picture took roughly ten minutes. The former upgrade-specific early-skip behavior has since been replaced by the deployed drain-and-wait workflow; this design retains only the still-open navigation and activity-continuity problem.
+
+The slice therefore establishes `/workforce` as the one canonical AI Coworkers home:
+
+- the directory remains the front door and every row still opens the coworker's identity;
+- current and retained recent activity are part of the same page, not a competing platform-admin destination;
+- live and recent activity reuse the existing governed activity read model rather than inventing a second roster or ledger;
+- provider/routing, skills, scheduling, governance, and build-runtime controls remain advanced links from this home and from an individual identity; they are not another top-level roster;
+- `/platform/ai/right-now` remains a compatibility deep link into the activity view, while the primary navigation exposes only the canonical home.
+
+The activity view distinguishes identities from execution envelopes:
+
+- **Coworkers** are the governed roster identities the organization can configure, schedule, and supervise.
+- **External & platform work** is governed activity from Codex/Claude/Grok desktop sessions, Build Studio, specialists, and native runtimes, projected through their Workrooms and TaskRuns. It is visible in the same journey but is never relabeled as a roster coworker.
+- **Usage detail** stays on the existing activity surface in this slice. Lossless roster/external/unattributed reconciliation remains owned by `BI-3EC91596`; a missing join is never permission to infer a Workroom from timing or prompt text.
+- **Workroom detail** remains the context boundary: objective, executor, branch/build context, activity journal, evidence, and status. Raw `WC-*` route repair remains owned by `BI-496CD36E`.
+- **Operations Map history** remains the deeper replay altitude. URL-backed historical-window controls remain owned by `BI-75D5ABCD`.
+
+This is still one concern: an operator must be able to answer “which AI coworker is this, what is it doing, and how do I manage it?” without choosing between identity and operations taxonomies. It reuses the existing roster, workforce-activity, TaskRun, Workroom, and navigation models; no new registry or event store is introduced.
 
 ### 4.3 Mechanism
 
@@ -90,11 +112,31 @@ How comparable business platforms bind a domain model to primary navigation:
 
 **Adopted stance:** derive a portfolio-shaped, capability-gated two-level spine from substrate DPF already computes (FPAW placement + `getActiveOrgCapabilities` + nav-mode), rather than hand-curating per role (SAP) or exposing the module tree (Odoo).
 
+The 2026-08-28 amendment also benchmarked current agent-management control planes:
+
+- **Microsoft Agent 365.** Its Agent Registry is the central inventory and management surface, while its all-agents activity view keeps in-progress and recent completed work together and drills from an agent into activity details. Microsoft is explicitly converging previously separate registry experiences into one control plane. Adopt the unified inventory→activity journey and retained recent tasks. Reject copying the remaining split into a separate identity-admin portal: DPF already has one canonical agent record and can disclose its advanced identity controls in context. Sources: [Agent Registry](https://learn.microsoft.com/en-us/microsoft-365/admin/manage/agent-registry?view=o365-worldwide), [agent activity](https://learn.microsoft.com/en-us/microsoft-agent-365/observe-agents-microsoft-365-copilot), [registry convergence](https://learn.microsoft.com/en-us/entra/agent-id/agent-registry-convergence).
+- **ServiceNow AI Control Tower.** It unifies inventory, performance/value, risk, and governance around each AI system, agent, and workflow. Adopt one fleet cockpit with progressive disclosure for operational and governance detail. Reject a KPI-first landing that displaces the human-readable coworker directory; DPF's operator begins with “who,” not an abstract asset inventory. Source: [AI Control Tower solution brief](https://www.servicenow.com/content/dam/servicenow-assets/public/en-us/doc-type/resource-center/solution-brief/sb-ai-control-tower.pdf).
+- **Microsoft's agent tools registry.** Tools and MCP servers are centrally governed but remain a nested tools concern under Agents. Adopt advanced links nested from the coworker home; reject making Tools, Providers, or Build Runtime competing roster destinations. Source: [Agent Tools registry](https://learn.microsoft.com/en-us/microsoft-365/admin/manage/manage-tools-for-agent?view=o365-worldwide).
+
+**Amended stance:** the canonical object is the AI coworker. Inventory, current/recent work, identity, cost, and ordinary controls converge around it; fleet plumbing is disclosed from that home. Operational evidence must outlive the instantaneous live-state window that produced it.
+
+The 2026-08-31 operator-activity amendment benchmarked execution and observability control planes:
+
+- **Langfuse sessions and traces.** Langfuse models observations as individual steps, traces as one request/agent run, and sessions as the grouping for multi-trace interactions; its metrics retain cost and token breakdowns by session, user, model, and feature. Adopt the hierarchy: routed calls remain observations, TaskRuns remain execution units, and Workrooms group the governed multi-step context. Reject installing Langfuse or copying its data into a second ledger; DPF already owns the canonical evidence. Sources: [data model](https://langfuse.com/docs/observability/data-model), [sessions](https://langfuse.com/docs/observability/features/sessions), [metrics](https://langfuse.com/docs/metrics/overview).
+- **GitHub Actions run history.** GitHub presents recent and completed workflow runs in one list, then drills into a run summary, job graph, steps, and logs. Adopt current+historical continuity and stable detail drill-through. Reject a build-specific activity taxonomy: DPF's Workroom spans every execution surface. Sources: [run history](https://docs.github.com/en/actions/how-tos/monitor-workflows/view-workflow-run-history), [visualization graph](https://docs.github.com/en/actions/how-tos/monitor-workflows/use-the-visualization-graph).
+- **Grafana time controls.** Grafana makes relative/absolute ranges, zoom, reset, refresh, and URL-carried `from`/`to` values first-class; current releases also support stepping a full time span backward or forward. Adopt presets, exact window labeling, bounded stepping, and shareable window state. Reject dashboard-global complexity and arbitrary query syntax on this owner-facing surface. Sources: [dashboard time controls](https://grafana.com/docs/grafana/latest/visualizations/dashboards/use-dashboards/), [time-range pan and zoom](https://grafana.com/whats-new/2026-01-15-time-range-pan-and-zoom/).
+
+**Activity stance:** one human journey, three canonical altitudes. AI Coworkers answers *who and what now/recently*; Workroom answers *why, where, and with which evidence*; Operations Map answers *how activity and routing changed over time*. Navigation composes those altitudes rather than merging their models or duplicating their ledgers.
+
 ## 6. §1 substrate check (no parallel utilities)
 
 - **No new nav model.** Extends `portal-navigation-model.ts` / `portal-shell-sections.ts`; no second registry.
 - **No new taxonomy.** Reuses the FPAW four-portfolio keys already persisted on `PortfolioDecomposition`; adds only a section→portfolio adapter map (the standard already mandates the key adapter).
 - **No new mode system.** Reuses the `nav-mode` cookie for operator preview.
+- **No new activity ledger.** The canonical home composes the existing workforce-activity projection and its current retention behavior.
+- **Workroom is the external-execution envelope.** Desktop coding agents and Build Studio remain external/platform executors projected through existing Workroom and WorkroomActivity records, not synthetic coworker identities.
+- **Usage gaps stay visible.** TokenUsage is reconciled losslessly into known roster, external/specialist, and unattributed buckets; the read model never invents attribution.
+- **Identity and execution stay distinct.** The directory remains bounded to coworker identities; external and platform work is labeled as Workroom-backed execution.
 - **No coherence regression.** Section-scoped nav, breadcrumb, and the one-renderer ratchet are unchanged; only `sectionKey` groupings move.
 
 ## 7. Phased plan
@@ -102,7 +144,7 @@ How comparable business platforms bind a domain model to primary navigation:
 | Phase | Deliverable | Size |
 |---|---|---|
 | 0 | Section→FPAW-portfolio adapter map + trace test asserting every `shellNav` entry resolves to a portfolio or an explicit cross-cut | S |
-| 1 | **Workforce unification slice** — regroup People + AI Workforce + Coworker Decisions under one Workforce section (behind nav-mode preview) | M |
+| 1 | **Workforce unification slice** — one `/workforce` directory + current/recent governed activity; contextual Workroom and Operations Map links; compatibility redirect; one primary AI-coworker destination | M |
 | 2 | Label & de-dupe pass (folds in the quick wins: "Portal"→"Storefront Setup", drop `/platform/ai` vs `/overview` duplicate, "AI Coworkers"→"Agent Identities", rail-label↔H1 alignment) | S |
 | 3 | Reconcile remaining sections to the portfolio spine; make it the default after live-install validation | L |
 | 3b | **Connections cockpit (§4.5)** — unified external-dependency registry + one Foundation surface + uniform cost/billing + in-dialog provisioning (BI-2A0180A9); first concrete instance of the §4.4 capability | L |
@@ -118,8 +160,22 @@ The companion spec's lexicon rule has been corrected accordingly (*Interaction S
 
 ## 8. Acceptance
 
+| Acceptance ID | Objective IDs | Statement |
+|---|---|---|
+| AC-WORKFORCE-001 | OBJ-WORKFORCE-001 | The primary navigation presents one AI-coworker destination whose canonical Workforce home combines coworker identity, ordinary controls, current activity, and retained recent activity while advanced fleet plumbing remains nested. |
+| AC-WORKFORCE-002 | OBJ-WORKFORCE-001, OBJ-WORKFORCE-002 | The Activity view reuses the governed current/recent read model and visibly distinguishes external and platform Workroom execution from roster coworkers. |
+| AC-WORKFORCE-003 | OBJ-WORKFORCE-001 | `/platform/ai/right-now` is a compatibility redirect to `/workforce?view=activity` and does not retain a second activity implementation. |
+| AC-WORKFORCE-004 | OBJ-WORKFORCE-002 | Workrooms and Operations Map remain contextual drill-downs from Activity, while their deeper route and history enhancements remain in their existing backlog carriers. |
+| AC-WORKFORCE-005 | OBJ-WORKFORCE-001, OBJ-WORKFORCE-002 | The reconciled experience is verified on a served target without regressing section-scoped navigation, breadcrumb, single-renderer, or canonical-ledger guarantees. |
+
 - Every `shellNav` entry resolves — via a checked-in test — to exactly one FPAW portfolio key or an explicitly declared cross-cut; none is silently unclassified.
 - People, AI Workforce, and Coworker Decisions are reachable under one Workforce section without violating section-scoped nav or the breadcrumb guarantee.
+- The primary navigation presents one AI-coworker destination; operators do not choose between “AI Coworkers” and “AI Workforce.”
+- `/workforce` moves from fleet status to a coworker identity and ordinary controls without crossing to another main-menu domain; advanced fleet plumbing is nested, not competing.
+- Current and recent activity reuse the existing governed workforce-activity projection and retention policy.
+- `/platform/ai/right-now` remains a non-competing compatibility route into the canonical activity experience.
+- Live and recent Workrooms from external/platform executors appear in a clearly labeled lane with objective, executor kind, status, time, and a working detail link.
+- Detailed TokenUsage attribution, raw `WC-*` route repair, and Operations Map history controls remain explicitly deferred to their existing backlog items.
 - The reconciled spine is previewable via nav-mode on a live install before it becomes default.
 - No regression in the EP-NAV-COHERENCE guarantees (§3), asserted by the existing nav tests plus the new trace test.
 

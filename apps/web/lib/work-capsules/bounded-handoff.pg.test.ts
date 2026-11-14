@@ -131,7 +131,7 @@ describe.skipIf(!DATABASE_URL)("bounded handoff transaction protocol (PostgreSQL
       CREATE TABLE "WorkCapsuleActivity" (id TEXT PRIMARY KEY, "workCapsuleId" TEXT REFERENCES "WorkCapsule"(id), kind TEXT, summary TEXT, payload JSONB, "recordedAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP, "recordedById" TEXT, "recordedByAgentId" TEXT, "commandScopeKey" TEXT, "commandKey" TEXT, UNIQUE("commandScopeKey", "commandKey"));
       CREATE TABLE "ExternalEvidenceRecord" (id TEXT PRIMARY KEY, "workCapsuleId" TEXT, "operationType" TEXT, details JSONB);
       CREATE TABLE "Agent" (id TEXT PRIMARY KEY, "agentId" TEXT); CREATE TABLE "BacklogItem" (id TEXT PRIMARY KEY, "itemId" TEXT);
-      CREATE TABLE "Principal" (id TEXT PRIMARY KEY); CREATE TABLE "PrincipalAlias" (id TEXT PRIMARY KEY, "principalId" TEXT, issuer TEXT, "aliasType" TEXT, "aliasValue" TEXT);
+      CREATE TABLE "Principal" (id TEXT PRIMARY KEY, kind TEXT NOT NULL DEFAULT 'human'); CREATE TABLE "PrincipalAlias" (id TEXT PRIMARY KEY, "principalId" TEXT, issuer TEXT, "aliasType" TEXT, "aliasValue" TEXT);
       CREATE TABLE "User" (id TEXT PRIMARY KEY); CREATE TABLE "WorkItem" (id TEXT PRIMARY KEY); CREATE TABLE "WorkCapsuleParticipant" (id TEXT PRIMARY KEY, "workroomId" TEXT);`);
   });
   afterAll(async () => { while (fixture.telemetry.size) await Promise.all([...fixture.telemetry]); await prisma?.$disconnect(); if (pool) { try { await pool.query('DROP SCHEMA IF EXISTS "' + SCHEMA + '" CASCADE'); } finally { await pool.end(); } } });

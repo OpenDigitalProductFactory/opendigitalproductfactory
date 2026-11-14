@@ -45,7 +45,7 @@ Before changing this surface, read [orientation](docs/architecture/orientation.m
 
 ## 3. Branching, Commits & PRs
 
-All changes land through a DCO-signed PR against `main`; never push directly to `main`. One thread = one branch + one worktree in the dedicated sibling base. Keep the root clone read-only for feature work. Refresh `origin/main`; never use bare rebase on a shallow clone. Commit from a named topic branch and push it. Open a PR only when ready, never draft; merge through the queue and verify with `pnpm pr:health`.
+All changes land through a DCO-signed PR against `main`; never push directly to `main`. One thread = one branch + one worktree in the dedicated sibling base. Keep the root clone read-only for feature work. Refresh `origin/main`; never use bare rebase on a shallow clone. Land a topic branch with `pnpm land` (gates, push, PR, queue merge); never chain those by hand.
 
 Procedure: [branch and worktree runbook](docs/architecture/branch-and-worktree-runbook.md). Read before this phase.
 

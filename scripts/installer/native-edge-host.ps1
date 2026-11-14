@@ -12,6 +12,34 @@ function Get-DPFNativeEdgeReleaseUri {
     return "https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/releases/latest/download/$Asset"
 }
 
+function Get-DPFNativeEdgeLocalAuthorityUrl {
+    param([Parameter(Mandatory)][string]$InstallDir)
+    $canonical = $env:DPF_CANONICAL_PUBLIC_URL
+    if (-not $canonical) { $canonical = $env:PUBLIC_URL }
+    $configPath = Join-Path $InstallDir ".env"
+    if (-not $canonical -and (Test-Path -LiteralPath $configPath)) {
+        foreach ($line in (Get-Content -LiteralPath $configPath)) {
+            if ($line -match '^PUBLIC_URL=(.*)$') { $canonical = $Matches[1] }
+        }
+        if ($canonical -and $canonical.Length -ge 2) {
+            $first = $canonical.Substring(0, 1)
+            if (($first -eq '"' -or $first -eq "'") -and $canonical.EndsWith($first)) {
+                $canonical = $canonical.Substring(1, $canonical.Length - 2)
+            }
+        }
+    }
+    if (-not $canonical) { return "http://127.0.0.1:3000" }
+    if ($canonical.EndsWith('/')) { $canonical = $canonical.Substring(0, $canonical.Length - 1) }
+    [Uri]$origin = $null
+    if ($canonical -ne $canonical.Trim() -or $canonical -notmatch '^https?://' -or
+        -not [Uri]::TryCreate($canonical, [UriKind]::Absolute, [ref]$origin) -or
+        $origin.Scheme -notin @('http', 'https') -or $origin.UserInfo -or
+        $origin.Query -or $origin.Fragment -or $origin.AbsolutePath -ne '/' -or $origin.Port -lt 1) {
+        throw "Canonical host-upkeep origin is invalid; no service was changed."
+    }
+    return $canonical
+}
+
 function Install-DPFNativeEdgeNode {
     param(
         [Parameter(Mandatory)][string]$InstallDir,
@@ -23,6 +51,9 @@ function Install-DPFNativeEdgeNode {
         [ValidateSet("full", "host-upkeep")][string]$Role = "full"
     )
 
+    if (-not $AuthorityUrl -and $Role -eq "host-upkeep") {
+        $AuthorityUrl = Get-DPFNativeEdgeLocalAuthorityUrl -InstallDir $InstallDir
+    }
     if (-not $AuthorityUrl) {
         $lanAddress = Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue |
             Where-Object { $_.IPAddress -notmatch '^127\.' -and $_.PrefixOrigin -ne 'WellKnown' } |

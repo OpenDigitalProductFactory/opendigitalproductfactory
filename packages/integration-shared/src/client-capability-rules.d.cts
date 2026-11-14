@@ -34,7 +34,7 @@ export type ClientCapabilityRow = {
     oauthHttps: CapabilityField<boolean>;
     oauthLoopbackHttp: CapabilityField<boolean>;
     staticHeaders: CapabilityField<boolean>;
-    declarationCarrier: CapabilityField<"query" | "header">;
+    declarationCarrier: CapabilityField<"query" | "header" | "helper">;
     pluginScopes: CapabilityField<string[]>;
     reloadRequired: CapabilityField<boolean>;
     skillsLoad: CapabilityField<boolean>;

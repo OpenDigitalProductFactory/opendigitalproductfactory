@@ -17,6 +17,7 @@
  *
  * Run: node scripts/check-hidden-unicode-commit-text.mjs
  */
+import { readFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { findHiddenUnicode } from "./check-hidden-unicode-instruction-files.mjs";
 import { gitTextOrNull } from "./lib/git.mjs";
@@ -45,14 +46,19 @@ export function parseCommitLog(logText) {
 }
 
 /** Every hidden-Unicode hit across commit messages and PR text, labelled by source. */
-export function findHiddenInCommitText({ commits = [], prTitle = "", prBody = "" }) {
+export function findHiddenInCommitText({ commits = [], prTitle = "", prBody = "", prAuthor = "" }) {
   const findings = [];
   for (const { sha, message } of commits) {
     const hits = findHiddenUnicode(message);
     if (hits.length > 0) findings.push({ source: `commit ${sha.slice(0, 12)} message`, hits });
   }
   for (const [source, text] of [["PR title", prTitle], ["PR body", prBody]]) {
-    const hits = findHiddenUnicode(text ?? "");
+    // Dependabot suppresses notifications in copied release notes with @ + ZWSP.
+    // Replace only that position, preserving diagnostic line/column offsets.
+    const scanned = source === "PR body" && prAuthor === "dependabot[bot]"
+      ? (text ?? "").replace(/@\u200B(?=[A-Za-z0-9])/g, "@ ")
+      : text ?? "";
+    const hits = findHiddenUnicode(scanned);
     if (hits.length > 0) findings.push({ source, hits });
   }
   return findings;
@@ -68,8 +74,15 @@ function main() {
     return;
   }
   const commits = parseCommitLog(log);
+  let prAuthor = "";
+  if (process.env.GITHUB_EVENT_PATH) {
+    // Author comes from GitHub's event payload, never the workflow actor.
+    const event = JSON.parse(readFileSync(process.env.GITHUB_EVENT_PATH, "utf8"));
+    if (event.pull_request?.user?.type === "Bot") prAuthor = event.pull_request.user.login;
+  }
   const findings = findHiddenInCommitText({
     commits,
+    prAuthor,
     prTitle: process.env.PR_TITLE || "",
     prBody: process.env.PR_BODY || "",
   });

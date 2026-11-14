@@ -91,7 +91,11 @@ export function formatTimestamp(value: string | null | undefined, empty = "—")
 }
 
 /** A compact elapsed time: "3d 4h", "2h 10m", "45m", "<1m". Used by the workroom flow surfaces (EP-B70E718D). */
-export function formatDuration(ms: number): string {
+export function formatDuration(ms: number, options?: { includeSeconds?: boolean }): string {
+  if (options?.includeSeconds) {
+    const seconds = Math.floor(ms / 1000), minutes = Math.floor(seconds / 60);
+    return minutes === 0 ? `${seconds}s` : `${minutes}m ${seconds % 60}s`;
+  }
   const minutes = Math.floor(ms / 60_000);
   if (minutes < 1) return "<1m";
   const days = Math.floor(minutes / 1440);

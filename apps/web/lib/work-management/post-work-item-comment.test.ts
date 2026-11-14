@@ -54,7 +54,7 @@ describe("postWorkItemComment (BI-B416B12A)", () => {
     expect(notificationCreate).toHaveBeenCalledWith({
       data: expect.objectContaining({ userId: "user-1", type: "work-item-mention", deepLink: "/workspace/cases/manual-task%3AWI-1" }),
     });
-    expect(result).toEqual({ messageId: "WIM-1", notifiedUserIds: ["user-1"], mentionedAgentIds: ["AGT-9"] });
+    expect(result).toEqual({ messageId: "WIM-1", notifiedUserIds: ["user-1"], mentionedAgentIds: ["AGT-9"], addressed: false });
   });
 
   it("never notifies the author of their own @mention", async () => {

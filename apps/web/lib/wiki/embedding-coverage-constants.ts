@@ -29,6 +29,14 @@ export const EMBEDDING_COVERAGE_REQUESTED_EVENT =
  * :40 keeps it clear of the on-the-hour and half-hour ticks the other crons use.
  */
 export const EMBEDDING_COVERAGE_CRON = "40 */2 * * *";
+/**
+ * Time budget for one scheduled run (BI-F039D17A). A release that edits many
+ * corpus pages can need hundreds of embeds; past this budget the remaining
+ * pages are reported as deferred and the next run takes them. The content
+ * digest is the only state, so nothing is lost between runs.
+ */
+export const EMBEDDING_COVERAGE_RUN_BUDGET_MS = 10 * 60_000;
+
 export const EMBEDDING_COVERAGE_CADENCE = "Every 2 hours at :40";
 
 /** Durable Workroom collecting this outcome's activity, so a run is visible. */

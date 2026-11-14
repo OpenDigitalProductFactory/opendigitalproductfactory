@@ -1,0 +1,18 @@
+{
+  "version": "1",
+  "decidedOption": "band-with-14-mark-strips",
+  "decisionInteractionId": "DI-A64D5B09381E",
+  "scope": {
+    "files": [
+      "apps/web/components/ops/workrooms/atlas/RhythmStrip.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "band-with-14-mark-strips",
+      "summary-count-only",
+      "strip-in-room-detail-only"
+    ]
+  }
+}

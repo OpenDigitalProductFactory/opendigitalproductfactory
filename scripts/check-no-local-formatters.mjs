@@ -173,7 +173,6 @@ export const ALLOWLIST = new Map([
   ["apps/web/components/monitoring/ContainerResourceTable.tsx#formatBytes", "1000-based with no space before the unit"],
   ["apps/web/components/workbooks/cell-editors.tsx#formatBytes", "1024-based, one decimal only under 10"],
   // Durations.
-  ["apps/web/components/build/BuildPhaseCostCard.tsx#formatDuration", 'floored "Xm Ys" with an em dash for null'],
   ["apps/web/components/build/TaskInspector.tsx#formatDuration", 'milliseconds tier under 1s, then "Xs" / "Xm Ys"'],
   ["apps/web/components/build/VoiceRationalePlayer.tsx#formatDuration", 'media clock "m:ss"'],
   ["apps/web/components/ops/GitPromotionCandidatesPanel.tsx#formatDuration", 'rounded seconds, null for missing, "Xm" when seconds are 0'],

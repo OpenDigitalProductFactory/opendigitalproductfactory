@@ -1,4 +1,14 @@
 {
+  "account": {
+    "trigger": "Signed in as {$name} — account details",
+    "heading": "Your account",
+    "signedInAs": "Signed in as",
+    "role": "Role",
+    "noRole": "No platform role assigned",
+    "superuser": "Superuser",
+    "organization": "Organization",
+    "organizationUnavailable": "Organization unavailable"
+  },
   "area": {
     "workDenied": "Your role does not include viewing Workrooms.",
     "teamEmpty": "No one is assigned to this area yet.",
@@ -50,6 +60,27 @@
     "offBody": "Prometheus and Grafana are not running, so metrics and metric alerts are not collected. Logs are still captured.",
     "offLink": "See runtime services",
     "offAlertsNote": "Log alerts only — metric monitoring is off."
+  },
+  "aiCoworkers": {
+    "viewsLabel": "AI coworker views",
+    "activityDescription": "See what coworkers and external executors are doing, the Workrooms that retain their context, and where today's model use belongs.",
+    "advancedOperations": "Advanced AI operations",
+    "operationsMap": "Operations Map",
+    "usageBreakdown": "{$roster} roster · {$workrooms} Workrooms · {$unattributed} unattributed · ~{$cost}",
+    "workroomsHeading": "Governed Workrooms — current and recent",
+    "workroomsHint": "retained context, executor, status, and model use",
+    "workroomsEmpty": "No current or recently completed Workrooms were found.",
+    "unattachedHeading": "Unattached platform runs",
+    "unattachedHint": "live runs with no coworker or Workroom context",
+    "historyLabel": "History",
+    "historyAriaLabel": "Operations history window",
+    "historyOneHour": "1 hour",
+    "historySixHours": "6 hours",
+    "historyTwentyFourHours": "24 hours",
+    "historySevenDays": "7 days",
+    "historyPrevious": "Previous window",
+    "historyNext": "Next window",
+    "historyLive": "Return to live edge"
   },
   "calendarFeed": {
     "heading": "Subscribe from another calendar app",

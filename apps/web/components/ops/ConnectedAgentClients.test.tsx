@@ -1,24 +1,96 @@
+// @vitest-environment jsdom
 // BI-E7974C18 — the "Connected agent clients" section on /ops/self-upgrade.
-import { describe, expect, it } from "vitest";
-import { renderToStaticMarkup } from "react-dom/server";
+import { describe, expect, it, vi } from "vitest";
+import { act } from "react";
+import { createRequire } from "node:module";
+import type { Root } from "react-dom/client";
+import { renderToStaticMarkup, renderToString } from "react-dom/server";
 import { namespaceMessages } from "@dpf/i18n";
 
 import { MessagesProvider } from "@/components/i18n/MessagesProvider";
 import { ConnectedAgentClients } from "./ConnectedAgentClients";
-import type { ConnectedClientsView } from "@/lib/agent-toolchain/connected-clients";
+import type { ConnectedClientRow, ConnectedClientsView } from "@/lib/agent-toolchain/connected-clients";
+
+// The repository's Vite react-dom alias is an exact package file, so resolve
+// the client entry through Node rather than that prefix alias.
+const { hydrateRoot } = createRequire(import.meta.url)("react-dom/client") as typeof import("react-dom/client");
 
 const now = new Date("2026-10-13T12:00:00Z");
 const release = { packVersion: "0.4.0", fingerprint: "1111111111aa" };
 
-function render(view: ConnectedClientsView | null) {
-  return renderToStaticMarkup(
-    <MessagesProvider locale="en-US" messages={{ upgrade: namespaceMessages("en-US", "upgrade") }}>
+function content(view: ConnectedClientsView | null, sinceMessage?: string) {
+  const upgrade = { ...namespaceMessages("en-US", "upgrade") };
+  if (sinceMessage) upgrade["agentClients.hostAgentSince"] = sinceMessage;
+  return (
+    <MessagesProvider locale="en-US" messages={{ upgrade }}>
       <ConnectedAgentClients view={view} now={now} />
-    </MessagesProvider>,
+    </MessagesProvider>
   );
 }
 
+function render(view: ConnectedClientsView | null) {
+  return renderToStaticMarkup(content(view));
+}
+
+function hostFailure(status: NonNullable<ConnectedClientRow["hostAgent"]>["status"], since: Date | null): ConnectedClientsView {
+  return { release, truncated: false, clients: [{
+    credentialRef: "oauth:hydration-fixture", product: "Codex", probable: false,
+    authMode: "oauth", standing: "stale", loadedVersion: "0.3.0",
+    loadedFingerprint: null, lastSeen: now, behind: true, reasons: [],
+    hostAgent: { status, code: null, since },
+  }] };
+}
+
 describe("ConnectedAgentClients", () => {
+  it.each(["failed", "needs-operator"] as const)("keeps initial markup identical across server/viewer zones for %s", status => {
+    const previous = process.env.TZ;
+    const since = new Date("2026-11-06T00:30:00Z");
+    try {
+      process.env.TZ = "UTC";
+      expect(since.getDate()).toBe(6);
+      const server = render(hostFailure(status, since));
+      process.env.TZ = "America/Chicago";
+      expect(since.getDate()).toBe(5);
+      expect(render(hostFailure(status, since))).toBe(server);
+    } finally {
+      if (previous === undefined) delete process.env.TZ;
+      else process.env.TZ = previous;
+    }
+  });
+
+  it("hydrates without recovery and localizes dates in translated sentence order", async () => {
+    const previous = process.env.TZ;
+    const since = new Date("2026-11-06T00:30:00Z");
+    const element = content(hostFailure("failed", since), "[{$date}] depuis / {$date}.");
+    const container = document.createElement("div");
+    const errors: unknown[] = [];
+    let root: Root | undefined;
+    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+    try {
+      process.env.TZ = "UTC";
+      container.innerHTML = renderToString(element);
+      document.body.append(container);
+      process.env.TZ = "America/Chicago";
+      await act(async () => { root = hydrateRoot(container, element, { onRecoverableError: error => errors.push(error) }); });
+      expect(errors).toEqual([]);
+      expect(container.querySelector("[data-host-agent=failed]")?.textContent).toContain("[Nov 5, 2026] depuis / Nov 5, 2026.");
+    } finally {
+      if (root) await act(async () => { root!.unmount(); });
+      container.remove();
+      vi.unstubAllGlobals();
+      if (previous === undefined) delete process.env.TZ;
+      else process.env.TZ = previous;
+    }
+  });
+
+  it.each(["failed", "needs-operator", "ok"] as const)("omits the since sentence when its date is missing for %s", status => {
+    expect(render(hostFailure(status, null))).not.toContain("Since ");
+  });
+
+  it("does not add a since sentence to a healthy host with a date", () => {
+    expect(render(hostFailure("ok", new Date("2026-11-06T00:30:00Z")))).not.toContain("Since ");
+  });
+
   it("lists each client with its tools version, standing in plain words, and when it was last seen", () => {
     const html = render({
       release,

@@ -160,6 +160,18 @@ export const HYGIENE_JOB_CATALOG_ENTRIES: readonly ScheduledJobCatalogEntry[] = 
     runNowEvent: null,
   },
   {
+    jobId: "entity-references-rebuild",
+    inngestId: "knowledge/entity-references-rebuild",
+    honorsEnabledGate: true,
+    name: "Entity references rebuild",
+    purpose: "Re-derives reference links from every body and removes links whose source is gone (BI-A63A9476). Safe to re-run.",
+    cron: "40 4 * * 0",
+    cadence: "Weekly, Sun 04:40",
+    category: "core",
+    tracksRunData: false,
+    runNowEvent: null,
+  },
+  {
     jobId: "substrate-reconciler",
     inngestId: "ops/substrate-reconciler",
     honorsEnabledGate: true,

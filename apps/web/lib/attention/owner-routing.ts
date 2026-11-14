@@ -1,5 +1,5 @@
 import type { ProactivityLevel } from "@dpf/validators/workroom-policy/proactivity-types";
-import { namesNoConcreteConsequence } from "./types";
+import { isAiCapacityItem, isOperatorContinuityItem, namesNoConcreteConsequence } from "./types";
 import type { AttentionItem, AttentionSource } from "./types";
 
 export type OwnerAttentionLane = "needs-you-now" | "weekly-digest" | "custodian";
@@ -77,6 +77,20 @@ export function classifyOwnerAttentionLane(
   }
   if (item.source === "paused-ai" && item.triage.residueReason === "needs-credential") {
     return decision("custodian", "A credential is technical access work, not owner judgment.", false, appliedLevel);
+  }
+  if (isAiCapacityItem(item) && item.triage.residueReason !== "self-heals") {
+    // Lost AI capacity the operator must restore — a sign-in, a spending limit,
+    // every subscription out, a collapse. Hidden as custodian work it was never
+    // seen (BI-ACE041FE, WWMD DI-ECB244DF2109). A usage limit that lifts on its
+    // own stays with the digital team below.
+    return decision("needs-you-now", "AI capacity stays lost until you restore it.", false, appliedLevel);
+  }
+  if (isOperatorContinuityItem(item)) {
+    // The platform stopped serving, or cannot reach its paired installation.
+    // The cause sits with a person: a computer that sleeps or does not restart
+    // on its own, or a paired computer switched off or re-paired. Counted as
+    // custodian work it was never seen (BI-3E2F87FA, BI-85DE8EBD).
+    return decision("needs-you-now", "Only you can fix what stopped the platform or its paired installation.", false, appliedLevel);
   }
   if (TECHNICAL_SOURCES.has(item.source)) {
     return decision("custodian", "The technical custodian owns platform recovery.", false, appliedLevel);

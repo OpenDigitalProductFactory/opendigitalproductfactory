@@ -13,6 +13,8 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { gzipSync } from "node:zlib";
 
+import { deliveredContent } from "./pack-digest";
+
 const BLOCK = 512;
 const GZIP_OS_UNKNOWN = 0xff;
 
@@ -59,7 +61,7 @@ function modeFor(path: string): number {
 export function buildPackArchive(root: string, files: readonly string[]): Buffer {
   const parts: Buffer[] = [];
   for (const relative of files) {
-    const bytes = readFileSync(join(root, ...relative.split("/")));
+    const bytes = deliveredContent(relative, readFileSync(join(root, ...relative.split("/"))));
     parts.push(header(relative, bytes.length, modeFor(relative)), bytes);
     const pad = (BLOCK - (bytes.length % BLOCK)) % BLOCK;
     if (pad) parts.push(Buffer.alloc(pad, 0));

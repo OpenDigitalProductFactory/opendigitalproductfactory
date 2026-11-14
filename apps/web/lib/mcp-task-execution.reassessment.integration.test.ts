@@ -205,6 +205,8 @@ function installStorage() {
   m["modelProvider.findUnique"] = () => provider;
   // BI-F3B6713F: the daily budget excludes zero-marginal providers; this fixture has none.
   m["modelProvider.findMany"] = () => [];
+  // The reassessment budget excludes subscription-covered providers (BI-F98BBE4F).
+  m["supplierContract.findMany"] = () => [];
   m["modelProfile.findMany"] = () => [profile]; m["modelProfile.findUnique"] = () => profile;
   m["aiProviderConnection.findMany"] = () => [account]; m["aiProviderConnection.findUnique"] = () => account;
   m["agent.findUnique"] = m["agent.findFirst"] = () => agent;

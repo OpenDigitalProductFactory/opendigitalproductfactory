@@ -137,6 +137,8 @@ Merge blocked. Definition of done.
 | Pre-PR tests | `pnpm test` (vitest + jest) | Every PR | `ci.yml` Unit Tests job |
 | Mobile jest pin | check-mobile-jest-pin.mjs | Every PR | `ci.yml` Mobile Jest Pin Guard |
 
+> **2026-11-13:** the post-PR alert diff and its baseline were retired (BI-8ED87FD9). The workflow had stopped running after CodeQL was renamed; see [README.md](README.md#retired-the-codeql-inflow-gate).
+
 Zero third-party accounts. Everything ships with the repo.
 
 ## Acceptance test attempts

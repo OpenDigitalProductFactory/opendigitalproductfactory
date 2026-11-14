@@ -35,6 +35,7 @@ import { fetchWorkPageFromPeer, type PeerPostResult } from "./client";
 import { relationshipPresetForRole } from "./demand-reconciliation";
 import { decryptPeerToken } from "./outbound";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
+import { mergeWorkSyncHealth, parseWorkSyncHealthRecord, type WorkSyncErrorClass } from "./work-sync-health";
 import {
   claimFromMirrorPayload,
   recordFederatedTwins,
@@ -88,7 +89,7 @@ export interface WorkSyncDb {
     updateMany(args: unknown): Promise<{ count: number }>;
   };
   /** Optional: where the last pull's outcome per link is kept for the health line. */
-  platformConfig?: { upsert(args: unknown): Promise<unknown> };
+  platformConfig?: { upsert(args: unknown): Promise<unknown>; findUnique?(args: unknown): Promise<{ value: unknown } | null> };
 }
 
 /** PlatformConfig key holding the last work-sync outcome per link (EP-ZERO-CONFIG-FEDERATION §5.7). */
@@ -97,7 +98,18 @@ export const WORK_SYNC_HEALTH_KEY = "federation.work-sync.health.v1";
 export interface WorkSyncHealthRecordV1 {
   schemaVersion: 1;
   observedAt: string;
-  links: Array<{ linkId: string; outcome: WorkSyncLinkResult["outcome"]; detail: string | null; lastPullAt: string | null }>;
+  links: Array<{
+    linkId: string;
+    outcome: WorkSyncLinkResult["outcome"];
+    detail: string | null;
+    /** When THIS pull landed; null when it failed. */
+    lastPullAt: string | null;
+    /** The last pull that landed, carried across failed cycles (BI-85DE8EBD). */
+    lastSuccessAt?: string | null;
+    /** When the current run of failures began; null while syncing. */
+    failingSince?: string | null;
+    errorClass?: WorkSyncErrorClass | null;
+  }>;
 }
 
 export interface WorkSyncLinkResult {
@@ -294,7 +306,15 @@ async function recordMirrorStatusChange(
 
 function sameClaim(a: FederatedWorkClaim | null, b: FederatedWorkClaim | null): boolean {
   if (!a || !b) return a === b;
-  return a.active === b.active && a.since === b.since && a.workrooms === b.workrooms;
+  return a.active === b.active && a.since === b.since && a.workrooms === b.workrooms
+    && sameHolder(a.holder ?? null, b.holder ?? null);
+}
+
+/** The holder and its lease travel with the claim, so a renewal at the home
+ *  reaches the mirror (BI-30EDDB7F). */
+function sameHolder(a: FederatedWorkClaim["holder"], b: FederatedWorkClaim["holder"]): boolean {
+  if (!a || !b) return !a && !b;
+  return a.installationId === b.installationId && a.workroomId === b.workroomId && a.leaseExpiresAt === b.leaseExpiresAt;
 }
 
 async function upsertItem(
@@ -565,12 +585,12 @@ export async function runWorkSync(
   }
   // Remember what each pull reported so the health line can say WHY, not only when.
   if (db.platformConfig) {
-    const record: WorkSyncHealthRecordV1 = {
-      schemaVersion: 1,
-      observedAt: now.toISOString(),
-      links: results.map((r) => ({ linkId: r.linkId, outcome: r.outcome, detail: r.detail, lastPullAt: r.outcome === "synced" ? now.toISOString() : null })),
-    };
     try {
+      // Carry the last success and the start of a failure across cycles (BI-85DE8EBD).
+      const previous = db.platformConfig.findUnique
+        ? await db.platformConfig.findUnique({ where: { key: WORK_SYNC_HEALTH_KEY }, select: { value: true } })
+        : null;
+      const record = mergeWorkSyncHealth(parseWorkSyncHealthRecord(previous?.value), results, now);
       await db.platformConfig.upsert({ where: { key: WORK_SYNC_HEALTH_KEY }, create: { key: WORK_SYNC_HEALTH_KEY, value: record }, update: { value: record } });
     } catch (error) {
       console.warn(`[work-sync] could not record health: ${getErrorMessage(error)}`);

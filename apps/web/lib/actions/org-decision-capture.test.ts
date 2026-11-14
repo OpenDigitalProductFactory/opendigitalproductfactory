@@ -30,7 +30,6 @@ vi.mock("@/lib/wiki/page-links", () => ({ syncWikiPageLinks: vi.fn(async () => (
 
 import { captureOrgDecisionOutcome } from "./org-decision-capture";
 import { upsertWikiPage } from "@dpf/db/wiki-store";
-import { syncWikiPageLinks } from "@/lib/wiki/page-links";
 
 function row(overrides: Record<string, unknown> = {}) {
   return {

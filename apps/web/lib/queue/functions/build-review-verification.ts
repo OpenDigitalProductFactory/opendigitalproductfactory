@@ -28,6 +28,21 @@ import { jobs } from "@/lib/jobs";
 import { buildPipelineConcurrency } from "../admission";
 import { shouldRunBrowserUxVerification } from "@/lib/build/ui-surface";
 
+/**
+ * BI-E3C5C7E4: review verification runs only for a build that is in review now.
+ * Every caller moves the build into review before queuing, but a stale or
+ * re-delivered event used to run the whole job anyway: from 2026-11-06 to
+ * 11-13, abandoned and in-build builds were each finalized ~230 times, and every
+ * pass spent cloud model calls on a change nobody could ship.
+ */
+export function reviewVerificationSkipReason(
+  build: { sandboxId?: string | null; sandboxPort?: number | null; phase?: string | null } | null,
+): string | null {
+  if (!build || !build.sandboxId || !build.sandboxPort) return "sandbox or build missing";
+  if (build.phase !== "review") return `build is in ${build.phase ?? "no"} phase, not review`;
+  return null;
+}
+
 export const buildReviewVerification = jobs.createFunction(
   {
     id: "build/review-verification",
@@ -56,13 +71,13 @@ export const buildReviewVerification = jobs.createFunction(
           verificationOut: true,
           buildBranch: true,
           designDoc: true,
+          phase: true,
         },
       });
     });
 
-    if (!build || !build.sandboxId || !build.sandboxPort) {
-      return { skipped: true, reason: "sandbox or build missing" };
-    }
+    const skip = reviewVerificationSkipReason(build);
+    if (skip || !build) return { skipped: true, reason: skip ?? "sandbox or build missing" };
 
     const { deriveFixUxTestCases } = await import("@/lib/explore/feature-build-types");
     const brief = build.brief as {

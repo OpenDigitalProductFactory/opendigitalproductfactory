@@ -44,11 +44,11 @@ export const CLIENT_CAPABILITY_PROFILE: ClientCapabilityProfile = {
           "evidence": "packages/dpf-bootstrap/src/agent-toolchain/mcp-client-config.ts writes an Authorization header where a bearer is required"
         },
         "declarationCarrier": {
-          "value": "header",
+          "value": "helper",
           "status": "encoded",
-          "verifiedAt": "2026-10-14",
-          "verifiedVersion": null,
-          "evidence": "#6329 (BI-DE1E6485): the updater writes the header carrier; the header leaves the connector URL, the OAuth resource and the desktop URL check unchanged. Not live-probed until the carrier spike measures it"
+          "verifiedAt": "2026-11-13",
+          "verifiedVersion": "2.1.323",
+          "evidence": "BI-BDC94789: Claude Code 2.1.323 keys a server's stored OAuth sign-in by cf(name, config) = name|sha256(JSON.stringify({type, url, headers || {}}))[:16], read from the installed binary, so the header carrier changed that key on every update and signed the owner out. A constant headersHelper is outside the key; its output is merged over static headers per connection, and a failing helper or an untrusted folder sends no headers without failing the connection. Not live-probed end to end"
         },
         "pluginScopes": {
           "value": [

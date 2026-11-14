@@ -8,27 +8,33 @@ order: 1
 
 Operations is the delivery backlog for the platform. It tracks the work items, epics, priorities, and deployments that make up your team's delivery commitments. It is designed for transparency — blockers are visible, work in progress is limited by investment (each portfolio admits new work while its points in flight fit its allowance, so ten small items and two large ones that cost the same are treated alike), and progress is always up to date.
 
-## Workroom Inventory
+## Work in progress: the Work Atlas
 
 **Work** in the main navigation opens this same page — there is one entry for work activity, not a separate dashboard beside it. It is distinct from the coworker directory under **Workforce**: the Workforce portfolio groups business work, including supporting activities such as hiring and finance, while the coworker directory is a people-and-agent view across all four portfolios.
 
-Open **Work in progress** (`/ops/workrooms`) to follow business, coworker and development work in one place. Choose **Needs attention**, **Working now** or **Waiting**. The page starts with attention when it is recorded. A renewed session lease alone does not mean work is progressing.
+Open **Work in progress** (`/ops/workrooms`) to see every open workroom on one screen, called the **Work Atlas**. Grey means a room is moving on its own. Colour and shape mean you should look.
 
-Each row shows the work, its accountable person and its next step. Accountability comes from the room, its responsibility chain or the recorded organization owner. **Not assigned** means a person has not been resolved; the page does not guess from who started the session. Select the work's title to open its existing case and supported actions.
+**Today's question** sits at the top: how many rooms are waiting on a person, and which of them has gone longest without a new signal. Select that room to open it.
 
-Rooms waiting on the same recovery condition are grouped under **Shared recovery issues**. Expand a group to see its affected rooms. A missing stage result needs evidence or writeback from the executor; changing ownership alone does not restore it.
+Below it are five counts, each with the mark it uses on the map:
 
-**Technical evidence** reveals session information, branches, lease reasons and recovery conditions. **History** loads the retained rows only when opened. **System details** explains the system's protected leases and cleanup candidates. Routine expiry follows the existing policy: a valid held lease is not reaped, paused sessions retain their resume grace, and unmerged work is preserved. The Waiting view does not promise that an unavailable worker will automatically return.
+- **Needs a person** (amber diamond): a decision, approval, owner or closeout is waiting on someone.
+- **Stuck or held** (red square with a bar): the room is blocked, failed, or paused by its drive. This replaces the old **Shared recovery issues** section.
+- **Working now** (light grey square): an executor is demonstrably working.
+- **Waiting its turn** (dark grey square): the room is waiting for capacity or input.
+- **No recent signal** (hatched square): nothing recorded says what the room is doing.
 
-History says **Closed** for an archived room. **Source merged** requires recorded merge evidence; it does not assert that the change is deployed or accepted.
+Select a count to highlight those rooms and dim the rest. Select it again to show every state. A renewed session lease alone does not mean work is progressing.
 
-The page reads up to 200 recent rooms. Shared recovery can include older rooms. The attention total combines both and counts each room once. Open a portfolio's Work view to narrow the same inventory. Open **Architecture > Workrooms** for reusable definitions rather than instance history.
+The map draws one square per room. Rooms group by portfolio (Manufacturing and Delivery first, **Not yet placed** last), then by delivery shape (**Unshaped** when a room declares none). Within a shape, rooms that need a look sit at the left. Each portfolio heading gives its totals, for example "118 rooms · 18 need you · 7 stuck". Select a portfolio name to show only that portfolio. Select any square to open its room.
 
-**Activity by portfolio** groups the same Workrooms under the four portfolios and summarises each one with a few concrete activities rather than a bare count. Every line names its Workroom and says what is happening to it, so two Workrooms blocked for the same reason stay distinguishable. Select any line to open that Workroom's activity case in one step.
+Select a shape's name to open its rows. Each row shows the room, its stage rail (done, current, still to do) and what it is doing or why it is held, with its accountable person. A held room shows the drive's recorded cause and since when. Rows show eight at a time; filter by state to narrow the rest. **Not assigned** accountability means no person has been resolved; the page does not guess from who started the session.
 
-Use the arrow beside a portfolio to expand it. Expanding lists the Workrooms in that portfolio, up to twenty-five at a time, and tells you how many it is not listing. Expanding one portfolio does not collapse the others and does not change what you already have open.
+Filters live in the address, for example `/ops/workrooms?portfolio=forEmployees&state=stuck&shape=delivery-small`, so other pages and agents can link straight to a view and a refresh keeps it. An area's **Work** view now gives its room counts and links here filtered to that portfolio. Agents read the same picture through `list_workrooms` with `view: "atlas"`.
 
-Counts describe the Workrooms the page read, not everything in the portfolio. When the page reads its limit, each count reads "N rooms read" and a note below the tree says so. To see beyond that, narrow the inventory below or open the portfolio itself.
+The Atlas reads every open room, up to 2,000. Above that it says the picture is truncated. Open **Architecture > Workrooms** for reusable definitions rather than instance history.
+
+**Day-to-day operations** lists every standing room with its last 14 days. A missed day shows as an outlined cross, so it stands out as clearly as a stuck project. See [Day-to-day operations](../workspace/work-rooms.md#day-to-day-operations) for what each mark means.
 
 ## Key Concepts
 
@@ -69,7 +75,16 @@ their age is then counted from when they were created and the real figure may
 be lower; hover it for the explanation. The progress bar shows done in one
 colour and awaiting acceptance as a separate segment after it. The workspace
 **Backlog** tile shows the same counts as **Awaiting acceptance** and **Awaiting
-14+ days**, above **Done**.
+14+ days**, above **Done**. The tile counts only the items this installation
+can accept. Items copied in from a connected installation by work sync are
+accepted by the installation they came from, so the tile shows them separately
+as **Awaiting at peer installation** and leaves them out of the other two
+counts. While work sync with that installation is failing, the row reads
+**stale since** the last successful sync, because the copies no longer change.
+If sync has not worked for six hours, **Needs you** names the installation, the
+last success, what kind of failure it is (the connection was revoked or
+refused, the network, or a secure-connection problem) and what to check. The
+item clears once sync works again.
 
 **Active only** is enabled by default. It hides awaiting-acceptance, deferred, done, and retired item
 rows when you expand an epic, while the row-level status mix stays visible. Turn
@@ -106,6 +121,27 @@ When you file an item, say what will be true, and for whom, once it is done (the
 A retired duplicate is labeled **retired duplicate**; the other backlog item is
 the canonical record, so the duplicate is retained for history without being
 counted as completed. Retired items no longer keep an epic open.
+
+### Security findings from GitHub
+
+On the installation that stewards the repository, inbound issue triage reads
+three GitHub security surfaces every four hours: Dependabot, code scanning and
+secret scanning. Each one becomes backlog work:
+
+- **One item per unit of fix.** Dependabot findings are grouped by package, so
+  one upgrade closes one item. Code scanning is grouped by rule. Each leaked
+  secret is its own item.
+- **Ranked by severity.** Leaked secrets and critical findings are priority 1,
+  high is 2, medium 3 and low 4. A rise in severity raises the item; the job
+  never lowers a priority.
+- **Closed when GitHub resolves it.** When GitHub no longer reports a finding
+  open, the item records that as evidence and moves to awaiting acceptance. The
+  daily acceptance sweep then closes it. If the finding comes back first, the
+  item returns to open.
+- **Unreadable is never zero.** If the installation's GitHub connection cannot
+  read a surface, the schedule view marks that surface **UNREADABLE** and the
+  run as failed. The connection needs read access to Dependabot alerts, code
+  scanning alerts and secret scanning alerts.
 
 ### Clearing copies of a paired installation's demand
 
@@ -304,6 +340,26 @@ grants, and approved links.
 You reach it from the installation badge beside the logo, which appears on every
 installation that is not production.
 
+### How this computer is set up to keep the platform running
+
+The platform stops serving whenever the computer it runs on sleeps, restarts and
+waits at the sign-in screen, or starts without Docker. This section shows three
+checks, read from the computer each time the platform starts after someone signs
+in:
+
+- **Plugged in to power.** On battery a Mac goes to sleep when idle.
+- **Never sleeps on power.** In System Settings, open **Battery**, then
+  **Options**, and turn on **Prevent automatic sleeping on power adapter when the
+  display is off**. On a Mac without a battery this is under **Energy**.
+- **Docker starts at sign-in.** In Docker Desktop, open **Settings**, then
+  **General**, and turn on **Start Docker Desktop when you sign in to your
+  computer**.
+
+These are suggestions. The platform reads the settings but never changes them.
+After a restart, for example for a macOS update, the platform starts again only
+once someone signs in to the computer. If the platform was down for more than half
+an hour, the next time it runs **Needs you** shows how long and the likely cause.
+
 ### Who runs this installation
 
 Name the company or team that operates this installation. This is not the
@@ -367,3 +423,5 @@ that stops describing this installation. Nothing is saved until you confirm it.
 The operator name is different: it is a label rather than a change to what your
 coworkers may do, so it saves directly without an impact preview. The preview
 step is reserved for changes that actually move a brake.
+
+Work in progress keeps recorded executor and invocation details inside each row’s Technical evidence disclosure. These identify the recorded execution path independently of the accountable person. Missing historical evidence is identified explicitly; a schedule alone does not establish agent-to-agent delegation.

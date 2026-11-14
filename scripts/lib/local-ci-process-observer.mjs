@@ -18,7 +18,14 @@ function errorEvidence(error) {
     : null;
 }
 
-export function descendantProcesses(rootPid, {
+export function descendantProcesses(rootPid, options = {}) {
+  return descendantProcessScan(rootPid, options) ?? [];
+}
+
+// Same scan, but a failed scan is null rather than an empty list, so a caller
+// that must PROVE no descendant survives cannot mistake "could not look" for
+// "nothing there" (BI-93EECD80).
+export function descendantProcessScan(rootPid, {
   platform = process.platform,
   spawnSyncImpl = spawnSync,
 } = {}) {
@@ -37,7 +44,8 @@ export function descendantProcesses(rootPid, {
         timeout: 5_000,
         windowsHide: true,
       });
-      if (result.status !== 0 || !result.stdout.trim()) return [];
+      if (result.status !== 0) return null;
+      if (!result.stdout.trim()) return [];
       const parsed = JSON.parse(result.stdout);
       return (Array.isArray(parsed) ? parsed : [parsed]).map((row) => ({
         pid: Number(row.ProcessId),
@@ -50,7 +58,7 @@ export function descendantProcesses(rootPid, {
       encoding: "utf8",
       timeout: 5_000,
     });
-    if (result.status !== 0) return [];
+    if (result.status !== 0) return null;
     const rows = result.stdout.split(/\r?\n/).map((line) => {
       const match = line.trim().match(/^(\d+)\s+(\d+)\s+(.+)$/);
       return match
@@ -70,7 +78,7 @@ export function descendantProcesses(rootPid, {
     }
     return rows.filter((row) => ids.has(row.pid));
   } catch {
-    return [];
+    return null;
   }
 }
 

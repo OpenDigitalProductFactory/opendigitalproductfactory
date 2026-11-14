@@ -626,6 +626,18 @@ async function estimatedTokenRates(providerId: string, modelId: string | undefin
   return { input: ESTIMATED_BLENDED_PER_MTOKEN, output: ESTIMATED_BLENDED_PER_MTOKEN };
 }
 
+/** The estimated cost of a subscription-covered call; null when no plan with a recorded fee covers the provider. */
+async function subscriptionCallCostUsd(providerId: string, tokens: number): Promise<number | null> {
+  try {
+    const { subscriptionEstimateForProvider } = await import("@/lib/finance/subscription-cost-estimator.server");
+    const { estimatedCallCostUsd } = await import("@/lib/finance/subscription-cost-estimator");
+    return estimatedCallCostUsd(await subscriptionEstimateForProvider(providerId), tokens);
+  } catch (err) {
+    console.warn("[ai-inference] Subscription cost estimate unavailable; using the provider price:", err instanceof Error ? err.message : err);
+    return null;
+  }
+}
+
 export async function logTokenUsage(input: {
   traceId?: string | null;
   agentId: string;
@@ -651,12 +663,21 @@ export async function logTokenUsage(input: {
         provider.electricityRateKwh ?? 0.12,
       );
     } else if (provider.costModel !== "compute") {
+      // A subscription is not free: a call on a plan with a recorded fee is
+      // charged its share of the fee at the effective-cost estimate
+      // (BI-F98BBE4F). Portfolio budgets see it; the daily paid allowance does
+      // not count it (budget-gate, WWMD DI-223FEAA53080).
+      const subscriptionCost = await subscriptionCallCostUsd(input.providerId, input.inputTokens + input.outputTokens);
       // Any cost model other than compute is paid to the budget gate, so it is
       // priced or estimated here, never recorded as $0.
-      const rates = provider.inputPricePerMToken != null && provider.outputPricePerMToken != null
-        ? { input: provider.inputPricePerMToken, output: provider.outputPricePerMToken }
-        : await estimatedTokenRates(input.providerId, modelId);
-      costUsd = computeTokenCost(input.inputTokens, input.outputTokens, rates.input, rates.output);
+      if (subscriptionCost !== null) {
+        costUsd = subscriptionCost;
+      } else {
+        const rates = provider.inputPricePerMToken != null && provider.outputPricePerMToken != null
+          ? { input: provider.inputPricePerMToken, output: provider.outputPricePerMToken }
+          : await estimatedTokenRates(input.providerId, modelId);
+        costUsd = computeTokenCost(input.inputTokens, input.outputTokens, rates.input, rates.output);
+      }
     }
   }
   // Record cost metric for Prometheus

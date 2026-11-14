@@ -8,6 +8,7 @@ import { ARCHETYPE_READINESS_PURPOSE_CONTRACTS } from "./archetype-readiness";
 import { GRAPH_EXPLORER_PURPOSE_CONTRACTS } from "./graph-explorer";
 import { RIGHT_NOW_PURPOSE_CONTRACTS } from "./right-now";
 import { MILEAGE_PURPOSE_CONTRACTS } from "./mileage";
+import { STATUTORY_RATES_PURPOSE_CONTRACTS } from "./statutory-rates";
 import { RECRUITING_PIPELINE_PURPOSE_CONTRACTS } from "./recruiting-pipeline";
 import { COWORKER_IDENTITY_PURPOSE_CONTRACTS } from "./coworker-identity";
 import { GOVERNED_TEARDOWN_PURPOSE_CONTRACTS } from "./governed-teardown";
@@ -22,12 +23,14 @@ import { AREA_HOME_PURPOSE_CONTRACTS } from "./area-home";
 import { MARKET_FOOTPRINT_PURPOSE_CONTRACTS } from "./market-footprint";
 import { MONITORING_SETTINGS_PURPOSE_CONTRACTS } from "./monitoring-settings";
 import { GATE_EFFICACY_PURPOSE_CONTRACTS } from "./gate-efficacy";
+import { UPSTREAM_FEEDBACK_PURPOSE_CONTRACTS } from "./upstream-feedback";
 
 const CONTRACT_MODULES: readonly PurposeContractModule[] = [
   ARCHETYPE_READINESS_PURPOSE_CONTRACTS,
   GRAPH_EXPLORER_PURPOSE_CONTRACTS,
   RIGHT_NOW_PURPOSE_CONTRACTS,
   MILEAGE_PURPOSE_CONTRACTS,
+  STATUTORY_RATES_PURPOSE_CONTRACTS,
   RECRUITING_PIPELINE_PURPOSE_CONTRACTS,
   COWORKER_IDENTITY_PURPOSE_CONTRACTS,
   GOVERNED_TEARDOWN_PURPOSE_CONTRACTS,
@@ -42,6 +45,7 @@ const CONTRACT_MODULES: readonly PurposeContractModule[] = [
   MARKET_FOOTPRINT_PURPOSE_CONTRACTS,
   MONITORING_SETTINGS_PURPOSE_CONTRACTS,
   GATE_EFFICACY_PURPOSE_CONTRACTS,
+  UPSTREAM_FEEDBACK_PURPOSE_CONTRACTS,
 ];
 
 export function buildPurposeContractSourceIndex(

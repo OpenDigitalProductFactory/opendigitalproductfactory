@@ -1,0 +1,79 @@
+{
+  "title": "Statutory rates",
+  "noPermission": "Confirming tax figures needs finance management permission.",
+  "lead": {
+    "ready": "Federal payroll is ready.",
+    "missing": ".input {$count :number}\n.match $count\none {{{$count} federal figure missing.}}\n* {{{$count} federal figures missing.}}",
+    "waiting": ".input {$count :number}\n.match $count\none {{{$count} waiting for you.}}\n* {{{$count} waiting for you.}}",
+    "checkFigures": "Check figures",
+    "addFigure": "Add a figure"
+  },
+  "missingHeading": "Missing",
+  "required": {
+    "socialSecurityEmployee": "Social Security, employee rate",
+    "socialSecurityEmployer": "Social Security, employer rate",
+    "socialSecurityWageBase": "Social Security, wage base",
+    "medicareEmployee": "Medicare, employee rate",
+    "medicareEmployer": "Medicare, employer rate"
+  },
+  "groups": {
+    "waiting": "Waiting for you",
+    "waitingEmpty": "Nothing is waiting. A figure a coworker researched appears here for you to check.",
+    "confirmed": "Confirmed and in use by payroll",
+    "confirmedEmpty": "No figure is confirmed yet, so payroll cannot compute these taxes.",
+    "rejected": "Rejected"
+  },
+  "card": {
+    "meta": "{$jurisdiction} · tax year {$year} · from {$from}",
+    "metaUntil": "{$jurisdiction} · tax year {$year} · from {$from} to {$to}",
+    "byPerson": "Entered by a person",
+    "byCoworker": "Researched by a coworker",
+    "read": "Read on {$date}",
+    "noSource": "No source is recorded, so this figure cannot be confirmed.",
+    "rejectedReason": "Rejected: {$reason}",
+    "confirm": "Confirm figure",
+    "reject": "Reject",
+    "rejectOpen": "Reject…",
+    "rejectPrompt": "Why is this figure wrong?"
+  },
+  "entry": {
+    "summary": "Enter a figure you have read yourself",
+    "help": "The same bar as a coworker's proposal: the authority's own page, and the passage that states the figure.",
+    "jurisdiction": "Jurisdiction",
+    "tax": "Tax",
+    "kind": "Kind",
+    "side": "Who pays",
+    "sideEmployee": "Employee (withheld)",
+    "sideEmployer": "Employer",
+    "sideNone": "Not specific to one side",
+    "rate": "Rate (%)",
+    "amount": "Amount",
+    "taxYear": "Tax year",
+    "effectiveFrom": "Effective from",
+    "readOn": "Read on",
+    "sourceUrl": "Source URL",
+    "sourceUrlHint": "https://www.irs.gov/…",
+    "excerpt": "Passage that states the figure",
+    "submit": "Record and confirm"
+  },
+  "taxType": {
+    "social_security": "Social Security",
+    "medicare": "Medicare",
+    "additional_medicare": "Additional Medicare",
+    "futa": "Federal unemployment (FUTA)",
+    "federal_withholding": "Federal income tax withholding",
+    "state_withholding": "State income tax withholding",
+    "suta": "State unemployment (SUTA)",
+    "local_withholding": "Local income tax withholding"
+  },
+  "ruleKind": {
+    "rate": "Rate",
+    "wage_base": "Wage base",
+    "threshold": "Threshold",
+    "amount": "Amount"
+  },
+  "side": {
+    "employee_withheld": "employee",
+    "employer_contribution": "employer"
+  }
+}

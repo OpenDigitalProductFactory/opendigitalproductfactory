@@ -142,6 +142,8 @@ open http://localhost:3000/wiki/stances/portfolio-as-anchor
 
 The seed advances the revision chain **only when body content changes**, so re-running on unchanged files is a no-op. Same for link / source / vector upserts — all idempotent.
 
+**Vectors follow your edits automatically ([corpus and vectors converge on every update](wiki/principles/corpus-and-vectors-converge-on-every-update.md), BI-F039D17A).** Every `wiki-pages` vector records a `contentDigest` of the text it was built from (abstract, blank line, body — `packages/db/src/wiki-embedding-digest.ts`). On every platform update the upgrade boot re-embeds each published page, kernel and profession alike, whose current text no longer matches its vector's digest. The two-hourly embedding-coverage job does the same, so an edit never needs a manual re-embed. Unchanged pages are skipped. Runs are reported in the corpus-health Workroom. The sidecar is optional: it only fills pages that have no vector yet and never overwrites a vector built from the current text. To list stale pages, run `pnpm --filter web exec tsx scripts/reembed-wiki-store.ts --check`. It names each missing or stale page and exits 1 while any remain.
+
 ---
 
 ## 7. Check your work
@@ -253,7 +255,8 @@ Customers will be able to override kernel pages with their own takes via the `ke
 | Seed fails: `has pageKind "heuristic" but declares principle-only frontmatter` | A non-`principle` page declares `principleDimensionVector`, `principleTier`, or another `principle*` key. Those are read only from `pageKind: principle`. | Change `pageKind` to `principle` if the page is meant to move decision verdicts, or drop the `principle*` keys if it is a rule of thumb. See §3. |
 | Page doesn&#39;t appear at `/wiki/<slug>` after seed | Slug mismatch | Check the file path. Slug is `<path-under-wiki-without-ext>` unless overridden. |
 | Same page seeds with `version=1` every time | Body actually unchanged between runs | Expected behaviour — revision chain only advances on body change. |
-| Vector upsert returns `vectors=no-sidecar` | `embeddings.jsonl` missing | Run `tsx scripts/build-kernel-embeddings.ts` to generate it. The seed still writes Postgres rows even without it. |
+| Vector upsert returns `vectors=no-sidecar` | `embeddings.jsonl` missing | Nothing to fix: the upgrade-boot reconcile embeds pages that have no vector. Run `tsx scripts/build-kernel-embeddings.ts` only to give a fresh install vectors before its embedding provider is reachable. |
+| A page you edited is still found by its old wording | Its vector predates the edit and the reconcile has not run since (or the embedding provider was busy) | Run `reembed-wiki-store.ts --check` to confirm it is listed as `stale`. The next upgrade boot or two-hourly embedding-coverage run refreshes it, and the corpus-health Workroom shows when. |
 | Wiki block doesn&#39;t show up in agent prompts | Vector index empty for this query, score below threshold (0.55), or the embedding model is down | Verify the vector index has points (`/admin/wiki/lint` page count > 0), check the embedding endpoint, broaden the query. |
 
 ---

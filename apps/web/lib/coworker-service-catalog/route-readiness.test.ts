@@ -448,6 +448,17 @@ describe("projectCoworkerRouteReadiness", () => {
     });
   });
 
+  it("names the requirement mismatch, not a repair, when capacity is not why nothing routes (BI-5A6C4011)", async () => {
+    await expect(
+      projectCoworkerRouteReadiness(config, {
+        ...snapshot([
+          endpoint({ id: "ep-weak", providerId: "weak", reasoning: 10, codegen: 10, toolFidelity: 10, instructionFollowing: 10, conversational: 10 }),
+        ]),
+        capacityByProvider: new Map([["weak", { state: "reauth_required" }]]),
+      }),
+    ).resolves.toMatchObject({ ready: false, reason: expect.not.stringContaining("needs attention") });
+  });
+
   it("keeps the record reachable when routing metadata could not load", async () => {
     await expect(
       projectCoworkerRouteReadiness(config, {

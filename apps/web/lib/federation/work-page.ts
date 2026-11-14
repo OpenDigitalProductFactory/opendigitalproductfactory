@@ -7,11 +7,13 @@
 // peer (those carry the federatedWork origin marker; re-serving them would
 // echo a record back to its owner or hand a third install a copy of a copy).
 
+import { claimHolderOf, isLapsedPeerClaim } from "./work-claim-ref";
 import {
   FEDERATED_WORK_LOCAL_ONLY_SENSITIVITIES,
   FEDERATED_WORK_ORIGIN_MARKER_SQL_PREFIX,
   FEDERATED_WORK_SPEC_VERSION,
   hasFederatedWorkOriginMarker,
+  type FederatedWorkClaimHolderV1,
   type FederatedWorkClaimV1,
   type FederatedWorkDeferralV1,
   type FederatedWorkEpicV1,
@@ -67,13 +69,28 @@ export interface WorkPageDb {
   backlogItem: { findMany(args: unknown): Promise<WorkPageItemRow[]> };
   epic: { findMany(args: unknown): Promise<WorkPageEpicRow[]> };
   /** Live Workrooms, so a peer can see work in flight (BI-91FC6B9A). */
-  workroom?: { findMany(args: unknown): Promise<Array<{ backlogItemId: string | null }>> };
+  workroom?: { findMany(args: unknown): Promise<WorkPageWorkroomRow[]> };
+}
+
+export interface WorkPageWorkroomRow {
+  backlogItemId: string | null;
+  capsuleId?: string;
+  executorKind?: string | null;
+  executorRef?: string | null;
+  leaseExpiresAt?: Date | null;
+  createdAt?: Date;
+}
+
+/** Live Workrooms on one served item: how many, and who holds the claim. */
+interface ItemWorkrooms {
+  count: number;
+  holder: FederatedWorkClaimHolderV1 | null;
 }
 
 /** Mirrors TERMINAL_CAPSULE_STATUSES (apps/web/lib/build/unified-wip-query.ts). */
 const TERMINAL_WORKROOM_STATUSES = ["complete", "abandoned", "archived"] as const;
 
-function toItem(row: WorkPageItemRow, liveWorkrooms: number): FederatedWorkItemV1 {
+function toItem(row: WorkPageItemRow, liveWorkrooms: ItemWorkrooms): FederatedWorkItemV1 {
   return {
     itemId: row.itemId,
     title: row.title,
@@ -102,20 +119,37 @@ function toItem(row: WorkPageItemRow, liveWorkrooms: number): FederatedWorkItemV
   };
 }
 
-function toClaim(row: WorkPageItemRow, liveWorkrooms: number): FederatedWorkClaimV1 {
+function toClaim(row: WorkPageItemRow, liveWorkrooms: ItemWorkrooms): FederatedWorkClaimV1 {
   const held = row.claimStatus === "active";
   return {
-    active: held || liveWorkrooms > 0,
+    active: held || liveWorkrooms.count > 0,
     since: held ? (row.claimedAt?.toISOString() ?? null) : null,
-    workrooms: liveWorkrooms,
+    workrooms: liveWorkrooms.count,
+    holder: liveWorkrooms.holder,
   };
 }
 
-/** Live Workrooms per served item. A Workroom names its item by semantic id or
- *  row id, so both are matched; counts key on the semantic id. */
-async function liveWorkroomCounts(db: WorkPageDb, rows: readonly WorkPageItemRow[]): Promise<Map<string, number>> {
-  const counts = new Map<string, number>();
-  if (!db.workroom || rows.length === 0) return counts;
+function holderOf(room: WorkPageWorkroomRow, selfInstallationId: string): FederatedWorkClaimHolderV1 | null {
+  if (!room.capsuleId) return null;
+  return claimHolderOf({
+    capsuleId: room.capsuleId,
+    executorKind: room.executorKind ?? null,
+    executorRef: room.executorRef ?? null,
+    leaseExpiresAt: room.leaseExpiresAt ?? null,
+  }, selfInstallationId);
+}
+
+/** Live Workrooms per served item, and the oldest one as the claim holder. A
+ *  Workroom names its item by semantic id or row id, so both are matched;
+ *  results key on the semantic id. */
+async function liveWorkroomsByItem(
+  db: WorkPageDb,
+  rows: readonly WorkPageItemRow[],
+  selfInstallationId: string,
+  now: Date,
+): Promise<Map<string, ItemWorkrooms>> {
+  const byItem = new Map<string, ItemWorkrooms>();
+  if (!db.workroom || rows.length === 0) return byItem;
   const bySemanticOrRowId = new Map<string, string>();
   for (const row of rows) {
     bySemanticOrRowId.set(row.itemId, row.itemId);
@@ -123,12 +157,18 @@ async function liveWorkroomCounts(db: WorkPageDb, rows: readonly WorkPageItemRow
   }
   for (const room of await db.workroom.findMany({
     where: { backlogItemId: { in: [...bySemanticOrRowId.keys()] }, status: { notIn: [...TERMINAL_WORKROOM_STATUSES] } },
-    select: { backlogItemId: true },
+    orderBy: [{ createdAt: "asc" }, { capsuleId: "asc" }],
+    select: { backlogItemId: true, capsuleId: true, executorKind: true, executorRef: true, leaseExpiresAt: true, createdAt: true },
   })) {
     const itemId = room.backlogItemId ? bySemanticOrRowId.get(room.backlogItemId) : undefined;
-    if (itemId) counts.set(itemId, (counts.get(itemId) ?? 0) + 1);
+    if (!itemId) continue;
+    // A claim held for a peer that stopped renewing no longer holds the item:
+    // publishing it would keep every installation from taking the item over.
+    if (isLapsedPeerClaim({ executorKind: room.executorKind ?? null, leaseExpiresAt: room.leaseExpiresAt ?? null }, now)) continue;
+    const current = byItem.get(itemId) ?? { count: 0, holder: null };
+    byItem.set(itemId, { count: current.count + 1, holder: current.holder ?? holderOf(room, selfInstallationId) });
   }
-  return counts;
+  return byItem;
 }
 
 /** Publish the deferral only when it is attributable (BI-9DA5F179). A parked
@@ -206,7 +246,7 @@ export async function buildFederatedWorkPage(
   // The cursor is the last row CONSIDERED, served or filtered, so a filtered
   // tail never makes the next page re-read or skip a row.
   const last = considered[considered.length - 1];
-  const workroomCounts = await liveWorkroomCounts(db, pageRows);
+  const workrooms = await liveWorkroomsByItem(db, pageRows, input.originInstallationId, input.now ?? new Date());
 
   const epics = input.cursor
     ? []
@@ -223,7 +263,7 @@ export async function buildFederatedWorkPage(
     specVersion: FEDERATED_WORK_SPEC_VERSION,
     originInstallationId: input.originInstallationId,
     generatedAt: (input.now ?? new Date()).toISOString(),
-    items: pageRows.map((row) => toItem(row, workroomCounts.get(row.itemId) ?? 0)),
+    items: pageRows.map((row) => toItem(row, workrooms.get(row.itemId) ?? { count: 0, holder: null })),
     epics: epics.map(toEpic),
     cursor: hasMore && last ? last.itemId : null,
     complete: !hasMore,

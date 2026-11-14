@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { DEFAULT_LOCALE, translate } from "@dpf/i18n";
 
 import { PortalContextStrip } from "@/components/portal-context/PortalContextStrip";
 import { StatCard } from "@/components/ui/report-kit/StatCard";
@@ -16,6 +17,7 @@ export function WorkControlPanel({
   createAction,
   canCreateGovernedWork = false,
   portalContext,
+  outcomesLabel = translate(DEFAULT_LOCALE, "workrooms", "outcomes.title"),
 }: {
   deliveryHub: DeliveryTaskHubPage;
   adoptable: AdoptableWorktreeRow[];
@@ -26,6 +28,7 @@ export function WorkControlPanel({
   // cannot use. Defaults false — the create door is hidden unless granted.
   canCreateGovernedWork?: boolean;
   portalContext?: PortalContextEnvelope | null;
+  outcomesLabel?: string;
 }) {
   return (
     <section className="space-y-6 px-4 py-4">
@@ -33,6 +36,7 @@ export function WorkControlPanel({
         <div className="min-w-0">
           <h1 className="text-xl font-bold text-[var(--dpf-text)]">Development Workrooms</h1>
         </div>
+        <Link href="/build/work?view=outcomes" className="text-sm font-medium text-[var(--dpf-accent)] hover:underline">{outcomesLabel}</Link>
       </div>
 
       {/* BI-E167A8A6: state what this surface is and how it relates to the other
@@ -41,11 +45,8 @@ export function WorkControlPanel({
           Build Studio. Making the relationship explicit is the fix for the
           dual-intake IA confusion. */}
       <p className="max-w-2xl text-sm leading-relaxed text-[var(--dpf-muted)]">
-        Build Studio&rsquo;s governed engineering context — git branches,
-        worktrees, and workrooms for hands-on development and AI coding
-        agents. Every build you start already manages its own workroom here. To
-        describe a feature in plain English and have your AI Coworker design,
-        build, and ship it, use{" "}
+        Track engineering work, branches and worktrees here. To describe a
+        feature and have your AI Coworker deliver it, use{" "}
         <Link
           href="/build"
           className="font-medium text-[var(--dpf-accent)] hover:underline"
@@ -75,16 +76,15 @@ export function WorkControlPanel({
         <CreateGovernedWorkForm action={createAction} />
       ) : (
         <div className="rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4 text-sm text-[var(--dpf-muted)]">
-          Planning governed work directly is reserved for the manage-backlog role.
-          To start new work, use{" "}
+          Planning governed work is reserved for the manage-backlog role.
+          To start work, use{" "}
           <Link
             href="/build"
             className="font-medium text-[var(--dpf-accent)] hover:underline"
           >
-            Start a new outcome
+            Build Studio
           </Link>{" "}
-          in Build Studio — your AI Coworker sets up the workroom and branch for
-          you.
+          — your AI Coworker sets up the workroom and branch for you.
         </div>
       )}
 

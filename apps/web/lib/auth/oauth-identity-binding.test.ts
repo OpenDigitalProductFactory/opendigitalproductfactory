@@ -150,7 +150,7 @@ describe("current OAuth execution authority", () => {
     expect(await isCurrentOAuthExecutionAuthority({ ...token, oauthFamilyKey: "family", expiresAt: new Date(0) })).toBe(true);
     expect(identityDb.oAuthRefreshToken.findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({
       oauthFamilyKey: "family", userId: token.userId, oauthClientId: "client", authorityBindingId: "binding",
-      agentId: token.agentId, resource: token.resource, scopes: { hasEvery: token.publicScopes },
+      agent: { agentId: token.agentId }, resource: token.resource, scopes: { hasEvery: token.publicScopes },
       revokedAt: null, consumedAt: null, rotatedToId: null, expiresAt: { gt: expect.any(Date) },
     }) }));
   });

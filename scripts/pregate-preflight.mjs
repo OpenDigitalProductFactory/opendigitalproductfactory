@@ -358,6 +358,13 @@ export async function runPreflightEntrypoint(run = main, report = text => proces
     // An orchestration/receipt exception supplies no guard verdict. Parser
     // excerpts and arbitrary exception text can carry private source material.
     const code = /^[A-Z0-9_]{1,64}$/.test(error?.code ?? "") ? error.code : "execution-exception";
+    if (code === "HOST_RECEIPT_RETAINED") {
+      // BI-93EECD80: name the receipt, not host pressure. Only the receipt path
+      // and the observer's next action are reported, never the exception text.
+      report(`[pregate-preflight] execution blocked by a retained host guard receipt (${code}): ${String(error.receiptPath ?? "unknown")}. ` +
+        `This is not host pressure. Inspect it with pnpm run pregate:status -- --reconcile-host-receipt. ${String(error.nextAction ?? "")}\n`);
+      return 88;
+    }
     report(`[pregate-preflight] execution inconclusive (${code}); no passing verification was recorded. Inspect the host receipt and restore its execution/recording prerequisites before retry.\n`);
     return 88;
   }

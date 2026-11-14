@@ -11,7 +11,7 @@ on **Apple Silicon Macs** (M1 or later).
 > that validation are folded into the steps and the
 > [Troubleshooting](#troubleshooting) section below.
 >
-> CI still only exercises the `--dry-run` path (the `macos-14` GHA
+> CI still only exercises the `--dry-run` path (the `macos-15` GHA
 > runner can't nest-virtualize Docker Desktop), so additional
 > verification reports on other Mac models / macOS versions remain
 > welcome — see [Verify your install](#verify-your-install). Both
@@ -492,7 +492,7 @@ The portal is still running at `http://localhost:3000`.
 ## Verify your install
 
 macOS Apple Silicon is GA, but CI still can't run the installer on real
-hardware (the GHA `macos-14` runner can't nest-virtualize Docker
+hardware (the GHA `macos-15` runner can't nest-virtualize Docker
 Desktop), so verification reports from additional Mac models / macOS
 versions remain valuable for widening the tested matrix. If you ran the
 install above, **a quick report is appreciated** — happy paths and

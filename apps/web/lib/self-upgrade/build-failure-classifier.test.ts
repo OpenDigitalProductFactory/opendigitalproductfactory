@@ -249,11 +249,14 @@ describe("classifyBuildFailure", () => {
     expect(c.failingTrace).toContain("install_state_envelope_state_changed");
   });
 
-  it("classifies an expired handoff as the same drain-window class with the TTL remedy", () => {
+  it("classifies an expired handoff as the same envelope class and names the launch-anchored TTL, not the drain (SUR-4DC82F3C)", () => {
     const c = classifyBuildFailure({ log: "--- stderr (tail) ---\nerror: install_state_envelope_expired\n" });
     expect(c.class).toBe("install-state-envelope-changed");
     expect(c.summary).toContain("EXPIRED");
-    expect(c.summary).toContain("QuiescenceRun");
+    expect(c.summary).toContain("starts at launch");
+    expect(c.summary).toContain("self-upgrade-steps.log");
+    expect(c.summary).not.toContain("QuiescenceRun");
+    expect(c.isMainDefectVsEnvironment).toBe("environment");
   });
 
   it("keeps an unrelated mounts-denied path out of the state-dir advice", () => {
@@ -364,6 +367,22 @@ ERROR: failed to build: failed to solve: error from sender: readdirent /host-dpf
     expect(c.class).toBe("host-out-of-memory");
     expect(c.isMainDefectVsEnvironment).toBe("environment");
     expect(c.failingTrace).toContain("cannot allocate memory");
+  });
+
+  it("classifies an apk fetch network error as host-network-unavailable, not a readiness defect (BI-7FFF5CB0)", () => {
+    const log = `promoter-readiness-failed: promoter_candidate_build_failed: #6 3.1 WARNING: fetching https://dl-cdn.alpinelinux.org/alpine/v3.24/main: network error (check Internet connectivity and network settings)
+ERROR: failed to build: failed to solve: process "/bin/sh -c apk add --no-cache bash" did not complete successfully: exit code: 9`;
+    const c = classifyBuildFailure({ log });
+    expect(c.class).toBe("host-network-unavailable");
+    expect(c.isMainDefectVsEnvironment).toBe("environment");
+    expect(c.failingTrace).toContain("network error");
+  });
+
+  it("classifies an upstream git fetch timeout as host-network-unavailable", () => {
+    const c = classifyBuildFailure({
+      log: "prep-error: fetch upstream failed: fatal: unable to access 'https://github.com/x/y/': Failed to connect to github.com port 443 after 75004 ms: Could not connect to server",
+    });
+    expect(c.class).toBe("host-network-unavailable");
   });
 
   it("classifies an OOMKilled container as host-out-of-memory", () => {

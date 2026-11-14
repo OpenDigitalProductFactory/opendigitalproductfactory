@@ -4,7 +4,7 @@ import { executeProductionRuntimeCapabilityTransition, readProductionRuntimeCapa
 import { assertRuntimeCapabilityTransitionAdmission } from "./transition-recovery";
 import type { RuntimeReconciliationIntent } from "./transition-protocol";
 
-export type RuntimeCapabilityMutationInput = { transitionId: string; desiredKeys: string[]; mode?: "transition" | "reconciliation"; reconciliation?: RuntimeReconciliationIntent };
+export type RuntimeCapabilityMutationInput = { transitionId: string; desiredKeys: string[]; mode?: "transition" | "reconciliation"; reconciliation?: RuntimeReconciliationIntent; imageServices?: string[] };
 
 function assertActorPresent(userId: string) {
   if (typeof userId !== "string" || !userId.trim()) throw new Error("Unauthorized");

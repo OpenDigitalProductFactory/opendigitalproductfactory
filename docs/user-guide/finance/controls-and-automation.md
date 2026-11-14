@@ -8,6 +8,7 @@ order: 7
 
 - `/finance/settings`, `/finance/configuration`, and currency, dunning, and tax
   settings
+- `/finance/settings/statutory-rates`
 - `/finance/recurring`, `/finance/recurring/new`, and
   `/finance/recurring/[id]`
 - `/finance/payment-runs`
@@ -60,6 +61,27 @@ handoff and payment evidence.
 Bill approval rules are amount-range controls. Every matching rule creates an
 approval, while no matching rule currently allows auto-approval. Test boundary
 amounts and approver availability before relying on the rule set.
+
+## Statutory Rates Payroll Uses
+
+Payroll computes a tax only from a figure a person has confirmed. Open
+**Finance > Configuration > Statutory Rates** to see which US federal figures
+are still missing, which are waiting for you, and which payroll already uses.
+
+A coworker can research a figure and propose it. Each proposal shows the
+authority's own page, the date it was read, and the passage that states the
+figure. Read the passage against the page before you choose **Confirm figure**.
+If it is wrong, choose **Reject** and say why, so the next search can correct
+it. A figure with no source cannot be confirmed.
+
+You can also enter a figure you read yourself. Open **Enter a figure you have
+read yourself**, and give the same evidence a coworker must: the page and the
+quoted passage. Type a rate as the authority prints it, such as 6.2 for 6.2%.
+
+Only a person can confirm or reject a figure. An agent signed into the portal
+is refused, even through this page. Confirming a newer figure ends the earlier
+one on the new start date. The earlier figure still applies to the dates
+before that, so closed periods keep the rate they used.
 
 ## Payment Runs Are Records, Not Transfers
 

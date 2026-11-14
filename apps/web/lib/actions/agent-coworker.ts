@@ -4,6 +4,7 @@ import { RESPONSE_FEEDBACK_BINDING_SELECT, type ResponseProducer } from "../rout
 import { randomUUID } from "node:crypto";
 import { buildAttachmentContext } from "@/lib/tak/attachment-context";
 import { prisma } from "@dpf/db";
+import { formatVerificationSummary } from "@/lib/build/verification-output";
 import { validateMessageInput, type AgentMessageRow } from "@/lib/agent-coworker-types";
 import { generateCannedResponse } from "@/lib/agent-routing";
 import { loadOpeningBriefingPayload } from "@/lib/agent/opening-briefing-loader";
@@ -863,6 +864,7 @@ export async function sendMessage(input: {
     // too). Empty when neither applies, so this is a no-op for ordinary turns.
     const { buildCoworkerExtraSections } = await import("@/lib/tak/coworker-context-sections");
     const coworkerExtra = await buildCoworkerExtraSections({
+      formatVerification: formatVerificationSummary,
       buildId: resolvedBuildId,
       routeContext: input.routeContext,
       userId: user.id!,
@@ -1050,8 +1052,7 @@ export async function sendMessage(input: {
             if (tasks.toolsExecuted) progressLines.push(`Tools executed: ${(tasks.toolsExecuted as string[]).join(", ")}`);
           }
           if (buildRecord.verificationOut) {
-            const verify = buildRecord.verificationOut as Record<string, unknown>;
-            progressLines.push(`Tests: ${verify.testsPassed ? "PASS" : "FAIL"}. Typecheck: ${verify.typeCheckPassed ? "PASS" : "FAIL"}.`);
+            progressLines.push(formatVerificationSummary(buildRecord.verificationOut));
           }
           promptSections.push(progressLines.join("\n"));
         }
@@ -1865,7 +1866,7 @@ export async function sendMessage(input: {
     const { runWithTransientInferenceRetry } = await import("@/lib/build/inference-retry");
     const agenticResult = await runWithTransientInferenceRetry(
       () => executeAutonomousAgenticLoop({
-        chatHistory,
+        chatHistory, activeAssignment: { messageId: userMsg.id, content: trimmedContent },
         systemPrompt: populatedPrompt,
         systemPromptInstructionSpans,
         messageOrigins: labelled.origins,
@@ -2305,7 +2306,7 @@ export async function sendMessage(input: {
 
   await persistCoworkerResponseArtifact({
     taskRunId: currentTaskRun?.taskRunId ?? null,
-    responseContent,
+    acceptedMessage: agentMsg, deliveryOutcome: foregroundResourceWait ? "capacity-wait" : responseIsSystemFailure ? "blocked" : "responded",
     routeContext: input.routeContext,
     threadId: input.threadId,
     agentId: agent.agentId,

@@ -60,8 +60,10 @@ vi.mock("@/lib/mcp-tools", () => ({
 const performPlanToBuildTransitionMock = vi.fn();
 const enforceReadinessMock = vi.fn();
 const healShapeMock = vi.fn();
+const reconcileReviewShapeMock = vi.fn();
 vi.mock("@/lib/build/heal-build-workroom-shape", () => ({
   healBuildWorkroomShape: (...args: unknown[]) => healShapeMock(...args),
+  reconcileReviewBuildWorkroomShape: (...args: unknown[]) => reconcileReviewShapeMock(...args),
 }));
 vi.mock("@/lib/build/build-entry-gate", () => ({
   enforceBuildInitiativeReadiness: (...args: unknown[]) => enforceReadinessMock(...args),
@@ -139,6 +141,7 @@ describe("resumePreBuildPhase (BI-9257CF19)", () => {
     queueBuildReviewVerificationMock.mockReset().mockResolvedValue(undefined);
     dispatchIdeateMock.mockReset().mockResolvedValue({ kind: "dispatched-success" });
     healShapeMock.mockReset().mockResolvedValue({ healed: false, detail: "delivery shape already bound" });
+    reconcileReviewShapeMock.mockReset().mockResolvedValue({ kind: "ready", healed: false, detail: "delivery shape already bound" });
     enforceReadinessMock.mockReset().mockResolvedValue({ allowed: true, message: "plan readiness allowed." });
     dispatchDesignFixMock.mockReset().mockResolvedValue({ kind: "repaired", rounds: 1 });
     dispatchPlanMock.mockReset().mockResolvedValue({ kind: "dispatched-success" });
@@ -240,6 +243,17 @@ describe("resumePreBuildPhase (BI-9257CF19)", () => {
     expect(queueBuildReviewVerificationMock).toHaveBeenCalledWith("FB-1");
     expect(findUniqueMock).not.toHaveBeenCalled(); // review path doesn't need the row
     expect(out.kind).toBe("resumed");
+    expect(reconcileReviewShapeMock).toHaveBeenCalledWith({ buildId: "FB-1" });
+    expect(healShapeMock).not.toHaveBeenCalled();
+    expect(reconcileReviewShapeMock.mock.invocationCallOrder[0]).toBeLessThan(queueBuildReviewVerificationMock.mock.invocationCallOrder[0]!);
+  });
+
+  it("does not queue review while its existing native room metadata remains held", async () => {
+    reconcileReviewShapeMock.mockResolvedValue({ kind: "held", detail: "native room ownership is ambiguous" });
+    const out = await resumePreBuildPhase({ buildId: "FB-HELD", phase: "review", userId: "u1" });
+    expect(out).toMatchObject({ kind: "skipped", phase: "review", reason: "native room ownership is ambiguous" });
+    expect(queueBuildReviewVerificationMock).not.toHaveBeenCalled();
+    expect(healShapeMock).not.toHaveBeenCalled();
   });
 
   it("re-dispatches plan generation when no plan exists yet", async () => {

@@ -90,3 +90,33 @@ describe("refreshFailureReadinessForDelivery (BI-4D0B2AAB)", () => {
     expect(result).toMatchObject({ observeAgain: false, refreshed: true, rerunRunIds: [] });
   });
 });
+
+describe("refreshFailureReadinessForDelivery ignores non-required checks (BI-D081EDD0)", () => {
+  const optional = (name: string): GithubCheckObservation => ({ name, status: "COMPLETED", conclusion: "FAILURE", required: false });
+
+  it("re-runs Failure Readiness when the other red checks are not required (rate-limited Code Quality scans)", async () => {
+    const d = deps();
+    const result = await refreshFailureReadinessForDelivery({
+      observation: observation([
+        { ...check(FAILURE_READINESS_CHECK_NAME, "FAILURE", 41), required: true },
+        optional("Analyze (go)"), optional("Analyze (python)"),
+      ]),
+      readiness: failing, ...d });
+    expect(d.publish).toHaveBeenCalledOnce();
+    expect(d.rerun).toHaveBeenCalledWith(41);
+    expect(result).toMatchObject({ observeAgain: true, refreshed: true, rerunRunIds: [41] });
+  });
+
+  it("still leaves a PR alone when another required check is red", async () => {
+    const d = deps();
+    const result = await refreshFailureReadinessForDelivery({
+      observation: observation([
+        { ...check(FAILURE_READINESS_CHECK_NAME, "FAILURE", 41), required: true },
+        { ...check("Unit Tests", "FAILURE", 43), required: true },
+        optional("Analyze (go)"),
+      ]),
+      readiness: failing, ...d });
+    expect(d.publish).not.toHaveBeenCalled();
+    expect(result.refreshed).toBe(false);
+  });
+});

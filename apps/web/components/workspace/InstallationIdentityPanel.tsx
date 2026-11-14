@@ -256,6 +256,20 @@ export function InstallationIdentityPanel({ view }: { view: InstallationIdentity
               className="sm:col-span-2"
               disabled={isPending}
             />
+            {view.pairingRepair ? (
+              <div className="grid gap-2 sm:col-span-2">
+                <Notice variant="warn"><p className="text-xs">{view.pairingRepair.message}</p></Notice>
+                {view.pairingRepair.repairRef && view.pairingRepair.actionLabel ? (
+                  <Button
+                    variant="secondary"
+                    onClick={() => edited(setPairedRef)(view.pairingRepair?.repairRef ?? "")}
+                    disabled={isPending || pairedRef === view.pairingRepair.repairRef}
+                  >
+                    {view.pairingRepair.actionLabel}
+                  </Button>
+                ) : null}
+              </div>
+            ) : null}
             <fieldset className="grid gap-2 sm:col-span-2" aria-describedby="installation-other-jobs-hint">
               <legend className="text-sm font-medium text-[var(--dpf-text)]">
                 {SECONDARY_PURPOSES_COPY.legend}

@@ -15,7 +15,7 @@ import {
   unselectLocalDemandForLink,
   type ChannelDemandDb,
 } from "@/lib/federation/channel-demand";
-import { queueDemandResponse, type DemandResponseDb } from "@/lib/federation/demand-response";
+import { outboundResponseRef, queueDemandResponse, type DemandResponseDb } from "@/lib/federation/demand-response";
 import { resolveFederationIdentity, type FederationIdentityDb } from "@/lib/federation/demand-identity";
 import { ingestBacklogItem } from "@/lib/operate/backlog-ingest";
 import { requireCapability } from "@/lib/actions/shared/guards";
@@ -148,20 +148,43 @@ export async function forwardFederatedDemandAction(input: {
 export async function respondToFederatedDemandAction(input: {
   mirrorId: string;
   kind: "interest" | "help-offer";
+  /** How much it matters, 1..4 (BI-626A4ECA). Omitted means 1. */
+  weight?: number;
 }): Promise<FederatedDemandShareResult> {
   await requireCapability("manage_backlog");
   try {
     const identity = await resolveFederationIdentity(prisma as unknown as FederationIdentityDb);
+    const mirrorId = input.mirrorId.trim();
+    const now = new Date();
+    // BI-626A4ECA: every interest spends this installation's weekly quadratic
+    // budget. An unaffordable vote is refused with its cost, never clamped or
+    // dropped — a voter who believes they voted, and did not, is worse off.
+    if (input.kind === "interest") {
+      const { castVote, isoWeekStart, ledgerFromOutboundVotes } = await import("@/lib/ecosystem/vote-budget");
+      const { outboundVotesFromResponses } = await import("@/lib/ecosystem/vote-tally");
+      // Bounded to this week at the database: only a response sent or re-weighted
+      // since Monday can spend this week's credits. Reading every response ever
+      // sent would grow without limit — the unbounded-read class the architecture
+      // findings name.
+      const sent = await prisma.federatedRecordMirror.findMany({
+        where: { recordType: "demand-response", canonicalSide: "local", updatedAt: { gte: isoWeekStart(now) } },
+        select: { localRecordRef: true, payload: true },
+      });
+      const ledger = ledgerFromOutboundVotes(identity.installationId, outboundVotesFromResponses(sent), now);
+      const decision = castVote(ledger, { ref: outboundResponseRef(mirrorId, "interest"), weight: input.weight ?? 1 });
+      if (!decision.accepted) return { ok: false, error: decision.message };
+    }
     const result = await queueDemandResponse(
       prisma as unknown as DemandResponseDb,
       {
-        mirrorId: input.mirrorId.trim(),
+        mirrorId,
         kind: input.kind,
+        ...(input.kind === "interest" && input.weight ? { weight: input.weight } : {}),
         identity,
         ...(input.kind === "help-offer"
           ? { message: "Our organization can help investigate, reproduce, or validate this demand." }
           : {}),
-        now: new Date(),
+        now,
       },
     );
     revalidatePath(DEMAND_PATH);

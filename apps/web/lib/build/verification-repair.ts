@@ -84,6 +84,8 @@ export type RepairLoopResult = {
   rounds: number;
   repaired: boolean;
   final: RepairVerdict;
+  /** The retained verdict was obtained after the most recent repair dispatch. */
+  reverifiedAfterLastDispatch: boolean;
 };
 
 /**
@@ -92,12 +94,15 @@ export type RepairLoopResult = {
  * completed), `reverify` re-runs typecheck/tests and returns the fresh verdict.
  * Stops the moment the verdict is clean or the round budget is spent; on an
  * incomplete dispatch it stops rather than re-verifying stale state. Never
- * throws on its own — dispatch/verify error handling is the caller's.
+ * changes source before durable invalidation; a refused save prevents dispatch.
+ * Dispatch/verify error handling remains the caller's.
  */
 export async function runVerificationRepairLoop(args: {
   initial: RepairVerdict;
   changedFiles: string[];
   maxRounds: number;
+  /** Save an unknown current-source verdict before permitting source mutation. */
+  invalidateVerification: (attempt: number) => Promise<void>;
   dispatchRepair: (spec: {
     title: string;
     implement: string;
@@ -108,12 +113,14 @@ export async function runVerificationRepairLoop(args: {
   reverify: () => Promise<RepairVerdict>;
   log?: (m: string) => void | Promise<void>;
 }): Promise<RepairLoopResult> {
-  const { initial, changedFiles, maxRounds, dispatchRepair, reverify, log } = args;
+  const { initial, changedFiles, maxRounds, invalidateVerification, dispatchRepair, reverify, log } = args;
   let verdict = initial;
   let rounds = 0;
+  let reverifiedAfterLastDispatch = false;
 
   while (verificationNeedsRepair(verdict) && rounds < maxRounds) {
     rounds += 1;
+    reverifiedAfterLastDispatch = false;
     const failingFiles = selectFailingFiles(verdict.output, changedFiles);
     const prompt = buildRepairPrompt({
       attempt: rounds,
@@ -123,13 +130,15 @@ export async function runVerificationRepairLoop(args: {
       failingFiles,
     });
     await log?.(`verification-repair round ${rounds}/${maxRounds} on ${failingFiles.length} file(s)`);
+    await invalidateVerification(rounds);
     const completed = await dispatchRepair({ ...prompt, failingFiles, attempt: rounds });
     if (!completed) {
       await log?.(`verification-repair round ${rounds} dispatch did not complete — stopping`);
       break;
     }
     verdict = await reverify();
+    reverifiedAfterLastDispatch = true;
   }
 
-  return { rounds, repaired: !verificationNeedsRepair(verdict), final: verdict };
+  return { rounds, repaired: !verificationNeedsRepair(verdict), final: verdict, reverifiedAfterLastDispatch };
 }

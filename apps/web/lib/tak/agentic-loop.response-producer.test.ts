@@ -48,6 +48,7 @@ describe("agentic response producer propagation", () => {
     const result = await runAgenticLoop(input);
     expect(result.content).toBe(preserved);
     expect(result.responseProducer?.attemptId).toBe("earlier-draft");
+    expect(result.failure).toBeUndefined();
     expect(vi.mocked(routeAndCall).mock.calls.length).toBeGreaterThan(2);
   });
   it("keeps actual provider metadata while leaving a synthetic exhausted answer unbound", async () => {
@@ -55,11 +56,43 @@ describe("agentic response producer propagation", () => {
     const result = await runAgenticLoop({ ...input, effortWarrant: { level: "minimal", reasoningDepth: "minimal", maxIterations: 1, maxDurationMs: 60000, contextTier: "basic", toolBudgetTarget: 1, signals: ["test"] } });
     expect(result.providerId).toBe("openai");expect(result.modelId).toBe("actual");
     expect(result.responseProducer).toBeUndefined();
+    expect(result.failure).toEqual({ kind: "unknown", message: result.content });
+  });
+  it("returns a held failure when a local call produced no answer or tool result", async () => {
+    vi.mocked(routeAndCall).mockResolvedValue(response("empty-local", "", [], true));
+    const result = await runAgenticLoop({ ...input, effortWarrant: { level: "minimal", reasoningDepth: "minimal", maxIterations: 1, maxDurationMs: 60000, contextTier: "basic", toolBudgetTarget: 1, signals: ["test"] } });
+    expect(result.executedTools).toHaveLength(0);
+    expect(result.responseProducer).toBeUndefined();
+    expect(result.failure).toEqual({ kind: "unknown", message: result.content });
   });
   it("leaves a synthetic local diagnostic unbound", async () => {
     vi.mocked(routeAndCall).mockResolvedValue(response("narration", "I can check that for you.", [], true));
     const result = await runAgenticLoop(input);
     expect(result.content).toMatch(/Platform > AI > Providers/);
+    expect(result.responseProducer).toBeUndefined();
+    expect(result.failure).toEqual({ kind: "unknown", message: result.content });
+  });
+  it("keeps retained conversational advice as an answer with its actual producer", async () => {
+    const advice = "Here's your owner-operator segment profile: trades owners on Facebook groups. Let me create the campaign brief for you now.";
+    vi.mocked(routeAndCall).mockResolvedValue(response("advice-attempt", advice));
+    const result = await runAgenticLoop({ ...input, routeContext: "/customer/marketing", agentId: "marketing-specialist",
+      tools: [{ name: "save_marketing_review", description: "Save advice", inputSchema: {}, requiredCapability: null, executionMode: "immediate", sideEffect: true, coworkerArtifact: true }],
+      toolsForProvider: [{ type: "function", function: { name: "save_marketing_review", description: "Save", parameters: {} } }],
+      effortWarrant: { level: "minimal", reasoningDepth: "minimal", maxIterations: 1, maxDurationMs: 60000, contextTier: "basic", toolBudgetTarget: 1, signals: ["test"] } });
+    expect(result.content).toBe(advice);
+    expect(result.failure).toBeUndefined();
+    expect(result.responseProducer?.attemptId).toBe("advice-attempt");
+  });
+  it("keeps corrected conversational advice nonfailed when the last iteration cannot persist it", async () => {
+    vi.mocked(routeAndCall).mockResolvedValue(response("unbacked-advice", "Done — I've saved your campaign brief and it's now in your approval queue."));
+    const result = await runAgenticLoop({ ...input, routeContext: "/customer/marketing", agentId: "marketing-specialist",
+      tools: [{ name: "save_marketing_review", description: "Save advice", inputSchema: {}, requiredCapability: null, executionMode: "immediate", sideEffect: true, coworkerArtifact: true }],
+      toolsForProvider: [{ type: "function", function: { name: "save_marketing_review", description: "Save", parameters: {} } }],
+      effortWarrant: { level: "minimal", reasoningDepth: "minimal", maxIterations: 1, maxDurationMs: 60000, contextTier: "basic", toolBudgetTarget: 1, signals: ["test"] } });
+    expect(result.content).toContain("campaign brief");
+    expect(result.content).toContain("haven't saved this to your marketing workspace");
+    expect(result.failure).toBeUndefined();
+    // The platform appended a correction; it must not claim the model produced those bytes.
     expect(result.responseProducer).toBeUndefined();
   });
 });

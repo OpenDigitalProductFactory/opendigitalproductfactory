@@ -1,6 +1,6 @@
 import { mocks, state, result } from "./semantic-review-background.test-fixtures";
 import { createHash } from "node:crypto";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { getQuiescenceLevel } from "@/lib/self-upgrade/quiescence";
 import { executePersistedSemanticReview, enqueueSemanticReview, reconcileSemanticReviews, retryPersistedSemanticReview } from "./semantic-review-background";
 import { createSemanticReviewRequest } from "./semantic-review-request";
@@ -656,4 +656,61 @@ it("distinguishes an unavailable authority store from a denied grant", async () 
   expect(state.row.status).toBe("input-required");
   expect(state.row.progressPayload).toMatchObject({ semanticReview: { reason: "review-authority-unavailable" } });
   expect(mocks.evidence).not.toHaveBeenCalled();
+});
+
+// BI-4FDE4050: Docker Desktop's VM stops its monotonic clock while the host
+// sleeps and steps its wall clock forward on wake. The heartbeat ticker
+// (setInterval, monotonic) then waits out the rest of its interval, while the
+// wall-clock cron reconciler fires at once and reads a frozen heartbeat as loss.
+describe("host suspension is not executor loss", () => {
+  const wall0 = Date.now();
+  const mono0 = performance.now();
+  function hostClock(wallMs: number, processMs: number) {
+    vi.spyOn(Date, "now").mockReturnValue(wall0 + wallMs);
+    vi.spyOn(performance, "now").mockReturnValue(mono0 + processMs);
+  }
+  function liveWorkingReview(heartbeatAt: Date) {
+    state.row.status = "working";
+    state.row.lastHeartbeatAt = heartbeatAt;
+    state.row.updatedAt = heartbeatAt;
+    mocks.db.taskRun.findMany.mockImplementation(async () => [{ ...state.row }]);
+    mocks.db.taskNode.findFirst.mockResolvedValue({ id: "branch" });
+    mocks.db.taskNode.findMany.mockResolvedValue([{ taskNodeId: "branch", status: "running", outputSnapshot: {} }]);
+  }
+  afterEach(() => vi.restoreAllMocks());
+
+  it("does not park a live review when the wall clock jumps past the stale window with no process time elapsing", async () => {
+    const heartbeatAt = new Date(wall0);
+    liveWorkingReview(heartbeatAt);
+    hostClock(10_000, 10_000);
+    await reconcileSemanticReviews(new Date(wall0 + 10_000)); // pre-sleep pass
+    hostClock(9 * 60_000, 20_000); // host slept ~8.7 min; the process ran 20 s
+    await reconcileSemanticReviews(new Date(wall0 + 9 * 60_000));
+    expect(state.row.status).toBe("working");
+    expect(mocks.db.taskNode.update).not.toHaveBeenCalled();
+  });
+
+  it("still parks a dead executor whose heartbeat stopped for the stale window of process time", async () => {
+    const heartbeatAt = new Date(wall0);
+    liveWorkingReview(heartbeatAt);
+    hostClock(10_000, 10_000);
+    await reconcileSemanticReviews(new Date(wall0 + 10_000));
+    hostClock(9 * 60_000, 9 * 60_000); // no suspension: nine real minutes without a beat
+    await reconcileSemanticReviews(new Date(wall0 + 9 * 60_000));
+    expect(state.row.status).toBe("input-required");
+    expect(state.row.progressPayload).toMatchObject({ semanticReview: { reason: "provider-outcome-uncertain-after-restart" } });
+  });
+
+  it("parks an executor that stays silent for the stale window after the host wakes", async () => {
+    const heartbeatAt = new Date(wall0);
+    liveWorkingReview(heartbeatAt);
+    hostClock(10_000, 10_000);
+    await reconcileSemanticReviews(new Date(wall0 + 10_000));
+    hostClock(9 * 60_000, 20_000);
+    await reconcileSemanticReviews(new Date(wall0 + 9 * 60_000));
+    expect(state.row.status).toBe("working");
+    hostClock(13 * 60_000, 4 * 60_000); // four minutes of process time since wake, still no beat
+    await reconcileSemanticReviews(new Date(wall0 + 13 * 60_000));
+    expect(state.row.status).toBe("input-required");
+  });
 });

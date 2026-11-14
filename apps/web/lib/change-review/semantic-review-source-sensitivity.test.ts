@@ -5,6 +5,7 @@ import {
   repositoryVisibility,
   resetSemanticReviewVisibilityCache,
   resolveSemanticReviewRoomSensitivity,
+  resolveSemanticReviewRoute,
   semanticReviewRouteSensitivity,
   type SemanticReviewRoomDeps,
 } from "./semantic-review-source-sensitivity";
@@ -72,6 +73,30 @@ describe("semantic review routing follows the reviewed Workroom (BI-9F620FE1)", 
       await expect(resolveSemanticReviewRoomSensitivity("WC-FORK", { readRoom: room, ceiling: async () => "public", visibility: async () => answer }))
         .resolves.toBe("internal");
     }
+  });
+});
+
+describe("the review carries its room's repository record to the payload screen (BI-FC94F754)", () => {
+  const room = async () => ({ scopeClaims: [], backlogItemId: "BI-FC94F754", repositoryFullName: REPO });
+
+  it.each([
+    ["public", "development"],
+    ["private", "internal"],
+    ["unknown", "internal"],
+  ] as const)("records a %s repository on a public room's route", async (visibility, sensitivity) => {
+    await expect(resolveSemanticReviewRoute("WC-1", { readRoom: room, ceiling: async () => "public", visibility: async () => visibility }))
+      .resolves.toEqual({ sensitivity, sourceCodeProvenance: { repository: REPO, visibility } });
+  });
+
+  it("carries no repository record when the room is not public or names no repository", async () => {
+    const visibility = vi.fn(async () => "public" as const);
+    await expect(resolveSemanticReviewRoute("WC-1", { readRoom: room, ceiling: async () => "confidential", visibility }))
+      .resolves.toEqual({ sensitivity: "confidential" });
+    expect(visibility).not.toHaveBeenCalled();
+    await expect(resolveSemanticReviewRoute("WC-1", {
+      readRoom: async () => ({ scopeClaims: [], backlogItemId: null, repositoryFullName: null }),
+      ceiling: async () => "public", visibility,
+    })).resolves.toEqual({ sensitivity: "internal" });
   });
 });
 

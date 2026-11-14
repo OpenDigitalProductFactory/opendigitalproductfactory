@@ -13,6 +13,7 @@
 import { prisma } from "@dpf/db";
 import { getMarketingWorkspaceSnapshot } from "../marketing";
 import { resolveMarketingOrganizationId } from "./org-scope";
+import { RETIRED_MARKETING_WORK_STATUS } from "./retire-work";
 
 export const CAMPAIGN_STATUSES = ["draft", "active", "paused", "complete"] as const;
 export type CampaignStatus = (typeof CAMPAIGN_STATUSES)[number];
@@ -39,13 +40,16 @@ export type CampaignExecutionRollup = {
  * which tasks have drafted/approved assets. No DB access — unit-testable.
  */
 export function summarizeCampaignExecution(input: CampaignExecutionInput): CampaignExecutionRollup {
-  const briefCount = input.briefs.length;
-  const taskCount = input.tasks.length;
+  // Retired work is history, not work to do (BI-3F641F91).
+  const briefs = input.briefs.filter((b) => b.status !== RETIRED_MARKETING_WORK_STATUS);
+  const tasks = input.tasks.filter((t) => t.status !== RETIRED_MARKETING_WORK_STATUS);
+  const briefCount = briefs.length;
+  const taskCount = tasks.length;
   const drafted = input.draftedTaskIds ?? new Set<string>();
   const approved = input.approvedTaskIds ?? new Set<string>();
 
-  const approvedCount = input.tasks.filter((t) => approved.has(t.taskId)).length;
-  const draftedCount = input.tasks.filter((t) => drafted.has(t.taskId) && !approved.has(t.taskId)).length;
+  const approvedCount = tasks.filter((t) => approved.has(t.taskId)).length;
+  const draftedCount = tasks.filter((t) => drafted.has(t.taskId) && !approved.has(t.taskId)).length;
   const undraftedCount = Math.max(0, taskCount - draftedCount - approvedCount);
 
   let nextStep: string;

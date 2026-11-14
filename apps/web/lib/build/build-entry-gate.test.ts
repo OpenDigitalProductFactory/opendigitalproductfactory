@@ -2,6 +2,83 @@ import { describe, expect, it, vi } from "vitest";
 
 import { enforceBuildInitiativeReadiness } from "./build-entry-gate";
 
+/** Ordinary query semantics for the two-room fixture, not a readiness stub. */
+function roomMatches(room: Record<string, unknown>, where: Record<string, unknown>) {
+  return Object.entries(where).every(([key, expected]) => {
+    if (expected && typeof expected === "object") {
+      const rule = expected as { in?: unknown[]; notIn?: unknown[] };
+      if (rule.in) return rule.in.includes(room[key]);
+      if (rule.notIn) return !rule.notIn.includes(room[key]);
+    }
+    return room[key] === expected;
+  });
+}
+
+describe("review-stage exact native carrier (BI-1173F1CC)", () => {
+  function fixture(planPath: string | null) {
+    const db = database();
+    db.featureBuild.findUnique.mockResolvedValue({
+      id: "build-row", buildId: "FB-ENTRY", kind: "feature", originatingBacklogItemId: "bi-row",
+      designDoc: { acceptanceCriteria: ["Retain the native plan and owner action"] }, designReview: { decision: "pass" },
+      buildPlan: planPath ? { fileStructure: [{ path: planPath, action: "modify" }] } : null,
+      originator: { id: "bi-row", itemId: "BI-ENTRY", title: "Native repair", body: "Retain the native plan.", type: "portfolio", source: "user-request", workType: "feature", scopeKind: "platform", archetypeCategories: [], archetypeIds: [], activities: [] },
+    });
+    const native = {
+      id: "native-row", capsuleId: "WC-NATIVE", featureBuildId: "build-row", executorKind: "build-studio", executorRef: "FB-ENTRY",
+      backlogItemId: "bi-row", archivedAt: null, status: "working", updatedAt: 1,
+      scopeClaims: [{ workShape: "delivery-medium@1.0.0" }],
+    };
+    const external = {
+      ...native, id: "external-row", capsuleId: "WC-EXTERNAL", featureBuildId: null, executorKind: "codex-desktop", executorRef: "another-chat", updatedAt: 2,
+      scopeClaims: [{ workShape: "delivery-small@1.0.0" }, { kind: "path", intent: "edit", value: "docs/proposal.md" }],
+    };
+    const rooms = [native, external];
+    const query = (args: { where: Record<string, unknown>; take?: number }) => rooms.filter(room => roomMatches(room, args.where));
+    const workroom = {
+      findFirst: vi.fn(async (args: { where: Record<string, unknown> }) => query(args).sort((a, b) => b.updatedAt - a.updatedAt)[0] ?? null),
+      findMany: vi.fn(async (args: { where: Record<string, unknown>; take?: number }) => query(args).slice(0, args.take)),
+    };
+    const enforce = (expectedWorkroom?: { id: string; capsuleId: string }) => enforceBuildInitiativeReadiness({
+      db: { ...db, workroom, backlogItem: { findFirst: vi.fn().mockResolvedValue({ id: "bi-row", itemId: "BI-ENTRY" }) } }, buildId: "FB-ENTRY", target: "implementation", targetPhase: "build", expectedPhase: "review",
+      ...(expectedWorkroom ? { expectedWorkroom } : {}),
+    });
+    return { enforce, rooms, native, external, workroom };
+  }
+
+  it.each([
+    ["apps/web/app/api/change-review/failure-readiness/resume/route.ts", "elevated"],
+    ["apps/web/lib/auth/session.ts", "high"],
+  ])("keeps the real native %s plan raised when another room is newer", async (path, sensitivity) => {
+    const f = fixture(path!);
+    const result = await f.enforce();
+    expect(result.allowed).toBe(false);
+    expect(result.decision.shapeDecision).toMatchObject({ declared: "medium", sensitivity, raised: true });
+    expect(result.decision.unmet.map(entry => entry.code)).toContain("PLAN_REQUIRED");
+  });
+
+  it("uses the native declaration for benign already-shaped work, not the newer external declaration", async () => {
+    const result = await fixture(null).enforce();
+    expect(result.allowed).toBe(true);
+    expect(result.decision.shapeDecision?.declared).toBe("medium");
+  });
+
+  it("does not let an external heartbeat after reconciliation alter the native gate", async () => {
+    const f = fixture("apps/web/lib/auth/session.ts");
+    f.native.updatedAt = 3; // metadata reconciliation has just made this room newest
+    f.external.updatedAt = 4; // another chat heartbeats before readiness
+    const result = await f.enforce({ id: f.native.id, capsuleId: f.native.capsuleId });
+    expect(result.allowed).toBe(false);
+    expect(result.decision.shapeDecision).toMatchObject({ declared: "medium", sensitivity: "high", raised: true });
+  });
+
+  it("holds a vanished or replaced admitted carrier rather than borrowing another room", async () => {
+    const f = fixture(null);
+    const result = await f.enforce({ id: "replaced-native-row", capsuleId: "WC-OLD" });
+    expect(result.allowed).toBe(false);
+    expect(result.decision.blockers.map(entry => entry.code)).toContain("CAPSULE_IDENTITY_MISMATCH");
+  });
+});
+
 function database(activities: unknown[] = []) {
   return {
     featureBuild: {

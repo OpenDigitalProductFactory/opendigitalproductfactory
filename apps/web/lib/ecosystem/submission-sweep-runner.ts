@@ -21,6 +21,8 @@ export interface SubmissionSweepDeps {
   loadConfig?: () => Promise<SweepConfig>;
   loadReports?: () => Promise<SweepableReport[]>;
   escalate?: (reportId: string) => Promise<{ ok: boolean }>;
+  /** How many triaged reports are waiting to go upstream. */
+  countWaiting?: () => Promise<number>;
 }
 
 async function defaultLoadConfig(): Promise<SweepConfig> {
@@ -48,12 +50,21 @@ async function defaultLoadConfig(): Promise<SweepConfig> {
   };
 }
 
+const SUBMITTABLE = [ISSUE_REPORT_STATUS.TRIAGED_LOCAL, ISSUE_REPORT_STATUS.AWAITING_ESCALATION_ACK];
+
+async function defaultCountWaiting(): Promise<number> {
+  const { prisma } = await import("@dpf/db");
+  return prisma.platformIssueReport.count({
+    where: { upstreamIssueNumber: null, status: { in: SUBMITTABLE } },
+  });
+}
+
 async function defaultLoadReports(): Promise<SweepableReport[]> {
   const { prisma } = await import("@dpf/db");
   return prisma.platformIssueReport.findMany({
     where: {
       upstreamIssueNumber: null,
-      status: { in: [ISSUE_REPORT_STATUS.TRIAGED_LOCAL, ISSUE_REPORT_STATUS.AWAITING_ESCALATION_ACK] },
+      status: { in: SUBMITTABLE },
     },
     orderBy: { occurrenceCount: "desc" },
     // Bounded: the per-install rate limit is 30/hour, so a larger batch would
@@ -68,17 +79,18 @@ export async function runEcosystemSubmissionSweep(
 ): Promise<SweepResult> {
   const config = await (deps.loadConfig ?? defaultLoadConfig)();
 
-  // Load reports only once the gates could pass — an install that never opted
-  // in should not have its reports read on a daily cadence.
+  // Load the reports themselves only once the gates could pass.
   const probe = planSubmissionSweep({ reports: [], config });
   if (probe.halted) {
-    if (probe.reason === "awaiting-consent") {
-      console.info(
-        "[ecosystem-submission-sweep] halted: upstream feedback is off for this installation; "
-        + "the operator is asked once, not once per report.",
-      );
-    }
-    return { submitted: 0, skipped: 0, failed: 0, halted: probe.reason };
+    // BI-6ED89EC6: this branch used to end in a console line, so a sweep halted
+    // for want of consent told nobody and halted again the next day. It now
+    // reports how much is waiting; the heartbeat carries that to the register
+    // and the attention source raises ONE standing item from it. Counting is a
+    // local read — nothing leaves the installation to produce it.
+    const waiting = probe.reason === "awaiting-consent"
+      ? await (deps.countWaiting ?? defaultCountWaiting)().catch(() => null)
+      : null;
+    return { submitted: 0, skipped: 0, failed: 0, halted: probe.reason, waiting };
   }
 
   const reports = await (deps.loadReports ?? defaultLoadReports)();

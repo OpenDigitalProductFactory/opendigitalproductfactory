@@ -24,6 +24,34 @@ beforeEach(() => {
 });
 
 describe("shared OAuth execution diagnosis", () => {
+  it.each(["private-agent", "different-agent"])("matches refresh persistence identity through its %s assistant", async (refreshAgentId) => {
+    const { row, db } = fixture();
+    row.expiresAt = new Date(0);
+    // Refresh tokens reference Agent.id; access tokens carry Agent.agentId.
+    // Honor either filter as the persisted relation would, instead of returning
+    // a refresh token regardless of the requested assistant.
+    db.oAuthRefreshToken.findFirst.mockImplementation(async ({ where }: {
+      where: { agentId?: string; agent?: { agentId: string } };
+    }) => {
+      const refresh = { id: "private-refresh", agentId: "private-record", agent: { agentId: refreshAgentId } };
+      if (where.agentId !== undefined && where.agentId !== refresh.agentId) return null;
+      if (where.agent !== undefined && where.agent.agentId !== refresh.agent.agentId) return null;
+      return { id: refresh.id };
+    });
+    expect(await inspectOAuthExecutionAuthority(row as never, db as never)).toEqual(
+      refreshAgentId === row.agentId ? { allowed: true } : { allowed: false, detail: "continuity-evidence-missing" },
+    );
+  });
+  it("refuses an absent assistant before looking for refresh evidence", async () => {
+    const { row, db } = fixture();
+    row.expiresAt = new Date(0);
+    const missingAssistant = { ...row, agentId: null };
+    db.oAuthRefreshToken.findFirst.mockResolvedValue({ id: "private-refresh" });
+    expect(await inspectOAuthExecutionAuthority(missingAssistant as never, db as never)).toEqual({
+      allowed: false, detail: "continuity-envelope-missing",
+    });
+    expect(db.oAuthRefreshToken.findFirst).not.toHaveBeenCalled();
+  });
   it.each([
     "token-kind-invalid", "token-revoked", "client-missing", "client-revoked", "human-unavailable",
     "continuity-envelope-missing", "continuity-evidence-missing", "consent-binding-missing",
@@ -57,7 +85,8 @@ describe("shared OAuth execution diagnosis", () => {
     if (mode === "successor") expect(db.oAuthRefreshToken.findFirst).not.toHaveBeenCalled();
     if (mode === "refresh") expect(db.oAuthRefreshToken.findFirst).toHaveBeenCalledWith(expect.objectContaining({
       where: expect.objectContaining({ oauthFamilyKey: "private-family", authorityBindingId: "private-consent",
-        userId: "private-human", oauthClientId: "private-client", agentId: "private-agent",
+        userId: "private-human", oauthClientId: "private-client", agent: { agentId: "private-agent" },
+        resource: "https://private.example/api/mcp/v1", scopes: { hasEvery: ["dpf.work"] }, expiresAt: { gt: expect.any(Date) },
         consumedAt: null, rotatedToId: null, revokedAt: null }),
     }));
   });

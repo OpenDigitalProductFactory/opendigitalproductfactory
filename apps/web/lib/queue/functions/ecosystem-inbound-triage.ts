@@ -23,10 +23,31 @@ function summarizeScan(result: RanOutcome): string {
     .join("; ") + (allReviews.length > 10 ? `; +${allReviews.length - 10} more` : "");
   return `${result.complete ? "Complete" : "Incomplete"} scan: ${result.ingested} created, ${unchanged} unchanged, `
     + `${changed} changed, ${recurred} recurred, ${needsReview} needs review, ${result.failed} failed; `
-    + `${result.sourceErrors.length} unread source(s).${reviews ? ` Needs review: ${reviews}.` : ""}`;
+    + `${result.sourceErrors.length} unread source(s).${summarizeSecurity(result)}${reviews ? ` Needs review: ${reviews}.` : ""}`;
 }
 
-async function recordScanOutcome(result: InboundTriageOutcome): Promise<void> {
+const SECURITY_SURFACE_LABELS = [
+  ["dependabot-package", "Dependabot"], ["code-scanning-rule", "code scanning"], ["secret-scanning-alert", "secret scanning"],
+] as const;
+
+/** Per-surface counts, so an unreadable surface reads as unreadable, never as zero (BI-C67E5CCB). */
+export function summarizeSecurity(result: RanOutcome): string {
+  const security = result.security;
+  if (!security) return "";
+  const surfaces = SECURITY_SURFACE_LABELS.map(([kind, label]) => {
+    const counts = security.surfaces[kind];
+    return counts ? `${label} ${counts.alerts} open, ${counts.groups} items` : `${label} UNREADABLE`;
+  }).join("; ");
+  const life = security.lifecycle;
+  const moves = life
+    ? ` Resolved ${life.resolved.length}, held by build ${life.heldByBuild.length}, reopened ${life.reopened.length}, `
+      + `regressions ${life.regressions.length}${life.regressions.length ? ` (${life.regressions.slice(0, 10).join(", ")})` : ""}, `
+      + `reprioritised ${life.reprioritized.length}.`
+    : "";
+  return ` Security: ${surfaces}.${moves}`;
+}
+
+async function recordScanOutcome(result: InboundTriageOutcome, arbitration: string | null = null): Promise<void> {
   const { prisma } = await import("@dpf/db");
   const entry = ECOSYSTEM_JOB_CATALOG_ENTRIES.find((job) => job.jobId === "ecosystem-inbound-issue-triage")!;
   const now = new Date();
@@ -42,7 +63,7 @@ async function recordScanOutcome(result: InboundTriageOutcome): Promise<void> {
     nextRunAt: projectNextRun(schedule, now),
     lastStatus: !result.ran ? "not-configured" : result.complete ? "completed" : "failed",
     lastError: errors.length ? errors.join("; ").slice(0, 2000) : null,
-    lastRunSummary: result.ran ? summarizeScan(result) : result.reason,
+    lastRunSummary: (result.ran ? `${summarizeScan(result)}${arbitration ? ` ${arbitration}` : ""}` : result.reason).slice(0, 4000),
     ...(result.ran && result.issueReadComplete && result.scannedAt ? { runCursor: result.scannedAt } : {}),
   };
   await prisma.scheduledJob.upsert({
@@ -50,6 +71,35 @@ async function recordScanOutcome(result: InboundTriageOutcome): Promise<void> {
     create: { jobId: entry.jobId, name: entry.name, schedule, ...heartbeat },
     update: { schedule, ...heartbeat },
   });
+}
+
+/** Rank the open ecosystem queue and answer submitters on real decisions.
+ *  Best-effort: a failure here is reported on the schedule view, never allowed
+ *  to lose the intake scan's own heartbeat. */
+async function arbitrateEcosystemQueue(): Promise<string> {
+  try {
+    const { prisma } = await import("@dpf/db");
+    const {
+      runEcosystemArbitrationCycle, sendEcosystemDecisionNotices, summarizeArbitration,
+    } = await import("@/lib/ecosystem/arbitration-cycle");
+    const { queueFounderDispositionNotices } = await import("@/lib/federation/demand-disposition");
+    const { decodeDemandMirrorPayload } = await import("@/lib/federation/demand-exchange");
+    const ranking = await runEcosystemArbitrationCycle(prisma as never);
+    const decisions = await sendEcosystemDecisionNotices(prisma as never, {
+      queue: (input) => queueFounderDispositionNotices(prisma as never, input),
+      decodeEnvelope: (payload) => {
+        const envelope = decodeDemandMirrorPayload(payload)?.envelope as
+          { envelopeId?: unknown; originInstallationId?: unknown } | undefined;
+        return typeof envelope?.envelopeId === "string" && typeof envelope.originInstallationId === "string"
+          ? { envelopeId: envelope.envelopeId, originInstallationId: envelope.originInstallationId }
+          : null;
+      },
+    });
+    return summarizeArbitration(ranking, decisions);
+  } catch (error) {
+    const { getErrorMessage } = await import("@/lib/shared/get-error-message");
+    return `Ecosystem queue not ranked: ${getErrorMessage(error)}`.slice(0, 500);
+  }
 }
 
 // BI-F47386ED — the inbound half of the ecosystem loop. Until this existed the
@@ -67,7 +117,12 @@ async function executeIntake({ step }: { step: JobStepTools }) {
       const { runEcosystemInboundTriage } = await import("@/lib/ecosystem/inbound-triage-runner");
       return runEcosystemInboundTriage();
     });
-    await step.run("record-inbound-scan-outcome", () => recordScanOutcome(result));
+    // BI-FB03E2FD — only a commissioned controller ranks the queue and answers
+    // submitters; on any other install the intake did not run.
+    const arbitration = result.ran
+      ? await step.run("arbitrate-ecosystem-queue", () => arbitrateEcosystemQueue())
+      : null;
+    await step.run("record-inbound-scan-outcome", () => recordScanOutcome(result, arbitration));
     return result;
 }
 

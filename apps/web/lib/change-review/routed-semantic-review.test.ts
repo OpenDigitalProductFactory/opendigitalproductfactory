@@ -7,7 +7,7 @@ vi.mock("@/lib/routing/local-provider-capacity", () => ({
   inspectLocalProviderCapacity: vi.fn(),
 }));
 vi.mock("./semantic-review-source-sensitivity", () => ({
-  resolveSemanticReviewRoomSensitivity: vi.fn(async () => "internal"),
+  resolveSemanticReviewRoute: vi.fn(async () => ({ sensitivity: "internal" })),
 }));
 
 import { routeAndCall } from "@/lib/inference/routed-inference";
@@ -70,7 +70,7 @@ describe("routed semantic review", () => {
   const review = (artifact: string, room: (capsuleId: string | undefined) => Promise<"development" | "internal" | "confidential" | "restricted">) =>
     dispatchRoutedSemanticReview(artifact, {
       strategyProfile: "high-assurance", reviewerId: "change-reviewer", specialistIds: ["AGT-181"], surface: "external", capsuleId: "WC-PLATFORM",
-    }, undefined, undefined, room);
+    }, undefined, undefined, async (capsuleId) => ({ sensitivity: await room(capsuleId) }));
 
   it("routes a platform room's source diff as development, so every cleared provider is eligible (BI-9F620FE1)", async () => {
     vi.mocked(routeAndCall).mockResolvedValue({
@@ -84,6 +84,24 @@ describe("routed semantic review", () => {
       const screened = screenInferencePayload({ messages, systemPrompt, taskType: "build-review", routeContext: { sensitivity } });
       expect(screened.receipt.measuredSensitivity).toBe("public");
       expect(screened.routeContext.residencyPolicy).not.toBe("local_only");
+    }
+  });
+
+  it("hands the room's repository record to routing, so the diff is screened by that repository (BI-FC94F754)", async () => {
+    vi.mocked(routeAndCall).mockResolvedValue({
+      content: JSON.stringify({ decision: "pass", issues: [], summary: "Completed review." }),
+    } as never);
+    const sourceCodeProvenance = { repository: "OpenDigitalProductFactory/opendigitalproductfactory", visibility: "public" as const };
+    await dispatchRoutedSemanticReview("export function normalizePaths(paths: string[]) { return paths.filter(Boolean); }", {
+      strategyProfile: "high-assurance", reviewerId: "change-reviewer", specialistIds: ["AGT-181"], surface: "external", capsuleId: "WC-PLATFORM",
+    }, undefined, undefined, async () => ({ sensitivity: "development", sourceCodeProvenance }));
+    expect(routeAndCall).toHaveBeenCalledTimes(2);
+    for (const [messages, systemPrompt, sensitivity, options] of vi.mocked(routeAndCall).mock.calls) {
+      expect(options?.sourceCodeProvenance).toEqual(sourceCodeProvenance);
+      const screened = screenInferencePayload({
+        messages, systemPrompt, taskType: "build-review", routeContext: { sensitivity }, sourceCodeProvenance,
+      });
+      expect(screened.receipt).toMatchObject({ measuredSensitivity: "public", sourceCodeVisibility: "public" });
     }
   });
 

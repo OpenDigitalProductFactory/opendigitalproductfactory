@@ -512,6 +512,17 @@ describe("deriveBuildStudioWorkflowAction", () => {
     expect(action.message).not.toContain("healthy sandbox");
   });
 
+  it.each([null, true])("does not call invalidated source clean using a retained scoped verdict (%s)", (scopedTypecheck) => {
+    const { build, progressVisibility } = reviewBuildWithScopedSurface([]);
+    build.verificationOut = { ...build.verificationOut!, typecheckPassed: null,
+      testsQualified: false, failureAxis: "unknown", verificationSource: { workdir: "/isolated", baseRef: "main",
+        digest: "old", unchanged: false, checkedAt: "2026-06-19T16:46:14Z" } } as never;
+    progressVisibility.verification!.buildScoped.typecheckPassed = scopedTypecheck;
+    progressVisibility.verification!.buildScoped.failureAxis = "unknown";
+    const action = deriveBuildStudioWorkflowAction({ build, governedBacklogEnabled: true, progressVisibility });
+    expect(action.kind).toBe("resume-implementation");
+  });
+
   it("does not force Resume Implementation on a review build whose scoped surface is clean despite out-of-scope test noise (BI-2F10D6D3 follow-up)", () => {
     // The truncateMiddle strand's second-order blocker: review-verification was
     // skipped (non-UI), typecheck passed, and the 88 failures are all outside

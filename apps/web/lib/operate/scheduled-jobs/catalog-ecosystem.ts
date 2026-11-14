@@ -48,8 +48,11 @@ export const ECOSYSTEM_JOB_CATALOG_ENTRIES: readonly ScheduledJobCatalogEntry[] 
     honorsEnabledGate: true,
     name: "Ecosystem: inbound issue triage",
     purpose:
-      "Reads repository issues, Dependabot security alerts and peer federated demand, "
-      + "reconciles source changes into the backlog and reports incomplete coverage. "
+      "Reads repository issues, Dependabot, code scanning and secret scanning alerts and peer "
+      + "federated demand, and reconciles them into the backlog: one item per vulnerable package, "
+      + "code-scanning rule or leaked secret, ranked by severity (secrets first). A finding GitHub "
+      + "no longer reports open moves its item to awaiting acceptance for the acceptance sweep to close. "
+      + "An unreadable surface is reported unreadable, never as zero. "
       + "Runs only on the commissioned repository controller: a declared production install "
       + "whose confirmed purposes include evolve-dpf (primary or secondary) and whose locally "
       + "owned issue-triage-watch workroom matches the configured upstream repository. "

@@ -58,7 +58,9 @@ _TEMPLATE = re.compile(r"^\$\{(DPF_(?:CLAUDE_)?MCP_URL):-([^}]+)\}$")
 # manifest with a content version, and Claude Code keeps one marker file per
 # loading process under .in_use/ in a cache dir. The connector the client loads
 # is compared on its own, below.
-_PER_INSTALL = {Path(".codex-plugin") / "plugin.json", Path(".dpf-delivery.json")}
+# toolchain-declaration.json is the Claude declaration the updater writes per
+# copy (BI-BDC94789, toolchain_convergence.DECLARATION_SIDECAR).
+_PER_INSTALL = {Path(".codex-plugin") / "plugin.json", Path(".dpf-delivery.json"), Path("toolchain-declaration.json")}
 _PER_INSTALL_DIRS = {".in_use"}
 # BI-4F9E3221: the updater stamps `<packVersion>+c.<digest12>` into these
 # client manifests when it delivers the pack, so a version-keyed client cache

@@ -31,8 +31,8 @@ export function executorRefForms(sessionId: string): string[] {
  */
 export async function findLocalCiEvidenceWorkroom(
   workroom: WorkroomReader,
-  run: { branch: string; sha: string; sessionId: string },
-): Promise<{ id: string } | "ambiguous" | null> {
+  run: { branch: string; sha: string; sessionId: string; ownerPrincipalId?: string | null },
+): Promise<{ id: string; attribution?: "same-owner-exact-head" } | "ambiguous" | null> {
   const rooms = await workroom.findMany({
     where: { headBranch: run.branch, executorRef: { in: executorRefForms(run.sessionId) }, archivedAt: null },
     select: { id: true, headSha: true }, take: 3,
@@ -40,7 +40,28 @@ export async function findLocalCiEvidenceWorkroom(
   const exact = rooms.filter((room) => room.headSha === run.sha);
   if (exact.length > 1) return "ambiguous";
   if (exact.length === 1) return { id: exact[0].id };
-  return rooms.length === 1 ? { id: rooms[0].id } : null;
+  if (rooms.length === 1) return { id: rooms[0].id };
+  if (rooms.length > 1 || !run.ownerPrincipalId || !/^[a-f0-9]{40}$/i.test(run.sha)) return null;
+  // BI-53BED66C: the gate records the client thread id, but a claim may carry
+  // another spelling of the same session (PR #7011's room was claimed under a
+  // descriptive name, so its passing gate never reached the review). The same
+  // authenticated person's single live room on this branch, at exactly the
+  // gated commit, is the run's room whatever its session is called. Two such
+  // rooms stay unlinked; another person's room is never linked. Attribution
+  // still grants no review authority (see the resolver).
+  const owned = await workroom.findMany({
+    where: {
+      headBranch: run.branch, headSha: run.sha, archivedAt: null,
+      OR: [
+        { leaseHolderPrincipalId: run.ownerPrincipalId },
+        { createdByPrincipalId: run.ownerPrincipalId },
+        { requestedByPrincipalId: run.ownerPrincipalId },
+      ],
+    },
+    select: { id: true, headSha: true }, take: 2,
+  });
+  if (owned.length > 1) return "ambiguous";
+  return owned.length === 1 ? { id: owned[0].id, attribution: "same-owner-exact-head" } : null;
 }
 export type ReusedLocalCiEvidence = {
   id: string; operationType: string; target: string | null;

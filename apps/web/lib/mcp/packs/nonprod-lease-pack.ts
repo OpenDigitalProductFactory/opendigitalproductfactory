@@ -464,13 +464,18 @@ async function claimNonprodEnvironmentLeaseHandler(
     return {
       success: true,
       entityId: result.lease.leaseId,
-      message: `Queued nonproduction environment lease ${result.lease.leaseId} at position ${result.queuePosition}.`,
+      message: `Queued nonproduction environment lease ${result.lease.leaseId} at position ${result.queuePosition}`
+        + (result.estimatedWaitMs !== undefined ? `, estimated wait about ${Math.max(1, Math.round(result.estimatedWaitMs / 60_000))} min` : "")
+        + (result.queueReason ? `: ${result.queueReason}` : "."),
       data: {
         lease: toolLease,
         admission: {
           status: "queued",
           queuePosition: result.queuePosition,
           waitAgeMs: result.waitAgeMs,
+          ...(result.estimatedWaitMs !== undefined ? { estimatedWaitMs: result.estimatedWaitMs } : {}),
+          ...(result.queueReason ? { queueReason: result.queueReason } : {}),
+          ...(result.policyVersion ? { policyVersion: result.policyVersion } : {}),
           resumeMode: "durable-task",
           taskRunId: durableWait.taskRunId,
         },
@@ -592,9 +597,11 @@ async function renewNonprodEnvironmentLeaseHandler(params: Record<string, unknow
       success: false,
       error: "lease_lost",
       message: result.reason === "yielded"
-        ? "Contributor preview yielded the shared local-CI slot: it passed its bounded hold while pre-PR gates were waiting. Re-claim to queue behind them."
+        ? `This ${result.holdClass} hold reached its bound (${result.holdBoundAt.toISOString()}) while another session was waiting, so it yielded the shared slot. Re-claim to queue again; the overseer orders the queue.`
         : `Lease cannot be renewed (${result.reason}); re-claim if you still need the environment.`,
-      data: { reason: result.reason },
+      data: result.reason === "yielded"
+        ? { reason: result.reason, holdClass: result.holdClass, holdBoundAt: result.holdBoundAt.toISOString() }
+        : { reason: result.reason },
     };
   }
   return {

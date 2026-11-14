@@ -1,5 +1,15 @@
 # Platform Support Watch-List (living document)
 
+**Co-located host-upkeep authority (BI-7EE97802).** Native host-upkeep uses the
+configured canonical installation origin instead of an incidental self-LAN
+address. Shell fixtures exercise macOS and Linux selection, network changes,
+explicit overrides and full Edge compatibility before host effects. The
+PowerShell selection fixture runs only where PowerShell is available; a skip is
+not Windows acceptance. Retain the enrolled identity and pinned inference
+controller during configuration recovery; do not re-enroll or activate a runtime
+to fix an address. Fresh canonical heartbeat is separate from installer fixture
+success and from multi-OS native installation acceptance.
+
 **Preview loopback replacement (BI-4E94B021).** Preview-only generated Compose
 YAML uses the standard ports !override tag (Compose >=2.24.4). A loopback entry
 alone can retain inherited broad IPv4/IPv6 mappings because host IP participates

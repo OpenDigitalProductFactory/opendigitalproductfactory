@@ -310,6 +310,8 @@ Per-invocation gate axes (route-scope, subject-scope, approval/HITL) are **not**
 
 **Asynchronous Task delivery:** for ordinary external task submissions, `/api/mcp/v1` commits the `TaskRun` plus its request/authentication snapshot, enqueues the deterministic worker, and returns the durable task handle immediately. An authenticated GET to the same Streamable HTTP endpoint opens SSE and first replays durable status snapshots before sending `notifications/tasks/status`. Treat that notification as a wake-up hint only: its payload is projected from committed task state, but clients still re-read with `tasks/get` and may use `tasks/list`; clients without notification support poll those methods. DPF does not accept caller-supplied webhook URLs, because redirect targets would create a new outbound trust and credential boundary. The default-on path can be disabled with `DPF_EXTERNAL_MCP_TASK_ASYNC=off` for rollback while preserving the prior synchronous execution contract.
 
+**Work Room resources (BI-ED52AB82):** `/api/mcp/v1` also serves `resources/list`, `resources/templates/list`, `resources/read`, `resources/subscribe` and `resources/unsubscribe` for `dpf://rooms/<caseKey>/messages`, and advertises `resources: { subscribe: true }`. A read or subscribe runs `read_room_messages` through this route's own `tools/call` path, so it needs the same token scope, coworker grant (`work_room_read`), user capability and `content` room admission, and it is audited the same way. A refused subscriber stores nothing. On the GET stream, `notifications/resources/updated` carries only the room URI. Each notice re-checks the credential, the grant and room admission, so revoking any of them stops push immediately. Frames carry `id: <streamId>.<epochMs>.<seq>`; a reconnect with `Last-Event-ID` replays the room updates that stream missed. Design: [agent dialog broker §6.7](../superpowers/specs/2026-10-27-agent-dialog-broker-design.md).
+
 POST and GET share the same bearer-token authentication resolver. A stream is token-scoped, notifications contain no bearer material, and authorization is re-established from persisted server-owned context when the background worker claims the task. Opening an SSE connection never grants execution authority, and losing it never changes task state. Duplicate queue delivery is fenced by the canonical `TaskRun` compare-and-set claim; reconciliation is bounded and auditable rather than a second executor.
 
 **Progressive-disclosure recovery:** `load_tools` is always added to the MCP tool list after authorization filtering. When a DPF tool is not attached in the current model turn, call `load_tools` with either `{ "names": ["exact_tool_name"] }` or `{ "query": "the capability needed in natural language" }`. It can only select tools already permitted by the token/grant intersection and loads at most 16 at a time. A successful call appends matches to the per-token session; it never replaces the core floor. A client that receives `notifications/tools/list_changed` may refresh immediately, while every client can re-fetch `tools/list` after the result and use the loaded tool in the same bearer-token session.
@@ -842,6 +844,29 @@ starting provider work. Internal tool execution carries that captured identity;
 native MCP carries it in the signed session. Tool arguments and JSON-RPC metadata
 cannot supply it. Approval replay uses the original server-owned audit identity,
 never the task's latest generation.
+
+Task-bound native terminal sessions keep their originally admitted token grants
+separate from the tools shown to the model. The signed `scopes` still authorize
+each nested governed operation; a versioned `toolSurface` constrains direct
+listing and calls before discovery loading. Narrowing a writer's presentation
+therefore neither drops its admitted nested-reader authority nor exposes that
+reader as a direct model tool. Current human, coworker, task, source and fence
+checks still apply. Missing original reader authority remains denied.
+Restricted sessions accept handshake, ping and constrained tool methods; the
+general Tasks submission and lifecycle endpoints cannot bypass that surface.
+After authentication, restricted GET requests return `405` with `Allow: POST`
+before opening the general task-status stream. The [Streamable HTTP transport
+specification](https://modelcontextprotocol.io/specification/2025-06-18/basic/transports#listening-for-messages-from-the-server)
+allows a server to decline the optional SSE stream with `405`.
+
+These restricted sessions use only `dpf-mcp-server-restricted-v1` as their scalar
+audience. A matching surface and captured task fence are mandatory; ordinary
+audience tokens cannot carry the new surface, and audience arrays are refused.
+An old receiver rejects the restricted audience instead of accepting scopes and
+discarding the constraint. Issuance failure ends that restricted turn; it cannot
+fall back to text tools or remint an ordinary token. Ordinary sessions and the
+separate native read-only lane retain their existing contracts. This protocol
+does not settle or authorize replay of an uncertain historical review.
 
 Both canonical review writers lock the original task before the subject. A new
 receipt, baseline or retention pin requires a working task, no execution

@@ -127,4 +127,26 @@ describe("bounded subscription quota recovery", () => {
     expect(mocks.requests).not.toHaveBeenCalled(); expect(mocks.persist).not.toHaveBeenCalled();
     expect(quotaRecoveryCommission(job.metadata)?.hourly).toBe(false);
   });
+  // BI-F98BBE4F: the owner asked that the hourly check is kept for generous
+  // providers and that a limited subscription comes back as soon as possible.
+  it("a due hourly sweep rechecks a limited subscription and schedules the next check an hour out", async () => {
+    mocks.capture.mockResolvedValue({ ...captured, resetTimes: [new Date(Date.now() + 7 * 86400_000)] });
+    const before = Date.now();
+    const result = await runSubscriptionQuotaRecovery();
+    expect(result.checked).toBe(1);
+    expect(result.outcomes[0]).toMatchObject({ ok: true, observationCompleted: true });
+    expect(mocks.requests).toHaveBeenCalledTimes(1);
+    expect(job.lastStatus).toBe("recovered");
+    expect(job.nextRunAt!.getTime()).toBeGreaterThanOrEqual(before + 3600_000);
+    expect(job.nextRunAt!.getTime()).toBeLessThanOrEqual(Date.now() + 3600_000);
+  });
+  it("a generous reset inside the hour is waited for, then checked at the reset rather than an hour later", async () => {
+    const reset = new Date(Date.now() + 20 * 60_000);
+    mocks.capture.mockResolvedValue({ ...captured, resetTimes: [reset] });
+    const result = await runSubscriptionQuotaRecovery();
+    expect(result.outcomes[0]).toMatchObject({ ok: false, nextCheckAt: reset.toISOString() });
+    expect(mocks.requests).not.toHaveBeenCalled();
+    expect(job.nextRunAt).toEqual(reset);
+    expect(job.lastStatus).toBe("waiting");
+  });
 });

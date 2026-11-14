@@ -21,5 +21,51 @@
     "added": "A link to \"{$title}\" has been added to the first mention below. Review it, then save. Nothing has changed yet.",
     "notFound": "No plain mention of \"{$title}\" is left on this page to link.",
     "changeSummary": "Link the mention of {$title}"
+  },
+  "editor": {
+    "titles": {
+      "create": "New wiki page",
+      "update": "Edit page",
+      "override": "Override kernel page"
+    },
+    "helpers": {
+      "create": "Creates a new page for your organization. It stays a draft until you set its status to Published.",
+      "update": "Saves a new revision of this page. The page view updates when you save.",
+      "override": "Creates your organization's version of this platform page. Your version replaces the platform text for your organization only; the platform page is unchanged."
+    },
+    "cancel": "Cancel",
+    "fields": {
+      "title": "Title",
+      "kind": "Kind",
+      "status": "Status",
+      "abstract": "Abstract",
+      "abstractHint": "Optional. One or two sentences shown under the title.",
+      "body": "Body",
+      "bodyHint": "Markdown. Type [[ and two letters to link a page.",
+      "changeSummary": "Change summary",
+      "changeSummaryHint": "Optional. Appears in the revision log.",
+      "changeSummaryPlaceholder": "e.g. clarified the second paragraph"
+    },
+    "save": "Save",
+    "saving": "Saving…",
+    "saveAnyway": "Save anyway",
+    "view": {
+      "label": "Editor view",
+      "write": "Write",
+      "preview": "Preview",
+      "previewEmpty": "Nothing to preview yet."
+    },
+    "suggestions": {
+      "label": "Pages to link",
+      "loading": "Searching pages…",
+      "empty": "No page you can read matches."
+    },
+    "dangling": {
+      "heading": "Links that do not resolve",
+      "line": "Line {$line}",
+      "lintMessage": "An [[link]] target does not exist (blocks publish).",
+      "targets": "Unresolved: {$targets}",
+      "saveHint": "Fix the links, or save again to keep them."
+    }
   }
 }

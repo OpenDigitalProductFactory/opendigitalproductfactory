@@ -17,6 +17,7 @@
 // classified and kept local.
 
 import type { RepositoryVisibility } from "@/lib/forge/managed-repository-access";
+import type { SourceCodeProvenance } from "@/lib/inference/data-screening/types";
 
 export type SemanticReviewRouteSensitivity = "development" | "internal" | "confidential" | "restricted";
 
@@ -40,22 +41,48 @@ export type SemanticReviewRoomDeps = {
   visibility?: (repositoryFullName: string | null) => Promise<RepositoryVisibility>;
 };
 
+/**
+ * How a review routes: the sensitivity it declares, plus the reviewed room's
+ * repository record when one was read (BI-FC94F754). The payload screen uses
+ * that record to classify the diff by its repository instead of treating any
+ * code as confidential.
+ */
+export type SemanticReviewRoute = {
+  sensitivity: SemanticReviewRouteSensitivity;
+  sourceCodeProvenance?: SourceCodeProvenance;
+};
+
+/** The reviewed room's route; anything unreadable is `internal` with no provenance. */
+export async function resolveSemanticReviewRoute(
+  capsuleId: string | undefined,
+  deps: SemanticReviewRoomDeps = {},
+): Promise<SemanticReviewRoute> {
+  if (!capsuleId) return { sensitivity: "internal" };
+  try {
+    const room = await (deps.readRoom ?? readRoom)(capsuleId);
+    if (!room) return { sensitivity: "internal" };
+    const ceiling = await (deps.ceiling ?? roomCeiling)(room);
+    // Visibility is asked only for a public room; it never lowers any other ceiling.
+    if (ceiling !== "public") return { sensitivity: semanticReviewRouteSensitivity(ceiling, "unknown") };
+    // A room that names no repository has no visibility to prove.
+    const repository = room.repositoryFullName?.trim();
+    if (!repository) return { sensitivity: semanticReviewRouteSensitivity(ceiling, "unknown") };
+    const visibility = await (deps.visibility ?? repositoryVisibility)(repository);
+    return {
+      sensitivity: semanticReviewRouteSensitivity(ceiling, visibility),
+      sourceCodeProvenance: { repository, visibility },
+    };
+  } catch {
+    return { sensitivity: "internal" };
+  }
+}
+
 /** The reviewed room's routing sensitivity; anything unreadable is `internal`. */
 export async function resolveSemanticReviewRoomSensitivity(
   capsuleId: string | undefined,
   deps: SemanticReviewRoomDeps = {},
 ): Promise<SemanticReviewRouteSensitivity> {
-  if (!capsuleId) return "internal";
-  try {
-    const room = await (deps.readRoom ?? readRoom)(capsuleId);
-    if (!room) return "internal";
-    const ceiling = await (deps.ceiling ?? roomCeiling)(room);
-    // Visibility is asked only for a public room; it never lowers any other ceiling.
-    const visibility = ceiling === "public" ? await (deps.visibility ?? repositoryVisibility)(room.repositoryFullName) : "unknown";
-    return semanticReviewRouteSensitivity(ceiling, visibility);
-  } catch {
-    return "internal";
-  }
+  return (await resolveSemanticReviewRoute(capsuleId, deps)).sensitivity;
 }
 
 /** A public answer is reused this long; anything else is asked again next time. */

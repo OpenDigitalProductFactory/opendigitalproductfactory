@@ -305,6 +305,30 @@ const REGISTRY = {
     summary:
       "Usable AI capacity is lost: one provider is failing every request, or too few AI requests across all providers are succeeding.",
   },
+  platform_downtime: {
+    resolvedBy: "monitor-clears",
+    subject: "scope",
+    raisedBySubjectAbsence: false,
+    autoResolveWhen:
+      "the platform-continuity watch closes a downtime record 72 hours after it opened; the resolved row stays as the record of the window (BI-3E2F87FA)",
+    operatorActionable: true,
+    expectedSteadyState: 0,
+    owner: "operator",
+    summary:
+      "The platform stopped serving for longer than 30 minutes outside a planned upgrade. The row names the window and the cause the platform could observe.",
+  },
+  work_sync_failure: {
+    resolvedBy: "monitor-clears",
+    subject: "scope",
+    raisedBySubjectAbsence: false,
+    autoResolveWhen:
+      "the next successful work-sync pull from the same paired installation, or the link no longer being one this installation syncs with (BI-85DE8EBD)",
+    operatorActionable: true,
+    expectedSteadyState: 0,
+    owner: "operator",
+    summary:
+      "Work sync with a paired installation has failed for longer than 6 hours, so its mirrored items here are stale.",
+  },
   monitor_source_unreachable: {
     resolvedBy: "monitor-clears",
     subject: "scope",

@@ -16,6 +16,53 @@ import {
   type ThreadCheckpointState,
 } from "./thread-checkpoint";
 
+/**
+ * The roles a fold reads. The backlog finder counts exactly these, so a thread
+ * it admits is one the fold can act on.
+ */
+export const FOLD_MESSAGE_ROLES = ["user", "assistant"] as const;
+
+/** A thread and how many foldable messages sit after its own watermark. */
+export type ThreadFoldBacklog = { id: string; contextKey: string; unfolded: number };
+
+/**
+ * BI-546A9E36: the threads that are at least `minUnfolded` foldable messages
+ * behind their own watermark, most-behind first.
+ *
+ * This is the nightly sweep's admission rule. It replaced two timestamp-based
+ * selections (the most recently updated threads, plus stale ones oldest-first),
+ * both with fixed caps: on an install with 404 active threads the first left 304
+ * unswept, and in the second a quiet thread with nothing to fold kept its slot
+ * for as long as it received a message a fortnight, starving the threads behind
+ * it. Ordering by need has neither fault: a thread with nothing to fold is never
+ * a candidate, and one the sweep did not reach tonight is still at the front
+ * tomorrow.
+ *
+ * One query per sweep. The count has to compare each message against its own
+ * thread's watermark, which the query builder cannot express across a relation,
+ * hence the raw statement.
+ */
+export async function findThreadsWithFoldBacklog(args: {
+  minUnfolded: number;
+  take: number;
+}): Promise<ThreadFoldBacklog[]> {
+  const rows = await prisma.$queryRaw<Array<{ id: string; contextKey: string; unfolded: number | bigint }>>`
+    SELECT t."id", t."contextKey", b."unfolded"
+    FROM "AgentThread" t
+    CROSS JOIN LATERAL (
+      SELECT count(*) AS "unfolded"
+      FROM "AgentMessage" m
+      WHERE m."threadId" = t."id"
+        AND m."role" = ANY(${[...FOLD_MESSAGE_ROLES]}::text[])
+        AND (t."compactionWatermarkAt" IS NULL OR m."createdAt" > t."compactionWatermarkAt")
+    ) b
+    WHERE t."cancelledAt" IS NULL
+      AND b."unfolded" >= ${args.minUnfolded}
+    ORDER BY b."unfolded" DESC, t."id" ASC
+    LIMIT ${args.take}`;
+  return rows.map((row) => ({ id: row.id, contextKey: row.contextKey, unfolded: Number(row.unfolded) }));
+}
+
 /** ImprovementSignal.sourceType values a fold writes; query on these to see fold health. */
 export const THREAD_CHECKPOINT_FOLD_FAILED_SIGNAL = "thread_checkpoint_fold_failed";
 export const THREAD_CHECKPOINT_MESSAGE_SKIPPED_SIGNAL = "thread_checkpoint_message_skipped";
@@ -93,7 +140,7 @@ function prismaDeps(): AdvanceDeps {
       const rows = await prisma.agentMessage.findMany({
         where: {
           threadId,
-          role: { in: ["user", "assistant"] },
+          role: { in: [...FOLD_MESSAGE_ROLES] },
           ...(after ? { createdAt: { gt: after } } : {}),
         },
         orderBy: { createdAt: "asc" },

@@ -1,10 +1,15 @@
 // scripts/pr-health.test.mjs
-// node --test (no vitest). Covers the pure evaluatePrHealth() verdict — the three
-// blocker classes that were missed in practice (non-required failing guards,
-// mid-CI pending, unresolved review threads) plus conflict/draft/state handling.
+// node --test (no vitest). Covers the pure verdict and real CLI observations:
+// failing/pending checks, unreadable evidence, complete review-thread history,
+// conflict/draft/state handling and bounded waits.
 
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import { spawnSync } from "node:child_process";
 
 import {
   evaluatePrHealth,
@@ -13,6 +18,111 @@ import {
   selectLocalCiStateRecord,
   waitForPrHealth,
 } from "./pr-health.mjs";
+
+// Run the actual CLI with child-only gh responses. No GitHub request or credential.
+function runObservationFixture(fixture, args = []) {
+  const dir = mkdtempSync(join(tmpdir(), "dpf-pr-health-observation-"));
+  try {
+    const preload = join(dir, "observations.mjs");
+    writeFileSync(preload, `
+import cp from "node:child_process";
+import { syncBuiltinESMExports } from "node:module";
+const original = cp.execFileSync;
+const fixture = ${JSON.stringify(fixture)};
+const meta = { number: 42, title: "Labelled fixture", state: "OPEN", mergeable: "MERGEABLE",
+  mergeStateStatus: "CLEAN", isDraft: false, baseRefName: "main", headRefName: "fixture/readability",
+  headRefOid: "a".repeat(40), body: "", files: [{path:"docs/README.md"}], commits: [],
+  author: {login:"fixture"}, ...fixture.meta };
+const page = {data:{repository:{pullRequest:{reviewThreads:{nodes:[],pageInfo:{hasNextPage:false,endCursor:null}}}}}};
+function response(value) {
+  const output = value.raw ?? JSON.stringify(value.data);
+  if (value.exit) throw Object.assign(new Error("Labelled unavailable observation"), {status:value.exit,stdout:output});
+  return output;
+}
+cp.execFileSync = function(command, args, options) {
+  if (command !== "gh") return Reflect.apply(original, this, [command,args,options]);
+  if (args[0] === "pr" && args[1] === "view") return JSON.stringify(meta);
+  if (args[0] === "pr" && args[1] === "checks") return response(fixture.checks ?? {data:[]});
+  if (args[0] === "repo") return JSON.stringify({owner:{login:"fixture"},name:"repository"});
+  if (args[0] === "api") return response(fixture.threads ?? {data:args.includes("--slurp") ? [page] : page});
+  if (args[0] === "run") return "[]";
+  throw new Error("Unexpected fixture gh operation");
+};
+syncBuiltinESMExports();
+`);
+    return spawnSync(process.execPath, ["--import", pathToFileURL(preload).href,
+      fileURLToPath(new URL("./pr-health.mjs", import.meta.url)), "42", ...args],
+    { cwd: dir, encoding: "utf8", timeout: 10_000 });
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+}
+
+const threadPage = (nodes = [], hasNextPage = false, endCursor = null) =>
+  ({ data: { repository: { pullRequest: { reviewThreads: { nodes, pageInfo: { hasNextPage, endCursor } } } } } });
+const observationCases = [
+  ["valid empty observations", {}, 0],
+  ["missing PR state", {meta:{state:null}}, 3],
+  ["missing PR source head", {meta:{headRefOid:null}}, 3],
+  ["missing PR target identity", {meta:{number:null}}, 3],
+  ["missing PR base observation", {meta:{baseRefName:null}}, 3],
+  ["missing PR file observations", {meta:{files:null}}, 3],
+  ["invalid PR draft observation", {meta:{isDraft:"false"}}, 3],
+  ["failed checks JSON on exit1", {checks:{exit:1,data:[{name:"Failed",bucket:"fail"}]}}, 1],
+  ["pending checks JSON on exit8", {checks:{exit:8,data:[{name:"Pending",bucket:"pending"}]}}, 75],
+  ["merged PR with valid observations", {meta:{state:"MERGED"}}, 0],
+  ["merged PR without readiness-only metadata", {meta:{state:"MERGED",headRefOid:null,files:null,isDraft:null}}, 0],
+  ["merged PR with unavailable checks", {meta:{state:"MERGED"},checks:{exit:1,raw:""}}, 0],
+  ["merged PR with unavailable threads", {meta:{state:"MERGED"},threads:{exit:1,raw:""}}, 0],
+  ["check transport failure", {checks:{exit:1,raw:""}}, 3],
+  ["malformed check JSON", {checks:{raw:"{broken"}}, 3],
+  ["missing check output", {checks:{raw:""}}, 3],
+  ["check object instead of array", {checks:{data:{}}}, 3],
+  ["null check row", {checks:{data:[null]}}, 3],
+  ["unknown check bucket", {checks:{data:[{name:"Unknown",bucket:"unknown"}]}}, 3],
+  ["check missing its name", {checks:{data:[{bucket:"pass"}]}}, 3],
+  ["nonzero empty check result", {checks:{exit:1,data:[]}}, 3],
+  ["unexpected exit carrying passing JSON", {checks:{exit:2,data:[{name:"Pass",bucket:"pass"}]}}, 3],
+  ["thread transport failure", {threads:{exit:1,raw:""}}, 3],
+  ["GraphQL errors with partial data", {threads:{data:[{...threadPage(),errors:[{message:"Unavailable"}]}]}}, 3],
+  ["malformed thread JSON", {threads:{raw:"{broken"}}, 3],
+  ["null pull request", {threads:{data:[{data:{repository:{pullRequest:null}}}]}}, 3],
+  ["incomplete thread pagination", {threads:{data:[threadPage([],true,"next")]}}, 3],
+  ["missing pagination evidence", {threads:{data:[{data:{repository:{pullRequest:{reviewThreads:{nodes:[]}}}}}]}}, 3],
+  ["thread without resolution state", {threads:{data:[threadPage([{}])]}}, 3],
+  ["absent thread pages", {threads:{data:[]}}, 3],
+  ["null thread page", {threads:{data:[null]}}, 3],
+  ["cursor absent before another page", {threads:{data:[threadPage([],true),threadPage()]}}, 3],
+  ["repeated pagination cursor", {threads:{data:[threadPage([],true,"next"),threadPage([],true,"next"),threadPage()]}}, 3],
+  ["extra page after terminal page", {threads:{data:[threadPage(),threadPage()]}}, 3],
+  ["unresolved thread on the second page", {threads:{data:[threadPage([],true,"next"),threadPage([{isResolved:false,path:"fixture.ts",line:1}])]}}, 2],
+  ["complete two-page resolved history", {threads:{data:[threadPage([{isResolved:true}],true,"next"),threadPage([{isResolved:true}])]}}, 0],
+];
+for (const [name, fixture, expected] of observationCases) {
+  test(`CLI observation: ${name}`, () => {
+    const run = runObservationFixture(fixture);
+    assert.equal(run.error, undefined);
+    assert.equal(run.status, expected, `${run.stdout}\n${run.stderr}`);
+    if (expected === 3) {
+      assert.doesNotMatch(run.stdout, /^READY/m);
+      assert.match(run.stderr, /^UNREADABLE/m);
+      if (fixture.checks?.exit) assert.match(run.stderr, /GitHub checks command failed/);
+      if (fixture.checks?.raw === "{broken") assert.doesNotMatch(run.stderr, /command failed/);
+    }
+    if (fixture.meta?.state === "MERGED") {
+      assert.match(run.stdout, /^MERGED/m);
+      assert.match(run.stdout, /not read/);
+      assert.doesNotMatch(run.stdout, /checks: 0 total/);
+    }
+  });
+}
+test("CLI wait stops unreadable observations instead of reporting ready", () => {
+  const run = runObservationFixture({checks:{exit:1,raw:""}}, ["--wait","--timeout","0.001","--interval","0.1"]);
+  assert.equal(run.status, 3, `${run.stdout}\n${run.stderr}`);
+});
+test("CLI wait retains pending exit75 at its bounded timeout", () => {
+  const run = runObservationFixture({checks:{exit:8,data:[{name:"Pending",bucket:"pending"}]}}, ["--wait","--timeout","0.001","--interval","0.1"]);
+  assert.equal(run.status, 75, `${run.stdout}\n${run.stderr}`);
+  assert.match(run.stdout, /timed out/);
+});
 
 const okMeta = { number: 1, title: "x", state: "OPEN", mergeable: "MERGEABLE", mergeStateStatus: "CLEAN", isDraft: false };
 const pass = (name) => ({ name, bucket: "pass" });

@@ -10,13 +10,15 @@ import { prisma } from "@dpf/db";
 import { Pool } from "pg";
 import { autoDiscoverAndProfile } from "./ai-provider-internals";
 import { canRunStartupModelDiscovery } from "@/lib/routing/provider-eligibility";
+import { capacityRoutingExclusionReason, isHardCapacityBlock } from "@/lib/routing/capacity-routing-exclude";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 const LOCK_KEY = 0x4d434156; // "MCAV" as int32 (deterministic, stable)
 
 export type ModelRevalidationOutcome =
   | { providerId: string; status: "ok"; discovered: number; profiled: number }
-  | { providerId: string; status: "failed"; error: string };
+  | { providerId: string; status: "failed"; error: string }
+  | { providerId: string; status: "skipped"; reason: string };
 export type ModelRevalidationSummary = { acquired: boolean; outcomes: ModelRevalidationOutcome[] };
 
 /**
@@ -49,6 +51,24 @@ async function withAdvisoryLock(
   }
 }
 
+/** providerId → reason, for providers whose recorded capacity is a hard block now. */
+async function hardBlockedProviders(providerIds: string[]): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  if (providerIds.length === 0) return out;
+  const nowMs = Date.now();
+  const rows = await prisma.providerCapacityStatus.findMany({
+    where: { providerId: { in: providerIds } },
+    select: { providerId: true, state: true, retryAt: true, lastObservedAt: true },
+  });
+  for (const row of rows) {
+    if (!row.providerId) continue;
+    const snapshot = { state: row.state, retryAtMs: row.retryAt?.getTime() ?? null, observedAtMs: row.lastObservedAt?.getTime() ?? null };
+    if (!isHardCapacityBlock(snapshot, nowMs)) continue;
+    out.set(row.providerId, capacityRoutingExclusionReason(snapshot, nowMs) ?? `provider capacity ${row.state}`);
+  }
+  return out;
+}
+
 export async function runModelRevalidation(
   opts: { source: "startup" | "scheduled" | "manual" },
   pgPool: Pool,
@@ -71,8 +91,19 @@ export async function runModelRevalidation(
       },
     });
 
+    const blocked = opts.source === "manual" ? new Map<string, string>() : await hardBlockedProviders(activeProviders.map((p) => p.providerId));
+
     for (const provider of activeProviders.filter(canRunStartupModelDiscovery)) {
       const { providerId } = provider;
+      const blockedReason = blocked.get(providerId);
+      if (blockedReason) {
+        // Unattended discovery and profiling against a provider that has said
+        // calls will fail is guaranteed waste (BI-5A6C4011). An operator-run
+        // refresh still goes through, so a just-fixed credential can be checked.
+        outcomes.push({ providerId, status: "skipped", reason: blockedReason });
+        console.log(`[model-revalidation] Skipped ${providerId}: ${blockedReason}`);
+        continue;
+      }
       if (Date.now() > totalDeadline) {
         console.warn(
           "[model-revalidation] Total budget exceeded — stopping early",

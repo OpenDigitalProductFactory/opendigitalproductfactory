@@ -112,6 +112,28 @@ describe("assertRelationWrite (AC-TRV-2)", () => {
   });
 });
 
+describe("drift repair helpers (BI-92804832)", () => {
+  it("stores one spelling for a registered inventory type and leaves an unknown one alone", async () => {
+    const { canonicalRelationKey } = await import("./relation-vocabulary");
+    expect(canonicalRelationKey("hosts")).toBe("HOSTS");
+    expect(canonicalRelationKey("monitors")).toBe("MONITORS");
+    expect(canonicalRelationKey("HOSTS")).toBe("HOSTS");
+    expect(canonicalRelationKey("frobnicates")).toBe("frobnicates");
+  });
+
+  it("projects each known document refType as its PROV-O / schema.org relation", async () => {
+    const { documentReferenceRelation } = await import("./relation-vocabulary");
+    expect(documentReferenceRelation("canonical-source")).toBe("HAD_PRIMARY_SOURCE");
+    expect(documentReferenceRelation("source")).toBe("WAS_DERIVED_FROM");
+    expect(documentReferenceRelation("provided-rendered-input")).toBe("USED");
+    expect(documentReferenceRelation("capture-context")).toBe("WAS_INFORMED_BY");
+    expect(documentReferenceRelation("contains")).toBe("CONTAINS");
+    // Unmapped stays quarantined: DOC_REFERENCES requires its refType prop.
+    expect(documentReferenceRelation("blocks")).toBe("DOC_REFERENCES");
+    expect(() => assertRelationWrite("DOC_REFERENCES", {})).toThrow(/refType/);
+  });
+});
+
 describe("relation-vocabulary guard (AC-TRV-3)", () => {
   it("fails a fixture that adds RELATED_TO to a seed and a writer", () => {
     const violations = findRelationVocabularyViolations([

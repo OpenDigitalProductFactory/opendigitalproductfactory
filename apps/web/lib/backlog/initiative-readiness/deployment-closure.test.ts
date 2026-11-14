@@ -63,3 +63,28 @@ describe("feature build deployment closure", () => {
     expect(findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: { featureBuildId: "row-1", pullRequestNumber: { not: null } } }));
   });
 });
+
+// BI-8129F585: a PR merged outside the inventory window proves delivery from
+// the verified observation its room recorded when the merge was settled.
+describe("selectDeliveryObservation", () => {
+  it("prefers the inventory snapshot", async () => {
+    const { selectDeliveryObservation } = await import("./deployment-closure");
+    expect(selectDeliveryObservation([observation], { repositoryFullName: "owner/repo" })).toEqual(observation);
+  });
+  it("falls back to the room's recorded verified observation", async () => {
+    const { selectDeliveryObservation } = await import("./deployment-closure");
+    const recorded = { mergedPullRequestObservation: observation };
+    expect(selectDeliveryObservation([], { repositoryFullName: "owner/repo", workspaceState: recorded })).toEqual(observation);
+  });
+  it("rejects a recorded observation that was altered or names another repository", async () => {
+    const { selectDeliveryObservation } = await import("./deployment-closure");
+    const altered = { mergedPullRequestObservation: { ...observation, mergeCommitSha: sha("f") } };
+    expect(selectDeliveryObservation([], { repositoryFullName: "owner/repo", workspaceState: altered })).toBeNull();
+    expect(selectDeliveryObservation([], { repositoryFullName: "other/repo", workspaceState: { mergedPullRequestObservation: observation } })).toBeNull();
+  });
+  it("lets a recorded observation close delivery through the same proof", async () => {
+    const { selectDeliveryObservation } = await import("./deployment-closure");
+    const chosen = selectDeliveryObservation([], { repositoryFullName: "owner/repo", workspaceState: { mergedPullRequestObservation: observation } });
+    expect((await resolveDeploymentClosureProof({ ...inputs(), observation: chosen })).kind).toBe("deployed");
+  });
+});

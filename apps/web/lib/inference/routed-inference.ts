@@ -197,7 +197,7 @@ async function prepareRoute(
     tools: options?.tools,
     taskType,
     routeContext: initialRouteContext,
-    activityContract: options?.activityContract,
+    activityContract: options?.activityContract, sourceCodeProvenance: options?.sourceCodeProvenance,
     policyVersionSource: options?.inferencePolicyVersionSource,
     sensitiveDetailUse: options?.sensitiveDetailUse,
     responseRehydration: options?.responseRehydration,

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   formatDate,
+  formatDuration,
   formatDateTime,
   formatInstant,
   formatTimestamp,
@@ -97,4 +98,9 @@ describe("datetime shared display helpers", () => {
       }).format(new Date("2026-09-26T15:04:05Z")),
     );
   });
+});
+
+describe("shared duration seconds precision",()=>{
+  it.each([[0,"0s"],[45000,"45s"],[61000,"1m 1s"],[3600000,"60m 0s"]])("preserves phase precision for %s",(ms,expected)=>{expect(formatDuration(ms as number,{includeSeconds:true})).toBe(expected);});
+  it("keeps the existing compact duration contract unchanged",()=>{expect(formatDuration(45000)).toBe("<1m");expect(formatDuration(90000000)).toBe("1d 1h");});
 });

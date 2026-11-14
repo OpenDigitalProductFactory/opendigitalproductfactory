@@ -15,6 +15,9 @@ import {
 } from "@dpf/db/federation-health";
 
 import { WORK_SYNC_HEALTH_KEY, type WorkSyncHealthRecordV1 } from "./work-sync";
+import { parseWorkSyncHealthRecord } from "./work-sync-health";
+
+export { parseWorkSyncHealthRecord };
 
 export interface WorkSyncLinkView {
   linkId: string;
@@ -45,13 +48,6 @@ export interface WorkSyncLinkRow {
   linkId: string;
   peerAuthorityUrl: string;
   principal: { displayName: string } | null;
-}
-
-export function parseWorkSyncHealthRecord(value: unknown): WorkSyncHealthRecordV1 | null {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
-  const record = value as Partial<WorkSyncHealthRecordV1>;
-  if (record.schemaVersion !== 1 || !Array.isArray(record.links)) return null;
-  return record as WorkSyncHealthRecordV1;
 }
 
 export function mapWorkSyncLinks(

@@ -29,6 +29,7 @@ export const STANDING_SHAPE_REQUIRED_AGENT: Readonly<Record<string, string>> = O
   "repository-policy-drift-watch": "platform-engineer",
   "pull-request-flow-watch": "change-reviewer",
   "issue-triage-watch": "portfolio-advisor",
+  "backlog-steward-watch": "portfolio-advisor",
   "release-readiness-watch": "build-specialist",
 });
 

@@ -50,6 +50,17 @@ test("parent preflight recording error remains unrun even if the child exits zer
   assert.match(diagnostics,/could not RUN/);
 });
 
+test("exit 88 from a retained host receipt names the receipt, not host pressure", async () => {
+  let diagnostics = "";
+  const result = await pregate.runHostPreflight({ env: {}, readStatusImpl: async () => ({level:"normal"}),
+    runObservedImpl: async () => ({status:88,
+      outputTail:"[pregate-preflight] execution blocked by a retained host guard receipt (HOST_RECEIPT_RETAINED): /wt/key.json\n"}),
+    stdout: () => {}, stderr: text => {diagnostics += text;} });
+  assert.equal(result,88);
+  assert.match(diagnostics,/retained host guard receipt/);
+  assert.doesNotMatch(diagnostics,/host under pressure/);
+});
+
 test("observed parent preflight passes cancellation and cleans its listeners", async () => {
   const before = process.listenerCount("SIGINT");
   let output = "";

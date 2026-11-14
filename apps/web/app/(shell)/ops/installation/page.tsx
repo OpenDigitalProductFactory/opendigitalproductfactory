@@ -18,6 +18,7 @@ import Link from "next/link";
 
 import { prisma } from "@dpf/db";
 
+import { HostPosturePanel } from "@/components/ops/HostPosturePanel";
 import { PairedEstatePosturePanel } from "@/components/ops/PairedEstatePosturePanel";
 import { EstateNameField } from "@/components/workspace/EstateNameField";
 import { InstallationIdentityPanel } from "@/components/workspace/InstallationIdentityPanel";
@@ -28,6 +29,7 @@ import {
 } from "@/lib/install/estate-identity";
 import { resolveFederationIdentity, type FederationIdentityDb } from "@/lib/federation/demand-identity";
 import { getPairedEstatePosture } from "@/lib/federation/operational-posture-read-model";
+import { readHostPosture } from "@/lib/install/host-posture";
 import { prismaInstanceStanceStore } from "@/lib/install/instance-stance";
 import { loadInstallationIdentityView } from "@/lib/installation-journey/installation-identity-view";
 import { can } from "@/lib/permissions";
@@ -49,10 +51,12 @@ export default async function InstallationIdentityPage() {
   const t = await getT("portfolio");
 
   const store = prismaInstanceStanceStore(prisma);
-  const [view, estate, identity] = await Promise.all([
+  const [view, estate, identity, hostPosture] = await Promise.all([
     loadInstallationIdentityView(prisma, store),
     loadEstateNameResolution(store),
     resolveFederationIdentity(prisma as unknown as FederationIdentityDb),
+    // What the host start script last read about this computer (BI-3E2F87FA).
+    readHostPosture(),
   ]);
   // The paired estate: this installation's posture captured now, beside what
   // each same-organization peer last reported (BI-648F01A0 Slice 3).
@@ -81,6 +85,9 @@ export default async function InstallationIdentityPage() {
           badgePreview={badgePreview}
           organizationFallback={estate.tier === "organization-name" ? estate.estateName : null}
         />
+      </div>
+      <div className="px-4 pb-6 sm:px-6">
+        <HostPosturePanel view={hostPosture} />
       </div>
       <div className="px-4 pb-6 sm:px-6">
         <PairedEstatePosturePanel view={JSON.parse(JSON.stringify(posture))} />

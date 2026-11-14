@@ -229,7 +229,7 @@ export async function approveBuildStart(
 export async function updateFeatureBrief(
   buildId: string,
   brief: FeatureBrief,
-  options: { actorUserId?: string } = {},
+  options: Parameters<typeof updateFeatureBriefAction>[2] = {},
 ): Promise<void> {
   return updateFeatureBriefAction(buildId, brief, options);
 }

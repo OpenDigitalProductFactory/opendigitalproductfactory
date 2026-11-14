@@ -8,7 +8,7 @@ import { CORPUS_HEALTH_WORKROOM_ID, EMBEDDING_COVERAGE_ACTIVITY_KIND } from "./e
 // that never runs, which is exactly how the previous version failed: no caller
 // at all for months, and no surface would have shown the difference.
 describe("embedding coverage is reported in operator language (BI-ED117C82)", () => {
-  const base = { scanned: 10, missing: 0, embedded: 0, failed: [] as string[] };
+  const base = { scanned: 10, missing: 0, stale: 0, embedded: 0, refreshed: [] as string[], failed: [] as string[], deferred: 0 };
 
   it("states coverage as a fraction of what coworkers can search", () => {
     const r = describeCoverage({ ...base });
@@ -16,8 +16,19 @@ describe("embedding coverage is reported in operator language (BI-ED117C82)", ()
     expect(r.summary).toContain("10 of 10 reference pages are searchable by your coworkers");
   });
 
+  // BI-F039D17A — a page whose text changed since its vector was computed is
+  // not "current", and a budget-deferred refresh is named, not hidden.
+  it("counts deferred stale pages as not yet current and says they will be refreshed", () => {
+    const r = describeCoverage({ ...base, stale: 4, embedded: 1, refreshed: ["principles/a"], deferred: 3 });
+    expect(r.covered).toBe(7);
+    expect(r.stale).toBe(4);
+    expect(r.deferred).toBe(3);
+    expect(r.summary).toContain("refreshed 1 that were missing or had changed");
+    expect(r.summary).toContain("3 more will be refreshed on the next run");
+  });
+
   it("says a provider outage retries itself, and names the consequence", () => {
-    const r = describeCoverage({ scanned: 10, missing: 3, embedded: 0, failed: ["a", "b", "c"], providerUnavailable: true });
+    const r = describeCoverage({ scanned: 10, stale: 0, refreshed: [], deferred: 0, missing: 3, embedded: 0, failed: ["a", "b", "c"], providerUnavailable: true });
     expect(r.providerUnavailable).toBe(true);
     expect(r.summary).toContain("retries automatically");
     // The operator cannot connect "embeddings" to what they actually see, so the
@@ -28,15 +39,15 @@ describe("embedding coverage is reported in operator language (BI-ED117C82)", ()
   });
 
   it("reports a partial repair without claiming success", () => {
-    const r = describeCoverage({ scanned: 10, missing: 4, embedded: 2, failed: ["x", "y"] });
+    const r = describeCoverage({ scanned: 10, stale: 0, refreshed: [], deferred: 0, missing: 4, embedded: 2, failed: ["x", "y"] });
     expect(r.repaired).toBe(2);
-    expect(r.summary).toContain("Repaired 2");
+    expect(r.summary).toContain("Refreshed 2");
     expect(r.summary).toContain("retried");
   });
 
   it("distinguishes 'nothing needed repair' from 'repaired some'", () => {
     expect(describeCoverage({ ...base }).summary).toContain("Nothing needed repair");
-    expect(describeCoverage({ ...base, embedded: 3 }).summary).toContain("repaired 3");
+    expect(describeCoverage({ ...base, embedded: 3 }).summary).toContain("refreshed 3");
   });
 });
 
@@ -50,7 +61,7 @@ describe("coverage runs land in the corpus-health Workroom (BI-ED117C82)", () =>
 
   it("upserts the durable Workroom and records one activity", async () => {
     const client = db();
-    await recordCoverageRun({ db: client, result: { scanned: 5, missing: 1, embedded: 1, failed: [] } });
+    await recordCoverageRun({ db: client, result: { scanned: 5, stale: 0, refreshed: [], deferred: 0, missing: 1, embedded: 1, failed: [] } });
 
     expect(client.workroom.upsert).toHaveBeenCalledTimes(1);
     const upsert = client.workroom.upsert.mock.calls[0]![0] as unknown as { where: { capsuleId: string } };
@@ -73,7 +84,7 @@ describe("coverage runs land in the corpus-health Workroom (BI-ED117C82)", () =>
     // "platform-maintenance" was registered, every upsert failed with 23514 and
     // the corpus-health room was never written. This pins the writer to the set.
     const client = db();
-    await recordCoverageRun({ db: client, result: { scanned: 1, missing: 0, embedded: 0, failed: [] } });
+    await recordCoverageRun({ db: client, result: { scanned: 1, stale: 0, refreshed: [], deferred: 0, missing: 0, embedded: 0, failed: [] } });
 
     const upsert = client.workroom.upsert.mock.calls[0]![0] as unknown as { create: { source: string } };
     expect(WORK_CAPSULE_SOURCES).toContain(upsert.create.source);
@@ -83,7 +94,7 @@ describe("coverage runs land in the corpus-health Workroom (BI-ED117C82)", () =>
     const client = db();
     await recordCoverageRun({
       db: client,
-      result: { scanned: 5, missing: 5, embedded: 0, failed: ["a"], providerUnavailable: true },
+      result: { scanned: 5, stale: 0, refreshed: [], deferred: 0, missing: 5, embedded: 0, failed: ["a"], providerUnavailable: true },
     });
     const activity = client.workroomActivity.create.mock.calls[0]![0] as unknown as { data: { payload: { providerUnavailable: boolean } } };
     expect(activity.data.payload.providerUnavailable).toBe(true);
@@ -94,7 +105,7 @@ describe("coverage runs land in the corpus-health Workroom (BI-ED117C82)", () =>
     const client = db();
     client.workroom.upsert = vi.fn(async (_args: unknown) => { throw new Error("db down"); });
     const logger = { warn: vi.fn() };
-    const report = await recordCoverageRun({ db: client, result: { scanned: 5, missing: 0, embedded: 0, failed: [] }, logger });
+    const report = await recordCoverageRun({ db: client, result: { scanned: 5, stale: 0, refreshed: [], deferred: 0, missing: 0, embedded: 0, failed: [] }, logger });
     expect(report.covered).toBe(5);
     expect(logger.warn).toHaveBeenCalled();
   });

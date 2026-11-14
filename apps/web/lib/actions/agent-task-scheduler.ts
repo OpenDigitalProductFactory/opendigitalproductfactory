@@ -20,6 +20,7 @@ import { runConsolidationParitySteward } from "@/lib/ea/consolidation-parity-ste
 import { computeNextCronRun, isOneShotCron } from "@/lib/operate/cron-next-run";
 import { extractScheduledTaskSummary } from "./agent-task-scheduler-summary";
 import { readWorkroomStageTaskConfig } from "@/lib/scheduling/workroom-stage-task-config";
+import { coworkerSelfTaskMandatedTools } from "@/lib/operate/scheduled-jobs/coworker-self-task-mandate";
 import { formatScheduledTurnPrompt } from "./scheduled-turn-prompt";
 import {
   classifyScheduledRequiredTools, scheduledToolsNeedingPin, scheduledRunLastStatus,
@@ -482,9 +483,8 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
       intentQuery: task.prompt,
     };
     let { tools, toolsForProvider, deferredTools } = await resolveAutonomousWorkTools(toolArgs);
-    const pinned = scheduledToolsNeedingPin({
-      prompt: task.prompt, attached: tools, deferred: deferredTools, taskConfig: task.taskConfig,
-    });
+    const pinned = scheduledToolsNeedingPin({ prompt: task.prompt, attached: tools, deferred: deferredTools,
+      taskConfig: task.taskConfig, cadenceTools: coworkerSelfTaskMandatedTools(task.agentId) });
     if (pinned.length > 0) {
       ({ tools, toolsForProvider, deferredTools } = await resolveAutonomousWorkTools({
         ...toolArgs, requiredToolNames: pinned,

@@ -11,6 +11,8 @@ import type { PublicScope } from "@/lib/auth/oauth-scope-map";
 import type { McpAuthSource } from "@/lib/mcp/tool-tier";
 import { ok, type ActionSuccess } from "@/lib/shared/action-result";
 import type { TaskExecutionFence } from "@/lib/shared/task-execution-fence";
+import type { McpToolSurface } from "@/lib/mcp/session-token";
+import { currentUserContext } from "@/lib/govern/current-user-context";
 
 export type ResolvedMcpTransportAuth = ResolvedMcpToken & {
   threadId?: string | null;
@@ -18,6 +20,7 @@ export type ResolvedMcpTransportAuth = ResolvedMcpToken & {
   /** BI-B949993E: present only on session-JWT tokens minted for a governed TaskRun. */
   taskRunId?: string | null;
   taskExecutionFence?: TaskExecutionFence | null;
+  toolSurface?: McpToolSurface;
   /** BI-05715F4C: the Workroom a room session token is bound to; set only on such a token. */
   workroomRef?: string | null;
   source: McpAuthSource;
@@ -119,6 +122,9 @@ export async function authenticateMcpRequest(request: Request): Promise<McpAuthe
     if (!session) {
       return { ok: false, response: unauthorizedResponse("invalid or expired MCP session", request) };
     }
+    if (session.toolSurface && !await currentUserContext(session.userId).catch(() => null)) {
+      return { ok: false, response: unauthorizedResponse("invalid or expired MCP session", request) };
+    }
     return {
       ...ok(),
       token: {
@@ -132,6 +138,7 @@ export async function authenticateMcpRequest(request: Request): Promise<McpAuthe
         routeContext: session.routeContext ?? null,
         taskRunId: session.taskRunId ?? null,
         taskExecutionFence: session.taskExecutionFence,
+        ...(session.toolSurface ? { toolSurface: session.toolSurface } : {}),
         source: "session-jwt",
       },
       oauthGrantedScopes: [],

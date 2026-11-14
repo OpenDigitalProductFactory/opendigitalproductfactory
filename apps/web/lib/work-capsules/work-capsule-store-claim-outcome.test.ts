@@ -52,3 +52,34 @@ describe("claimBacklogItemWorkspace room objective", () => {
     }));
   });
 });
+
+// BI-30EDDB7F: the item's claim fields belong to the installation that holds
+// the claim. A mirror's claim lives at its home, and a claim held here for a
+// paired installation is its Workroom; neither stamps the item.
+describe("claimBacklogItemWorkspace item claim fields", () => {
+  it("records the claim on the item for an ordinary local claim", async () => {
+    const db = fakeDb({ ...unclaimed, title: "t", outcome: "o" });
+    await claimBacklogItemWorkspace({ db: db as unknown as CapsuleDb, input, actor });
+    expect(db.backlogItem.update).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ claimStatus: "active" }),
+    }));
+  });
+
+  it("creates the local Workroom but leaves a mirror's claim fields untouched when the claim is at its home", async () => {
+    const db = fakeDb({ ...unclaimed, title: "t", outcome: "o" });
+    await claimBacklogItemWorkspace({ db: db as unknown as CapsuleDb, input: { ...input, claimAtHome: true }, actor });
+    expect(db.workroom.create).toHaveBeenCalled();
+    expect(db.backlogItem.update).not.toHaveBeenCalled();
+  });
+
+  it("leaves the item's claim fields to the Workroom when the claim is held for a paired installation", async () => {
+    const db = fakeDb({ ...unclaimed, title: "t", outcome: "o" });
+    await claimBacklogItemWorkspace({
+      db: db as unknown as CapsuleDb,
+      input: { ...input, executorKind: "federated-peer" as const, executorRef: "federation:inst_x:WC-X" },
+      actor,
+    });
+    expect(db.workroom.create).toHaveBeenCalled();
+    expect(db.backlogItem.update).not.toHaveBeenCalled();
+  });
+});

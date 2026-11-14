@@ -132,10 +132,11 @@ export async function inspectOAuthExecutionAuthority(row: OAuthAuthorityRow,
     if (!successor || !isCurrentOAuthAccessToken(successor)) {
       // Accepted work belongs to the consent family, not to the client's next
       // network request. This does NOT make an expired bearer signable.
-      if (!row.oauthFamilyKey || !row.authorityBindingId) return { allowed: false, detail: "continuity-envelope-missing" };
+      if (!row.oauthFamilyKey || !row.authorityBindingId || !row.agentId) return { allowed: false, detail: "continuity-envelope-missing" };
       const refresh = await db.oAuthRefreshToken.findFirst({ where: {
         oauthFamilyKey: row.oauthFamilyKey, userId: row.userId, oauthClientId: row.oauthClientId,
-        authorityBindingId: row.authorityBindingId, agentId: row.agentId, resource: row.resource ?? "",
+        // Refresh.agentId is Agent.id; access.agentId is Agent.agentId.
+        authorityBindingId: row.authorityBindingId, agent: { agentId: row.agentId }, resource: row.resource ?? "",
         scopes: { hasEvery: row.publicScopes }, revokedAt: null, consumedAt: null, rotatedToId: null,
         expiresAt: { gt: new Date() },
       }, select: { id: true } });
@@ -211,6 +212,8 @@ export async function resolveOAuthAccessToken(
       capability: row.scope === "read" ? "read" : "write",
       // Only reachable after resolveOAuthConsent above accepted the binding.
       authorityBindingId: row.authorityBindingId ?? null,
+      // Room subscriptions follow the refresh family, so a rotation keeps them (BI-ED52AB82).
+      oauthFamilyKey: row.oauthFamilyKey ?? null,
     },
     publicScopes,
     clientId: row.oauthClient?.oAuthClientId ?? null,

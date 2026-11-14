@@ -39,6 +39,7 @@ const definitions: ToolDefinition[] = [
       type: "object",
       properties: {
         title: { type: "string", description: "Feature title" },
+        expectedUpdatedAt: { type: "string", description: "Optional exact ISO build version read before diagnosis. Reject the write if that version or the Ideate phase changed; grants no additional authority." },
         description: { type: "string", description: "Plain-language feature description" },
         portfolioContext: { type: "string", description: "Portfolio slug that owns this feature. For internal platform/meta work (a change to Build Studio, the portal, or platform tooling itself) pass an empty string rather than forcing a customer-facing portfolio." },
         targetRoles: { type: "array", items: { type: "string" }, description: "Roles that will use this feature. For internal platform/meta work use internal operator roles (e.g. platform operator, admin) — never customer." },

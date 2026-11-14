@@ -25,15 +25,15 @@ token totals reward consumption, and a median hides the blocked tail. The operat
 to know whether a delivery change produced more verified outcomes with equal or better
 quality, less waiting, less human attention, and complete attribution.
 
-- **OBJ-DOS-001 — coherent outcome unit.** Project one immutable, versioned observation
+- **OBJ-DOS-001:** coherent outcome unit. Project one immutable, versioned observation
   per Workroom and aggregate only explicitly defined cohorts.
-- **OBJ-DOS-002 — truthful flow and quality.** Report stage durations, p50/p90, first-pass
+- **OBJ-DOS-002:** truthful flow and quality. Report stage durations, p50/p90, first-pass
   protected-check state, rework, abandonment, and evidence completeness without turning
   missing facts into zero or success.
-- **OBJ-DOS-003 — truthful economy.** Keep uncached input, cached input, cache creation,
+- **OBJ-DOS-003:** truthful economy. Keep uncached input, cached input, cache creation,
   output, reasoning, API-equivalent cost, and actual invoiced spend distinct. Preserve
   attribution method and completeness. Parent and child views must not double count.
-- **OBJ-DOS-004 — decision-ready UI.** Show the bounded cohort, verified-results signal,
+- **OBJ-DOS-004:** decision-ready UI. Show the bounded cohort, verified-results signal,
   bottleneck, quality, economy, and source health first; disclose record-level evidence
   and technical detail second.
 
@@ -62,7 +62,7 @@ quality, less waiting, less human attention, and complete attribution.
 |---|---|---|
 | Delivery identity | `Workroom` and semantic `capsuleId` | One observation per Workroom; branch is evidence, not identity. |
 | Lifecycle facts | `WorkroomActivity`, Workroom status/timestamps | Event names are mapped explicitly; absent milestones stay unavailable. |
-| Verified result | `RuntimeVerification` | Only a passed terminal verification marks verified. |
+| Verified result | `RuntimeVerification` | Only terminal final acceptance with a retained server-owned source/deployment binding marks verified. A target's current SHA cannot qualify an older check. |
 | Queue/capacity | `QueueTelemetryEvent`, `QueueMetricSnapshot` | Preserve lane/source; do not infer an install from a branch. |
 | PR/check/review | contributor GitHub snapshots plus recorded activities/evidence | Snapshot freshness is visible; stale or missing GitHub data is not success. |
 | Model/tool economy | `AdapterRunTelemetry`, `ToolExecution`, `TaskRun` hierarchy | Incremental rows only; inclusive totals are derived from unique descendant runs. |
@@ -108,7 +108,7 @@ The outcome view uses one report-kit composition:
 3. stage and economy tables with `Unavailable` labels instead of zeroes;
 4. a bounded Workroom table linking every aggregate to `/build/work/<capsuleId>`.
 
-The view is server-rendered, keyboard navigable, narrow-safe, theme-token-only, and
+The view is server-rendered, keyboard navigable, desktop-web focused, theme-token-only, and
 reduced-motion neutral. It adds no polling. Refresh follows normal navigation; later
 Workroom-rail/task-hub slices may supply event-driven invalidation without changing the
 projection contract.
@@ -122,7 +122,7 @@ projection contract.
 | AC-DOS-003 | OBJ-DOS-002 | Verified, abandoned, superseded, first-pass, rework, regression, and evidence-completeness measures link to their underlying Workrooms. |
 | AC-DOS-004 | OBJ-DOS-003 | Token classes and spend concepts remain separate; exclusive/inclusive child attribution deduplicates run identity and exposes completeness. |
 | AC-DOS-005 | OBJ-DOS-001 | The DB adapter reads a 30-day, row-bounded cohort using existing indexed identities and returns per-source state without a GitHub/network fan-out. |
-| AC-DOS-006 | OBJ-DOS-004 | `/build/work?view=outcomes` renders ready, empty, partial/stale, and failed-source states with report-kit and semantic tables on desktop and narrow layouts. |
+| AC-DOS-006 | OBJ-DOS-004 | `/build/work?view=outcomes` renders ready, empty, partial/stale, and failed-source states with report-kit and semantic tables on desktop web. |
 | AC-DOS-007 | OBJ-DOS-004 | The default `/build/work` frozen route budget, keyboard semantics, contrast, light/dark tokens, and UX sweep pass. |
 | AC-DOS-008 | OBJ-DOS-001 | No schema migration, second event stream, global navigation entry, or client-owned scorecard state is introduced. |
 
@@ -149,3 +149,90 @@ report-kit remain unchanged.
 No causal model, employee leaderboard, private reasoning capture, billing system,
 campaign scheduler, new PR store, or real-time subscription is part of this BI.
 
+## Source contract reconciliation — 2026-10-29
+
+The existing medium delivery was admitted for implementation by
+`IRD-B1C2308E56A7` in `WC-FB38E81D` after the controlled owner transfer.
+Earlier blocked reviews in other Workrooms remain unresolved history; this
+admission does not settle or replay them.
+
+The fixed cohort contains visible Workrooms **created** in the last 30 days.
+Creation fixes membership; it is not a claim event. Claim durations start at
+`WorkItem.claimedAt` when recorded. Every source is queried only after the
+actual user's exact-room admission, with a 100-room and 1,000-row per-source
+ceiling. Explicit task ancestry has an eight-level ceiling. Reaching a ceiling
+or losing a source marks coverage incomplete rather than inventing totals.
+
+The projector reuses queue reconstruction, `computeFlowDurations`, and the
+nearest-rank percentile helper. Canonical wait already includes holds; it is
+not increased by adding held time again. Process describes execution state,
+not human touch time or value added.
+
+Current source limitations remain visible and do not become zero:
+
+- The PR snapshot stores an authenticated merge observation but no first-commit,
+  PR-open, review-ready or protected-check history. Those milestones and
+  first-pass quality stay unavailable. A snapshot's observation time is not an
+  event time.
+- Final acceptance currently qualifies through the existing reserved
+  `smallRuntimeAcceptance` binding parser. Other or legacy final checks without
+  an immutable source and deployment binding remain unqualified. A completed
+  room, generic passed test, preview or currently matching target is insufficient.
+- Retained Claude adapter rows distinguish uncached input from cache reads and
+  writes. Other ambiguous input semantics remain unavailable. Run identity is
+  deduplicated before direct/descendant totals; estimates, subscriptions and
+  invoices are separate concepts. No subscription allocation or invoice source
+  is synthesized.
+- Reopen/regression, post-open rework, blocking findings per kLOC, non-progress
+  classification, interventions, lease utilization, package breadth and risk
+  metadata lack a qualified source in this adapter. They remain unavailable.
+  The existing acceptance criteria are retained; these gaps must be assessed
+  explicitly during independent acceptance rather than described as measured.
+
+The view provides a bounded text filter by campaign, model, installation, work
+kind, repository or effort. Coverage and cohort definitions accompany the
+numbers. An investment comparison requires the same cohort definition, source
+coverage and observation horizon; this read model makes no benefit or causal
+claim from a correlation.
+
+
+## Attribution correction — 2026-10-31
+
+Current executor/chat identity does not establish exclusive historical run ownership.
+Usage qualifies through recorded direct build identities or descendant build identities
+reached from the Workroom's explicit TaskRun root. Buildless thread-only rows remain
+unattributed; no cost split or cohort-local uniqueness is inferred. Tool counts require
+explicit task ancestry. Potential attribution gaps, failed/truncated run sources, and
+failed/truncated descendant history withhold affected totals and mark coverage partial.
+Qualified run identities remain inspectable; unavailable totals do not become zero.
+The original acceptance criteria and pending architecture choice remain unchanged.
+
+## Phase-report convergence — 2026-10-31
+
+The bounded refactoring lane replaces the existing bespoke BuildPhaseCostCard
+with report-kit DataTable inside its sole BuildProgressOperationalPanel consumer.
+The old component is deleted; no feature is relocated to evade the budget.
+Preserve empty hiding, canonical phase order with unknown-phase fallback, active
+indication, seconds precision, input/output/call figures, and the conditional
+total row. Missing estimates stay unavailable; estimates remain separate from
+subscription fees and invoices. The existing message provider carries the viewer's
+optional numeric-format locale; /build supplies the workrooms namespace and the
+resolved locale. Shared formatDuration gains an opt-in seconds mode while its
+default behavior is unchanged. No BuildStudio prop forwarding is needed.
+
+Claimed source includes the old card, operational panel and its test, /build
+page, existing locale context/provider, and shared datetime helper/test. Behavior
+regressions first failed for the named table and seconds mode. Source measurement
+under the unchanged cap is 70 components and 16,294 lines, down from 16,296.
+Retightening may only lower that budget and must preserve owner and expiry.
+This measured convergence needs no budget increase; the previous exception
+question is not an approval. Independent review, served desktop/narrow behavior,
+UX capture and the protected build/release gates still apply to the final delta.
+
+## Desktop-web acceptance scope amendment — 2026-11-02
+
+The owner clarified that the separate native iOS app supplies the mobile experience, and this execution campaign should prioritize desktop web. This amendment proposes replacing the narrow-browser campaign target in AC-DOS-006 with desktop-web acceptance. The remaining data, source attribution, coverage, reporting and accessibility obligations are unchanged. Credit against the revised criterion requires supported baseline reconciliation; this source proposal is not independent approval or acceptance.
+
+> Prior AC-DOS-006: `/build/work?view=outcomes` renders ready, empty, partial/stale, and failed-source states with report-kit and semantic tables on desktop and narrow layouts.
+
+The revised criterion keeps the same route, states, report-kit and semantic-table contract on desktop web. Desktop light/dark, keyboard, contrast, axe, existing zoom/accessibility obligations and frozen route-budget checks remain owed. Native iOS is separate scope and is untested by this web change; no native feature acceptance is introduced or inferred. Existing responsive behavior and protected repository guards remain enabled. Historical C108 narrow observations and earlier dated wording are retained, without commissioning additional narrow-browser testing. All other acceptance IDs and the seven medium-item body criteria remain unchanged.

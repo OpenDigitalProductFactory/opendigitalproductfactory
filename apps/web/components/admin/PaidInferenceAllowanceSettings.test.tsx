@@ -46,6 +46,17 @@ describe("PaidInferenceAllowanceSettings", () => {
     expect(mockSave).toHaveBeenCalledWith({ dailyUsd: 25, reason: "Sized to review volume" });
   });
 
+  it("announces the saved confirmation to screen readers through a region present before saving", async () => {
+    render(<PaidInferenceAllowanceSettings dailyUsd={null} spentTodayUsd={0} setAt={null} setByEmail={null} reason={null} />);
+    const status = screen.getByRole("status");
+    expect(status.textContent).toBe("");
+    fireEvent.change(screen.getByLabelText(/Dollars per day/), { target: { value: "25" } });
+    fireEvent.change(screen.getByLabelText(/Reason/), { target: { value: "Sized to review volume" } });
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Save allowance" })); });
+    expect(screen.getByRole("status")).toBe(status);
+    expect(status.textContent).not.toBe("");
+  });
+
   it("follows the saved amount after the page revalidates", () => {
     const view = render(<PaidInferenceAllowanceSettings dailyUsd={null} spentTodayUsd={0} setAt={null} setByEmail={null} reason={null} />);
     expect((screen.getByLabelText(/Dollars per day/) as HTMLInputElement).value).toBe("");

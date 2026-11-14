@@ -18,7 +18,7 @@ import {
   type AutonomousRecoveryStateV1,
 } from "./autonomous-recovery-policy";
 import type { BuildPrDeliveryStatus } from "./build-pr-delivery-state";
-import type { GithubCheckObservation, GithubPrReadiness } from "./github-pr-readiness";
+import { checkBlocksMerge, type GithubCheckObservation, type GithubPrReadiness } from "./github-pr-readiness";
 
 /** Infrastructure failures get one re-run per head; never the repair budget (§3.4). */
 export const INFRA_RERUN_BOUND = 1;
@@ -184,7 +184,8 @@ export function decidePrFollowThrough(input: {
     };
   }
 
-  const failing = classifyFailingChecks(input.checks);
+  // Only required checks hold the PR, so only they are repaired or re-run (BI-D081EDD0).
+  const failing = classifyFailingChecks(input.checks.filter(checkBlocksMerge));
   if (prior.judgedHeadSha === headSha) {
     return { kind: "hold", headSha, followThrough: { ...prior, failing } };
   }

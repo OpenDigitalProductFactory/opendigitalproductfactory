@@ -31,12 +31,18 @@ An archetype primes defaults. An imported document supplies evidence. Neither au
 | Published organization guidance | `apps/web/lib/decision-perspective/org-business-gate.ts` | Reuse published organization corpora and their version hash. Verify that imported candidate additions cannot become confirmed guidance by appending directly to a published page |
 | Profession and jurisdiction context | `apps/web/lib/decision-perspective/profession-corpus.ts`, `install-variant-context.ts` | Reuse the existing dimension-aware applicability logic. Undeclared jurisdiction dimensions are missing information, not evidence that no obligation applies |
 | Incumbent assessment | `apps/web/lib/incumbent/coverage-ai.ts`; canonical incumbent coverage portfolio source | The proposal seam currently receives incumbent name/vendor and emits fixed-confidence proposals. Extend it with the business job and observed evidence, while preserving human-confirmed assessments |
-| Workroom execution | `apps/web/lib/work-management/work-shapes.ts`, `delivery-shapes.ts`, source registry and drive modules | Reuse definition versions, stages, accountable principals, evidence kinds, stops, budgets and canonical cases; do not add a separate REA lifecycle |
+| Workroom execution | `apps/web/lib/work-management/work-shapes.ts`, `delivery-shapes.ts`, source registry and drive modules | Reuse definition versions, stages, accountable principals, evidence kinds, stops, budgets and canonical cases; preserve the observable registry order when appending a shape; do not add a separate REA lifecycle |
 | Workroom measures | `workroom-flow-state.ts`, `workroom-stage-telemetry.ts`, `workroom-flow-map.ts` | Reuse stage queues and drive-derived flow states. A terminal refusal ends flow time but is not successful throughput; standing-room time between triggers is excluded |
 | Continuous improvement | `ImprovementSignal` and `ImprovementProposal` in split Prisma schema; cross-Workroom review design | Findings, reviewed proposals and delivery backlog have existing owners; do not introduce another findings queue |
 | Integration authority and observations | Existing MCP discovery/quarantine, governed execution, RawSource and evidence contracts | REA observations enter these contracts. A discovered tool, provider annotation or REA session never confers DPF authority |
 
 Source comments describe typed shape gates and bindings as additive declarations, while stage tool declarations affect attachment and remain filtered by grants. Therefore, the presence of a gate or binding in a shape is not sufficient evidence that the matching runtime path enforces it. Verify each proposed path against its actual execution boundary.
+
+The same boundary applies to standing stewardship. A recurring shape may read the complete
+population, classify drift and record proposals, but it must not acquire a domain writer merely
+because the review is deterministic. The accountable owner makes the governed decision, and an
+accepted correction crosses the existing action lane. This keeps cadence authority, business
+judgment and mutation authority independently reviewable while reusing one Workroom history.
 
 Relevant design history:
 
@@ -96,6 +102,11 @@ For each slice, the implementation plan must name the current Workroom `changeIm
 ## UI refinement
 
 Reuse the four disclosures in the flow-map design: workspace glance, area/portfolio summary, shape map and room evidence. Keep job, purpose, accountable person, current stage, blocker and next action visible in the existing room; show provider/artifact/tool detail when it helps explain a decision.
+
+When a coworker's current task has a canonical Workroom, the workforce glance links the task name
+to that room rather than creating a second dashboard, card or status store. Unbound work remains
+plain text. The room is the human-readable audit trail for coverage, proposals, owner decisions,
+peer routing and the governed action that follows.
 
 For onboarding and incorporation, expose plain states such as “received,” “being incorporated,” “needs your decision,” and “usable for this work.” Do not collapse setup completion, asynchronous invocation, accepted guidance and qualified execution into one green “ready” badge. Map display states to canonical records and durable completion evidence; do not create a UI-owned readiness database.
 

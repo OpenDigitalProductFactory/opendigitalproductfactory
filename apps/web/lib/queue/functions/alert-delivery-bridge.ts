@@ -224,15 +224,19 @@ export async function runAlertDeliveryScan(): Promise<AlertDeliveryResult> {
 export const alertDeliveryBridge = jobs.createFunction(
   { id: "ops/alert-delivery-bridge", retries: 2, triggers: [cron("*/5 * * * *")] },
   async ({ step }) => {
+    // BI-3E2F87FA: the heartbeat runs BEFORE the quiescence gate, so an upgrade
+    // drain or this job's kill switch never reads as downtime. A cycle that
+    // follows a gap records the window and tells the operator.
+    const continuity = await step.run("watch-platform-continuity", async () => runPlatformContinuityWatchCycle());
     const gate = await gateAtEntry(step, "ops/alert-delivery-bridge");
-    if (!gate.proceed) return { skipped: true, reason: gate.reason };
+    if (!gate.proceed) return { skipped: true, reason: gate.reason, continuity };
 
     const delivery = await step.run("deliver-alerts", async () => runAlertDeliveryScan());
     // BI-24092DC9: its own step, so it runs even when both alert evaluators are
     // unreachable (the delivery scan returns early then) and a failure in one
     // does not hide the other.
     const aiCapacity = await step.run("watch-ai-capacity", async () => runAiCapacityWatchCycle());
-    return { ...delivery, aiCapacity };
+    return { ...delivery, aiCapacity, continuity };
   },
 );
 
@@ -264,6 +268,21 @@ export async function runAiCapacityWatchCycle() {
       // No resolvable owner: notification is best-effort; the row still projects.
       if (!recipient) return;
       await notifyAttentionLive({ source: "platform-health", userId: recipient, ...item });
+    },
+  });
+}
+
+/** One platform-continuity cycle over the live db (BI-3E2F87FA), pushing a recorded gap to the operator's bell. */
+export async function runPlatformContinuityWatchCycle() {
+  const { prisma } = await import("@dpf/db");
+  const { runPlatformContinuityWatch } = await import("@/lib/observability/platform-continuity-watch");
+  const { notifyAttentionLive, resolveOperatorRecipient } = await import("@/lib/attention/notify-live");
+  return runPlatformContinuityWatch(prisma as never, {
+    notify: async (notice) => {
+      const recipient = await resolveOperatorRecipient();
+      // No resolvable owner: notification is best-effort; the row still projects.
+      if (!recipient) return;
+      await notifyAttentionLive({ source: "platform-health", userId: recipient, ...notice });
     },
   });
 }

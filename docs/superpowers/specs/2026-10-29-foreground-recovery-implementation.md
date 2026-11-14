@@ -4,6 +4,76 @@ status: active
 
 # Retained foreground coworker requests
 
+## Accepted-response evidence correction — 13 November 2026
+
+The owned Finance attempt `TR-CHAT-e0a0901901bab3aab6d5e867896d785c`
+published a blocked SYSTEM notice and no assistant response. Its separate
+`ta_53e9bba5-2a04-44f6-aeac-68af74866764` artifact nevertheless recorded
+`deliveryState: responded`. Text length had been the artifact's only success
+guard. That could also emit misleading Workroom and backlog response evidence.
+This is distinct from provider settlement, acceptance-sweep closure and the
+separate Finance authorized-guidance repair; none is resolved by this change.
+
+Keep the existing message publication and retained-task recovery boundaries.
+The planned correction is to bind response evidence to the actual accepted
+message and publication disposition, reject blocked/capacity/system results
+before all three evidence writes, and preserve genuine assistant responses.
+Do not resend either original Finance question or rewrite its historical rows.
+
+Normal current implementation admission and exact-path overlap claims succeeded.
+The initial regressions failed6/passed13: blocked/capacity/system text still
+created success artifacts, accepted-message linkage was absent, and the actual
+blocked foreground call chain emitted response evidence. The correction now
+requires a responded disposition plus an accepted assistant message from the
+expected agent. Artifact, Workroom and backlog evidence carry its message ID;
+response content comes from that accepted message, not a separate draft.
+
+The expanded five-suite run passes47 tests. It also exposed an old positive
+fixture that always mocked an assistant row while the actual anchored turn was
+blocked. That fixture now preserves the requested persisted role/content and
+asserts no successful response evidence. The existing genuine conversational
+foreground case separately verifies responded evidence linked to its accepted
+message. Direct controls retain genuine artifact, Workroom and backlog writes.
+The bounded independent CLIENT source review found no blocker in the correction;
+it is not native review or served acceptance. Both TypeScript programs passed
+after regenerating the stale generated client from the current schema.
+
+Canonical exact-tree verification, native review, protected publication,
+deployment and a new permitted served acceptance remain pending. This source
+correction does not prove an assistant answer useful or a delegated task done.
+
+## Served safety-limit failure correction — 11 November 2026
+
+Native task TR-CHAT-1a0d271ca9c95d28c42adf96a466a114 on served3aa5 retained
+its identity and prompt through reload, but completed with zero tool executions,
+no requested checkpoint and a local fallback's safety-limit message. The caveat
+asked the owner to send the message again. Canonical failed acceptance evidence
+is cmwc59o7z01xi0emf93ymlu2a; a completed turn was not a completed delegation.
+
+Keep the existing privacy screen, provider/capability policy, deadline, attempt
+limits and publication fence. This correction adds no provider, grant, retry
+engine or schema. Ordered work under the existing BI-D0D2FF0D medium fix:
+
+1. First fail regressions for synthetic safety exhaustion being returned without
+   a failure, and the caveat's futile resend instruction. Preserve a real earlier
+   draft and ordinary conversational responses as non-failures.
+2. Mark only synthetic safety-limit output as an existing unknown dead-end,
+   so the existing foreground system-failure/publication path retains blocked
+   work instead of recording a successful response. Partial effects still need
+   reconciliation; do not create automatic retry authority. Remove the caveat's
+   resend instruction without claiming recovery or live evidence.
+3. Run affected loop, evidence, proposal, local continuation, foreground and
+   caveat controls; both package typechecks; current guards and the canonical
+   exact-tree gate. Independent review and served acceptance remain required.
+   Verify an actual requested stored artifact separately. Until then, useful
+   delegation and the full permitted real-email chain remain unproven.
+
+Observed routing receipt screen_14555bbb68060e50 required local-only handling;
+the selected local model is recorded tool-capable, while no tools executed.
+That does not establish the attached tool count or why it failed. Do not clear
+history or reroute confidential data to avoid the failure. Roll back this source
+delta if valid answer preservation or approval/uncertainty fences regress.
+
 ## Verified progress wording and measured disclosure
 
 A governed preview of source7aa retained one fresh read-only Finance Spend

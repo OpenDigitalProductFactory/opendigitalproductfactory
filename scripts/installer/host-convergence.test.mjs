@@ -283,7 +283,7 @@ test("promote.sh runs the bridge from the install root after the release commit;
   assert.ok(start.indexOf("healthy=1") < start.indexOf("dpf_host_converge"), "convergence runs only after the portal is healthy");
   assert.doesNotMatch(start + autostart, /\breboot\b|shutdown -r|systemctl (reboot|poweroff)/, "never reboots the host");
   const dockerfile = await readFile(join(root, "Dockerfile"), "utf8");
-  assert.match(dockerfile, /cp scripts\/installer\/dpf-start\.consumer\.sh scripts\/installer\/native-edge-host\.sh scripts\/installer\/autostart-bridge\.mjs \/dpf-release-assets\/scripts\/installer\//);
+  assert.match(dockerfile, /cp scripts\/installer\/dpf-start\.consumer\.sh scripts\/installer\/native-edge-host\.sh scripts\/installer\/autostart-bridge\.mjs scripts\/installer\/host-posture\.mjs \/dpf-release-assets\/scripts\/installer\//, "the start script and the host-posture reader it runs ship together (BI-3E2F87FA)");
   assert.match(dockerfile, /scripts\/installer\/lib\/host-convergence\.sh \/dpf-release-assets\/scripts\/installer\/lib\//);
   const resolver = await readFile(join(root, "scripts", "lib", "resolve-capability-compose-profiles.mjs"), "utf8");
   assert.doesNotMatch(resolver, /autostart-bridge/, "the resolver carries no side effect");

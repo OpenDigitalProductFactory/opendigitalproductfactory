@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { mkdtempSync, writeFileSync, rmSync, mkdirSync, readFileSync, existsSync } from "node:fs";
+import { mkdtempSync, writeFileSync, rmSync, mkdirSync, readFileSync, existsSync, realpathSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -310,6 +310,21 @@ test("an unmapped change cannot silently run zero affected checks", () => {
   assert.throws(() => buildCorrectionCommands({ affectedTests: [], fileDispositions: [{ path: "scripts/unknown.mjs", kind: "other", tests: [] }], affectedPackages: [], scope: {} }), /mapping unresolved/);
 });
 
+test("storefront template corrections use the package's existing verification runners", () => {
+  const testPath = "packages/storefront-templates/src/standing-roster.test.ts";
+  const commands = buildCorrectionCommands({
+    affectedTests: [testPath],
+    fileDispositions: [{ path: testPath, kind: "test", tests: [] }],
+    affectedPackages: ["@dpf/storefront-templates"],
+    scope: {},
+  }, { packageScripts: { "@dpf/storefront-templates": { typecheck: "tsc --noEmit" } } });
+
+  assert.deepEqual(commands, [
+    { command: "pnpm", args: ["--filter", "@dpf/storefront-templates", "exec", "vitest", "run", "src/standing-roster.test.ts", "--maxWorkers=1", "--reporter=json"] },
+    { command: "pnpm", args: ["--filter", "@dpf/storefront-templates", "run", "typecheck"] },
+  ]);
+});
+
 test("an explicitly mapped Dockerfile runs its affected test while an unmapped Dockerfile is refused", () => {
   const source = "services/edge-node/Dockerfile";
   const target = "scripts/check-docker-workspace-context.test.mjs";
@@ -481,7 +496,7 @@ test("report reading opens before classification and rejects pathname replacemen
 
 test("real Vitest file output qualifies despite launcher noise and an old project report", { timeout: 60_000 }, () => {
   const cwd = process.cwd();
-  const fixture = mkdtempSync(join(tmpdir(), "correction-vitest fixture-"));
+  const fixture = realpathSync(mkdtempSync(join(tmpdir(), "correction-vitest fixture-")));
   try {
     const config = join(fixture, "vitest.config.mjs");
     const file = join(fixture, "report.test.mjs");

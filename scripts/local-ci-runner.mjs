@@ -281,10 +281,18 @@ export function slotPostgresReuseCommands(container) {
  * The container and database identities are derived from the slot manifest; the
  * strict shape check keeps this recovery path away from developer/production DBs.
  */
+/** A reset step lost a race with another reset of the same slot. */
+const SLOT_RESET_RACE = /already exists|duplicate key value|is being accessed by other users/i;
+
+/** The slot database could not be prepared: a prerequisite, never a verdict. */
+export class SlotDatabaseResetError extends Error {}
+
 export function resetOwnedSlotDatabase({
   container,
   database,
   run = spawnSync,
+  attempts = 3,
+  pause = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms),
 }) {
   if (!/^dpf-local-ci-postgres-\d+$/.test(container) || !/^dpf_local_ci_\d+$/.test(database)) {
     throw new Error(`refusing non-slot Postgres reset: ${container}/${database}`);
@@ -293,12 +301,25 @@ export function resetOwnedSlotDatabase({
     ["exec", container, "dropdb", "--if-exists", "--force", "-U", "dpf", database],
     ["exec", container, "createdb", "-U", "dpf", "-O", "dpf", database],
   ];
-  for (const args of commands) {
-    const result = run("docker", args, { encoding: "utf8" });
-    if (result.status !== 0) {
-      const detail = (result.stderr || result.stdout || "unknown Docker error").trim();
-      throw new Error(`could not reset disposable slot database ${database}: ${detail}`);
+  // BI-AE87D2BE: drop-then-create is not atomic. Two resets of one slot
+  // interleave into "duplicate key value violates unique constraint
+  // pg_database_datname_index", which failed gates before any test ran. A race
+  // is retried from the drop; any other error, or a race that persists, fails.
+  for (let attempt = 1; ; attempt += 1) {
+    let raced = false;
+    for (const args of commands) {
+      const result = run("docker", args, { encoding: "utf8" });
+      if (result.status !== 0) {
+        const detail = (result.stderr || result.stdout || "unknown Docker error").trim();
+        if (!SLOT_RESET_RACE.test(detail) || attempt >= attempts) {
+          throw new SlotDatabaseResetError(`could not reset disposable slot database ${database}: ${detail}`);
+        }
+        raced = true;
+        break;
+      }
     }
+    if (!raced) return;
+    pause(250 * attempt);
   }
 }
 
@@ -664,7 +685,14 @@ async function main() {
     `local-ci-runner: pnpm ${pnpmToolchain.expectedVersion} ` +
     `(${pnpmToolchain.mode}${pnpmToolchain.mode === "pinned-shim" ? `; host was ${pnpmToolchain.actualVersion}` : ""})\n`,
   );
-  const testDatabaseUrl = await resolveDatabaseUrl(env, manifest);
+  let testDatabaseUrl;
+  try {
+    testDatabaseUrl = await resolveDatabaseUrl(env, manifest);
+  } catch (error) {
+    // Nothing was graded; record a prerequisite, not a failed verdict (BI-AE87D2BE).
+    if (!(error instanceof SlotDatabaseResetError)) throw error;
+    dieUnavailable(error.message);
+  }
   const invocation = createLocalIntegrationChildInvocation({
     repoTop,
     candidate,

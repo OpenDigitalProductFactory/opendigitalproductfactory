@@ -51,6 +51,20 @@ export function intentStyle(intent: Intent): IntentStyle {
  * (e.g. complaints) so each gets its own namespace.
  */
 export const STATUS_INTENT: Record<string, Record<string, Intent>> = {
+  // A standing room's day in the Work Atlas rhythm strip (BI-D8A6F0F2). Missed
+  // is also drawn as an outlined cross, so it differs from late without colour.
+  // Work Atlas health (BI-3791FDD8). Grey is the baseline: only the states an
+  // operator should look at carry a colour, and each also has its own shape.
+  atlasHealth: {
+    "needs-person": "warning", stuck: "danger", "no-signal": "neutral",
+    working: "neutral", waiting: "neutral", finished: "neutral",
+  },
+  standingRhythm: {
+    "on-time": "success", late: "warning", missed: "danger", running: "accent", due: "neutral", "no-record": "neutral",
+  },
+  // A host-posture check on the installation page (BI-3E2F87FA). Unknown stays
+  // neutral: the computer could not be read, so nothing was established.
+  hostPosture: { ok: "success", attention: "warning", unknown: "neutral" },
   providerAccountReadiness: {
     "verified-success": "success", enabled: "success", "temporary-wait": "warning", paused: "warning",
     "action-required": "danger", unverified: "neutral",

@@ -1625,6 +1625,7 @@
         "heartbeat_capsule",
         "heartbeat_runtime_target",
         "heartbeat_workroom",
+        "queue_workroom_pull_request",
         "rebind_workroom_shape",
         "record_capsule_evidence",
         "record_runtime_verification",

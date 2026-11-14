@@ -1,0 +1,20 @@
+{
+  "version": "1",
+  "decidedOption": "canonical-coworker-home-with-contextual-operations",
+  "decisionInteractionId": "DI-01D9535C3E84",
+  "scope": {
+    "files": [
+      "apps/web/app/(shell)/workforce/page.tsx",
+      "apps/web/components/platform/WorkforceNowShell.tsx",
+      "apps/web/components/platform/OperationsMapLiveShell.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "canonical-coworker-home-with-contextual-operations",
+      "separate-coworker-and-workforce-homes",
+      "operations-map-as-primary-activity-home"
+    ]
+  }
+}

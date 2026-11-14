@@ -2,6 +2,10 @@ import { describe, expect, it, vi } from "vitest";
 import {
   refreshReviewBuildAfterGauntletNotRun,
   REVIEW_SOURCE_REFRESH_RETRY_MS,
+  REVIEW_SOURCE_REFRESH_MAX_PER_DAY,
+  REVIEW_SOURCE_REFRESH_EXHAUSTED_PREFIX,
+  REVIEW_SOURCE_REFRESH_TOOL,
+  refreshAttemptWhere,
   type ReviewSourceRefreshDeps,
 } from "./review-source-refresh";
 
@@ -14,9 +18,12 @@ function deps(overrides: Partial<ReviewSourceRefreshDeps> = {}) {
   const base: ReviewSourceRefreshDeps = {
     loadPhase: vi.fn(async () => "review"),
     lastAttemptAt: vi.fn(async () => null),
+    attemptsSince: vi.fn(async () => 0),
+    exhaustedNoticeSince: vi.fn(async () => false),
     refresh: vi.fn(async () => ({ status: "refreshed" as const, headSha: "a".repeat(40), clientSha: "b".repeat(40) })),
     queueReview: vi.fn(async () => {}),
     record: vi.fn(async () => {}),
+    routeConflictToRepair: vi.fn(async () => "repair-queued" as const),
     now: () => NOW,
   };
   return { ...base, ...overrides };
@@ -45,11 +52,66 @@ describe("refreshReviewBuildAfterGauntletNotRun", () => {
     expect(d.record).not.toHaveBeenCalled();
   });
 
-  it("never resolves a conflict: it records the files and leaves review to its normal sweep", async () => {
-    const d = deps({ refresh: vi.fn(async () => ({ status: "conflict" as const, files: ["apps/web/x.ts"] })) });
-    await expect(refreshReviewBuildAfterGauntletNotRun("FB-1", REASON, d)).resolves.toBe("conflict");
+  // BI-E3C5C7E4: 33 builds re-ran the crashing gauntlet hourly for a week.
+  it("stops re-queuing review once a day's refresh budget is spent, and says why", async () => {
+    const d = deps({ attemptsSince: vi.fn(async () => REVIEW_SOURCE_REFRESH_MAX_PER_DAY) });
+    await expect(refreshReviewBuildAfterGauntletNotRun("FB-202D4508", REASON, d)).resolves.toBe("refresh-exhausted");
+    expect(d.refresh).not.toHaveBeenCalled();
     expect(d.queueReview).not.toHaveBeenCalled();
-    expect(vi.mocked(d.record).mock.calls[0]?.[1]).toMatch(/conflicts in apps\/web\/x\.ts/);
+    expect(vi.mocked(d.record).mock.calls[0]?.[1]).toMatch(/Review is not re-queued until a refresh is 24 hours old/);
+  });
+
+  // BI-A9E32D80: live on 2026-11-14, FB-2F8572A3 was 92 commits behind main and
+  // had not been refreshed for 34 hours. The budget-spent notice is written
+  // under the refresh tool, and counting it kept the 24-hour count at the bound.
+  it("does not count its own budget-spent notice as a refresh, so the budget frees up a day after the last real one", () => {
+    const since = new Date(NOW.getTime() - 24 * 60 * 60 * 1000);
+    expect(refreshAttemptWhere("FB-2F8572A3", since)).toEqual({
+      buildId: "FB-2F8572A3",
+      tool: REVIEW_SOURCE_REFRESH_TOOL,
+      NOT: { summary: { startsWith: REVIEW_SOURCE_REFRESH_EXHAUSTED_PREFIX } },
+      createdAt: { gte: since },
+    });
+    expect(refreshAttemptWhere("FB-2F8572A3")).not.toHaveProperty("createdAt");
+  });
+
+  it("writes the budget-spent notice with the prefix the count excludes, and only once a day", async () => {
+    const first = deps({ attemptsSince: vi.fn(async () => REVIEW_SOURCE_REFRESH_MAX_PER_DAY) });
+    await refreshReviewBuildAfterGauntletNotRun("FB-2F8572A3", REASON, first);
+    expect(vi.mocked(first.record).mock.calls[0]?.[1]?.startsWith(REVIEW_SOURCE_REFRESH_EXHAUSTED_PREFIX)).toBe(true);
+
+    const again = deps({
+      attemptsSince: vi.fn(async () => REVIEW_SOURCE_REFRESH_MAX_PER_DAY),
+      exhaustedNoticeSince: vi.fn(async () => true),
+    });
+    await expect(refreshReviewBuildAfterGauntletNotRun("FB-2F8572A3", REASON, again)).resolves.toBe("refresh-exhausted");
+    expect(again.record).not.toHaveBeenCalled();
+  });
+
+  // BI-2CCD5C0E: live on 2026-11-11, ten review builds re-crashed the gauntlet
+  // every few minutes because their refresh conflicted and they "stayed in
+  // review" with the old base's guard scripts forever.
+  it("hands a conflicted refresh back to the coding agent with the files named, instead of leaving it in review", async () => {
+    const file = "apps/web/lib/coworker-self-assessment/assessment-service.ts";
+    const d = deps({ refresh: vi.fn(async () => ({ status: "conflict" as const, files: [file], ontoRef: "client/abc" })) });
+    await expect(refreshReviewBuildAfterGauntletNotRun("FB-F11D52E8", REASON, d)).resolves.toBe("conflict-repair-queued");
+    expect(d.queueReview).not.toHaveBeenCalled();
+    expect(d.routeConflictToRepair).toHaveBeenCalledWith("FB-F11D52E8", expect.objectContaining({
+      source: "conflict",
+      ontoRef: "client/abc",
+      findings: [expect.objectContaining({ description: expect.stringContaining(file) })],
+    }));
+    const summary = vi.mocked(d.record).mock.calls[0]?.[1] ?? "";
+    expect(summary).toMatch(/conflicts in apps\/web\/lib\/coworker-self-assessment/);
+    expect(summary).not.toMatch(/stays in review/);
+  });
+
+  it("names the escalation when the conflict hand-backs are spent, so the loop ends with an owner decision", async () => {
+    const d = deps({
+      refresh: vi.fn(async () => ({ status: "conflict" as const, files: ["a.ts"] })),
+      routeConflictToRepair: vi.fn(async () => "escalated" as const),
+    });
+    await expect(refreshReviewBuildAfterGauntletNotRun("FB-1", REASON, d)).resolves.toBe("conflict-escalated");
   });
 
   it("records a refresh that could not run, and a throw, without re-queuing", async () => {

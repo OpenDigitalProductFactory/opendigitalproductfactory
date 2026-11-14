@@ -65,11 +65,40 @@ describe("runVerificationRepairLoop", () => {
   const failing: RepairVerdict = { typecheckPassed: false, testsFailed: 0, failureAxis: "typecheck-failure", output: "apps/web/lib/foo.ts: error TS2322" };
   const clean: RepairVerdict = { typecheckPassed: true, testsFailed: 0, failureAxis: null, output: "ok" };
 
+  it("durably invalidates before every dispatch, including a later partial mutation that throws", async () => {
+    const events: string[] = [];
+    let saved = { typecheckPassed: true as boolean | null };
+    const invalidateVerification = vi.fn(async (attempt: number) => {
+      events.push(`save-${attempt}`);
+      saved = { typecheckPassed: null };
+    });
+    const dispatchRepair = vi.fn(async ({ attempt }: { attempt: number }) => {
+      events.push(`mutate-${attempt}`);
+      expect(saved.typecheckPassed).toBeNull();
+      if (attempt === 2) throw new Error("partial source mutation, provider interrupted");
+      return true;
+    });
+    await expect(runVerificationRepairLoop({ initial: failing, changedFiles: ["apps/web/lib/foo.ts"], maxRounds: 2,
+      invalidateVerification, dispatchRepair, reverify: async () => ({ ...clean, testsFailed: 1 }),
+    })).rejects.toThrow("partial source mutation");
+    expect(events).toEqual(["save-1", "mutate-1", "save-2", "mutate-2"]);
+    expect(saved.typecheckPassed).toBeNull();
+  });
+
+  it("never dispatches when durable invalidation is refused", async () => {
+    const dispatchRepair = vi.fn();
+    await expect(runVerificationRepairLoop({ initial: failing, changedFiles: [], maxRounds: 2,
+      invalidateVerification: async () => { throw new Error("artifact writer refused"); },
+      dispatchRepair, reverify: vi.fn(),
+    })).rejects.toThrow("artifact writer refused");
+    expect(dispatchRepair).not.toHaveBeenCalled();
+  });
+
   it("repairs and stops as soon as re-verify is clean", async () => {
     const dispatchRepair = vi.fn().mockResolvedValue(true);
     const reverify = vi.fn().mockResolvedValue(clean);
     const res = await runVerificationRepairLoop({
-      initial: failing, changedFiles: ["apps/web/lib/foo.ts"], maxRounds: 2, dispatchRepair, reverify,
+      invalidateVerification: vi.fn(), initial: failing, changedFiles: ["apps/web/lib/foo.ts"], maxRounds: 2, dispatchRepair, reverify,
     });
     expect(res.rounds).toBe(1);
     expect(res.repaired).toBe(true);
@@ -77,11 +106,20 @@ describe("runVerificationRepairLoop", () => {
     expect(reverify).toHaveBeenCalledTimes(1);
   });
 
+  it("does not treat an earlier verification as current after a later refused dispatch", async () => {
+    const dispatchRepair = vi.fn().mockResolvedValueOnce(true).mockResolvedValueOnce(false);
+    const reverify = vi.fn().mockResolvedValue({ typecheckPassed: true, testsFailed: 1, failureAxis: "test-failure", output: "one failure remains" });
+    const out = await runVerificationRepairLoop({ invalidateVerification: vi.fn(), initial: failing, changedFiles: ["apps/web/lib/foo.ts"], maxRounds: 2, dispatchRepair, reverify });
+    expect(out.rounds).toBe(2);
+    expect(reverify).toHaveBeenCalledOnce();
+    expect(out.reverifiedAfterLastDispatch).toBe(false);
+  });
+
   it("stops after maxRounds when it can't fix it (falls through to the gate)", async () => {
     const dispatchRepair = vi.fn().mockResolvedValue(true);
     const reverify = vi.fn().mockResolvedValue(failing); // never clean
     const res = await runVerificationRepairLoop({
-      initial: failing, changedFiles: ["apps/web/lib/foo.ts"], maxRounds: 2, dispatchRepair, reverify,
+      invalidateVerification: vi.fn(), initial: failing, changedFiles: ["apps/web/lib/foo.ts"], maxRounds: 2, dispatchRepair, reverify,
     });
     expect(res.rounds).toBe(2);
     expect(res.repaired).toBe(false);
@@ -92,7 +130,7 @@ describe("runVerificationRepairLoop", () => {
     const dispatchRepair = vi.fn();
     const reverify = vi.fn();
     const res = await runVerificationRepairLoop({
-      initial: clean, changedFiles: [], maxRounds: 2, dispatchRepair, reverify,
+      invalidateVerification: vi.fn(), initial: clean, changedFiles: [], maxRounds: 2, dispatchRepair, reverify,
     });
     expect(res.rounds).toBe(0);
     expect(res.repaired).toBe(true);
@@ -103,7 +141,7 @@ describe("runVerificationRepairLoop", () => {
     const dispatchRepair = vi.fn().mockResolvedValue(false);
     const reverify = vi.fn();
     const res = await runVerificationRepairLoop({
-      initial: failing, changedFiles: ["apps/web/lib/foo.ts"], maxRounds: 2, dispatchRepair, reverify,
+      invalidateVerification: vi.fn(), initial: failing, changedFiles: ["apps/web/lib/foo.ts"], maxRounds: 2, dispatchRepair, reverify,
     });
     expect(res.rounds).toBe(1);
     expect(res.repaired).toBe(false);

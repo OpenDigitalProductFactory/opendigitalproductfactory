@@ -247,6 +247,37 @@ describe("initiative readiness reviewer tools", () => {
       kind: "repo-blob-at-commit", repositoryFullName: "owner/repo", commitSha: "a".repeat(40), path: "docs/a.md", providerBlobId: "b".repeat(40) } }));
   });
 
+  it("BI-7BA59B8C admits {path, headSha} at preflight, completed the same way the handler completes it", async () => {
+    // Admission runs on raw params and applies the strict locator schema, so
+    // without completion here the documented shorthand was refused before the
+    // handler's own completion step could fill it in — closing the one
+    // author-owned route out of an unmet research gate.
+    mocks.findTaskRun.mockResolvedValue(null);
+    mocks.preflightArtifact.mockResolvedValue(null);
+    artifactDeps.lookupProviderCommit.mockResolvedValue({ kind: "found", sha: "a".repeat(40) });
+    artifactDeps.readBlobId.mockResolvedValue({ ok: true, data: { blobId: "b".repeat(40) } });
+    const context = { agentId: "AGT-OWN", tokenScope: "write" as const };
+    expect(await preflightInitiativeEvidence({ itemId: "BI-TEST", gate: "research", decision: "pass",
+      artifactRef: { path: "docs/a.md", headSha: "aaaaaaa" }, reason: "Reproduced.", findings: [], resolvedFindingRefs: [] },
+    "user", context)).toBeNull();
+    expect(mocks.preflightArtifact).toHaveBeenCalledWith(expect.objectContaining({
+      params: expect.objectContaining({ artifactRef: { kind: "repo-blob-at-commit", repositoryFullName: "owner/repo",
+        commitSha: "a".repeat(40), path: "docs/a.md", providerBlobId: "b".repeat(40) } }) }));
+  });
+
+  it("BI-7BA59B8C refuses an unresolvable artifact at preflight naming the field, not the bare schema", async () => {
+    mocks.findTaskRun.mockResolvedValue(null);
+    mocks.preflightArtifact.mockResolvedValue(null);
+    artifactDeps.lookupProviderCommit.mockResolvedValue({ kind: "found", sha: "a".repeat(40) });
+    artifactDeps.readBlobId.mockResolvedValue({ ok: false, code: "CANONICAL_DESIGN_REQUIRED", error: "No blob." });
+    const refusal = await preflightInitiativeEvidence({ itemId: "BI-TEST", gate: "research", decision: "pass",
+      artifactRef: { path: "docs/missing.md", headSha: "aaaaaaa" }, reason: "Reproduced.", findings: [], resolvedFindingRefs: [] },
+    "user", { agentId: "AGT-OWN", tokenScope: "write" as const });
+    expect(refusal).toMatchObject({ success: false, error: "CANONICAL_DESIGN_REQUIRED" });
+    expect((refusal as { message: string }).message).toContain("docs/missing.md");
+    expect(mocks.preflightArtifact).not.toHaveBeenCalled();
+  });
+
   it("BI-DF34D948 ends every malformed-receipt refusal with the caller's corrected call", async () => {
     mocks.findTaskRun.mockResolvedValue(null);
     const handler = initiativeReadinessPack.handlers.record_initiative_evidence!;

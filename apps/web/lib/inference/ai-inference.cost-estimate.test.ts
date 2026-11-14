@@ -6,6 +6,8 @@ const db = vi.hoisted(() => ({
   tokenUsage: { create: vi.fn(async () => ({})) },
 }));
 vi.mock("@dpf/db", () => ({ prisma: db }));
+const subscription = vi.hoisted(() => ({ estimate: vi.fn(async (): Promise<unknown> => null) }));
+vi.mock("@/lib/finance/subscription-cost-estimator.server", () => ({ subscriptionEstimateForProvider: subscription.estimate }));
 
 import { logTokenUsage } from "./ai-inference";
 
@@ -49,5 +51,44 @@ describe("logTokenUsage cost for a provider with no recorded price", () => {
     db.modelProfile.findUnique.mockResolvedValue(null);
     await logTokenUsage(usage);
     expect(recordedCost()).toBeCloseTo(3, 6);
+  });
+});
+
+// BI-F98BBE4F: a subscription is not free. A call on a plan with a recorded fee
+// is charged its share at the effective-cost estimate, not $0 and not the
+// provider's list price.
+describe("logTokenUsage cost for a subscription-covered provider", () => {
+  beforeEach(() => vi.clearAllMocks());
+  const estimate = { status: "estimated", usdPerMillionTokens: { low: 0.5, point: 2, high: 4 } };
+
+  it("records a zero-priced subscription call at the point estimate", async () => {
+    db.modelProvider.findUnique.mockResolvedValue({ costModel: "token", inputPricePerMToken: 0, outputPricePerMToken: 0 });
+    subscription.estimate.mockResolvedValueOnce(estimate);
+    await logTokenUsage({ ...usage, providerId: "anthropic-sub" });
+    expect(subscription.estimate).toHaveBeenCalledWith("anthropic-sub");
+    expect(recordedCost()).toBeCloseTo(2, 6); // 1M tokens x $2 per million
+  });
+
+  it("uses the estimate instead of a covered provider's list price", async () => {
+    db.modelProvider.findUnique.mockResolvedValue({ costModel: "token", inputPricePerMToken: 1.5, outputPricePerMToken: 6 });
+    subscription.estimate.mockResolvedValueOnce(estimate);
+    await logTokenUsage({ ...usage, providerId: "codex" });
+    expect(recordedCost()).toBeCloseTo(2, 6);
+  });
+
+  it("keeps today's pricing when the plan has no recorded fee or the estimate is unavailable", async () => {
+    db.modelProvider.findUnique.mockResolvedValue({ costModel: "token", inputPricePerMToken: 1.5, outputPricePerMToken: 6 });
+    subscription.estimate.mockResolvedValueOnce({ status: "fee-missing", usdPerMillionTokens: null });
+    await logTokenUsage({ ...usage, providerId: "codex" });
+    expect(recordedCost()).toBeCloseTo(0.9 + 2.4, 6);
+    subscription.estimate.mockRejectedValueOnce(new Error("db down"));
+    await logTokenUsage({ ...usage, providerId: "codex" });
+    expect(recordedCost()).toBeCloseTo(0.9 + 2.4, 6);
+  });
+
+  it("never prices a local compute call from a subscription", async () => {
+    db.modelProvider.findUnique.mockResolvedValue({ costModel: "compute", computeWatts: 150, electricityRateKwh: 0.12 });
+    await logTokenUsage({ ...usage, providerId: "local" });
+    expect(subscription.estimate).not.toHaveBeenCalled();
   });
 });

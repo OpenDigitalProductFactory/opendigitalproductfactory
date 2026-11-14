@@ -144,6 +144,26 @@ branch. A session's live lease for other work, such as the receiving session's
 local-CI run on another branch, no longer refuses the handover. Reproduced live
 on 2026-11-04 as envelope cmw2326ve3qxj01ppj2q06vre.
 
+**Amendment 2026-11-13 (BI-1986D3C1, owner direction).** Production still
+raised 31 handover approvals in nine days after the first amendment shipped.
+26 were one-call takeovers: a replacement session of the same owner took over
+a room whose previous session had gone, so nobody was left to acknowledge a
+two-step request. The other 5 were malformed two-step calls. Two changes
+follow.
+
+- A one-call or batched reassignment is ordinary when all of these hold: the
+  owner's own OAuth assistant takes the room for itself; the person owns the
+  room; no other person holds its lease; the assistant may act there, or is one
+  nobody admitted, narrowed or removed; and the room keeps this design's
+  boundary (no build or native task, not archived, not restricted, and no live
+  reservation of the outgoing session on the room's branch). The consent
+  preview and the writer's transaction run the same check
+  (`own-room-takeover.ts`).
+- A phase call the parser refuses changes nothing. The handler refuses it with
+  its own message, so it is never put to the owner.
+
+Anything outside the room's ownership scope still reaches the owner.
+
 Same-holder reacquisition cannot revive the old request, even if principal
 and executor are equal. This contract does not promise acceptance across renewal;
 a future continuity optimization needs a proven acquisition identity and coverage

@@ -1,0 +1,63 @@
+{
+  "version": "1",
+  "accountableOwner": "portfolio-management",
+  "affectedCopies": [
+    "BacklogItem.status validated closed-set CHECK",
+    "BacklogItem active deferral projection",
+    "BacklogItemActivity immutable transition history",
+    "Outcome backfill active-status allow-list"
+  ],
+  "migration": {
+    "name": "20261110063000_normalize_legacy_blocked_backlog",
+    "backfill": "Converts only historical BacklogItem.status=blocked rows to deferred. Each row retains its identity and receives a reason, observable resume trigger, 90-day review horizon, deferral timestamp, and active human owner resolved first from its submitting user and then through the governed platform-work owner chain. A status_change activity preserves the original value, decision provenance, and assigned owner. The stored owner is the authoritative attribution; the migration does not record a source-tier label, and no later process may reconstruct one from ownership state that could have changed. The migration refuses to contract the column if any row cannot receive an owner, then replaces and validates the closed-set CHECK without blocked. It briefly holds a SHARE ROW EXCLUSIVE lock while rows matching the exact legacy-status predicate are normalized and the closed-set constraint is validated; concurrent BacklogItem writers wait for the transaction, while lock acquisition itself fails after five seconds instead of waiting indefinitely. No item is created, deleted, completed, or retired. Rollback is forward-only: application code can be reverted while the narrowed CHECK and preserved activities remain compatible; restoring blocked would require a new governed vocabulary expansion and is intentionally not automatic."
+  },
+  "tests": [
+    "packages/db/src/normalize-legacy-blocked-backlog-migration.test.ts",
+    "packages/db/src/backlog-awaiting-acceptance-migration.test.ts",
+    "apps/web/lib/backlog/outcome-backfill.test.ts"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:backlog-item#status",
+      "prismaModel": "BacklogItem",
+      "lifecycleDisposition": "Historical blocked rows remain wanted work and move to the existing governed deferred lifecycle; non-blocked rows are unchanged. BacklogItemActivity retains the normalization event under the existing BacklogItem retention policy. The validated closed-set CHECK prevents reintroduction of the unowned status value; the parent enum-contract item retains the separate Prisma client conversion.",
+      "fields": [
+        {
+          "fieldId": "data:backlog-item#status",
+          "resolution": "governed",
+          "reason": "The canonical lifecycle already distinguishes actionable, awaiting-acceptance, done, deferred, and retired work. blocked was historical drift without the attribution required for parked demand, so the storage contract now enforces the canonical enum.",
+          "provenance": "BI-22CDF13B; DI-FB8D23E524B1; docs/superpowers/plans/2026-08-16-enum-contract-step-proposal.md"
+        },
+        {
+          "fieldId": "data:backlog-item#deferOwnerPrincipalId",
+          "resolution": "governed",
+          "reason": "Each normalized row receives an active human Principal so the next review is attributable rather than hidden work debt.",
+          "provenance": "BI-22CDF13B; BI-59F6ED17 governed deferral contract",
+          "flags": [
+            "subject"
+          ],
+          "fieldPolicy": "Store only the canonical Principal foreign key. Prefer the active principal linked to the original submitting user; otherwise use the existing platform-work accountability chain. Refuse the migration when no active human exists."
+        },
+        {
+          "fieldId": "data:backlog-item#deferReason",
+          "resolution": "governed",
+          "reason": "The migration states honestly that the historical blocker rationale was absent and requires current review before resumption.",
+          "provenance": "BI-22CDF13B acceptance criteria"
+        },
+        {
+          "fieldId": "data:backlog-item#deferTrigger",
+          "resolution": "governed",
+          "reason": "The item resumes only after an accountable review records the actionable dependency or current scope and evidence.",
+          "provenance": "BI-22CDF13B acceptance criteria"
+        },
+        {
+          "fieldId": "data:backlog-item#deferReviewAt",
+          "resolution": "governed",
+          "reason": "A 90-day safety horizon prevents the normalized work from disappearing into indefinite deferral.",
+          "provenance": "BI-22CDF13B acceptance criteria"
+        }
+      ]
+    }
+  ]
+}

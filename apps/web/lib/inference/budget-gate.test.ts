@@ -8,12 +8,13 @@ vi.mock("@dpf/db", () => ({
     modelProvider: { findUnique: vi.fn(), findMany: vi.fn(async () => []) },
     aiProviderFinanceProfile: { findUnique: vi.fn() },
     platformDevConfig: { findUnique: vi.fn(async () => null) },
+    supplierContract: { findMany: vi.fn(async () => []) },
   },
 }));
 
 import {
   AgentAllowanceExhaustedError, checkAgentBudget, checkAgentBudgetFromRegistry,
-  classifyProviderSpend, isZeroMarginalPricing, nextAllowanceReset, providerSpendClass, writeBudgetEvent,
+  checkPaidInferenceAllowance, classifyProviderSpend, isZeroMarginalPricing, nextAllowanceReset, providerSpendClass, writeBudgetEvent,
 } from "./budget-gate";
 import { prisma } from "@dpf/db";
 
@@ -110,6 +111,42 @@ describe("only real spend counts", () => {
     expect(result).toMatchObject({ status: "ok", governedBy: "agent-cap", limitTokens: 200_000 });
     expect(prisma.tokenUsage.aggregate).toHaveBeenCalledWith(expect.objectContaining({
       where: expect.objectContaining({ agentId: "change-reviewer", providerId: { notIn: ["local", "anthropic-sub"] } }),
+    }));
+  });
+});
+
+// BI-F98BBE4F, WWMD DI-223FEAA53080: subscription usage is recorded at its
+// estimated cost for portfolio budgets, but the daily paid-AI allowance governs
+// marginal cash only. A provider covered by an active subscription contract is
+// never counted or refused by it, whatever per-token price it carries.
+describe("subscription-covered providers stay outside the paid allowance", () => {
+  beforeEach(() => vi.clearAllMocks());
+  const codexPlan = [{ id: "c1", contractId: "AIS-1", notes: "ChatGPT Pro", currency: "USD", billingCadence: "monthly",
+    monthlyCommittedAmount: 200, coveredProviderIds: ["chatgpt", "codex"], startDate: new Date("2026-11-01") }];
+
+  it("classifies a covered provider as free even when it records a list price", async () => {
+    vi.mocked(prisma.supplierContract.findMany).mockResolvedValueOnce(codexPlan as never);
+    vi.mocked(prisma.modelProvider.findUnique).mockResolvedValueOnce({ costModel: "token", inputPricePerMToken: 1.5, outputPricePerMToken: 6 } as never);
+    expect(await classifyProviderSpend("codex")).toBe("free");
+    expect(prisma.supplierContract.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { status: "active", contractType: "subscription", commitmentKind: "ai_provider" },
+    }));
+  });
+
+  it("keeps an uncovered priced provider paid, and fails toward paid when contracts cannot be read", async () => {
+    vi.mocked(prisma.modelProvider.findUnique).mockResolvedValue({ costModel: "token", inputPricePerMToken: 1.5, outputPricePerMToken: 6 } as never);
+    expect(await classifyProviderSpend("codex")).toBe("priced");
+    vi.mocked(prisma.supplierContract.findMany).mockRejectedValueOnce(new Error("db down"));
+    expect(await classifyProviderSpend("codex")).toBe("priced");
+  });
+
+  it("leaves covered usage out of the installation's paid spend", async () => {
+    vi.mocked(prisma.supplierContract.findMany).mockResolvedValueOnce(codexPlan as never);
+    vi.mocked(prisma.modelProvider.findMany).mockResolvedValueOnce([{ providerId: "local" }] as never);
+    vi.mocked(prisma.tokenUsage.aggregate).mockResolvedValueOnce({ _sum: { inputTokens: 10, outputTokens: 5, costUsd: 1 } } as never);
+    expect(await checkPaidInferenceAllowance(10)).toMatchObject({ status: "ok", spentUsd: 1 });
+    expect(prisma.tokenUsage.aggregate).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ providerId: { notIn: ["local", "chatgpt", "codex"] } }),
     }));
   });
 });

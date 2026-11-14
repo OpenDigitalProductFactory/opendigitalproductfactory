@@ -67,6 +67,17 @@ describe("updateFeatureBrief (BI-7175C7DB)", () => {
       { actorUserId: "mcp-actor-1" },
     );
   });
+
+  it("preserves the diagnosis version precondition across the authenticated action boundary", async () => {
+    const expectedUpdatedAt = "2026-11-11T04:00:00.000Z";
+    mocks.actionUpdateFeatureBrief.mockRejectedValueOnce(new Error("Build changed before the diagnosis could be saved"));
+    const result = await updateFeatureBrief({ expectedUpdatedAt, fixContext: { rootCause: "grounded cause" } }, "mcp-actor-1");
+    expect(mocks.actionUpdateFeatureBrief).toHaveBeenCalledWith("FB-123", expect.any(Object), {
+      actorUserId: "mcp-actor-1", expectedUpdatedAt,
+    });
+    expect(result.success).toBe(false);
+    expect(mocks.updateBuildHappyPathState).not.toHaveBeenCalled();
+  });
 });
 
 describe("formatUpdateFeatureBriefError (BI-PIR-309fb74b / BI-PIR-f8c1640b)", () => {

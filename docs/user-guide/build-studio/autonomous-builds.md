@@ -49,6 +49,30 @@ governed self-upgrade path.
 If recovery is exhausted, you receive one decision request rather than repeated alerts. If a
 human closes the pull request, Build Studio honors that closure.
 
+GitHub sometimes has not yet worked out whether a pull request can merge, usually because main
+has just moved. Build Studio treats that as a wait, not a failure. It keeps checking, and after six
+undecided checks in a row it checks less often, down to once an hour, and tells you once. It
+carries on by itself as soon as GitHub decides. A pull request that was stopped for a conflict or
+for falling behind main is looked at again every half hour, and Build Studio resumes it once
+GitHub no longer reports that problem. The room's activity trail records the resume.
+
+Some repository checks need a stated decision, such as how a change reaches existing installs or
+whether it changed the user guide. The coding agent records those decisions on its own commits.
+When Build Studio opens the pull request, it copies them into the pull request's **Readiness
+decisions** section, so the checks read the same decisions the build's review accepted. It copies
+only decisions the build recorded and never writes one itself.
+
+The pull request's commit is not the commit the build was first reviewed on. Build Studio
+publishes the change on top of the current main branch, so the published commit is new, and a
+republished or repaired pull request gets another new commit. The required Failure Readiness
+check only accepts evidence and a review for the exact commit it checks. When a pull request's
+commit has no review of its own, Build Studio moves the build onto that exact commit and sends it
+back to review. Its checks, tests and semantic review then run on the commit that ships, and
+the build returns to the pull request with nothing republished. Each pull request commit gets
+at most three attempts, spaced six hours apart; the build's activity trail records each one.
+After the pull request is open, Build Studio does not rebase the build onto a newer main. The
+merge queue keeps it current.
+
 Autonomy can be disabled without deleting build history, evidence, or the active Living Playbook.
 See the [operator runbook](../../operations/autonomous-build-completion.md) for rollout and
 kill-switch details.

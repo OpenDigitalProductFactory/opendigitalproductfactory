@@ -122,6 +122,10 @@ describe("portal navigation model", () => {
     }
   });
 
+  it("resolves canonical route records when a navigation destination carries view state", () => {
+    expect(getRouteNavRecord("/workforce?view=activity")?.path).toBe("/workforce");
+  });
+
   it("groups requests, work in progress and Build Studio under Improve & deliver (EP-2FB6C0CC)", () => {
     // The Delivery hub is superseded by the area home and kept as a redirect.
     expect(getRouteNavRecord("/delivery")?.destinationKind).toBe("legacy-redirect");

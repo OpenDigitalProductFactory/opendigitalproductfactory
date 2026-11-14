@@ -24,6 +24,8 @@ vi.mock("@/components/monitoring/PlatformHealthIndicator", () => ({
 vi.mock("@/components/shell/ShellSignOut", () => ({ ShellSignOut: () => null }));
 
 import { Header } from "./Header";
+import { namespaceMessages } from "@dpf/i18n";
+import { MessagesProvider } from "@/components/i18n/MessagesProvider";
 
 afterEach(() => { cleanup(); });
 
@@ -58,6 +60,11 @@ describe("installation badge", () => {
     expect(screen.getByTestId("installation-badge")).toHaveAttribute("href", "/ops/installation");
   });
 
+  it("shows account identity in Simple mode as well as Full mode", () => {
+    const { container } = render(<MessagesProvider locale="en-US" messages={{ shell: namespaceMessages("en-US", "shell") }}><Header {...base} navMode="worker" accountName="Alex Morgan" accountEmail="alex@example.com" accountRoleName="Administrator" organizationName="Example organization" /></MessagesProvider>);
+    expect(container.querySelector("summary")).toHaveTextContent("Alex Morgan");
+    expect(screen.queryByRole("button", { name: "Account and help" })).not.toBeInTheDocument();
+  });
   it("renders the estate and role on a development installation", () => {
     render(<Header {...base} installationBadge="NORTHWIND DEV" />);
     expect(screen.getByTestId("installation-badge")).toHaveTextContent("NORTHWIND DEV");

@@ -12,9 +12,115 @@
 // shape on the existing room. Idempotent; fixed forward at decomposition in
 // approve-decomposition.ts.
 
+import type { Prisma } from "@dpf/db";
 import { readWorkShapeClaim } from "@/lib/work-management/workroom-shape-claim";
+import { inspectNativeDeliveryClaim } from "@/lib/backlog/initiative-readiness/bound-work-shape";
+import { resolveDeliveryShape, buildDeliveryShapeClaim } from "@/lib/work-management/derive-delivery-shape";
+import { assessDeliverySensitivity } from "@/lib/backlog/initiative-readiness/delivery-sensitivity";
+import { lockCurrentArtifactBinding, prepareCurrentArtifactObservation } from "@/lib/backlog/initiative-readiness/current-artifact-observation";
+import { scopeClaimEntries, scopeWriteWhere } from "@/lib/work-capsules/scope-input";
+import { isTerminalCapsuleStatus } from "@/lib/work-capsules/work-capsule-branch-identity";
 
 export type HealBuildWorkroomShapeResult = { healed: boolean; detail: string };
+
+type ReviewShapeResult =
+  | { kind: "ready"; healed: boolean; detail: string; room: { id: string; capsuleId: string } }
+  | { kind: "held"; detail: string };
+type ShapeRecoveryDb = Pick<Prisma.TransactionClient, "featureBuild" | "workroom" | "$queryRaw">;
+
+/** Read only the build's existing native carrier, never another executor's room. */
+async function loadReviewShapeBinding(db: ShapeRecoveryDb, buildId: string) {
+  const build = await db.featureBuild.findUnique({
+    where: { buildId },
+    select: {
+      id: true, buildId: true, phase: true, createdById: true, updatedAt: true,
+      originatingBacklogItemId: true, buildBranch: true, sandboxId: true,
+      originator: { select: { id: true, itemId: true, title: true, body: true, effortSize: true, workType: true, updatedAt: true } },
+    },
+  });
+  if (!build || build.phase !== "review" || !build.createdById || !build.originator
+    || build.originatingBacklogItemId !== build.originator.id) return { kind: "unavailable" } as const;
+  const rooms = await db.workroom.findMany({
+    where: { executorKind: "build-studio", executorRef: buildId, archivedAt: null, status: { notIn: ["complete", "abandoned", "archived", "superseded"] } },
+    take: 2,
+    select: {
+      id: true, capsuleId: true, executorKind: true, executorRef: true, featureBuildId: true,
+      backlogItemId: true, status: true, archivedAt: true, scopeClaims: true, updatedAt: true,
+      headSha: true, headBranch: true, baseSha: true, repositoryFullName: true,
+      leaseHolderPrincipalId: true, createdByPrincipalId: true, requestedByPrincipalId: true,
+    },
+  });
+  const room = rooms[0];
+  if (rooms.length !== 1 || !room || room.featureBuildId !== build.id
+    || room.executorKind !== "build-studio" || room.executorRef !== buildId
+    || ![build.originator.id, build.originator.itemId].includes(room.backlogItemId ?? "")
+    || room.archivedAt != null || isTerminalCapsuleStatus(room.status) || room.status === "superseded") return { kind: "unavailable" } as const;
+  // canonicalJson intentionally does not call Date.toJSON. Make every source
+  // revision timestamp explicit so the shared guard detects concurrent edits.
+  return {
+    kind: "bound" as const,
+    itemRowId: build.originator.id,
+    build: { ...build, updatedAt: build.updatedAt.toISOString(), originator: { ...build.originator, updatedAt: build.originator.updatedAt.toISOString() } },
+    room: { ...room, updatedAt: room.updatedAt.toISOString() },
+  };
+}
+
+type ReviewShapeBinding = Extract<Awaited<ReturnType<typeof loadReviewShapeBinding>>, { kind: "bound" }>;
+type ReviewShapeEvidence =
+  | { kind: "held"; detail: string }
+  | { kind: "ready"; binding: ReviewShapeBinding; claim: ReturnType<typeof buildDeliveryShapeClaim> | null };
+
+function reviewShapeEvidence(binding: ReviewShapeBinding): ReviewShapeEvidence {
+  const carrier = binding.room.scopeClaims;
+  const declaration = inspectNativeDeliveryClaim(carrier);
+  if (declaration.kind === "invalid") return { kind: "held", detail: "Native Workroom delivery metadata is malformed or conflicting; existing declarations were retained." };
+  if (declaration.kind === "bound") return { kind: "ready", binding, claim: null };
+  const item = binding.build.originator;
+  const resolution = resolveDeliveryShape({ signals: {
+    effortSize: item.effortSize, workType: item.workType,
+    sensitivity: assessDeliverySensitivity({ title: item.title, body: item.body, workType: item.workType }).level,
+  } });
+  return resolution.kind === "derived" || resolution.kind === "declared"
+    ? { kind: "ready", binding, claim: buildDeliveryShapeClaim(resolution) }
+    : { kind: "held", detail: "The governing backlog item does not determine a delivery shape; no declaration was invented." };
+}
+
+/** BI-1173F1CC: metadata only. No attachment, coworker admission or gate override. */
+export async function reconcileReviewBuildWorkroomShape(input: { buildId: string }): Promise<ReviewShapeResult> {
+  const unavailable: ReviewShapeEvidence = { kind: "held", detail: "An unchanged, uniquely build-owned native Workroom and governing item are required for review recovery." };
+  try {
+    const { prisma } = await import("@dpf/db");
+    const observation = await prepareCurrentArtifactObservation<Awaited<ReturnType<typeof loadReviewShapeBinding>>, ReviewShapeEvidence>({
+      db: prisma,
+      load: db => loadReviewShapeBinding(db as ShapeRecoveryDb, input.buildId),
+      read: async binding => reviewShapeEvidence(binding),
+      unbound: () => unavailable, unavailable,
+      isUnavailable: evidence => evidence.kind === "held",
+      lock: async (binding, db) => {
+        if (!db.$queryRaw) throw new Error("Build source locking unavailable");
+        await db.$queryRaw`SELECT "id" FROM "FeatureBuild" WHERE "id" = ${binding.build.id} FOR SHARE`;
+        await lockCurrentArtifactBinding(binding, db);
+      },
+    });
+    if (observation.evidence.kind === "held") return observation.evidence;
+    return await prisma.$transaction(async tx => {
+      const evidence = await observation.admissionGuard(tx);
+      if (evidence.kind === "held") return evidence;
+      const { room } = evidence.binding;
+      const admittedRoom = { id: room.id, capsuleId: room.capsuleId };
+      if (!evidence.claim) return { kind: "ready", healed: false, room: admittedRoom, detail: "Native Workroom delivery shape already bound." } as const;
+      const changed = await tx.workroom.updateMany({
+        where: { ...scopeWriteWhere({ ...room, updatedAt: new Date(room.updatedAt) }), id: room.id },
+        data: { scopeClaims: [...scopeClaimEntries(room.scopeClaims), evidence.claim] as Prisma.InputJsonValue },
+      });
+      return changed.count === 1
+        ? { kind: "ready", healed: true, room: admittedRoom, detail: `Restored missing delivery shape on ${room.capsuleId} from its governing item.` } as const
+        : { kind: "held", detail: "Native Workroom changed during recovery; no declaration was overwritten." } as const;
+    }, { isolationLevel: "Serializable" });
+  } catch {
+    return { kind: "held", detail: "Native Workroom metadata reconciliation could not complete; existing state was retained." };
+  }
+}
 
 export async function healBuildWorkroomShape(input: {
   buildId: string;

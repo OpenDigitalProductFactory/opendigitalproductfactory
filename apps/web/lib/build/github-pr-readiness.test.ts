@@ -167,6 +167,57 @@ describe("observeGithubPullRequest check detail (BI-88341B5D)", () => {
   });
 });
 
+describe("required checks decide readiness (BI-D081EDD0)", () => {
+  const ok = { name: "Unit Tests", status: "COMPLETED", conclusion: "SUCCESS", required: true };
+
+  it("projects ready when only non-required checks fail, as GitHub's merge queue does", () => {
+    expect(projectGithubPrReadiness(observed({
+      mergeStateStatus: "UNSTABLE",
+      checks: [ok, { name: "Analyze (go)", status: "COMPLETED", conclusion: "FAILURE", required: false }],
+    }))).toEqual({ kind: "ready", headSha: "abc123" });
+  });
+
+  it("does not wait on a non-required check that is still running", () => {
+    expect(projectGithubPrReadiness(observed({
+      checks: [ok, { name: "Analyze (javascript-typescript)", status: "IN_PROGRESS", conclusion: null, required: false }],
+    }))).toEqual({ kind: "ready", headSha: "abc123" });
+  });
+
+  it("still blocks on a failing required check, and on a failing check whose required-ness is unknown", () => {
+    expect(projectGithubPrReadiness(observed({
+      checks: [{ ...ok, conclusion: "FAILURE" }],
+    }))).toMatchObject({ kind: "checking", reason: "checks-failing" });
+    expect(projectGithubPrReadiness(observed({
+      checks: [ok, { name: "legacy", status: "COMPLETED", conclusion: "FAILURE" }],
+    }))).toMatchObject({ kind: "checking", reason: "checks-failing" });
+  });
+
+  it("reads isRequired from GitHub for check runs and commit statuses", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        data: { repository: { pullRequest: {
+          id: "PR_node", number: 42, url: "https://github.com/o/r/pull/42", state: "OPEN", merged: false,
+          headRefOid: "abc123", mergeStateStatus: "UNSTABLE", autoMergeRequest: null, mergeQueueEntry: null,
+          reviewThreads: { nodes: [], pageInfo: { hasNextPage: false } },
+          commits: { nodes: [{ commit: { statusCheckRollup: { contexts: {
+            nodes: [
+              { name: "Analyze (go)", status: "COMPLETED", conclusion: "FAILURE", isRequired: false,
+                detailsUrl: null, checkSuite: { workflowRun: { databaseId: 7 } } },
+              { context: "dpf/failure-readiness", state: "SUCCESS", targetUrl: null, isRequired: true },
+            ],
+            pageInfo: { hasNextPage: false },
+          } } } }] },
+        } } },
+      }),
+    });
+    const observation = await observeGithubPullRequest({ owner: "o", repo: "r", prNumber: 42, token: "t", fetchImpl: fetchImpl as never });
+    expect(observation.checks.map((c) => [c.name, c.required])).toEqual([["Analyze (go)", false], ["dpf/failure-readiness", true]]);
+    const body = JSON.parse(fetchImpl.mock.calls[0][1].body as string) as { query: string };
+    expect(body.query).toContain("isRequired(pullRequestNumber:$number)");
+  });
+});
+
 describe("rerunFailedWorkflowJobs", () => {
   it("re-runs only the failed jobs and reports a run GitHub will not re-run", async () => {
     const accepted = vi.fn().mockResolvedValue({ status: 201 });

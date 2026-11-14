@@ -11,6 +11,11 @@
       "owner": "platform-engineering",
       "purpose": "Run every check-no-* guard; its own results are recorded per guard as loop:*.",
       "catchClass": "aggregate"
+    },
+    "loop:check-no-unrouted-owner-escalation": {
+      "owner": "platform-engineering",
+      "purpose": "Refuse an owner-attention write (needs-human self-fix class, a build-stall-escalation report, an escalation notice) outside the routeToHuman seam, so every hand-off to the owner passes the escalation gate (BI-5E067004).",
+      "catchClass": "ungated-owner-escalation"
     }
   }
 }

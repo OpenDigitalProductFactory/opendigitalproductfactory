@@ -5,7 +5,7 @@ import Link from "next/link";
 import { prisma } from "@dpf/db";
 
 import { loadAttentionItems, filterAttentionForAudience } from "@/lib/attention/aggregate";
-import { buildOwnerAttentionProjection, type OwnerAttentionProjection } from "@/lib/attention/owner-projection";
+import { buildOwnerAttentionProjection, namedCustodianHeadlines, type OwnerAttentionProjection } from "@/lib/attention/owner-projection";
 import type { OwnerDecisionAudience } from "@/lib/attention/owner-decision";
 import type { AttentionSource } from "@/lib/attention/types";
 import { OwnerDecisionCards } from "@/components/attention/OwnerDecisionCards";
@@ -73,6 +73,7 @@ export function OperatorCockpitView({
         <DigitalTeamHandlingStrip
           custodianCount={projection.custodian.length}
           digestCount={projection.weeklyDigest.length}
+          named={namedCustodianHeadlines(projection)}
         />
 
         {failedSources.length > 0 ? (

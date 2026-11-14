@@ -1,3 +1,4 @@
+import { normalizeVerificationOutput, projectVerificationEvidence } from "./verification-output";
 // apps/web/lib/build/review-lenses.ts
 //
 // Pure derivation: FeatureBuildRow → the review-gate "lenses" that have real,
@@ -168,19 +169,11 @@ function verificationLens(verificationOut: FeatureBuildRow["verificationOut"]): 
   if (!verificationOut) {
     return { key: "verification", label: "Verification", state: "pending", detail: "not run" };
   }
-  const { typecheckPassed, testsFailed } = verificationOut;
-  if (typecheckPassed && testsFailed === 0) {
-    return { key: "verification", label: "Verification", state: "pass", detail: "typecheck ✓ · tests ✓" };
-  }
-  if (!typecheckPassed) {
-    return { key: "verification", label: "Verification", state: "fail", detail: "typecheck ✗" };
-  }
-  return {
-    key: "verification",
-    label: "Verification",
-    state: "fail",
-    detail: `${testsFailed} test${testsFailed === 1 ? "" : "s"} failing`,
-  };
+  const display = projectVerificationEvidence(normalizeVerificationOutput(verificationOut));
+  return { key: "verification", label: "Verification",
+    state: display.failed ? "fail" : display.qualified ? display.exempt ? "advisory" : "pass" : "pending",
+    detail: display.summary };
+
 }
 
 /** Acceptance criteria met/total. */
