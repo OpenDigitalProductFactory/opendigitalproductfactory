@@ -8,6 +8,9 @@ import { prisma } from "@dpf/db";
 import type { WikiBacklinksLabels } from "@/components/wiki/WikiBacklinksPanel";
 import { WikiPageViewer, type WikiPageDetail } from "@/components/wiki/WikiPageViewer";
 import { getT } from "@/lib/i18n/t.server";
+import { auth } from "@/lib/auth";
+import { referencedByLabels } from "@/components/references/ReferencedByPanel";
+import { EMPTY_REFERENCE_SURFACE, loadReferenceSurface } from "@/lib/references/reference-surface.server";
 import { loadWikiBacklinks, type WikiReader } from "@/lib/wiki/backlinks";
 import { resolveReaderOrganizationId } from "@/lib/wiki/reader-organization";
 
@@ -112,5 +115,25 @@ export default async function WikiPageDetailRoute({ params }: { params: Params }
     },
   };
 
-  return <WikiPageViewer page={detail} backlinks={{ data: backlinks, labels }} />;
+  // BI-A63A9476: backlog items, epics, documents and messages that cite this
+  // page, and the readable ids in an organization page's body (kernel and
+  // profession pages render ids as plain text: R4 gives them no WWWD edges).
+  const session = await auth();
+  const user = session?.user;
+  const [surface, tReferences] = await Promise.all([
+    user
+      ? loadReferenceSurface(
+          { id: user.id, platformRole: user.platformRole, isSuperuser: user.isSuperuser },
+          { key: row.id, mention: `[[${row.slug}`, bodies: row.organizationId !== null ? [row.body] : [] },
+        )
+      : Promise.resolve(EMPTY_REFERENCE_SURFACE),
+    getT("references"),
+  ]);
+  const references = {
+    hrefs: surface.hrefs,
+    rows: surface.referencedBy,
+    labels: referencedByLabels(tReferences as (key: string) => string),
+  };
+
+  return <WikiPageViewer page={detail} backlinks={{ data: backlinks, labels }} references={references} />;
 }

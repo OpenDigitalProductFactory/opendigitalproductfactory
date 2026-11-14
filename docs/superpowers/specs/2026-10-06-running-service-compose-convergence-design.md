@@ -274,6 +274,45 @@ Selected image owners retain their existing catalog and saved manifest work guar
 The ordinary serializable receipt admission rechecks attributed tasks even though
 image-only reconciliation disables no capability; active work returns drain-required
 before a transition row or service apply is created.
+The producer half serializes inside the transaction that creates a TaskRun or
+build. Real PostgreSQL contention showed that an advisory-lock SELECT can fix a
+Serializable snapshot before the wait ends, hiding a newly committed transition.
+The shared admission helper therefore first takes a `SHARE ROW EXCLUSIVE` lock
+on the existing transition table, then the existing advisory lock. PostgreSQL's
+[utility snapshot rule](https://raw.githubusercontent.com/postgres/postgres/REL_17_STABLE/src/backend/tcop/pquery.c)
+explicitly excludes `LOCK` and `SHOW`, so serialization precedes snapshot
+creation. `createPending` and `commitSuccess` use the same order. No host work
+or inference runs under these metadata locks; transaction timeout settings are
+not changed. The drain counter uses the existing transaction-bound attribution
+store, avoiding an outer-pool request behind producers waiting on these locks.
+It examines every active transition and the existing
+`rollback_failed`/`recoveryRequired` image barrier, so unchanged capability keys
+cannot admit new matching work after the initial drain. The persisted v3 plan
+uses the shared validator; selected catalog owners and their saved manifests
+supply the guard union. Malformed image metadata retains only the existing
+browser recipe's guards, rather than silently losing its scope or stopping
+unrelated producers. Settled recovery releases the image guard. Legacy active
+key-removal admission retains its previous behavior.
+
+All eight actual production admission sites and their outer transaction wrappers
+are inventoried in the existing plan. Autonomous/build TaskRun admission already
+comes first; coworker spawn and durable Workroom tasks now acquire the same
+helper before parent/authority reads or a WorkCapsule row lock. Later admission
+reuses only a successful fence on that exact transaction object, preserving
+transactional ownership checks and existing-task replay. Capsule stores can
+receive an already-open transaction; their wrappers must not be treated as a
+snapshot reset. Current late-read Build/Capsule wrappers use ReadCommitted.
+
+The helper verifies actual isolation for every guard. In fixed-snapshot modes,
+SHOW and same-value `SET TRANSACTION [NOT] DEFERRABLE` preserve existing settings
+and assert that no first snapshot exists. PostgreSQL's
+[deferrable check](https://raw.githubusercontent.com/postgres/postgres/REL_17_STABLE/src/backend/commands/variable.c)
+rejects a prior snapshot even on the same value; its isolation check explicitly
+permits same-value SET and is unsuitable. An unsupported late fixed-snapshot
+caller fails before capabilities or transitions are read, rather than silently
+admitting stale state. No isolation downgrade, new persistent epoch, durable
+authority, grant, or transaction timeout change is introduced. Actual Prisma/
+PostgreSQL coverage must prove the utility ordering and real caller behavior.
 The existing ten-minute authority lifetime is preserved. Preparation reserves time
 for bounded apply and restoration; a short remaining lifetime holds before effects.
 

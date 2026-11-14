@@ -428,6 +428,13 @@ export const codexCliAdapter: ExecutionAdapterHandler = {
                 // A stated usage cap is capacity, not a reason to redispatch every tick.
                 if (failure.hint === "quota") void recordCliRateLimit("codex-cli", providerId, failure.signal, poolIdentity);
               }
+              // BI-F7D06E2D: text-tool mode runs codex read-only with its own tools
+              // off, so nothing can have committed. Its failure is a provider error
+              // the fallback chain moves past, not an execution to reconcile.
+              if (textTools) {
+                reject(new InferenceError(`Codex CLI returned no answer (exit=${code ?? "?"}, hint=${failure?.hint ?? "none"})`, "provider_error", providerId));
+                return;
+              }
               reject(new NativeCliExecutionUncertainError(providerId, failure ? { ...diagnostics, cliFailureHint: failure.hint } : diagnostics));
             } else {
               resolve({ stdout, diagnostics });
@@ -435,6 +442,10 @@ export const codexCliAdapter: ExecutionAdapterHandler = {
           },
           onError: (err: Error, observation) => {
             if (observation.started) {
+              if (textTools) {
+                reject(new InferenceError(`Codex CLI process error: ${err.message}`, "provider_error", providerId));
+                return;
+              }
               reject(new NativeCliExecutionUncertainError(providerId, observation.diagnostics));
               return;
             }

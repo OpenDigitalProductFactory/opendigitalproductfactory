@@ -17,6 +17,9 @@ import { DocumentFilePanel } from "./DocumentFilePanel";
 import { DocumentPagePreviews } from "./DocumentPagePreviews";
 import { changeDocumentStateAction } from "../actions";
 import { LocalTime } from "@/components/ui/LocalTime";
+import { ReferencedByPanel, referencedByLabels } from "@/components/references/ReferencedByPanel";
+import { getT } from "@/lib/i18n/t.server";
+import { loadReferenceSurface } from "@/lib/references/reference-surface.server";
 
 type Props = {
   params: Promise<{ documentId: string }>;
@@ -50,6 +53,14 @@ export default async function DocumentDetailPage({ params }: Props) {
   if (!document) notFound();
 
   const content = document.currentVersion?.contentText ?? document.currentVersion?.summary ?? "";
+  // BI-A63A9476: readable ids in the text link; "Referenced by" lists readable sources only.
+  const [referenceSurface, tReferences] = await Promise.all([
+    loadReferenceSurface(
+      { id: session.user.id, platformRole: session.user.platformRole, isSuperuser: session.user.isSuperuser },
+      { key: document.documentId, bodies: [content] },
+    ),
+    getT("references"),
+  ]);
   const storedFile = document.currentVersion?.contentBlobId ? document.currentVersion : null;
   const isOfficeFile = storedFile ? officeSourceExtension(storedFile.contentFormat) !== null : false;
   const textPreview = storedFile && isOfficeFile ? await loadRenditionTextPreview(storedFile.id).catch(() => null) : null;
@@ -128,13 +139,14 @@ export default async function DocumentDetailPage({ params }: Props) {
               />
             </div>
           ) : document.contentFormat === "text/markdown" ? (
-            <MarkdownHtml source={content} options={DOCUMENT_MARKDOWN_OPTIONS} />
+            <MarkdownHtml source={content} options={{ ...DOCUMENT_MARKDOWN_OPTIONS, entityRefHref: (id) => referenceSurface.hrefs[id] ?? null }} />
           ) : (
             <pre className="whitespace-pre-wrap text-sm leading-6 text-[var(--dpf-text)]">{content || "Binary or external content is stored as a managed blob."}</pre>
           )}
         </article>
 
         <aside className="space-y-4">
+          <ReferencedByPanel rows={referenceSurface.referencedBy} labels={referencedByLabels(tReferences as (key: string) => string)} />
           <section className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4">
             <h2 className="text-sm font-semibold text-[var(--dpf-text)]">Metadata</h2>
             <dl className="mt-3 space-y-2 text-sm">
