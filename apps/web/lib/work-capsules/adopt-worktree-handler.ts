@@ -1,6 +1,11 @@
 import { normalizePersistedScope, parseScopeInput } from "./scope-input";
 import type { ToolResult } from "@/lib/mcp-tool-types";
-import { ensureCapsuleWorkItemAnchorNonFatal } from "@/lib/work-capsules/capsule-workitem-anchor.server";
+import { kickRoomSetup, oweRoomSetup } from "@/lib/workroom-runtime/room-setup-effects.server";
+
+async function syncedUserPrincipalId(userId: string): Promise<string | null> {
+  const { syncUserPrincipal } = await import("@/lib/identity/principal-linking");
+  return (await syncUserPrincipal(userId))?.id ?? null;
+}
 import {
   WORK_CAPSULE_EXECUTOR_KINDS,
   isWorkCapsuleExecutorKind,
@@ -96,10 +101,21 @@ export async function adoptWorktree(args: {
   const boundBacklogItemId = binding.backlogItemId;
 
   let capsule;
+  let ownership: string | null = null;
   const actor = await args.resolveActor(args.userId, args.context);
+  // BI-C64EDA33 PR 3 (AC-5): the room, its ownership and the anchor it is owed commit together,
+  // so a crash can no longer leave a bound room with no owner or no WorkItem anchor.
+  // Principals are resolved first: identity sync writes outside the transaction.
+  const principals = boundBacklogItemId && args.db.workroomParticipant
+    ? await resolveRoomOwnershipPrincipals(actor, args.resolveUserPrincipalId ?? syncedUserPrincipalId)
+    : null;
+  const transact = args.db.$transaction
+    ? <T>(fn: (tx: CapsuleDb) => Promise<T>) => args.db.$transaction!(fn)
+    : <T>(fn: (tx: CapsuleDb) => Promise<T>) => fn(args.db);
   try {
-    capsule = await adoptWorktreeCapsule({
-      db: args.db,
+    capsule = await transact(async (tx) => {
+      const made = await adoptWorktreeCapsule({
+      db: tx,
       input: {
         title,
         objective,
@@ -115,6 +131,13 @@ export async function adoptWorktree(args: {
         scope: parseScopeInput(params),
       },
       actor,
+      });
+      if (adoptionBindingMismatch({ headBranch, requestedBacklogItemId: boundBacklogItemId, capsule: made })) return made;
+      if (principals) ownership = await establishNewRoomOwnership(tx, made.id, actor, "adopt", undefined, principals);
+      if ("$queryRaw" in tx) {
+        await oweRoomSetup(tx as never, { roomRowId: made.id, capsuleId: made.capsuleId, backlogItemId: made.backlogItemId ?? null, title: made.title, source: "adopt" });
+      }
+      return made;
     });
   } catch (error) {
     const occupied = branchOccupiedResult(error);
@@ -129,11 +152,8 @@ export async function adoptWorktree(args: {
   });
   if (mismatch) return mismatch;
 
-  await ensureCapsuleWorkItemAnchorNonFatal(capsule, "adopted");
-  // BI-36FC2981: delivery work is born owned, whichever door created the room.
-  const ownership = boundBacklogItemId && args.db.workroomParticipant
-    ? await establishNewRoomOwnership(args.db, capsule.id, actor, "adopt", args.resolveUserPrincipalId)
-    : null;
+  // BI-36FC2981: delivery work is born owned, whichever door created the room; the anchor it owes runs now.
+  kickRoomSetup();
   // A bound room without both SHAs cannot have a reviewer routed to it. Say so
   // now, with the exact call that repairs it, rather than at review time.
   const identityRepair = boundBacklogItemId
@@ -169,11 +189,10 @@ export async function establishNewRoomOwnership(
   actor: WorkCapsuleActor,
   source: "adopt" | "create",
   resolveUserPrincipalId?: (userId: string) => Promise<string | null>,
+  /** Already resolved (outside a transaction this call runs in). */
+  resolved?: Awaited<ReturnType<typeof resolveRoomOwnershipPrincipals>>,
 ): Promise<string | null> {
-  const principals = await resolveRoomOwnershipPrincipals(actor, resolveUserPrincipalId ?? (async (userId) => {
-    const { syncUserPrincipal } = await import("@/lib/identity/principal-linking");
-    return (await syncUserPrincipal(userId))?.id ?? null;
-  }));
+  const principals = resolved ?? await resolveRoomOwnershipPrincipals(actor, resolveUserPrincipalId ?? syncedUserPrincipalId);
   const outcome = await establishRoomOwnership(db as never, { workroomId, ...principals });
   const summary = describeRoomOwnership(outcome);
   if (summary && (outcome.ownerAppointed || outcome.assistantAdmitted)) {
