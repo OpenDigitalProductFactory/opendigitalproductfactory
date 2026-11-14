@@ -17,6 +17,7 @@
 // source-cited data task, because publishing a number here that I cannot cite
 // would be a fabrication with money attached.
 
+import type { PayComponent } from "./payroll";
 import {
   federalWithholdingWorksheet1A,
   type FederalWithholdingTables,
@@ -261,6 +262,50 @@ export function usStatutory(
         r.socialSecurityEmployee + r.medicareEmployee + r.additionalMedicareEmployee,
       ),
       employerNI: r.totalEmployer,
+      // Itemized so the payslip, the ledger and the tax liabilities each see
+      // the US taxes by name. Codes are stable; tax filing keys on them.
+      employeeLines: usEmployeeLines(r, rules),
+      employerLines: usEmployerLines(r, rules),
     };
   };
+}
+
+/** Stable payslip codes for US statutory lines. Tax liability emission keys on these. */
+export const US_STATUTORY_CODES = {
+  federalWithholding: "US_FWT",
+  stateWithholding: "US_SWT",
+  socialSecurityEmployee: "US_SS_EE",
+  medicareEmployee: "US_MED_EE",
+  additionalMedicareEmployee: "US_ADDMED_EE",
+  socialSecurityEmployer: "US_SS_ER",
+  medicareEmployer: "US_MED_ER",
+  futaEmployer: "US_FUTA",
+  sutaEmployer: "US_SUTA",
+} as const;
+
+function usEmployeeLines(r: UsStatutoryResult, rules: UsPayrollTaxRuleSet): PayComponent[] {
+  const lines: PayComponent[] = [
+    { code: US_STATUTORY_CODES.federalWithholding, label: "Federal income tax", amount: r.federalWithholding },
+    { code: US_STATUTORY_CODES.socialSecurityEmployee, label: "Social Security", amount: r.socialSecurityEmployee },
+    { code: US_STATUTORY_CODES.medicareEmployee, label: "Medicare", amount: r.medicareEmployee },
+  ];
+  if (r.additionalMedicareEmployee > 0) {
+    lines.push({ code: US_STATUTORY_CODES.additionalMedicareEmployee, label: "Additional Medicare", amount: r.additionalMedicareEmployee });
+  }
+  if (rules.state) {
+    lines.push({ code: US_STATUTORY_CODES.stateWithholding, label: `${rules.state.stateCode} state income tax`, amount: r.stateWithholding });
+  }
+  return lines;
+}
+
+function usEmployerLines(r: UsStatutoryResult, rules: UsPayrollTaxRuleSet): PayComponent[] {
+  const lines: PayComponent[] = [
+    { code: US_STATUTORY_CODES.socialSecurityEmployer, label: "Social Security (employer)", amount: r.socialSecurityEmployer },
+    { code: US_STATUTORY_CODES.medicareEmployer, label: "Medicare (employer)", amount: r.medicareEmployer },
+    { code: US_STATUTORY_CODES.futaEmployer, label: "Federal unemployment (FUTA)", amount: r.futaEmployer },
+  ];
+  if (rules.unemployment.sutaRate > 0 || rules.unemployment.sutaWageBase > 0) {
+    lines.push({ code: US_STATUTORY_CODES.sutaEmployer, label: "State unemployment (SUTA)", amount: r.sutaEmployer });
+  }
+  return lines;
 }
