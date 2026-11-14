@@ -30,6 +30,10 @@ export function isQuotaControlSettled(state: QuotaControlState): boolean {
     && Number.isFinite(state.opacity) && state.opacity > 0 && state.animations === 0;
 }
 
+export function quotaMeasurementStatus(seriousViolations: number, after: QuotaControlState | null): "failed" | "passed" {
+  return seriousViolations > 0 || (after !== null && !isQuotaControlSettled(after)) ? "failed" : "passed";
+}
+
 /** Observe completion, not a preferred color/opacity. Axe must still reject a
  * settled enabled control with poor contrast. Never change styles to pass. */
 export async function waitForQuotaControlSettlement(control: Locator, timeout = 10_000): Promise<QuotaControlState> {
