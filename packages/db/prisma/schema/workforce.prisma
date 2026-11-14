@@ -1731,3 +1731,4 @@ model DriverLocationConsent {
   // FK-leading (organizationId): org-wide consent posture review.
   @@index([organizationId, consentStatus])
 }
+

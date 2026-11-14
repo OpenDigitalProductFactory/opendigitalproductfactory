@@ -13,7 +13,7 @@ import {
 import { LIFECYCLE_TRANSITION_MATRIX, type EmploymentEventType } from "./workforce-types";
 
 /**
- * The 16 values, listed independently of the source union so this test is a real
+ * The 17 values, listed independently of the source union so this test is a real
  * check rather than a restatement. The parity test below proves the list matches
  * the shipped union.
  */
@@ -34,6 +34,7 @@ const ALL_EVENT_TYPES: EmploymentEventType[] = [
   "offboarding_completed",
   "terminated",
   "reactivated",
+  "withholding_recorded",
 ];
 
 function resolvedEvent(overrides: Partial<EmploymentEventInput> = {}): EmploymentEventInput {
@@ -47,10 +48,10 @@ function resolvedEvent(overrides: Partial<EmploymentEventInput> = {}): Employmen
   };
 }
 
-describe("every one of the 16 event types has an explicit disposition", () => {
+describe("every one of the 17 event types has an explicit disposition", () => {
   it("covers the union with no omissions", () => {
     expect(Object.keys(EVENT_DISPOSITIONS).sort()).toEqual([...ALL_EVENT_TYPES].sort());
-    expect(ALL_EVENT_TYPES).toHaveLength(16);
+    expect(ALL_EVENT_TYPES).toHaveLength(17);
   });
 
   it("stays in parity with the shipped union — a new event type fails this", () => {

@@ -330,6 +330,12 @@ export const INTENTIONAL_MODEL_ATTRIBUTE_REMOVALS = new Set([
   // Current remote-identity uniqueness is enforced by ExternalChannelProjection.
   // Migration: 20260822062000_allow_external_update_receipts.
   "OutboundPublication.@@unique([channelId, externalId])",
+  // 2026-11-14 BI-2BC8D614: the unique key gains qualifierKey (default "") so
+  // the rows of one withholding bracket table, which share a tax, kind, side
+  // and start date, are distinct figures. Widening a key by one column only
+  // relaxes it: every existing row keeps a unique identity under the new key.
+  // Migration: 20261114180000_payroll_tax_rule_qualifier_key.
+  "PayrollTaxRule.@@unique([jurisdictionRefId, taxType, ruleKind, side, effectiveFrom])",
 ]);
 
 // Models intentionally RETIRED through a steward-reviewed migration. A listed

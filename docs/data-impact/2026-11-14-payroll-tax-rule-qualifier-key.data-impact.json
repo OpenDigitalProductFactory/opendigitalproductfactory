@@ -1,0 +1,38 @@
+{
+  "version": "1",
+  "accountableOwner": "business-operator",
+  "summary": "BI-2BC8D614 (EP-PAYROLL-ABSORB). Migration 20261114180000_payroll_tax_rule_qualifier_key adds PayrollTaxRule.qualifierKey (TEXT NOT NULL DEFAULT '') and widens the unique key to include it, so each row of an IRS withholding bracket table (same tax, kind, side and start date) is its own person-confirmed figure. A Form W-4 is recorded as an EmploymentEvent of the new type withholding_recorded; no table is added.",
+  "affectedCopies": [
+    "PayrollTaxRule: one new column, derived from the existing qualifiers JSON (sorted scalar key=value pairs). Existing rows take '' and keep exactly the identity they had.",
+    "EmploymentEvent: a new eventType value, withholding_recorded, whose metadata carries the W-4 answers and the two-letter work state. Written only through recordAndActuateEmploymentEvent; its disposition is inert."
+  ],
+  "privacyAssessment": {
+    "personalData": false,
+    "sensitivity": "public figure key on internal statutory reference data. The W-4 metadata on EmploymentEvent is employee tax-election data and inherits that table's existing employee-record governance.",
+    "dataSubjectRights": "No new store. W-4 events live and are deleted with the employee's EmploymentEvent history, under the same rights handling as every other employment event.",
+    "reviewDisposition": "Additive column and key widening on regulated reference data; no new personal-data table."
+  },
+  "migration": {
+    "name": "20261114180000_payroll_tax_rule_qualifier_key",
+    "backfill": "None needed: every existing row is a stand-alone figure whose correct key is ''.",
+    "rollback": "Forward-only. The widened key is strictly looser than the one it replaces, so dropping the column and restoring the old index is safe only while no table has two rows sharing the old key."
+  },
+  "tests": [
+    "apps/web/lib/finance/statutory-rules.test.ts",
+    "apps/web/lib/finance/statutory-ratification.test.ts",
+    "apps/web/lib/hr/federal-withholding.test.ts",
+    "apps/web/lib/hr/us-payroll-rules.test.ts",
+    "apps/web/lib/workforce/employment-event-actuator.test.ts"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:payroll-tax-rule",
+      "prismaModel": "PayrollTaxRule",
+      "lifecycleDisposition": "Unchanged: regulated-record. The new column is part of a figure's identity and is kept for as long as the figure is.",
+      "fields": [
+        { "fieldId": "data:payroll-tax-rule#qualifierKey", "resolution": "governed", "reason": "Deterministic key derived from the published qualifiers (filing status, schedule, bracket floor). Public statutory reference data, no subject.", "provenance": "apps/web/lib/govern/data/statutory-reference-assets.ts", "flags": [] }
+      ]
+    }
+  ]
+}
