@@ -2,6 +2,7 @@ import { prometheusPoll, fullDiscoverySweep } from "./discovery-poll";
 import { modelDiscoveryRefresh } from "./model-discovery-refresh";
 import { routingReachabilityPreflight } from "./routing-reachability-preflight";
 import { infraPrune } from "./infra-prune";
+import { entityReferencesRebuild } from "./entity-references-rebuild";
 import { rateRecovery } from "./rate-recovery";
 import { providerRecovery } from "./provider-recovery";
 import { providerPauseExpiry, providerPauseReconcile } from "./provider-operator-pause";
@@ -186,6 +187,7 @@ export const scheduledFunctions = [
   modelDiscoveryRefresh,
   routingReachabilityPreflight, // BI-E2CCFAC1: coworker routing dead-ends surface before a human hits one
   infraPrune,
+  entityReferencesRebuild,
   codeGraphReconcileScheduled,
   issueReportTriage,
   ecosystemInboundTriage,

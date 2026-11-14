@@ -113,6 +113,26 @@ async function countNodesWithAnyLabel(labels: readonly string[]): Promise<number
   return Number(rows[0]?.n ?? 0);
 }
 
+const LIVE_REFERENCE_KEY = `(
+  EXISTS (SELECT 1 FROM "BacklogItem" b WHERE b."itemId" = k)
+  OR EXISTS (SELECT 1 FROM "Epic" p WHERE p."epicId" = k)
+  OR EXISTS (SELECT 1 FROM "Document" d WHERE d."documentId" = k)
+  OR EXISTS (SELECT 1 FROM "WikiPage" w WHERE w.id = k)
+  OR EXISTS (SELECT 1 FROM "WorkItemMessage" m WHERE m.id = k)
+  OR EXISTS (SELECT 1 FROM "WorkCapsule" r WHERE r."capsuleId" = k))`;
+
+/** Every MENTIONS edge, and those whose source and target rows still exist. */
+export async function countReferenceEdges(): Promise<{ total: number; live: number }> {
+  const rows = await prisma.$queryRawUnsafe<Array<{ total: bigint; live: bigint }>>(
+    `SELECT count(*)::bigint AS total,
+            count(*) FILTER (WHERE ${LIVE_REFERENCE_KEY.replace(/\bk\b/g, "e.src_key")}
+                               AND ${LIVE_REFERENCE_KEY.replace(/\bk\b/g, "e.dst_key")})::bigint AS live
+       FROM graph_edge e
+      WHERE e.rel_type = 'MENTIONS'`,
+  );
+  return { total: Number(rows[0]?.total ?? 0), live: Number(rows[0]?.live ?? 0) };
+}
+
 /**
  * Compare every projection that has no indexer of its own against its source.
  *
@@ -174,6 +194,20 @@ export async function reconcileGraphProjections(opts?: {
       status: classifyProjection(mirrorCount, sourceCount),
     });
   }
+
+  // References (BI-A63A9476 §5): counts only, never a repair; the rebuild
+  // (`references:rebuild`, weekly) is what repairs. The source side is the edges
+  // whose source and target rows still exist, so an edge a delete left behind
+  // reads as drift rather than hiding inside a healthy total.
+  const references = await countReferenceEdges();
+  out.push({
+    projectionKey: "references",
+    describes: "MENTIONS edges vs edges whose source and target still exist",
+    mirrorCount: references.total,
+    sourceCount: references.live,
+    drift: references.total - references.live,
+    status: classifyProjection(references.total, references.live),
+  });
 
   if (typeof opts?.docManifestPageCount === "number") {
     const docMirror = await countNodesWithAnyLabel([DOC_PAGE_LABEL]);
