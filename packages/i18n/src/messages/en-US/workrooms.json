@@ -611,7 +611,31 @@
     "areaLink": "See this portfolio's rooms in the Work Atlas",
     "areaSummary": "{$total} rooms in this portfolio · {$need} need a person · {$stuck} stuck or held",
     "rowMeta": "{$what} · {$who}",
-    "held": "Held: {$reason}"
+    "held": "Held: {$reason}",
+    "inspector": {
+      "close": "Close",
+      "idShape": "{$id} · {$shape}",
+      "noShape": "This room declares no shape, so it has no steps to show.",
+      "live": "Latest: {$summary} ({$date})",
+      "noLive": "Nothing recorded in this room yet.",
+      "needsPerson": "Needs {$who}: {$what}.",
+      "stuck": "Held: {$cause}.",
+      "stuckUnknown": "Held, with no cause recorded.",
+      "recovery": "Recovery condition: {$condition}",
+      "accountable": "Accountable",
+      "portfolio": "Portfolio",
+      "atStep": "At this step",
+      "atStepUsual": "{$duration} (usually {$usual})",
+      "openRoom": "Open room",
+      "showFlow": "Show in flow map",
+      "stage": {
+        "done": "Done",
+        "working": "Current step",
+        "awaiting-person": "Current step, waiting on a person",
+        "blocked": "Current step, held",
+        "ahead": "Still to do"
+      }
+    }
   },
   "savedProof": {
     "heading": "Saved builds",
