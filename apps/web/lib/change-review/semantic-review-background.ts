@@ -26,7 +26,7 @@ import { livenessNow } from "@/lib/shared/host-suspension";
 import { SEMANTIC_REVIEW_MAX_ATTEMPTS as MAX_DISPATCH_ATTEMPTS, semanticReviewRecoveryBudget, isSemanticReviewRecoveryWait, readCapacityRecoveryWait, readSemanticReviewBudget, semanticReviewNodeEligibility,
   semanticReviewCapacityWaitMs, semanticReviewEffectiveDeadline } from "./semantic-review-recovery-policy";
 import { readSemanticReviewRemediation } from "./semantic-review-remediation";
-import { capacityDeferralProof, capacityRecoveryMarker, hasProvenCapacityCheckpointSet, hasFinalReviewCheckpointSet } from "./semantic-review-capacity-recovery";
+import { capacityDeferralProof, capacityRecoveryMarker, generationCapacityWaitMs, hasProvenCapacityCheckpointSet, hasFinalReviewCheckpointSet, hasProvenNoDispatchLineage } from "./semantic-review-capacity-recovery";
 import { inspectLocalProviderCapacity, noteLocalAiDemand } from "@/lib/routing/local-provider-capacity";
 import { inspectLocalGpuAdmission } from "@/lib/inference/host-gpu-admission";
 import { NoEligibleEndpointsError } from "../routing/inference-error";
@@ -180,6 +180,8 @@ async function checkpointBranch(row: Run, packet: SemanticReviewRequest, generat
   // A running node is durable before the provider call. If the process dies,
   // reconciliation exposes uncertainty instead of silently repeating the call.
   onPhase("provider-call");
+  const branchStartedAt = Date.now();
+  let refusedAt = branchStartedAt;
   let result: SemanticReviewResult;
   let capacityDeferral: ReturnType<typeof capacityDeferralProof> = null;
   try {
@@ -196,6 +198,7 @@ async function checkpointBranch(row: Run, packet: SemanticReviewRequest, generat
     // Only a direct typed pre-dispatch refusal proves no provider work began.
     // A wrapped capacity error may also contain a failed paid remote attempt.
     capacityDeferral = capacityDeferralProof(error, packet.digest, generation);
+    refusedAt = Date.now();
     const eligibility = error instanceof NoEligibleEndpointsError && error.providerDispatch === "not-started"
       ? readRoutingEligibility(error.eligibility) : null;
     if (eligibility) {
@@ -221,7 +224,9 @@ async function checkpointBranch(row: Run, packet: SemanticReviewRequest, generat
     await assertFence(tx, row.taskRunId, generation);
     await tx.taskNode.update({ where: { taskNodeId }, data: { status: "completed", completedAt: new Date(),
       outputSnapshot: json({ requestDigest: packet.digest, result,
-        ...(capacityDeferral ? { providerOutcome: "not-dispatched", capacityDeferral } : {}),
+        // BI-49AA6BE8: time queued before a typed pre-dispatch refusal is wait, not review time.
+        ...(capacityDeferral ? { providerOutcome: "not-dispatched", capacityDeferral,
+          waitedBeforeRefusalMs: Math.max(0, refusedAt - branchStartedAt) } : {}),
         ...(result.routingEligibility ? { providerOutcome: "not-dispatched", routingEligibility: result.routingEligibility } : {}) }) } });
   });
   return result;
@@ -271,7 +276,8 @@ export async function retryPersistedSemanticReview(taskRunId: string, operatorUs
   if (recordedNodes.length > 100) throw new Error("semantic-review-checkpoint-limit-exceeded");
   const eligibilityBlocked = readSemanticReviewBudget(row.progressPayload).eligibilityBlocked === true
     || semanticReviewNodeEligibility(recordedNodes, packet.digest).length > 0;
-  if (budget === "expired" && successor) return admitReviewSuccessor(row, packet, operatorUserId, successor, eligibilityBlocked);
+  if (budget === "expired" && successor) return admitReviewSuccessor(row, packet,
+    { kind: "remediation", operatorUserId, recovery: successor, eligibilityBlocked });
   if (successor && !eligibilityBlocked) throw new Error("semantic-review-successor-requires-expired-request");
   if (budget === "expired") throw new Error("semantic-review-deadline-exhausted");
   if (budget !== "available" || typeof previousAttempt !== "number") throw new Error("semantic-review-recovery-exhausted");
@@ -321,12 +327,24 @@ async function reviewerAllowanceStillUsed(row: Run): Promise<{ resetAt: string }
   return budget?.status === "rejected" ? { resetAt: nextAllowanceReset().toISOString() } : null;
 }
 
-/** One successor per lineage, admitted by fresh scoped runtime evidence, never by a replay. */
-async function admitReviewSuccessor(row: Run, packet: SemanticReviewRequest, operatorUserId: string,
-  recovery: { remediationVerificationId: string; expectedRequestDigest: string }, eligibilityBlocked = false) {
+type SuccessorAdmission =
+  | { kind: "remediation"; operatorUserId: string; recovery: { remediationVerificationId: string; expectedRequestDigest: string };
+    eligibilityBlocked: boolean }
+  /** BI-49AA6BE8: the server's own proof that no branch ever reached a provider; no person restates it. */
+  | { kind: "proven-no-dispatch" };
+
+/**
+ * One successor per lineage, admitted by fresh scoped runtime evidence or by a
+ * server-proven no-dispatch lineage, never by a replay. Either way the change,
+ * request identity, failure evidence and authority are rechecked, and the
+ * predecessor is fenced before its checkpoints are read.
+ */
+async function admitReviewSuccessor(row: Run, packet: SemanticReviewRequest, admission: SuccessorAdmission) {
+  const remediation = admission.kind === "remediation" ? admission : null;
   if (object(row.progressPayload).resultClass === "fail") throw new Error("semantic-review-failed-verdict-requires-repair");
-  if (recovery.expectedRequestDigest !== packet.digest) throw new Error("semantic-review-recovery-digest-mismatch");
-  if (state(row).successorAttempt !== undefined || state(row).predecessorTaskRunId !== undefined) {
+  if (remediation && remediation.recovery.expectedRequestDigest !== packet.digest) throw new Error("semantic-review-recovery-digest-mismatch");
+  if (remediation ? state(row).successorAttempt !== undefined || state(row).predecessorTaskRunId !== undefined
+    : !noDispatchSuccessorAvailable(row)) {
     throw new Error("semantic-review-successor-budget-exhausted");
   }
   if (!(await verifySemanticReviewAuthority(packet, row.taskRunId))) throw new Error("semantic-review-recovery-authority-denied");
@@ -347,46 +365,63 @@ async function admitReviewSuccessor(row: Run, packet: SemanticReviewRequest, ope
   const attempt = object(row.a2aMetadata).attempt;
   if (typeof attempt !== "number" || !Number.isSafeInteger(attempt) || attempt < 1 || attempt >= Number.MAX_SAFE_INTEGER) throw new Error("semantic-review-attempt-invalid");
   const newTaskRunId = deterministicTaskRunId(packet.gateKey, attempt + 1);
+  const actorUserId = remediation ? remediation.operatorUserId : row.userId;
+  const successorAttempt = remediation ? 1
+    : (state(row).predecessorTaskRunId === undefined ? 0 : state(row).successorAttempt as number) + 1;
   const publication = await prisma.$transaction(async tx => {
-    const verification = await tx.runtimeVerification.findUnique({ where: { verificationId: recovery.remediationVerificationId } });
-    const proof = readSemanticReviewRemediation(verification, { capsuleId: capsule.id,
-      taskRunId: row.taskRunId, requestDigest: packet.digest, updatedAt: row.updatedAt });
-    if (!proof || (eligibilityBlocked && !proof.eligibilityVerified)) {
-      throw new Error("semantic-review-remediation-evidence-required");
+    let proof: ReturnType<typeof readSemanticReviewRemediation> = null;
+    if (remediation) {
+      const verification = await tx.runtimeVerification.findUnique({ where: { verificationId: remediation.recovery.remediationVerificationId } });
+      proof = readSemanticReviewRemediation(verification, { capsuleId: capsule.id,
+        taskRunId: row.taskRunId, requestDigest: packet.digest, updatedAt: row.updatedAt });
+      if (!proof || (remediation.eligibilityBlocked && !proof.eligibilityVerified)) {
+        throw new Error("semantic-review-remediation-evidence-required");
+      }
     }
     // CAS fences every old writer before inspecting checkpoints in this transaction.
     const changed = await tx.taskRun.updateMany({ where: { taskRunId: row.taskRunId, status: row.status, updatedAt: row.updatedAt },
-      data: { status: "canceled", completedAt: new Date(), progressPayload: progress(row, {
-        state: "superseded", successorTaskRunId: newTaskRunId, remediationVerificationId: recovery.remediationVerificationId,
-        recoveryAuthorizedBy: operatorUserId, recoveryAuthorizedAt: new Date().toISOString(),
+      data: { status: "canceled", completedAt: new Date(), progressPayload: progress(row, remediation ? {
+        state: "superseded", successorTaskRunId: newTaskRunId, remediationVerificationId: remediation.recovery.remediationVerificationId,
+        recoveryAuthorizedBy: remediation.operatorUserId, recoveryAuthorizedAt: new Date().toISOString(),
+      } : {
+        state: "superseded", successorTaskRunId: newTaskRunId, successorBasis: "proven-no-dispatch",
+        capacityRecovery: null, successorOnCapacity: false, recoveryAuthorizedAt: new Date().toISOString(),
       }) } });
     if (changed.count !== 1) throw new Error("semantic-review-recovery-state-changed");
     const nodes = await tx.taskNode.findMany({ where: { taskRunId: row.id }, take: 101 });
     if (nodes.length > 100) throw new Error("semantic-review-checkpoint-limit-exceeded");
-    for (const node of nodes) {
+    if (!remediation) {
+      // Re-proved inside the fence: a late writer cannot slip a dispatched branch in.
+      if (!hasProvenNoDispatchLineage({ nodes, requestDigest: packet.digest })) throw new Error("semantic-review-execution-unresolved");
+    } else for (const node of nodes) {
       const output = object(node.outputSnapshot);
       if (node.status === "completed") {
         if (output.requestDigest !== packet.digest) throw new Error("semantic-review-checkpoint-binding-mismatch");
         const restored = restoreSemanticReviewCheckpoint(output.result, String(object(node.requestContract).agentId ?? "change-reviewer"));
         if (restored.decision === "fail" || object(output.result).decision === "fail") throw new Error("semantic-review-failed-verdict-requires-repair");
       } else if (node.status !== "superseded") {
-        if (!proof.settledNodeIds.includes(node.taskNodeId)) throw new Error("semantic-review-execution-unresolved");
+        if (!proof!.settledNodeIds.includes(node.taskNodeId)) throw new Error("semantic-review-execution-unresolved");
         await tx.taskNode.update({ where: { taskNodeId: node.taskNodeId }, data: { status: "failed", completedAt: new Date(),
           outputSnapshot: json({ ...output, requestDigest: packet.digest, providerOutcome: "unknown",
-            remediationVerificationId: recovery.remediationVerificationId }) } });
+            remediationVerificationId: remediation.recovery.remediationVerificationId }) } });
       }
     }
-    await createPrismaSemanticReviewSingleFlightStore(tx, { packet: replacement, predecessorTaskRunId: row.taskRunId,
-      remediationVerificationId: recovery.remediationVerificationId }).create({
+    await createPrismaSemanticReviewSingleFlightStore(tx, remediation
+      ? { packet: replacement, predecessorTaskRunId: row.taskRunId, remediationVerificationId: remediation.recovery.remediationVerificationId }
+      : { packet: replacement, predecessorTaskRunId: row.taskRunId, successorAttempt, successorBasis: "proven-no-dispatch" }).create({
       taskRunId: newTaskRunId, repeatedPatternKey: `gate:${packet.gateKey}`, gateKey: packet.gateKey,
-      userId: operatorUserId, capsuleId: packet.input.identity.capsuleId, attempt: attempt + 1,
+      userId: actorUserId, capsuleId: packet.input.identity.capsuleId, attempt: attempt + 1,
       title: packet.input.title, objective: packet.input.title,
     });
     const activity = await recordWorkCapsuleEvidence({ db: tx, capsuleId: packet.input.identity.capsuleId,
-      evidence: { kind: "note", summary: "Authorized one bounded review successor after runtime reconciliation; no verdict inferred.",
+      evidence: { kind: "note", summary: remediation
+        ? "Authorized one bounded review successor after runtime reconciliation; no verdict inferred."
+        : "Started a successor review of the same change: no earlier branch reached a provider, so nothing needed settling. No verdict inferred.",
         targetId: newTaskRunId, result: { predecessorTaskRunId: row.taskRunId, requestDigest: packet.digest,
-          successorRequestDigest: replacement.digest, remediationVerificationId: recovery.remediationVerificationId,
-          deadlineAt: replacement.deadlineAt } }, actor: { userId: operatorUserId, agentId: null, principalId: null }, deferPublication: true });
+          successorRequestDigest: replacement.digest, deadlineAt: replacement.deadlineAt,
+          ...(remediation ? { remediationVerificationId: remediation.recovery.remediationVerificationId }
+            : { successorBasis: "proven-no-dispatch", successorAttempt }) } },
+      actor: { userId: actorUserId, agentId: null, principalId: null }, deferPublication: true });
     return activity;
   });
   publishRecordedWorkCapsuleActivity(capsule.id, publication.id);
@@ -403,7 +438,7 @@ export async function executePersistedSemanticReview(taskRunId: string) {
   const packet = await requestFor(row);
   if (!packet) return settle(row, "input-required", "immutable-review-request-unavailable");
   if (Date.now() >= Date.parse(reviewDeadline(row, packet))) {
-    return settle(row, "failed", "review-deadline-exhausted");
+    return await parkNoDispatchLineage(row, packet, Date.now()) ?? settle(row, "failed", "review-deadline-exhausted");
   }
   if (!(await verifySemanticReviewAuthority(packet, taskRunId))) {
     return settle(row, "auth-required", "submitting-authority-no-longer-valid");
@@ -519,12 +554,14 @@ export async function executePersistedSemanticReview(taskRunId: string) {
       // terminal outcome, matching settle(); the previous write marked an
       // inconclusive run both failed AND completed.
       const inconclusive = outcome.receipt.result.decision === "inconclusive";
-      const capacityRecovery = inconclusive && outcome.receipt.result.inconclusiveReason === "review-capacity-deferred"
-        && hasProvenCapacityCheckpointSet({
-          nodes: await tx.taskNode.findMany({ where: { taskRunId: row.id }, take: 101 }),
-          taskRunId, requestDigest: packet.digest, recoveryAttempt: state(row).recoveryAttempt ?? 0,
+      const generationNodes = inconclusive && outcome.receipt.result.inconclusiveReason === "review-capacity-deferred"
+        ? await tx.taskNode.findMany({ where: { taskRunId: row.id }, take: 101 }) : [];
+      const settledAt = Date.now();
+      const capacityRecovery = generationNodes.length && hasProvenCapacityCheckpointSet({
+          nodes: generationNodes, taskRunId, requestDigest: packet.digest, recoveryAttempt: state(row).recoveryAttempt ?? 0,
           specialistIds: packet.input.identity.specialistIds,
-        }) ? capacityRecoveryMarker(packet.digest, Date.now()) : null;
+        }) ? capacityRecoveryMarker(packet.digest, settledAt, 0,
+          new Date(settledAt - generationCapacityWaitMs(generationNodes, packet.digest, generation)).toISOString()) : null;
       const recordedStatus = inconclusive ? "input-required" : "completed";
       const accepted = await tx.taskRun.updateMany({ where: fence(taskRunId, generation),
         data: { status: recordedStatus, ...(inconclusive ? {} : { completedAt: new Date() }) } });
@@ -592,18 +629,45 @@ function currentReviewSource(packet: SemanticReviewRequest, room: { headSha: str
     && room.repositoryFullName?.toLowerCase() === packet.repository.toLowerCase();
 }
 
+/** Bounds a chain of server-admitted successors; a remediation-admitted successor never chains. */
+const MAX_NO_DISPATCH_SUCCESSORS = MAX_DISPATCH_ATTEMPTS;
+function noDispatchSuccessorAvailable(row: Run): boolean {
+  if (object(row.progressPayload).resultClass === "fail" || typeof state(row).successorTaskRunId === "string") return false;
+  if (state(row).predecessorTaskRunId === undefined) return true;
+  const position = state(row).successorAttempt;
+  return state(row).successorBasis === "proven-no-dispatch" && typeof position === "number"
+    && Number.isSafeInteger(position) && position >= 1 && position < MAX_NO_DISPATCH_SUCCESSORS;
+}
+async function provenNoDispatchLineage(db: Prisma.TransactionClient | typeof prisma, row: Run, packet: SemanticReviewRequest) {
+  const nodes = await db.taskNode.findMany({ where: { taskRunId: row.id }, take: 101 });
+  return nodes.length <= 100 && hasProvenNoDispatchLineage({ nodes, requestDigest: packet.digest });
+}
+/**
+ * BI-49AA6BE8. A review whose window or attempts ran out before any branch
+ * reached a provider is not failed: it waits for capacity, and the server then
+ * starts one bounded successor of the same change. Null when not eligible.
+ */
+async function parkNoDispatchLineage(row: Run, packet: SemanticReviewRequest, now: number) {
+  if (!noDispatchSuccessorAvailable(row) || !await provenNoDispatchLineage(prisma, row, packet)) return null;
+  return settle(row, "input-required", "review-capacity-deferred", {
+    capacityRecovery: capacityRecoveryMarker(packet.digest, now), successorOnCapacity: true, generation: null,
+    action: "No branch reached a provider; when capacity returns the server starts one bounded successor review of this change.",
+  });
+}
+
 /** Admission only: the existing outbox and worker still own execution and its final receipt. */
 async function resumeCapacityWait(row: Run, now: Date): Promise<boolean> {
   const marker = readCapacityRecoveryWait(state(row));
   if (!marker || now.getTime() < Date.parse(marker.nextCheckAt)) return false;
   const hold = async (reason: string, action: string, status: "input-required" | "auth-required" = "input-required") => {
-    await settle(row, status, reason, { action, capacityRecovery: null }); return false;
+    await settle(row, status, reason, { action, capacityRecovery: null, successorOnCapacity: false }); return false;
   };
+  let spentWait = false;
   const wait = async (reason: string, action: string) => {
     await settle(row, "input-required", "review-capacity-deferred", {
       capacityRecovery: capacityRecoveryMarker(marker.requestDigest, now.getTime(), marker.checks + 1,
         marker.waitStartedAt ?? now.toISOString()),
-      capacityWaitReason: reason, action,
+      capacityWaitReason: reason, action, ...(spentWait ? { successorOnCapacity: true } : {}),
     });
     return false;
   };
@@ -612,17 +676,23 @@ async function resumeCapacityWait(row: Run, now: Date): Promise<boolean> {
   const attempt = state(row).recoveryAttempt ?? 0;
   const dispatch = state(row).dispatchAttempt;
   const budget = semanticReviewRecoveryBudget(reviewDeadline(row, packet, now.getTime()), attempt, now.getTime());
-  if (budget !== "available"
-    || typeof attempt !== "number" || typeof dispatch !== "number" || !Number.isSafeInteger(dispatch)
-    || dispatch < 0 || dispatch >= MAX_DISPATCH_ATTEMPTS) return hold(budget === "expired" ? "review-deadline-exhausted"
+  const countersValid = typeof attempt === "number" && Number.isSafeInteger(attempt) && attempt >= 0
+    && typeof dispatch === "number" && Number.isSafeInteger(dispatch) && dispatch >= 0 && dispatch <= MAX_DISPATCH_ATTEMPTS;
+  // BI-49AA6BE8: this window or its attempts are spent, but if no branch ever
+  // reached a provider there is nothing to settle; a successor may follow.
+  const spent = countersValid && (budget === "expired" || budget === "exhausted" || dispatch >= MAX_DISPATCH_ATTEMPTS);
+  const spentHold = () => hold(budget === "expired" ? "review-deadline-exhausted"
       : budget === "exhausted" || dispatch === MAX_DISPATCH_ATTEMPTS ? "review-recovery-attempts-exhausted" : "review-recovery-budget-invalid",
     "Inspect the original expired, exhausted or invalid budget; automatic recovery cannot renew it.");
+  if (spent ? !(noDispatchSuccessorAvailable(row) && await provenNoDispatchLineage(prisma, row, packet))
+    : budget !== "available" || !countersValid) return spentHold();
   const checkpointSet = async (db: Prisma.TransactionClient | typeof prisma) => hasProvenCapacityCheckpointSet({
     nodes: await db.taskNode.findMany({ where: { taskRunId: row.id }, take: 101 }),
-    taskRunId: row.taskRunId, requestDigest: packet.digest, recoveryAttempt: attempt,
+    taskRunId: row.taskRunId, requestDigest: packet.digest, recoveryAttempt: attempt as number,
     specialistIds: packet.input.identity.specialistIds,
   });
-  if (!await checkpointSet(prisma)) return hold("review-capacity-proof-unavailable", "Reconcile every recorded branch; automatic recovery requires complete pre-dispatch proof.");
+  spentWait = spent;
+  if (!spent && !await checkpointSet(prisma)) return hold("review-capacity-proof-unavailable", "Reconcile every recorded branch; automatic recovery requires complete pre-dispatch proof.");
   let capacity: Awaited<ReturnType<typeof inspectLocalProviderCapacity>>;
   try {
     capacity = await inspectLocalProviderCapacity();
@@ -656,13 +726,23 @@ async function resumeCapacityWait(row: Run, now: Date): Promise<boolean> {
   if (!analysis.valid || analysis.digest !== packet.input.identity.failureAnalysisDigest) {
     return hold("failure-analysis-evidence-changed", "Submit a refreshed immutable review request with current failure evidence.");
   }
+  if (spent) {
+    try { await admitReviewSuccessor(row, packet, { kind: "proven-no-dispatch" }); }
+    catch (error) {
+      const message = error instanceof Error ? error.message : "";
+      // A refusal is durable; anything else is re-observed on the next check without dispatching.
+      if (message.startsWith("semantic-review-")) return hold("review-successor-refused", `The server could not start a successor (${message.split(":")[0]}). Inspect the recorded review.`);
+      return wait("review-capacity-observation-unavailable", "Successor admission could not complete; the server will recheck without dispatching inference.");
+    }
+    return false;
+  }
   return prisma.$transaction(async tx => {
     const admittedAt = Math.max(now.getTime(), Date.now());
-    if (semanticReviewRecoveryBudget(reviewDeadline(row, packet, admittedAt), attempt, admittedAt) !== "available") return false;
+    if (semanticReviewRecoveryBudget(reviewDeadline(row, packet, admittedAt), attempt as number, admittedAt) !== "available") return false;
     if (!await checkpointSet(tx)) return false;
     const changed = await tx.taskRun.updateMany({ where: { taskRunId: row.taskRunId, status: row.status, updatedAt: row.updatedAt },
       data: { status: "submitted", progressPayload: progress(row, { state: "pending", generation: null,
-        recoveryReason: "capacity-restored", recoveryAttempt: attempt + 1, capacityRecovery: null,
+        recoveryReason: "capacity-restored", recoveryAttempt: (attempt as number) + 1, capacityRecovery: null,
         // Close the open wait into a fixed credit; the resumed run's deadline stops moving.
         capacityWaitCreditMs: semanticReviewCapacityWaitMs(state(row), admittedAt),
         action: "Capacity recovered; observe this task's next recorded result without submitting duplicate inference." }) } });
@@ -697,7 +777,9 @@ export async function reconcileSemanticReviews(now = new Date()) {
       continue;
     }
     if (now.getTime() >= deadline) {
-      if ((await (row.status === "submitted" ? settle(row, "failed", "review-deadline-exhausted")
+      const packet = row.status === "submitted" ? await requestFor(row) : null;
+      const parked = packet ? await parkNoDispatchLineage(row, packet, now.getTime()) : null;
+      if ((parked ?? await (row.status === "submitted" ? settle(row, "failed", "review-deadline-exhausted")
         : parkLostReview(row, "review-deadline-exhausted"))).changed) waiting += 1;
       continue;
     }

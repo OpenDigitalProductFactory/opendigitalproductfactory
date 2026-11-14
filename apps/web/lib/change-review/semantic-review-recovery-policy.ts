@@ -105,7 +105,10 @@ export function semanticReviewRecoveryObservation(status: string, payload: unkno
   const reason = typeof recorded.reason === "string" ? recorded.reason : null;
   const executionUncertain = recorded.executionOutcome === "unknown" || reason?.startsWith("provider-outcome-uncertain");
   const allowanceResetAt = reason === "reviewer-daily-allowance-used" && typeof recorded.allowanceResetAt === "string" ? recorded.allowanceResetAt : null;
-  const capacityRecovery = status === "input-required" && budget === "available" ? readCapacityRecoveryWait(recorded) : null;
+  // BI-49AA6BE8: past its window, only a lineage the server proved never dispatched keeps a wait, ending in a successor.
+  const successorOnCapacity = recorded.successorOnCapacity === true && budget !== "available" && budget !== "unknown";
+  const capacityRecovery = status === "input-required" && (budget === "available" || successorOnCapacity)
+    ? readCapacityRecoveryWait(recorded) : null;
   const classification = successorTaskRunId ? "superseded" : status === "completed" ? "completed"
     : status === "canceled" ? "canceled" : status === "auth-required" ? "authorization-required" : executing ? "active-execution"
     : executionUncertain ? "execution-uncertain"
@@ -124,6 +127,7 @@ export function semanticReviewRecoveryObservation(status: string, payload: unkno
       : allowanceResetAt ? `The reviewer's daily allowance for paid AI is used; no provider was asked. It resets at ${allowanceResetAt}. Submit a fresh review after the reset, or after an owner raises it in Admin > Platform Development > Paid AI allowance.`
       : executionUncertain ? "The original execution outcome is unknown. Use the owned recovery details to establish complete execution settlement before requesting any retry or successor."
       : snapshot.eligibilityBlocked ? "Verify scoped endpoint eligibility remediation and record fresh runtime evidence before requesting recovery. An unchanged retry cannot resolve this refusal; the original budget still applies."
+      : capacityRecovery && successorOnCapacity ? `No branch reached a provider. The server rechecks capacity after ${capacityRecovery.nextCheckAt} and then starts one successor review of this change; do not submit duplicate inference.`
       : capacityRecovery ? `The server will recheck capacity after ${capacityRecovery.nextCheckAt} within the original window; do not submit duplicate inference.`
       : budget === "available" ? "Reconcile the execution, then confirm retry_semantic_review if replacement is required."
       : budget === "expired" && recorded.successorAttempt !== undefined ? "The successor window is exhausted. Inspect the recorded failure; this lineage cannot renew again."
