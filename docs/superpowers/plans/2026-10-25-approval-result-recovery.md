@@ -41,12 +41,21 @@ No product source implementation starts before the live coverage and implementat
 
 ## Runtime result successor (BI-08B1B79B)
 
-This medium atomic correction extends the existing design's OBJ-ARR-1/2 and
+This medium atomic correction extends the existing design's OBJ-ARR-1 and OBJ-ARR-2 and
 AC-ARR-1 through AC-ARR-6. It does not deliver or reopen the earlier handoff,
 D6 image action, broader approval policy, or original uncertain operations.
 FLOW-ARR-READ: authenticate current reader, select owned envelope, qualify one
 bound original execution, read its exact authorized transition when available,
 project typed facts, render existing owner/API/MCP result and reload it.
+
+The medium item's acceptance criteria are retained verbatim:
+
+- AC-ARR-1: Exact owner and current assistant can inspect safely bound original reconcile_runtime_capabilities evidence through existing native status projection; owner Inbox/API use the same result.
+- AC-ARR-2: Closed known pre-effect refusal codes are explained only when the actual bound original result proves them. Other errors remain unknown; no arbitrary handler text is surfaced.
+- AC-ARR-3: A completed/failed/recovery-required durable transition is selected by exact server-bound identity and requested owner, never a latest row. Contradictory or unavailable transition/result/receipt stays unverified; success requires actual qualifying receipt and does not infer restoration or provider closure.
+- AC-ARR-4: Approval outcome remains distinct from actual transition/host-effect evidence. Viewing result never creates/replays an operation or changes approval/settlement.
+- AC-ARR-5: RED/GREEN regressions cover provider/handoff compatibility, audit shadowing, foreign actor/thread/input, changed transition binding, ambiguity, missing/invalid result, partial or contradictory host receipt, private payloads and safe current-owner readback.
+- AC-ARR-6: Affected tests/typechecks, canonical gate, independent native/source review and protected publication; after coordinated deployment, ROOT exercises the original exact read without replay, and owner served result/reload is checked with actual limits recorded.
 
 1. Record the unsupported-runtime reproduction on immutable source. Add RED
    tests in the existing approval evidence suite before changing product code.
