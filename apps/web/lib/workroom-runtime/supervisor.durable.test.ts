@@ -298,6 +298,19 @@ describe("the room outbox across a restart (BI-C64EDA33, AC-4)", () => {
     expect(stored()).toMatchObject({ deliveredCursor: "cur-1", inFlight: null, activeTurnId: "turn-9" });
   });
 
+  it("a room message is handed over once: its id makes a repeated delivery a replay, and its wake commits with it", async () => {
+    const h = portal();
+    await h.runtime.start({ capsuleId: "WC-1", provider: "codex", actor });
+    await h.settle();
+    const wake = { messageRowId: "m1", structuredPayload: { addressing: { wake: { state: "woken" } } } };
+    const first = await h.runtime.deliver({ capsuleId: "WC-1", prompt: "room says hi", deliveredCursor: "cur-1", messageId: "MSG-1", wake });
+    const again = await h.runtime.deliver({ capsuleId: "WC-1", prompt: "room says hi", deliveredCursor: "cur-1", messageId: "MSG-1", wake });
+    expect(again).toEqual(first);
+    await h.settle();
+    expect(h.session.startTurn).toHaveBeenCalledTimes(1);
+    expect(store.messageWakes).toEqual([wake]);
+  });
+
   it("a stop decided just before a crash still revokes the credential after the restart", async () => {
     const before = portal();
     await before.runtime.start({ capsuleId: "WC-1", provider: "codex", actor });

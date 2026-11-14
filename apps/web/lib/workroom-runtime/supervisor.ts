@@ -26,7 +26,7 @@ import { TERMINAL_WORKROOM_STATUSES } from "@/lib/work-management/standing-room-
 import { createEffectWorker, effectResultCommandId, RetireEffectError, type EffectReport } from "./effect-worker.server";
 import { createEnvelopeHeldRequestStore, type HeldRequestStore } from "./held-request-store";
 import { createRuntimeCommitter, StaleEffectSettlementError, type RuntimeCommitter } from "./runtime-commit.server";
-import type { RuntimeCommand } from "./runtime-decider";
+import type { RoomMessageWakeWrite, RuntimeCommand } from "./runtime-decider";
 import { decideClaudeToolCall } from "./runtime-request-policy";
 import {
   DEFAULT_RUNTIME_CWD,
@@ -378,8 +378,9 @@ export function createRuntimeSupervisor(deps: RuntimeSupervisorDeps) {
     },
 
     /** A room message addressed to the session, as its next turn; the cursor moves past what it was handed. */
-    deliver(input: { capsuleId: string; prompt: string; deliveredCursor: string; commandId?: string }): Promise<RuntimeResult> {
-      return turnCommand(input.capsuleId, { type: "room-message.deliver", prompt: input.prompt, deliveredCursor: input.deliveredCursor, at: at() }, input.commandId);
+    deliver(input: { capsuleId: string; prompt: string; deliveredCursor: string; messageId?: string; wake?: RoomMessageWakeWrite | null }): Promise<RuntimeResult> {
+      return turnCommand(input.capsuleId, { type: "room-message.deliver", prompt: input.prompt, deliveredCursor: input.deliveredCursor, wake: input.wake ?? null, at: at() },
+        input.messageId ? `room-message:${input.messageId}:deliver` : undefined);
     },
 
     async interrupt(capsuleId: string): Promise<RuntimeResult> {

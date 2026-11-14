@@ -9,7 +9,7 @@
 import type { WorkCapsuleActor } from "@/lib/work-capsules/work-capsule-store-types";
 
 import { StaleEffectSettlementError, type RuntimeCommitter } from "../runtime-commit.server";
-import { decideRuntimeCommand, isProcessBound, type EffectKind } from "../runtime-decider";
+import { decideRuntimeCommand, isProcessBound, type EffectKind, type RoomMessageWakeWrite } from "../runtime-decider";
 import { readStoredRuntimeSession } from "../supervised-session";
 import type { EffectStorePort } from "../supervisor";
 import type { ClaimedEffect } from "../workroom-effect-store";
@@ -23,6 +23,7 @@ export function createMemoryRuntimeStore(rooms: (capsuleId: string) => Room | nu
   const receipts = new Map<string, Record<string, unknown>>();
   const effects: MemoryEffect[] = [];
   const activities: MemoryActivity[] = [];
+  const messageWakes: RoomMessageWakeWrite[] = [];
   let sequence = 0;
 
   const commit: RuntimeCommitter = async ({ capsuleId, commandId, command, actor }) => {
@@ -55,6 +56,7 @@ export function createMemoryRuntimeStore(rooms: (capsuleId: string) => Room | nu
       const by = a.as === "actor" ? actor : starter ? { ...starter, agentId: "workroom-runtime" } : { ...actor, agentId: "workroom-runtime" };
       activities.push({ kind: a.kind, summary: a.summary, payload: a.payload, actor: by });
     }
+    if (decision.messageWake) messageWakes.push(decision.messageWake);
     if (decision.session !== undefined) room.workspaceState = { ...room.workspaceState, runtimeSession: JSON.parse(JSON.stringify(decision.session)) };
     decision.effects.forEach((effect, ordinal) => {
       if (effects.some((e) => e.workCapsuleId === room.id && e.commandKey === commandId && e.ordinal === ordinal)) return;
@@ -101,5 +103,5 @@ export function createMemoryRuntimeStore(rooms: (capsuleId: string) => Room | nu
     },
   };
 
-  return { commit, effects: store, effectRows: effects, activities, kinds: () => activities.map((a) => a.kind) };
+  return { commit, effects: store, effectRows: effects, activities, messageWakes, kinds: () => activities.map((a) => a.kind) };
 }

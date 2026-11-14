@@ -163,7 +163,7 @@ The item's criteria, word for word:
 
 - Decision: decomposed
 - Parent: BI-C64EDA33
-- Receipt: cmwfx1zh709qg0emodzww40th
+- Receipt: cmwfzo1dz0w7c0emo4xoua5tp
 - Dependencies: PR 2 and PR 3 depend on PR 1
 - PR 1, the core -> BI-C64EDA33
 - PR 2, room delivery on the outbox -> BI-C64EDA33

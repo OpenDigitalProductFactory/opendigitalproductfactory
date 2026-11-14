@@ -35,6 +35,7 @@ export class StaleEffectSettlementError extends Error {
 class RoomNotFoundError extends Error {}
 
 type CommitTx = CapsuleDb & {
+  workItemMessage: { update(args: unknown): Promise<unknown> };
   $queryRaw<T = unknown>(strings: TemplateStringsArray, ...values: unknown[]): Promise<T>;
   $executeRaw(strings: TemplateStringsArray, ...values: unknown[]): Promise<number>;
 };
@@ -86,6 +87,10 @@ export function createRuntimeCommitter(deps: { db?: unknown; now?: () => Date } 
           }
           if (decision.session !== undefined) {
             await tx.$executeRaw`UPDATE "WorkCapsule" SET "workspaceState" = jsonb_set(COALESCE("workspaceState", '{}'::jsonb), '{runtimeSession}', ${JSON.stringify(decision.session)}::jsonb, true) WHERE "id" = ${room.id}`;
+          }
+          if (decision.messageWake) {
+            // The message reads as delivered only together with the decision that hands it over.
+            await tx.workItemMessage.update({ where: { id: decision.messageWake.messageRowId }, data: { structuredPayload: decision.messageWake.structuredPayload } });
           }
           await insertEffects(run, { roomRowId: room.id, commandId: input.commandId, generation: after?.generation ?? null, effects: decision.effects, now: at });
           return { reply: decision.reply, roomRowId: room.id, activityIds };
