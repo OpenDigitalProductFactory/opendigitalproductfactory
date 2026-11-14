@@ -7,7 +7,7 @@
 > whether the doc's wording actually needs updating (BI-AA5DFEA2). It does NOT
 > mean the doc is definitely wrong.
 
-**212** stale-candidate doc(s).
+**210** stale-candidate doc(s).
 
 | Doc | Drift | Most-recently-changed reference(s) |
 | --- | ----- | ---------------------------------- |
@@ -58,7 +58,6 @@
 | `docs/marketing/dpf-market-vision.md` | 75d | `docs/index.html` (+75d) |
 | `docs/founder-kernel/wiki/principles/worktree-selection-and-reaping.md` | 72d | `AGENTS.md` (+72d)<br>`docs/superpowers/specs/2026-06-05-unified-delivery-surfaces-execution-alignment-design.md` (+59d)<br>`docs/founder-kernel/wiki/principles/platform-function-never-depends-on-a-client.md` (+21d) |
 | `docs/architecture/field-service-work-item.md` | 71d | `packages/validators/src/field-dispatch.ts` (+71d) |
-| `docs/user-guide/finance/index.md` | 71d | `docs/user-guide/finance/controls-and-automation.md` (+71d)<br>`docs/user-guide/finance/ai-spend.md` (+70d)<br>`docs/user-guide/finance/accounts-payable.md` (+58d)<br>…+3 more |
 | `docs/personas/marisol-retail.md` | 70d | `docs/edge-node/deployment-topology.md` (+70d)<br>`docs/superpowers/specs/2026-05-24-vertical-workspace-home-design.md` (+42d)<br>`docs/superpowers/specs/2026-06-19-edge-node-deployment-topology-and-remote-provisioning-design.md` (+0d) |
 | `docs/personas/dale-hvac.md` | 68d | `docs/superpowers/specs/2026-05-24-vertical-workspace-home-design.md` (+68d)<br>`docs/dogfood/2026-05-23-dale-hvac-build-studio.md` (+1d) |
 | `docs/personas/linda-clinic.md` | 68d | `docs/superpowers/specs/2026-05-24-vertical-workspace-home-design.md` (+68d) |
@@ -83,8 +82,8 @@
 | `docs/founder-kernel/RAW-SOURCES-LICENSE.md` | 46d | `docs/superpowers/specs/2026-05-09-platform-kernel-wiki-design.md` (+46d)<br>`docs/architecture/four-portfolio-archetype-ai-workforce-operating-standard.md` (+11d) |
 | `docs/runbooks/dependency-compromise.md` | 44d | `docs/architecture/dependency-reduction-routine.md` (+44d) |
 | `docs/user-guide/development-workspace.md` | 44d | `docs/user-guide/build-studio/index.md` (+44d)<br>`docs/user-guide/contributing/agent-dev-environments.md` (+44d)<br>`docs/user-guide/operations/self-upgrade.md` (+42d)<br>…+1 more |
-| `docs/user-guide/getting-started/index.md` | 44d | `docs/user-guide/build-studio/index.md` (+44d)<br>`docs/user-guide/getting-started/roles-and-access.md` (+43d)<br>`docs/user-guide/customers/index.md` (+32d)<br>…+3 more |
-| `docs/user-guide/index.md` | 44d | `docs/user-guide/build-studio/index.md` (+44d)<br>`docs/user-guide/operations/index.md` (+44d)<br>`docs/user-guide/ai-workforce/index.md` (+43d)<br>…+15 more |
+| `docs/user-guide/getting-started/index.md` | 44d | `docs/user-guide/build-studio/index.md` (+44d)<br>`docs/user-guide/workspace/index.md` (+44d)<br>`docs/user-guide/getting-started/roles-and-access.md` (+43d)<br>…+3 more |
+| `docs/user-guide/index.md` | 44d | `docs/user-guide/build-studio/index.md` (+44d)<br>`docs/user-guide/finance/index.md` (+44d)<br>`docs/user-guide/operations/index.md` (+44d)<br>…+16 more |
 | `docs/architecture/orientation.md` | 42d | `docs/architecture/architecture-counts.generated.md` (+42d)<br>`docs/architecture/delivery-surfaces-runbook.md` (+42d)<br>`docs/architecture/mcp-tool-authorization-runbook.md` (+42d)<br>…+8 more |
 | `docs/founder-kernel/wiki/principles/never-ask-user-to-run-commands.md` | 42d | `docs/founder-kernel/wiki/principles/do-the-work-dont-task-the-operator.md` (+42d)<br>`docs/founder-kernel/wiki/principles/state-results-directly.md` (+42d)<br>`docs/founder-kernel/wiki/principles/autonomous-directives-are-blanket-approval.md` (+25d) |
 | `docs/architecture/skill-surfaces-runbook.md` | 41d | `AGENTS.md` (+41d)<br>`docs/superpowers/specs/2026-07-03-harness-enforced-decision-routing-and-lease-punt-gates-design.md` (+41d)<br>`docs/founder-kernel/wiki/principles/consult-scopes-before-asking.md` (+38d) |
@@ -143,7 +142,6 @@
 | `docs/runbooks/bet5-windows-self-upgrade.md` | 17d | `docs/superpowers/specs/2026-07-18-install-state-readiness-migration-design.md` (+17d) |
 | `docs/user-guide/compliance/policies-and-acknowledgements.md` | 17d | `docs/user-guide/compliance/controls-and-evidence.md` (+17d)<br>`docs/user-guide/compliance/regulations-and-obligations.md` (+17d) |
 | `docs/architecture/backlog-archetype-scope.md` | 16d | `docs/architecture/initiative-readiness-runbook.md` (+16d) |
-| `docs/user-guide/workspace/index.md` | 16d | `docs/user-guide/operations/index.md` (+16d)<br>`docs/user-guide/workspace/work-rooms.md` (+16d)<br>`docs/user-guide/workspace/attention-inbox.md` (+15d)<br>…+1 more |
 | `docs/architecture/agent-client-governance.md` | 15d | `docs/architecture/failure-analysis-and-recovery.md` (+15d) |
 | `docs/architecture/review-reliability-recovery.md` | 15d | `docs/founder-kernel/wiki/principles/absorb-dont-adopt.md` (+15d)<br>`docs/architecture/contributor-procedure-runbook.md` (+13d) |
 | `docs/founder-kernel/wiki/principles/architecture-over-shortcuts.md` | 15d | `docs/founder-kernel/wiki/principles/absorb-dont-adopt.md` (+15d) |
@@ -198,7 +196,7 @@
 | `docs/user-guide/compliance/index.md` | 2d | `docs/user-guide/compliance/licensing-readiness.md` (+2d) |
 | `AGENTS.md` | 1d | `docs/architecture/backlog-and-planning-runbook.md` (+1d)<br>`docs/architecture/build-gate-runbook.md` (+1d)<br>`docs/architecture/delivery-surfaces-runbook.md` (+1d)<br>…+4 more |
 | `docs/architecture/2026-06-09-long-running-agentic-process-architecture.md` | 1d | `apps/web/instrumentation.ts` (+1d)<br>`apps/web/lib/coworker/authorized-surface-runtime.ts` (+1d)<br>`apps/web/lib/mcp/packs/surface-pack.ts` (+1d)<br>…+5 more |
-| `docs/architecture/initiative-readiness-runbook.md` | 1d | `docs/architecture/mcp-tool-authorization-runbook.md` (+1d)<br>`apps/web/lib/work-capsules/governed-work-claim.ts` (+0d) |
+| `docs/architecture/initiative-readiness-runbook.md` | 1d | `apps/web/lib/mcp/packs/coworker-pack.ts` (+1d)<br>`docs/architecture/mcp-tool-authorization-runbook.md` (+1d)<br>`apps/web/lib/work-capsules/governed-work-claim.ts` (+0d) |
 | `docs/Reference/html-living-standard.md` | 1d | `docs/Reference/sysml-v2.md` (+1d) |
 | `docs/testing/pr-health.md` | 1d | `docs/architecture/failure-analysis-and-recovery.md` (+1d) |
 | `docs/user-guide/admin/index.md` | 1d | `docs/user-guide/operations/index.md` (+1d)<br>`docs/operations/acceptance-sweep.md` (+0d)<br>`docs/user-guide/ai-workforce/index.md` (+0d) |
@@ -209,7 +207,7 @@
 | `docs/architecture/branch-and-worktree-runbook.md` | 0d | `docs/architecture/mcp-tool-authorization-runbook.md` (+0d) |
 | `docs/architecture/dpf-patterns.md` | 0d | `docs/architecture/delivery-surfaces-runbook.md` (+0d)<br>`packages/db/prisma/schema/build-delivery.prisma` (+0d)<br>`packages/db/prisma/schema/work-coordination.prisma` (+0d) |
 | `docs/architecture/enforced-ci-gates.md` | 0d | `docs/architecture/failure-analysis-and-recovery.md` (+0d) |
-| `docs/architecture/mcp-tool-authorization-runbook.md` | 0d | `docs/architecture/agent-client-capability-parity.md` (+0d) |
+| `docs/architecture/mcp-tool-authorization-runbook.md` | 0d | `docs/architecture/agent-client-capability-parity.md` (+0d)<br>`docs/superpowers/specs/2026-10-27-agent-dialog-broker-design.md` (+0d) |
 | `docs/architecture/mcp-tool-packs.md` | 0d | `docs/user-guide/workspace/work-rooms.md` (+0d) |
 | `docs/install/platform-support-watchlist.md` | 0d | `docs/architecture/build-gate-runbook.md` (+0d) |
 | `docs/operations/autonomous-build-completion.md` | 0d | `docs/user-guide/build-studio/autonomous-builds.md` (+0d) |

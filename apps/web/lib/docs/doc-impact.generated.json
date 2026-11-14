@@ -1182,7 +1182,8 @@
       "docs/architecture/mcp-tool-packs.md"
     ],
     "apps/web/lib/mcp/packs/coworker-pack.ts": [
-      "docs/architecture/initiative-readiness-runbook.md"
+      "docs/architecture/initiative-readiness-runbook.md",
+      "docs/maintenance/staleness-report.md"
     ],
     "apps/web/lib/mcp/packs/deliberation-siem-pack.ts": [
       "docs/architecture/mcp-tool-packs.md"
@@ -4273,6 +4274,7 @@
       "apps/web/instrumentation.ts",
       "apps/web/lib/coworker/authorized-surface-runtime.ts",
       "apps/web/lib/inference/routed-inference.ts",
+      "apps/web/lib/mcp/packs/coworker-pack.ts",
       "apps/web/lib/mcp/packs/surface-pack.ts",
       "apps/web/lib/routing/cost-ranking.ts",
       "apps/web/lib/shared/markdown.ts",
