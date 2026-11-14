@@ -11,6 +11,8 @@ import {
   buildSandboxBuildCloneAlignCommand,
   buildSandboxBuildCloneCommand,
   buildSandboxBuildCloneRebaseCommand,
+  buildSandboxRegenerateDerivedArtifactsCommand,
+  parseRegenerateDerivedArtifactsOutput,
   buildSandboxPublishedHeadFetchCommand,
   buildSandboxBuildCloneRemoveCommand,
   buildSandboxBuildCloneSyncCommand,
@@ -208,6 +210,57 @@ describe("build clone rebase onto a moved client branch", { timeout: GIT_FIXTURE
   it("reads an unrecognised output as unknown rather than success", () => {
     expect(parseBuildCloneRebaseOutput("rebase=ok\nhead=\n").status).toBe("unknown");
     expect(parseBuildCloneRebaseOutput("").status).toBe("unknown");
+  });
+
+  // BI-A9E32D80: live on 2026-11-13 three refreshed review builds each spent
+  // both repair rounds on the Derived Artifact Registry guard.
+  describe("regenerating derived artifacts after the rebase", () => {
+    // Stands in for scripts/derived-artifacts-gate.mjs: regenerates one
+    // artifact from the files changed since the base ref and stages it.
+    const gate = (body: string) => `// regenerate-affected\nimport { execFileSync } from "node:child_process";\nimport { writeFileSync } from "node:fs";\n${body}\n`;
+    const WORKING = gate(
+      `const files = execFileSync("git", ["diff", "--name-only", process.argv[3], "HEAD"], { encoding: "utf8" }).trim().split("\\n").sort();\n` +
+      `writeFileSync("index.generated.txt", files.join(",") + "\\n");\nexecFileSync("git", ["add", "index.generated.txt"]);`,
+    );
+    function commitGate(content: string) {
+      execFileSync("mkdir", ["-p", join(path, "scripts")]);
+      commitInClone("scripts/derived-artifacts-gate.mjs", content);
+    }
+    function ready() {
+      sh(cloneCommand());
+      git(path, "config", "user.name", "dpf-agent-test");
+      git(path, "config", "user.email", "agent@example.test");
+    }
+    const regenerate = () => parseRegenerateDerivedArtifactsOutput(
+      sh(buildSandboxRegenerateDerivedArtifactsCommand(posix(path), "client/abc")),
+    );
+
+    it("commits the regenerated artifact and reports the new head", () => {
+      ready();
+      commitGate(WORKING);
+      commitInClone("feature.txt", "work\n");
+      const before = git(path, "rev-parse", "HEAD");
+
+      const head = regenerate();
+      expect(head).toBe(git(path, "rev-parse", "HEAD"));
+      expect(head).not.toBe(before);
+      expect(git(path, "show", "HEAD:index.generated.txt")).toBe("feature.txt,scripts/derived-artifacts-gate.mjs");
+      expect(git(path, "status", "--porcelain")).toBe("");
+    });
+
+    it("leaves the head alone with no gate, a gate that predates the subcommand, and a failing generator", () => {
+      ready();
+      commitInClone("feature.txt", "work\n");
+      expect(regenerate()).toBe(git(path, "rev-parse", "HEAD"));
+
+      commitGate(`process.exit(1); // an older gate\n`);
+      expect(regenerate()).toBe(git(path, "rev-parse", "HEAD"));
+
+      commitGate(gate(`process.exit(1);`));
+      const failing = git(path, "rev-parse", "HEAD");
+      expect(regenerate()).toBe(failing);
+      expect(git(path, "status", "--porcelain")).toBe("");
+    });
   });
 });
 

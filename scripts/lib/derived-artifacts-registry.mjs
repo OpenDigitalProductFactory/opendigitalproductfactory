@@ -130,10 +130,14 @@ export const DERIVED_ARTIFACTS = [
   {
     id: "doc-impact",
     description: "Doc-impact manifest (route/code -> user-guide page edges)",
+    // BI-A9E32D80: the generator walks the whole published corpus
+    // (publishedDocFiles), so an edit under docs/architecture that names a new
+    // code path adds an edge. The narrower glob left that edit unregenerated.
     sourceGlobs: [
-      "docs/user-guide/**/*.md",
+      "docs/**/*.md",
       "apps/web/lib/docs-route-map.ts",
       "scripts/check-docs-impact.mjs",
+      "scripts/lib/published-doc-roots.mjs",
     ],
     artifactPaths: ["apps/web/lib/docs/doc-impact.generated.json"],
     generate: ["node", "scripts/gen-doc-impact.mjs"],
