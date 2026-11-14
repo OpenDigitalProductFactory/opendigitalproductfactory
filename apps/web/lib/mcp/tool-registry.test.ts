@@ -283,8 +283,9 @@ describe("coworker memory pack", () => {
 });
 
 describe("portfolio-budget tool pack", () => {
-  it("bundles the epic attribution doors with handlers", () => {
+  it("bundles ownership setup and epic attribution tools with handlers", () => {
     expect(portfolioBudgetPack.definitions.map((t) => t.name)).toEqual([
+      "read_platform_funding_setup", "confirm_platform_funding_owner",
       "get_investment_balance", "set_investment_balance", "bind_investment_funding",
       "propose_epic_portfolios",
       "confirm_epic_portfolios",

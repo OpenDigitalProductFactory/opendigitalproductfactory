@@ -36,10 +36,18 @@ import { shouldRunBrowserUxVerification } from "@/lib/build/ui-surface";
  * pass spent cloud model calls on a change nobody could ship.
  */
 export function reviewVerificationSkipReason(
-  build: { sandboxId?: string | null; sandboxPort?: number | null; phase?: string | null } | null,
+  build: {
+    sandboxId?: string | null;
+    sandboxPort?: number | null;
+    phase?: string | null;
+    waitingOnOwnerSince?: Date | string | null;
+  } | null,
 ): string | null {
   if (!build || !build.sandboxId || !build.sandboxPort) return "sandbox or build missing";
   if (build.phase !== "review") return `build is in ${build.phase ?? "no"} phase, not review`;
+  // BI-B6894001: a parked build waits for its owner; re-verifying it would
+  // re-run the round that needed the answer.
+  if (build.waitingOnOwnerSince) return "build is waiting on an owner answer";
   return null;
 }
 
@@ -72,6 +80,7 @@ export const buildReviewVerification = jobs.createFunction(
           buildBranch: true,
           designDoc: true,
           phase: true,
+          waitingOnOwnerSince: true,
         },
       });
     });
@@ -211,6 +220,35 @@ export const buildReviewVerification = jobs.createFunction(
           });
         });
         return { status: "finalize-incomplete", finalize: finalize.status, repair: routed };
+      }
+      // BI-09FB398D: a risk outside this change that the escalation gate found
+      // damaging (critical) cannot be repaired by the build's agent, so it goes
+      // to a person now through the same seam, not after spent repair rounds.
+      if (finalize.status === "risk-needs-owner") {
+        const escalated = await step.run("escalate-damaging-out-of-scope-risk", async () => {
+          const { prisma } = await import("@dpf/db");
+          const row = await prisma.featureBuild.findUnique({
+            where: { buildId },
+            select: { id: true, phase: true, title: true, originatingBacklogItemId: true },
+          });
+          if (!row || row.phase !== "review") return "not-in-review";
+          const { escalateBuildToHuman } = await import("@/lib/build/escalate-build-to-human");
+          await escalateBuildToHuman({
+            buildPk: row.id,
+            buildId,
+            featureTitle: row.title,
+            originatingBacklogItemId: row.originatingBacklogItemId,
+            phase: "review",
+            rounds: 0,
+            issues: finalize.risks.map((risk) => ({
+              severity: risk.severity,
+              description: `Unmitigated risk outside this change, judged damaging: ${risk.key}: ${risk.trigger} → ${risk.effect}. ${risk.rationale}`,
+            })),
+            log: (summary: string) => prisma.buildActivity.create({ data: { buildId, tool: "review-verification", summary: summary.slice(0, 1000) } }).then(() => undefined).catch(() => undefined),
+          });
+          return "escalated";
+        });
+        return { status: "finalize-incomplete", finalize: finalize.status, escalation: escalated };
       }
       // BI-33B54E4B: a confirmed scoped-test or typecheck failure goes back to
       // the coding agent with the failing tests named, through the same bound,

@@ -1,0 +1,31 @@
+{
+  "version": "1",
+  "accountableOwner": "Mark Bodman (markdbodman@gmail.com)",
+  "summary": "Bridge-until-DPF2 non-acting routing failover. The only persistent-data change in this branch is the data-only migration 20261113010000_clear_retired_agent_pins: it NULLs AgentModelConfig.pinnedModelId / pinnedProviderId for rows whose pinned ModelProfile is retired (modelStatus = 'retired' OR retiredAt IS NOT NULL), so a stale hard pin stops aiming the router at an endpoint that no longer serves traffic and routing falls back to capability-based selection — the 'make pins soft' part of the bridge. It mutates no schema, deletes no rows, and is idempotent (pinnedModelId IS NOT NULL guard), mirroring the precedent in 20260416010000_clear_onboarding_agent_pin. Non-acting failures themselves introduce NO new persistent surface: they are counted against the exact route as a failed RouteOutcome row (toolSuccess=false with the non-acting provider error code) via recordNonActingFailure — RouteOutcome is the single source of truth and the time-decayed cost-ranking penalty derives from those rows. The whole surface is dropped at the DPF2 cutover.",
+  "affectedCopies": "Single source: the primary Postgres catalog (AgentModelConfig rows). No projection, mirror, embedding, or sanitized-clone copy consumes the cleared pin columns; routing reads AgentModelConfig directly.",
+  "migration": "20261113010000_clear_retired_agent_pins — data-only UPDATE that sets AgentModelConfig.pinnedModelId / pinnedProviderId to NULL for rows whose pinned model profile is retired. No schema change, no backfill, no row deletion, re-runnable via the pinnedModelId IS NOT NULL guard.",
+  "tests": "apps/web/lib/routing/record-non-acting-failure.test.ts, apps/web/lib/tak/agentic-loop-non-acting-failover.test.ts, apps/web/lib/routing/cost-ranking.test.ts.",
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "AgentModelConfig",
+      "lifecycleDisposition": "retain-for-agent-config-lifetime; this migration only clears stale pin columns, it adds no field and deletes no row",
+      "fields": [
+        {
+          "name": "pinnedModelId",
+          "resolution": "inherited",
+          "reason": "Routing coordinate: the modelId an agent is hard-pinned to. This migration sets it to NULL only when the pinned ModelProfile is retired, so routing falls back to capability-based selection. No new information is collected; governance is inherited from the existing AgentModelConfig row.",
+          "provenance": "Pre-existing AgentModelConfig column, cleared in place by the data-only UPDATE when the join to ModelProfile shows the pinned model is retired. No external or new source.",
+          "flags": []
+        },
+        {
+          "name": "pinnedProviderId",
+          "resolution": "inherited",
+          "reason": "Routing coordinate: the providerId half of the hard pin, cleared together with pinnedModelId because a provider pin with no model is not a meaningful route. No new information; governance inherited from the existing AgentModelConfig row.",
+          "provenance": "Pre-existing AgentModelConfig column, cleared in place by the data-only UPDATE alongside pinnedModelId. No external or new source.",
+          "flags": []
+        }
+      ]
+    }
+  ]
+}

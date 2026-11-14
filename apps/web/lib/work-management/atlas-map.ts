@@ -39,7 +39,7 @@ const SORT_RANK: Record<AtlasHealth, number> = {
 export type AtlasShapeMeta = { title: string; stages: Array<{ key: string; title: string }> };
 
 /** Why a held room is held, from the drive's recorded hold. */
-export type AtlasHold = { reason: string; since: string | null };
+export type AtlasHold = { reason: string; since: string | null; recovery?: string | null };
 
 export type AtlasFilters = {
   portfolio?: AtlasPortfolioKey;
@@ -77,13 +77,13 @@ export function parseAtlasFilters(params: Record<string, string | string[] | und
 }
 
 /** The filters plus which group is expanded; all of it lives in the URL so it survives a refresh. */
-export type AtlasView = AtlasFilters & { group?: string };
+export type AtlasView = AtlasFilters & { group?: string; room?: string };
 
 /** Builds an Atlas link from the current view. A `null` change clears that key. */
 export function atlasHref(base: string, view: AtlasView, change: Partial<Record<keyof AtlasView, string | null>> = {}): string {
   const merged: Record<string, string | null | undefined> = { ...view, ...change };
   const params = new URLSearchParams();
-  for (const key of ["portfolio", "state", "shape", "group"] as const) {
+  for (const key of ["portfolio", "state", "shape", "group", "room"] as const) {
     const value = merged[key];
     if (value) params.set(key, value);
   }
@@ -95,6 +95,12 @@ export function atlasHref(base: string, view: AtlasView, change: Partial<Record<
 export function parseAtlasGroup(params: Record<string, string | string[] | undefined>): string | undefined {
   const group = first(params.group);
   return group && /^[A-Za-z]{1,40}\/[a-z0-9-]{1,80}$/.test(group) ? group : undefined;
+}
+
+/** Reads the room selected for the inspector (`?room=WC-…`). */
+export function parseAtlasRoom(params: Record<string, string | string[] | undefined>): string | undefined {
+  const room = first(params.room);
+  return room && /^WC-[A-Z0-9]{4,32}$/.test(room) ? room : undefined;
 }
 
 export function atlasGroupKey(portfolio: string, shape: string): string {

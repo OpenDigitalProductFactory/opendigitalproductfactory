@@ -10261,6 +10261,7 @@
         "43-failure-observability",
         "44-tool-surface-scoping",
         "45-fabrication-guard-versus-infrastructure-failure",
+        "46-non-acting-answer-in-turn-failover-pre-dpf2-bridge",
         "5-migration-and-refactoring-inventory",
         "no-new-table-in-v1",
         "possible-nullable-columns",
@@ -12496,6 +12497,7 @@
         "build",
         "review",
         "ship",
+        "when-a-build-is-escalated-to-you",
         "related",
         "documentation-deliverables"
       ]
@@ -13731,6 +13733,7 @@
         "overview",
         "before-you-decide",
         "connecting-business-mail",
+        "bills-that-arrive-by-email",
         "checking-an-approval-result",
         "operations-and-performance",
         "spatial-operations-for-tables-and-rooms",
