@@ -1,3 +1,7 @@
+---
+status: binding
+---
+
 # Workroom runtime core: decide, commit, outbox (S2, BI-C64EDA33)
 
 Slice S2 of the T3 absorption ([spec](../specs/2026-11-13-t3-code-absorption-design.md), "Target architecture" item 1 and "Rooms and agent dialog" row S2). Decisions: DI-BEAADBEEB92C (adopt T3's decide/commit/outbox core) and DI-1B6A408A5F4F (the outbox is a new per-room `WorkroomEffect` table).
