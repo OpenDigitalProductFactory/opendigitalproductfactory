@@ -40,8 +40,18 @@ Use **Advanced diagnostics → Refresh model diagnostics** for troubleshooting;
 routine model maintenance does not require a weekly admin action.
 
 Codex reads the connected sandbox CLI's account-specific model list. ChatGPT
-attempts its backend list and can fall back to that shared account's Codex list.
-Other providers use their serving model-list APIs. A desktop client or official
+reads the Codex model list of its own signed-in account, because ChatGPT
+requests run on the Codex transport. The ChatGPT app's model list is not used:
+it names app-only models (such as `-wm`, `-instant` and `-thinking` variants)
+that the Codex transport refuses with `model_not_found`.
+Other providers use their serving model-list APIs.
+
+The Codex model list carries no token limits. A Codex-served model takes its
+output and context capacity from DPF's researched capacity reference: output
+from the provider's per-model documentation, context from the Codex
+transport's own window, which is smaller than the API's. A model with no
+reference row keeps unknown capacity. Independent reviews and other bounded
+activities do not route to it until a row is researched and added. A desktop client or official
 documentation can show models unavailable to this execution channel; DPF does
 not insert those names as proof of access. Known catalogs remain bootstrap
 metadata for other providers, never a Codex or ChatGPT subscription fallback.
@@ -247,6 +257,7 @@ Local models are automatically discovered and profiled. They are assigned the `b
 
 **Independent review reports unknown or insufficient model capacity:**
 - Unknown completion/context capacity means routing lacks usable capacity evidence; it is an infrastructure admission problem, not a failed code review or an active inference.
+- For ChatGPT and Codex subscription models, capacity comes from the researched capacity reference described under model discovery. A model the reference does not list stays unknown.
 - For the default local Docker Model Runner provider, routing reads the exact selected model's configured context. Input and completion share that window, and any lower explicit output limit still applies. Another installed model's capacity or advertised catalog maximum cannot substitute for an unavailable runtime read. Routing inputs refresh within 30 seconds and on explicit cache invalidation.
 - A known insufficient limit means the immutable review input plus its completion allowance does not fit. Have the authorized platform operator inspect the selected model and its serving configuration. Do not seed the requested allowance as model capacity or reduce the review payload to manufacture admission.
 - After repairing capacity, use the saved review's supported recovery action. Preserve completed evidence and the request identity; do not start parallel reviews or reuse an expired verdict. Only a completed independent verdict supplies review evidence. A separate authorization refusal requires its named grant and is not repaired by waiting for capacity.

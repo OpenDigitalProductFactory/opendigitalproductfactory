@@ -306,6 +306,70 @@ describe("estimateSuccessProbability", () => {
     expect(estimateSuccessProbability(seedAbove, easyWork))
       .toBeLessThan(estimateSuccessProbability(provenAbove, easyWork));
   });
+
+  // BRIDGE (DPF2-removable): endpoint-scoped, time-decayed non-acting penalty.
+  // A recent non-acting penalty (derived from the route's failed non-acting
+  // RouteOutcome rows) for the exact endpoint drops its successProb below its
+  // no-penalty baseline; once the failure ages well past the half-life the
+  // factor decays away and successProb returns to baseline.
+  describe("non-acting endpoint penalty (bridge)", () => {
+    const caps = { ...EMPTY_CAPABILITIES, toolUse: true, structuredOutput: true, streaming: true };
+    // tool-action maps to toolFidelity (70 default) and "low" floor is 45, so the
+    // endpoint clears the floor and lands on its historical-rate base.
+    const toolAction = makeContract({ taskType: "tool-action", reasoningDepth: "low" });
+    const now = Date.UTC(2026, 10, 13, 12, 0, 0); // fixed reference time
+
+    it("recent lastFailureAt lowers successProb below the no-tally baseline", () => {
+      const ep = makeEndpoint({ capabilities: caps, recentFailureRate: 0, profileConfidence: "high" });
+
+      const baseline = estimateSuccessProbability(ep, toolAction, { now });
+      const penalized = estimateSuccessProbability(ep, toolAction, {
+        now,
+        actionFailureTally: { failureCount: 1, lastFailureAt: new Date(now - 60 * 1000) }, // 1 min old
+      });
+
+      expect(baseline).toBeCloseTo(1.0); // no tally → unchanged base
+      expect(penalized).toBeLessThan(baseline);
+    });
+
+    it("an old lastFailureAt (well past the half-life) returns near-baseline", () => {
+      const ep = makeEndpoint({ capabilities: caps, recentFailureRate: 0, profileConfidence: "high" });
+
+      const baseline = estimateSuccessProbability(ep, toolAction, { now });
+      // 10 half-lives old → decay ≈ 2^-10 ≈ 0.001, factor ≈ 0.999.
+      const tenHalfLives = 10 * (24 * 60 * 60 * 1000);
+      const recovered = estimateSuccessProbability(ep, toolAction, {
+        now,
+        actionFailureTally: { failureCount: 1, lastFailureAt: new Date(now - tenHalfLives) },
+      });
+
+      expect(recovered).toBeCloseTo(baseline, 2);
+      expect(recovered).toBeGreaterThan(0.99);
+    });
+
+    it("does not penalize non-tool-action task types even with a recent tally", () => {
+      const ep = makeEndpoint({ capabilities: caps, recentFailureRate: 0, profileConfidence: "high" });
+      const codeGen = makeContract({ taskType: "code-gen", reasoningDepth: "low" });
+
+      const unaffected = estimateSuccessProbability(ep, codeGen, {
+        now,
+        actionFailureTally: { failureCount: 5, lastFailureAt: new Date(now) },
+      });
+
+      expect(unaffected).toBeCloseTo(estimateSuccessProbability(ep, codeGen, { now }));
+    });
+
+    it("clamps the penalty to the configured floor, never below", () => {
+      const ep = makeEndpoint({ capabilities: caps, recentFailureRate: 0, profileConfidence: "high" });
+      // Huge failureCount at age 0 → raw factor far negative, clamped to floor (0.2).
+      const penalized = estimateSuccessProbability(ep, toolAction, {
+        now,
+        actionFailureTally: { failureCount: 100, lastFailureAt: new Date(now) },
+      });
+      const baseline = estimateSuccessProbability(ep, toolAction, { now });
+      expect(penalized).toBeCloseTo(baseline * 0.2);
+    });
+  });
 });
 
 describe("satisfiesMinimumDimensions", () => {
