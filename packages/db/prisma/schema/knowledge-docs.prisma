@@ -421,6 +421,10 @@ model WikiPage {
   @@index([principleTier])
   @@index([principleConsumerArchetype])
   @@index([principlePublic])
+  // Raw-SQL index, not expressible here without declaring pg_trgm in the
+  // datasource: WikiPage_body_trgm_idx, a GIN trigram index on body that serves
+  // the unlinked-mentions ILIKE in apps/web/lib/wiki/backlinks.ts (BI-FC5E4832,
+  // migration 20261114000000_wiki_page_body_trgm_index).
 }
 
 // ─── Profession corpus runtime (WSID Phase 3 / BI close coverage→usage gap) ──
