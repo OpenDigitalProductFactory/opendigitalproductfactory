@@ -9,6 +9,7 @@ import {
   osvBatchClean,
   parseObservedPackage,
   parseRemediationVersions,
+  mergeGateEscalationDeclarations,
 } from "./remediation-merge-live";
 
 function okJson(body: unknown): Response {
@@ -173,5 +174,17 @@ describe("createLiveMergeGateAdapters.armAutoMerge (P2.2b)", () => {
       fetchImpl: (vi.fn() as never),
     });
     await expect(adapters.armAutoMerge(pr)).rejects.toThrow(/no GitHub token/i);
+  });
+});
+
+describe("mergeGateEscalationDeclarations (BI-5E067004)", () => {
+  it("declares the patch-only ceiling a crossed threshold, so a person decides", () => {
+    expect(mergeGateEscalationDeclarations("minor-bump requires employee review (WWMD patch-only-auto ceiling)")).toEqual({ thresholdExceeded: true });
+    expect(mergeGateEscalationDeclarations("unclassified change — cannot confirm a forward patch; escalating on uncertainty")).toEqual({ thresholdExceeded: true });
+  });
+
+  it("declares nothing for a mechanical refusal, which then passes the escalation gate", () => {
+    expect(mergeGateEscalationDeclarations("merge-conflict — PR is not cleanly mergeable")).toEqual({});
+    expect(mergeGateEscalationDeclarations("ci-not-green — required checks have not all passed")).toEqual({});
   });
 });
