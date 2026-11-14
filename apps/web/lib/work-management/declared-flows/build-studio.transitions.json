@@ -122,18 +122,6 @@
       "backlogItem": "BI-D37B2C13"
     },
     {
-      "file": "lib/build/escalate-build-to-human.ts",
-      "target": "abandoned",
-      "count": 1,
-      "lines": [
-        296
-      ],
-      "gates": [
-        "escalation policy; terminal owner handback"
-      ],
-      "backlogItem": "BI-D37B2C13"
-    },
-    {
       "file": "lib/build/gauntlet-repair.ts",
       "target": "build",
       "count": 1,
