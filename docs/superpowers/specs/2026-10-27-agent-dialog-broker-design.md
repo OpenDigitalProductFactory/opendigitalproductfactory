@@ -381,6 +381,35 @@ This section composes existing designs and adds only the dialog binding.
 5. **Remote identity on `TaskRun`.** `TaskRun` gains the peer link, the remote task id and the remote context id. Getting a task answers from the run the receiver owns.
 6. **The flag.** `DPF_FEDERATION_A2A_ENABLED` stays the switch. The binding is proven against the DEV peer before any cross-org use (S7–S9).
 
+### 8.1 The A2A dialog binding, as built (BI-ADB5CC1C, 2026-11-14)
+
+**Problem.** The ingress from item E1 (`BI-B45BBD8A`) carries signed, asynchronous DPF requests. Standard A2A clients speak JSON-RPC instead. That includes DPF's own delegation to a specific executor, which the T3 absorption routes through this binding (C3, `BI-7DBE498F`).
+
+**Options.**
+1. Carry JSON-RPC inside the signed CloudEvent envelope.
+2. Accept JSON-RPC 2.0 directly on `/api/v1/federation/a2a`, behind the same trusted same-organization link token, and map each method onto the handlers E1 and E2 already run.
+3. A separate `/a2a` route.
+
+**Chosen: option 2.** It is the standard surface on the wire, adds no transport or credential, and reuses one set of handlers, one inbox and one idempotency rule. Option 1 is not A2A on the wire. Option 3 is a second door to the same work.
+
+**Versions.** The A2A specification (a2a-protocol.org, latest 1.0.0, checked 2026-11-14) selects the version with the `A2A-Version` header, and an empty header means 0.3.
+
+| | 1.0 | 0.3 |
+| --- | --- | --- |
+| Send a message | `SendMessage` | `message/send` |
+| Get a task | `GetTask` | `tasks/get` |
+| Task states | `TASK_STATE_*` | lowercase |
+
+- Both versions are served from one handler. An unsupported version answers `-32009` and is never silently downgraded.
+- DPF's Agent Card still declares 0.3.0.
+- Streaming (`SendStreamingMessage` / `message/stream`) waits for outbox delivery evidence, as §8 says.
+
+**Rules.**
+- **Idempotency.** It keys on (link, `messageId`) in the E1 `a2a-request` inbox, so a retried message returns the same task.
+- **Task ids are not authorization.** `GetTask` answers `-32001` unless this link created the task, and it reads the receiver-owned state.
+- **Identity.** A remote GAID remains provenance until `BI-7E73D523`, so AC-ADB-15's estate-GAID clause stays unmet until then.
+- **Rooms.** A message whose `contextId` is a room (`dpf-room:`) becomes a room proposal once E2 (`BI-0F8CEAD4`) lands. Until then it answers `-32004` and never falls back to starting a task.
+
 ## 9. Security and failure behaviour
 
 - **Admission is computed server-side** from admission, clearance and grants. A client cannot assert it, and a self-asserted GAID is never admissible.
