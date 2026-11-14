@@ -36,10 +36,18 @@ import { shouldRunBrowserUxVerification } from "@/lib/build/ui-surface";
  * pass spent cloud model calls on a change nobody could ship.
  */
 export function reviewVerificationSkipReason(
-  build: { sandboxId?: string | null; sandboxPort?: number | null; phase?: string | null } | null,
+  build: {
+    sandboxId?: string | null;
+    sandboxPort?: number | null;
+    phase?: string | null;
+    waitingOnOwnerSince?: Date | string | null;
+  } | null,
 ): string | null {
   if (!build || !build.sandboxId || !build.sandboxPort) return "sandbox or build missing";
   if (build.phase !== "review") return `build is in ${build.phase ?? "no"} phase, not review`;
+  // BI-B6894001: a parked build waits for its owner; re-verifying it would
+  // re-run the round that needed the answer.
+  if (build.waitingOnOwnerSince) return "build is waiting on an owner answer";
   return null;
 }
 
@@ -72,6 +80,7 @@ export const buildReviewVerification = jobs.createFunction(
           buildBranch: true,
           designDoc: true,
           phase: true,
+          waitingOnOwnerSince: true,
         },
       });
     });

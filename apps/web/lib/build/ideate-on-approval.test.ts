@@ -527,6 +527,8 @@ describe("dispatchApprovedIdeateBuilds (BI-3E0EE3BA recovery)", () => {
           phase: "ideate",
           draftApprovedAt: { not: null },
           abandonedAt: null,
+          // A build parked on an owner answer is not re-driven (BI-B6894001).
+          waitingOnOwnerSince: null,
         }),
       }),
     );

@@ -43,6 +43,7 @@ import {
   normalizeHappyPathState,
 } from "@/lib/feature-build-types";
 import { closeOpenBuildPhaseRunsForTerminalBuild } from "@/lib/build/close-terminal-phase-runs";
+import { isActiveBuild } from "@/lib/build/wip-cap";
 
 export type ResumePreBuildOutcome =
   | { kind: "resumed"; phase: string; via: string; detail: string }
@@ -146,11 +147,12 @@ export async function abandonStrandedPreBuild(params: {
     return await prisma.$transaction(async (tx) => {
       const fresh = await tx.featureBuild.findUnique({
         where: { buildId },
-        select: { phase: true, abandonedAt: true },
+        select: { phase: true, abandonedAt: true, waitingOnOwnerSince: true },
       });
       // Already terminal/abandoned, or advanced out of an abandonable strand
-      // phase (pre-build or `build`) since the scan — nothing to do.
-      if (!fresh || fresh.abandonedAt || !isAbandonableStrandedPhase(fresh.phase)) {
+      // phase (pre-build or `build`) since the scan — nothing to do. A build
+      // parked on an owner answer is waiting, not stranded (BI-B6894001).
+      if (!fresh || !isActiveBuild(fresh) || !isAbandonableStrandedPhase(fresh.phase)) {
         return false;
       }
       await tx.featureBuild.update({
@@ -475,10 +477,16 @@ export async function resumePreBuildPhase(params: {
         // BI-0B7C1A9E: author of record for the child's backfilled design
         // artifact, so the minted revision carries real provenance.
         createdById: true,
+        waitingOnOwnerSince: true,
       },
     });
     if (!build) {
       return { kind: "failed", phase, error: "build not found" };
+    }
+    // Parked on an owner answer (BI-B6894001): resuming would re-run the round
+    // that needed the answer. Clearing the park is what resumes it.
+    if (build.waitingOnOwnerSince) {
+      return { kind: "skipped", phase, reason: "waiting on an owner answer", quiet: true };
     }
 
     // Self-heal (BI-C60EB507): readiness gates a build by the delivery shape

@@ -6,7 +6,7 @@ import {
   TERMINAL_CAPSULE_STATUSES,
   type UnifiedWipDb,
 } from "./unified-wip-query";
-import { decideUnifiedWip, sandboxPoolSize } from "./wip-cap";
+import { ACTIVE_BUILD_WHERE, decideUnifiedWip, sandboxPoolSize } from "./wip-cap";
 
 type CapsuleRow = {
   executorKind: string | null;
@@ -41,8 +41,21 @@ describe("loadActiveUnifiedWip (BI-937128F6)", () => {
     // Excludes terminal builds + abandoned + child (epic) builds, exactly like
     // the legacy BS-only gate did.
     expect(featureBuildCount).toHaveBeenCalledWith({
-      where: { phase: { notIn: ["complete", "failed"] }, abandonedAt: null, parentEpicId: null },
+      where: {
+        phase: { notIn: ["complete", "failed", "abandoned"] },
+        abandonedAt: null,
+        waitingOnOwnerSince: null,
+        parentEpicId: null,
+      },
     });
+  });
+
+  it("does not count a build parked on an owner answer against WIP (BI-B6894001)", async () => {
+    const { db, featureBuildCount } = makeDb({ activeBsBuilds: 0 });
+    await loadActiveUnifiedWip(db);
+    const where = (featureBuildCount.mock.calls[0]![0] as { where: Record<string, unknown> }).where;
+    expect(where).toMatchObject(ACTIVE_BUILD_WHERE);
+    expect(where.waitingOnOwnerSince).toBeNull();
   });
 
   it("does NOT count build-studio capsules toward bs-sandbox (excluded in the capsule query)", async () => {

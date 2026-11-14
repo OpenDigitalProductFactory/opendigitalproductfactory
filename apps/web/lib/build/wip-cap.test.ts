@@ -1,6 +1,17 @@
 import { describe, it, expect } from "vitest";
 import * as wipCap from "./wip-cap";
-import { SHARED_LEASE_WIP_CAP, WIP_POOL_CAPACITY, decideUnifiedWip, sandboxPoolSize } from "./wip-cap";
+import {
+  ACTIVE_BUILD_WHERE,
+  SHARED_LEASE_WIP_CAP,
+  TERMINAL_BUILD_PHASES,
+  WAITING_ON_OWNER_WHERE,
+  WIP_POOL_CAPACITY,
+  decideUnifiedWip,
+  isBuildWaitingOnOwner,
+  isActiveBuild,
+  sandboxPoolSize,
+} from "./wip-cap";
+import { TERMINAL_BUILD_PHASES as TOOL_HELPER_TERMINAL_BUILD_PHASES } from "@/lib/mcp/build-tool-helpers";
 
 describe("the count cap is retired (BI-3430B3A4)", () => {
   it("exports no BUILD_WIP_CAP or count-limit helpers for a caller to read", () => {
@@ -63,5 +74,34 @@ describe("decideUnifiedWip (BI-937128F6)", () => {
   it("never blocks unbounded pools (host-worktree / none) no matter the pressure", () => {
     expect(decideUnifiedWip("host-worktree", 999).admitted).toBe(true);
     expect(decideUnifiedWip("none", 999).admitted).toBe(true);
+  });
+});
+
+describe("one definition of an active build (BI-B6894001)", () => {
+  const parked = { phase: "ideate", abandonedAt: null, waitingOnOwnerSince: new Date("2026-11-14T00:00:00Z") };
+  const live = { phase: "ideate", abandonedAt: null, waitingOnOwnerSince: null };
+  const abandoned = { phase: "abandoned", abandonedAt: new Date("2026-11-14T00:00:00Z"), waitingOnOwnerSince: null };
+
+  it("excludes abandoned and owner-parked builds", () => {
+    expect(ACTIVE_BUILD_WHERE).toEqual({ abandonedAt: null, waitingOnOwnerSince: null });
+    expect(isActiveBuild(live)).toBe(true);
+    expect(isActiveBuild(parked)).toBe(false);
+    expect(isActiveBuild(abandoned)).toBe(false);
+  });
+
+  it("names the parked builds a read model must still show", () => {
+    expect(WAITING_ON_OWNER_WHERE).toEqual({ abandonedAt: null, waitingOnOwnerSince: { not: null } });
+    expect(isBuildWaitingOnOwner(parked)).toBe(true);
+    expect(isBuildWaitingOnOwner(live)).toBe(false);
+    expect(isBuildWaitingOnOwner({ waitingOnOwnerSince: "2026-11-14T00:00:00Z" })).toBe(true);
+  });
+
+  it("keeps a parked build in its real phase, so it is never terminal", () => {
+    expect(TERMINAL_BUILD_PHASES).not.toContain(parked.phase);
+  });
+
+  it("has a single TERMINAL_BUILD_PHASES vocabulary", () => {
+    expect([...TERMINAL_BUILD_PHASES]).toEqual(["complete", "failed", "abandoned"]);
+    expect(TOOL_HELPER_TERMINAL_BUILD_PHASES).toBe(TERMINAL_BUILD_PHASES);
   });
 });

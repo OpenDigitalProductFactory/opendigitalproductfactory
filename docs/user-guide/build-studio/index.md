@@ -6,6 +6,7 @@ relatedCode:
   - apps/web/lib/build/build-orchestrator.ts
   - apps/web/lib/work-capsules/delivery-task-hub.ts
   - apps/web/lib/queue/functions/async-operation-task-hub.ts
+  - apps/web/lib/build/escalate-build-to-human.ts
 ---
 
 ## Overview
@@ -175,6 +176,20 @@ Build Studio opens the build's pull request by itself. When a publication check 
 Build Studio tries at most three fixes that move the build. If the pull request still cannot open after that, or the same unexplained refusal comes back, the build is escalated to you once with the last reason, and Build Studio stops retrying it.
 
 Once the pull request is open, a required check can still fail on the change itself, for example a failing test. When that happens, Build Studio sends the build back to the AI Coworker with the name of the failing check and the relevant part of its log. After the fix is reviewed again, Build Studio adds it to the same pull request as a new commit. It never rewrites what is already there. Build Studio makes at most two such repairs per pull request. If the checks are still red after that, or a repair changes nothing, you are told once, with the failing check named. A check that failed because of an outage rather than the change is re-run, not repaired.
+
+## When a build is escalated to you
+
+When Build Studio cannot settle a question on its own, for example whether a page is public or needs sign-in, it escalates the build to you. You get a notification that opens the escalation report under **Admin > Issue Reports**. The report names the build, the stage it stopped at, what Build Studio tried, and the open findings.
+
+An escalated build is waiting on you. It is not abandoned:
+
+- It stays at the stage it reached, with its design, plan, review and activity trail intact.
+- It no longer counts toward the work Build Studio has in progress, so other builds can start.
+- Build Studio does not re-run, age out or clean up a waiting build, however long it waits.
+- Builds that depend on it keep waiting for it. They are not blocked permanently.
+- Its backlog item is deferred until the escalation is answered.
+
+A waiting build resumes when its wait is cleared. The build record holds the wait in its `waitingOnOwnerSince` field; clearing that field makes the build active again, and Build Studio picks it up from the stage it stopped at. A screen for answering the escalation and resuming the build in one step is not available yet. Until it is, ask an agent with build authority to clear the wait once you have answered.
 
 ## Related
 

@@ -134,6 +134,11 @@ describe("reviewVerificationSkipReason", () => {
   it.each(["abandoned", "build", "ship", "failed"])("skips a build in %s", (phase) => {
     expect(reviewVerificationSkipReason({ ...ready, phase })).toMatch(new RegExp(`in ${phase} phase`));
   });
+  it("skips a review build parked on an owner answer (BI-B6894001)", () => {
+    expect(
+      reviewVerificationSkipReason({ ...ready, phase: "review", waitingOnOwnerSince: new Date("2026-11-14T00:00:00Z") }),
+    ).toBe("build is waiting on an owner answer");
+  });
   it("skips a missing build or sandbox", () => {
     expect(reviewVerificationSkipReason(null)).toBe("sandbox or build missing");
     expect(reviewVerificationSkipReason({ sandboxId: null, sandboxPort: 1, phase: "review" })).toBe("sandbox or build missing");
