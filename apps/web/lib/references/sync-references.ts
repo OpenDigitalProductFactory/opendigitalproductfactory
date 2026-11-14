@@ -27,7 +27,13 @@ async function guarded(label: string, run: () => Promise<unknown>): Promise<void
   try {
     await run();
   } catch (err) {
-    console.warn(`[references] ${label} failed; the weekly rebuild repairs it: ${getErrorMessage(err)}`);
+    // The label carries caller-supplied ids: JSON.stringify escapes CR/LF so
+    // a crafted id cannot forge log lines (CodeQL js/log-injection, CWE-117).
+    console.warn(
+      "[references] %s failed; the weekly rebuild repairs it: %s",
+      JSON.stringify(label),
+      JSON.stringify(getErrorMessage(err)),
+    );
   }
 }
 

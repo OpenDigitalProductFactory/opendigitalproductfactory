@@ -57,7 +57,7 @@ describe("app reference hooks (BI-A63A9476 §5 write path)", () => {
     syncEntityReferences.mockRejectedValueOnce(new Error("graph down"));
     const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     await expect(syncBacklogItemReferences({ id: "row" }, "user:u1")).resolves.toBeUndefined();
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining("graph down"));
+    expect(warn).toHaveBeenCalledWith(expect.any(String), expect.any(String), expect.stringContaining("graph down"));
     warn.mockRestore();
   });
 
