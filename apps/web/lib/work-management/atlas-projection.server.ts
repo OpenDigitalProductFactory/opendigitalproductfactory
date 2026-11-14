@@ -1,5 +1,6 @@
 import type { WorkPortfolioRoleKey } from "@/lib/navigation/area-portfolio";
 import { loadCapsuleLivenessInventory, type InventoryDb } from "@/lib/work-capsules/liveness-inventory";
+import { readDeclaredWorkShapeKey } from "@/lib/work-management/work-shapes";
 import { loadRoomAccountabilityBatch, type RoomWorkforceDb } from "@/lib/work-management/room-workforce.server";
 import {
   ATLAS_ROOM_READ_LIMIT,
@@ -29,6 +30,14 @@ export async function loadAtlasPicture(
     take: limit + 1,
     portalSummary: true,
   });
+  // The portal inventory leaves scope claims out, so the declared shape is one
+  // bounded read keyed by the rooms already read, never one query per room.
+  const read = inventory.capsulesAll.slice(0, limit).map((room) => String(room.capsuleId));
+  const claims = read.length && db.workroom
+    ? await db.workroom.findMany({ where: { capsuleId: { in: read } }, select: { capsuleId: true, scopeClaims: true } }).catch(() => [])
+    : [];
+  const shapeById = new Map(claims.map((row: { capsuleId: string; scopeClaims: unknown }) =>
+    [row.capsuleId, readDeclaredWorkShapeKey(row.scopeClaims)] as const));
   const rooms: AtlasInventoryRoom[] = inventory.capsulesAll.map((room) => {
     const drive = room.drive as { action: string | null; reason: string | null; attentionRecorded?: boolean; stageKey?: string | null } | undefined;
     return {
@@ -41,6 +50,7 @@ export async function loadAtlasPicture(
       trueLivenessAt: str(room.trueLivenessAt),
       drive: drive ? { action: drive.action, reason: drive.reason, attentionRecorded: drive.attentionRecorded } : null,
       stageKey: str(drive?.stageKey),
+      shapeKey: shapeById.get(String(room.capsuleId)) ?? null,
     };
   });
   const rowIds = inventory.capsulesAll.slice(0, limit).flatMap((room) => typeof room.id === "string" ? [room.id] : []);
