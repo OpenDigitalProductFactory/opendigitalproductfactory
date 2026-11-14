@@ -541,3 +541,38 @@ describe("scheduled delivery authority transport (BI-D95FD249)", () => {
     }));
   });
 });
+
+// Phase G (BI-B3BBF9AD) — the scheduler builds every run's warrant through
+// scheduledRunEffortWarrant. A task without a stage record runs exactly as before;
+// the declared-tier cases are pinned in tak/stage-effort-routing.test.ts.
+describe("executeScheduledAgentTask — declared stage effort (Phase G)", () => {
+  function arrangeStageTask(taskConfig: unknown) {
+    arrangeMarketingSelfTask();
+    mocks.prisma.scheduledAgentTask.findUnique.mockResolvedValue({
+      taskId: "self-marketing-specialist-user-1",
+      agentId: "marketing-specialist",
+      title: "Workroom WC-TEST / decide",
+      prompt: "Decide the response to each finding.",
+      routeContext: "/customer/marketing",
+      schedule: "7 14 * * *",
+      timezone: "UTC",
+      isActive: true,
+      ownerUserId: "user-1",
+      attempts: 0,
+      taskConfig,
+    });
+    mocks.prisma.userFact.findMany.mockResolvedValue([]);
+    mocks.prisma.marketingCampaignBrief.findFirst.mockResolvedValue({ id: "brief-recent" });
+    mocks.runAgenticLoop.mockResolvedValue({ content: "ok", executedTools: [] });
+  }
+
+  it("forwards the unattended warrant, with no declared tier, for a task with no stage record", async () => {
+    arrangeStageTask(null);
+
+    await executeScheduledAgentTask("self-marketing-specialist-user-1");
+
+    const warrant = mocks.runAgenticLoop.mock.calls[0]?.[0].effortWarrant;
+    expect(warrant).toMatchObject({ level: expect.stringMatching(/^(medium|high)$/) });
+    expect(warrant.declaredEffort).toBeUndefined();
+  });
+});

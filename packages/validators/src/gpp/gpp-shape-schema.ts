@@ -42,6 +42,7 @@ import type {
   WorkShapeGate,
   WorkShapeStopCondition,
 } from "./work-shape-contracts.ts";
+import { WORK_SHAPE_STAGE_EFFORTS } from "./work-shape-contracts.ts";
 
 export const GPP_SHAPE_FORMAT = "gpp-shape/0.1";
 export const GPP_SHAPE_SCHEMA_ID = "urn:dpf:gpp-shape:0.1";
@@ -207,6 +208,10 @@ const stage = named(
     mandatedTools: described(
       uniqueArray(toolName),
       "Writes a drive-dispatched run of this non-governed stage may make without a person (scheduled mandate, BI-C1781121). Absent means none.",
+    ).optional(),
+    effort: described(
+      z.enum(WORK_SHAPE_STAGE_EFFORTS),
+      "Effort tier (Phase G). A capability floor for routing; a governed-decision stage runs high whatever it declares. Absent means undeclared.",
     ).optional(),
     binding: binding.optional(),
     deadline: timer.optional(),

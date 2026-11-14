@@ -1,7 +1,6 @@
 "use server";
 
 import { coworkerBriefSpans } from "@/lib/tak/coworker-prompt-provenance";
-import { deriveEffortWarrant } from "@/lib/tak/effort-warrant";
 import { auth } from "@/lib/auth";
 import { prisma, DATA_MODEL_MIRROR_TASK_ID, SYSML_PROJECTION_TASK_ID, SELF_OPTIMIZATION_SWEEP_TASK_ID } from "@dpf/db";
 import {
@@ -44,6 +43,7 @@ import { applyProviderRouteModelPreference } from "@/lib/ai-provider-route-conte
 import { getRequiredProceduralToolForScheduledTask } from "@/lib/operate/scheduled-jobs/scheduled-required-procedural-tool";
 import { assertScheduledReportingEligible, readScheduledReportingMode, scheduledReportingScopeDigest, scheduledReportingPrompt } from "@/lib/operate/scheduled-jobs/scheduled-reporting-contract";
 import { settleScheduledReportingRun, failScheduledReportingRun, runScheduledReportingLoop, type ScheduledReportingRunInput } from "@/lib/operate/scheduled-jobs/scheduled-reporting-run";
+import { scheduledRunEffortWarrant } from "@/lib/tak/stage-effort-routing";
 import {
   PRODUCT_INTELLIGENCE_WATCH_TASK_KIND,
 } from "@/lib/product-management/product-intelligence-watch-contract";
@@ -500,15 +500,13 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
     if (writerGap) throw new ScheduledRunTerminalError(`Scheduled run not dispatched (${writerGap}).`, "not-dispatched");
 
     // Mirror the interactive coworker path (agent-coworker.sendMessage): carry the
-    // coworker's configured model requirements into the scheduled run. Without
-    // this, executeAutonomousAgenticLoop routes at the default tier — for the
-    // Marketing Strategist that drops its route's frontier floor
-    // (defaultMinimumTier: "frontier", set precisely because weaker models were
-    // observed refusing to call tools) and the loop fabricates "Done" with zero
-    // tool calls (BI-3F09BDD4). The Golden Triangle posture is still applied
-    // independently at prepareRoute via agentId; this restores the per-coworker
-    // floor the interactive path sends, and benefits every autonomous coworker
-    // whose route declares modelRequirements.
+    // coworker's configured model requirements into the scheduled run. Without this,
+    // executeAutonomousAgenticLoop routes at the default tier — for the Marketing
+    // Strategist that drops its route's frontier floor (defaultMinimumTier: "frontier",
+    // set precisely because weaker models were observed refusing to call tools) and the
+    // loop fabricates "Done" with zero tool calls (BI-3F09BDD4). The Golden Triangle
+    // posture is still applied independently at prepareRoute via agentId; this restores
+    // the per-coworker floor the interactive path sends (every coworker declaring one).
     const rawModelRequirements =
       agentInfo.modelRequirements && typeof agentInfo.modelRequirements === "object"
         ? (agentInfo.modelRequirements as Record<string, unknown>)
@@ -536,7 +534,8 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
       ...(roomTurn ? { roomTurn } : {}),
       ...(Object.keys(modelRequirements).length > 0 ? { modelRequirements } : {}),
       // BI-83B1EE05: unattended, so not the 120s chat clock (a local engine took 4 min on turn one).
-      effortWarrant: deriveEffortWarrant({ reasoningDepth: "medium", availableToolNames: tools.map((tool) => tool.name), messageChars: scheduledPrompt.length }),
+      // Phase G (BI-B3BBF9AD): a Workroom stage's declared tier rides the warrant for routing.
+      effortWarrant: scheduledRunEffortWarrant(task.taskConfig, { toolNames: tools.map((tool) => tool.name), messageChars: scheduledPrompt.length }),
     };
     let result = reportingRun
       ? await runScheduledReportingLoop([...tools, ...deferredTools], () => executeAutonomousAgenticLoop(loopInput))

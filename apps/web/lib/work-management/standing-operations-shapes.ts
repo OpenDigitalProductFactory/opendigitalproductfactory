@@ -81,6 +81,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
       {
         key: "sweep",
         title: "Sweep advisories against the manifest",
+        effort: "low",
         accountablePrincipalRef: "agent:security-engineer",
         advance: {
           kind: "status-change",
@@ -92,6 +93,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
       {
         key: "raise",
         title: "Raise reachable findings",
+        effort: "low",
         accountablePrincipalRef: "agent:security-engineer",
         advance: {
           kind: "status-change",
@@ -140,6 +142,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
       {
         key: "read",
         title: "Read the enforced policy",
+        effort: "low",
         accountablePrincipalRef: "agent:platform-engineer",
         advance: {
           kind: "status-change",
@@ -150,6 +153,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
       {
         key: "diff",
         title: "Diff enforced against declared policy",
+        effort: "low",
         accountablePrincipalRef: "agent:platform-engineer",
         advance: {
           kind: "status-change",
@@ -197,6 +201,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
       {
         key: "scan",
         title: "Report credential age and exposure signals",
+        effort: "low",
         accountablePrincipalRef: "agent:security-engineer",
         advance: {
           kind: "status-change",
@@ -245,6 +250,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
       {
         key: "read",
         title: "Read mechanical pull-request health",
+        effort: "low",
         accountablePrincipalRef: "agent:change-reviewer",
         advance: {
           kind: "status-change",
@@ -256,6 +262,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
       {
         key: "classify",
         title: "Classify and summarize what needs a person",
+        effort: "low",
         accountablePrincipalRef: "agent:change-reviewer",
         advance: {
           kind: "status-change",
@@ -311,6 +318,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
       {
         key: "classify",
         title: "Classify inbound issues",
+        effort: "low",
         accountablePrincipalRef: "agent:portfolio-advisor",
         advance: {
           kind: "status-change",
@@ -322,6 +330,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
       {
         key: "dedupe",
         title: "Check against the existing backlog and propose",
+        effort: "medium",
         accountablePrincipalRef: "agent:portfolio-advisor",
         advance: {
           kind: "status-change",
@@ -370,6 +379,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
       {
         key: "assemble",
         title: "Assemble the gate evidence",
+        effort: "medium",
         accountablePrincipalRef: "agent:build-specialist",
         advance: {
           kind: "status-change",
@@ -381,6 +391,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
       {
         key: "report",
         title: "Name what is missing",
+        effort: "low",
         accountablePrincipalRef: "agent:build-specialist",
         advance: {
           kind: "status-change",
@@ -435,6 +446,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
       {
         key: "read",
         title: "Read recorded adopter signals",
+        effort: "low",
         accountablePrincipalRef: "agent:customer-advisor",
         advance: {
           kind: "status-change",
@@ -446,6 +458,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
       {
         key: "report",
         title: "Report relationships needing attention",
+        effort: "medium",
         accountablePrincipalRef: "agent:customer-advisor",
         advance: {
           kind: "status-change",
@@ -495,6 +508,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
       {
         key: "read",
         title: "Read recorded bills and recurring commitments",
+        effort: "low",
         accountablePrincipalRef: "agent:finance-controller",
         advance: {
           kind: "status-change",
@@ -506,6 +520,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
       {
         key: "report",
         title: "Report what falls due and what is unrecorded",
+        effort: "low",
         accountablePrincipalRef: "agent:finance-controller",
         advance: {
           kind: "status-change",
@@ -554,6 +569,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
       {
         key: "read",
         title: "Read supplier agreements and spend",
+        effort: "low",
         accountablePrincipalRef: "agent:finance-controller",
         advance: {
           kind: "status-change",
@@ -565,6 +581,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
       {
         key: "report",
         title: "Report renewals and spend against commitment",
+        effort: "low",
         accountablePrincipalRef: "agent:finance-controller",
         advance: {
           kind: "status-change",
@@ -614,6 +631,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
       {
         key: "sync",
         title: "Sync the contributor inventory",
+        effort: "low",
         accountablePrincipalRef: "agent:platform-engineer",
         advance: {
           kind: "status-change",
@@ -625,6 +643,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
       {
         key: "flag",
         title: "Flag missing sign-off or licence facts",
+        effort: "low",
         accountablePrincipalRef: "agent:platform-engineer",
         advance: {
           kind: "status-change",
@@ -673,6 +692,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
       {
         key: "measure",
         title: "Measure coworker capability and qualification freshness",
+        effort: "low",
         accountablePrincipalRef: "agent:platform-engineer",
         advance: {
           kind: "status-change",
@@ -684,6 +704,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
       {
         key: "report",
         title: "Report gaps and stale qualifications",
+        effort: "low",
         accountablePrincipalRef: "agent:platform-engineer",
         advance: {
           kind: "status-change",
@@ -734,6 +755,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
       {
         key: "observe",
         title: "Read the complete active backlog",
+        effort: "low",
         accountablePrincipalRef: "agent:portfolio-advisor",
         advance: {
           kind: "status-change",
@@ -745,6 +767,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
       {
         key: "reconcile",
         title: "Classify findings and propose corrections",
+        effort: "medium",
         accountablePrincipalRef: "agent:portfolio-advisor",
         advance: {
           kind: "status-change",

@@ -29,8 +29,23 @@ function coerce(value: string | undefined): BudgetClass {
  *   - `ok` / `rejected`      → unchanged (`rejected` is hard-thrown by the gate,
  *                              not downgraded).
  * Never raises the class. Pure.
+ *
+ * Phase G (proactivity & capacity allocation §6.1): `neverDemote` is set by the
+ * loop for a turn whose work-shape stage resolved `high` — every governed
+ * decision does — and such a turn is NEVER demoted. The
+ * tier is a capability floor, and trading a real decision for a cheap one is
+ * not a saving the operator authorised. The class is returned as it came.
  */
-export function spendAwareBudgetClass(current: string | undefined, status: BudgetStatus): BudgetClass {
+export function spendAwareBudgetClass(current: string | undefined, status: BudgetStatus): BudgetClass;
+export function spendAwareBudgetClass(current: string | undefined, status: BudgetStatus, neverDemote: boolean | undefined): BudgetClass | undefined;
+export function spendAwareBudgetClass(
+  current: string | undefined,
+  status: BudgetStatus,
+  neverDemote = false,
+): BudgetClass | undefined {
+  if (neverDemote) {
+    return current && (ORDER as readonly string[]).includes(current) ? (current as BudgetClass) : undefined;
+  }
   const cls = coerce(current);
   if (status === "warning_95") return "minimize_cost";
   if (status === "warning_80") {
