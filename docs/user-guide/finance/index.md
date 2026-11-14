@@ -193,6 +193,41 @@ reimbursement, which is not taxed because it repays money you already spent.
 Mileage appears in the mobile app only on installs that use it. A business whose
 staff do not drive to customers will not see it.
 
+## Payroll
+
+`/finance/payroll` runs US payroll. It opens with what still blocks a pay run,
+each item named, so a missing figure is never mistaken for nothing being owed.
+
+**What payroll needs first.**
+
+- **The federal and state tax figures, confirmed on Statutory Rates.** That covers
+  Social Security, Medicare, Additional Medicare and FUTA, plus the IRS withholding
+  tables. For each state where someone works, it covers that state's income tax
+  rate (enter 0 if the state does not tax wages) and the unemployment (SUTA) rate
+  and wage base assigned to your business.
+- **A pay rate on each employee who is paid.** Someone with no pay rate is listed as
+  not on this payroll rather than blocking it.
+- **A W-4 for each paid employee.** Record it under **Record a W-4**: filing status,
+  the Step 2 box, the Step 3 to 4(c) amounts, exempt, the state where they work,
+  and the first pay date it applies to. A new W-4 applies from that date and never
+  changes an earlier run.
+
+**Running it.** Under **Run payroll for a period**, give the first and last day, the
+pay date and how often you pay. DPF computes a draft run: salaried staff from their
+salary, hourly staff from approved timesheets in the period. Federal income tax
+follows the IRS percentage method for automated payroll systems (Publication 15-T,
+Worksheet 1A), from each employee's own W-4. Social Security, FUTA and SUTA stop at
+their wage bases, using what each person has already been paid this year.
+
+**Reviewing it.** Open a run to see every payslip line: earnings, federal and state
+income tax, Social Security, Medicare, net pay, and the employer's own taxes. A
+draft can be computed again for the same period until it is approved. Nothing on
+this page approves a run, posts to the ledger or moves money.
+
+**States DPF can compute.** A state with no wage income tax, such as Texas, or one
+with a single flat rate. A state that withholds with allowances or several brackets
+is refused by name rather than computed approximately.
+
 ## Reporting And Close Boundaries
 
 Current profit-and-loss and finance-period summaries are cash-basis: paid
@@ -211,6 +246,7 @@ authoritative accounting close and retain its reviewer evidence separately.
 - `/finance/invoices` and `/finance/payments` — customer billing and recorded receipts
 - `/finance/suppliers`, `/finance/purchase-orders`, and `/finance/bills` — supplier commitments and payables
 - `/finance/expense-claims` and `/finance/my-expenses` — reviewer and employee expense workflows
+- `/finance/payroll` — what blocks payroll, W-4s, and computing and reviewing pay runs
 - `/finance/mileage` — your own captured drives, sorted business or personal
 - `/finance/banking` — statement import, rules, and reconciliation
 - `/finance/reports` and `/finance/close` — reporting and close-readiness
