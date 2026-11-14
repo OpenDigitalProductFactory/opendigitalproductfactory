@@ -249,11 +249,14 @@ describe("classifyBuildFailure", () => {
     expect(c.failingTrace).toContain("install_state_envelope_state_changed");
   });
 
-  it("classifies an expired handoff as the same drain-window class with the TTL remedy", () => {
+  it("classifies an expired handoff as the same envelope class and names the launch-anchored TTL, not the drain (SUR-4DC82F3C)", () => {
     const c = classifyBuildFailure({ log: "--- stderr (tail) ---\nerror: install_state_envelope_expired\n" });
     expect(c.class).toBe("install-state-envelope-changed");
     expect(c.summary).toContain("EXPIRED");
-    expect(c.summary).toContain("QuiescenceRun");
+    expect(c.summary).toContain("starts at launch");
+    expect(c.summary).toContain("self-upgrade-steps.log");
+    expect(c.summary).not.toContain("QuiescenceRun");
+    expect(c.isMainDefectVsEnvironment).toBe("environment");
   });
 
   it("keeps an unrelated mounts-denied path out of the state-dir advice", () => {

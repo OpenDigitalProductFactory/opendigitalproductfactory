@@ -93,8 +93,9 @@ Decomposed. Umbrella BI-C54E691E.
 The November 13 source assessment and decision DI-CAC49D437EA8 extend the
 existing spec's OBJ-IMAGE. This is a distinct image-provenance contract, not
 delivery of the remaining D4/D5 work or permission to enforce shadow step 7e.
-The existing D1-D5 mappings above remain intact. The new mapping is proposed;
-live immutable coverage must be renewed before implementation.
+The existing D1-D5 mappings above remain intact. The parent coverage was renewed
+without changing its original criteria. The child has its own immutable coverage
+`cmwfow6zm0sqe0eqcd4nshyae` and implementation admission `IRD-D2A0E98FB7C3`.
 
 | Deliverable | Objectives | Contracts | Flow | Acceptance |
 |---|---|---|---|---|
@@ -106,7 +107,7 @@ live immutable coverage must be renewed before implementation.
 
 D6's phases below are internal sequencing for one image qualification contract.
 An isolated serializer, image build or green health check cannot independently
-deliver it. No implementation claim or passing evidence is asserted here.
+deliver it. Source implementation is in progress; served acceptance remains unrun.
 
 ### D6 acceptance (quoted from BI-0282088D)
 
@@ -161,3 +162,19 @@ closure change. The implementation path set remains provisional until admission.
 Rollback is through protected source delivery and the existing qualified-image
 compensation path. An uncertain prior image or ownership check stops recovery;
 it does not authorize a blind rebuild, volume change or wider service restart.
+
+### D6 implementation checkpoint
+
+The v3 plan, existing artifact owner, selected-only actuator, authenticated
+compensation and native administrator selector are implemented in the child
+Workroom WC-876B044A. Source fixtures exercise published/source inputs,
+unsupported protocols, unchanged-state boundaries, exact image and resource
+proof, health rollback, crash replay and uncertain settlement. They use injected
+IO and are separate from production acceptance. The original funding envelope
+remains pending; no new funding, provider or grant is inferred.
+
+Before completion, freeze the exact tree, run its required source/runtime gates,
+obtain independent code review, deliver through protected `pnpm land`, then use
+an admitted served target for native preview/apply, saved results, holds and
+recovery. The coordinator alone advances the canonical install. Preserve the
+original D4/D5 unfinished status and step 7e shadow mode throughout.

@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   completeRun: vi.fn(),
   failRun: vi.fn(),
   recordPromoterReadiness: vi.fn(),
+  recordMigrationHandoffLaunchStamp: vi.fn(),
   recordRunRecoveryPoint: vi.fn(),
   recordReassessmentCompatibility: vi.fn(),
   runReassessmentCandidatePreflight: vi.fn(async () => ({ ok: true, proof: {} })),
@@ -34,6 +35,7 @@ vi.mock("@/lib/self-upgrade/run-store", () => ({
   completeRun: mocks.completeRun,
   failRun: mocks.failRun,
   recordPromoterReadiness: mocks.recordPromoterReadiness,
+  recordMigrationHandoffLaunchStamp: mocks.recordMigrationHandoffLaunchStamp,
   recordRunRecoveryPoint: mocks.recordRunRecoveryPoint,
   recordReassessmentCompatibility: mocks.recordReassessmentCompatibility,
 }));
