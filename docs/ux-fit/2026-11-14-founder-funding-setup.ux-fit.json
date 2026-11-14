@@ -1,0 +1,19 @@
+{
+  "version": "1",
+  "decidedOption": "collapsed-in-existing-balance",
+  "decisionInteractionId": "DI-25BC062BCFC9",
+  "scope": {
+    "files": [
+      "apps/web/components/ops/PlatformFundingSetup.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "collapsed-in-existing-balance",
+      "all-fields-on-arrival",
+      "dedicated-setup-route"
+    ],
+    "rationale": "The recorded, autonomy-eligible choice retains the approved prototype's ownership setup in the existing Investment Balance home. Opening performs a bounded read; the exact person, organization, allocation and policy/funding consequence precede an unchecked attestation and explicit confirmation. Identifiers are disclosed on demand. The alternatives add arrival burden or another navigation destination. This decision is not a served measurement or an independent UX verdict; those checks remain required before acceptance."
+  }
+}
