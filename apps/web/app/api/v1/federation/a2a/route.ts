@@ -21,6 +21,7 @@ import { resolveFederationLinkAuth } from "@/lib/auth/federation-link-token";
 import { handleIncomingA2aRequest, type A2aIngressDb } from "@/lib/federation/a2a-ingress";
 import { taskSubmittedHandler } from "@/lib/federation/a2a-task-submitted.server";
 import { validateFederationCloudEvent } from "@/lib/federation/cloud-event-guard";
+import { ok } from "@/lib/shared/action-result";
 import { resolveFederationIdentity, type FederationIdentityDb } from "@/lib/federation/demand-identity";
 
 export const dynamic = "force-dynamic";
@@ -65,7 +66,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   );
 
   if (receipt.outcome !== "rejected") {
-    return NextResponse.json({ ok: true, ...receipt }, { status: receipt.outcome === "accepted" ? 202 : 200 });
+    return NextResponse.json({ ...ok(), ...receipt }, { status: receipt.outcome === "accepted" ? 202 : 200 });
   }
   const status = receipt.reason === "malformed" ? 422 : receipt.reason === "request-id-conflict" ? 409 : 200;
   return NextResponse.json({ ok: false, ...receipt }, { status });

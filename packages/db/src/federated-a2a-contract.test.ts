@@ -14,7 +14,7 @@ function request(overrides: Partial<A2aRequestV1> = {}): A2aRequestV1 {
     requestId: "a2r_01JZ0000000000000000000000",
     operation: "task.submitted",
     createdAt: "2026-11-14T00:00:00.000Z",
-    notAfter: "2026-11-17T00:00:00.000Z",
+    notAfter: "2026-11-17T00:00:00.000Z", // clock-bomb-guard: allow shape-only fixture; nothing compares it to the wall clock
     sourceInstallationDid: `did_${"a".repeat(64)}`,
     sourceSigningPublicKey: "MCowBQYDK2VwAyEA",
     targetInstallationDid: `did_${"b".repeat(64)}`,
@@ -59,7 +59,7 @@ describe("federated A2A request contract (BI-B45BBD8A)", () => {
   });
 
   it("refuses notAfter before createdAt", () => {
-    expect(validateA2aRequestV1(request({ notAfter: "2026-11-13T00:00:00.000Z" }))).toContain("notAfter:before-createdAt");
+    expect(validateA2aRequestV1(request({ notAfter: "2026-11-13T00:00:00.000Z" }))).toContain("notAfter:before-createdAt"); // clock-bomb-guard: allow compared only to createdAt, never to the wall clock
   });
 
   it("refuses an oversized payload", () => {

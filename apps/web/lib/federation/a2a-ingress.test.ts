@@ -65,7 +65,7 @@ function fakeDb(link: Record<string, unknown> | null = {}) {
 }
 
 function handlers(): A2aOperationHandlers & { submitted: ReturnType<typeof vi.fn>; readState: ReturnType<typeof vi.fn> } {
-  const submitted = vi.fn(async () => ({ ok: true as const, receiverTaskId: "CE-RECEIVER-1", state: "submitted" }));
+  const submitted = vi.fn(async () => ({ started: true as const, receiverTaskId: "CE-RECEIVER-1", state: "submitted" }));
   const readState = vi.fn(async () => "working");
   return { "task.submitted": { start: submitted, readState }, submitted, readState };
 }
@@ -149,7 +149,7 @@ describe("handleIncomingA2aRequest (BI-B45BBD8A)", () => {
 
   it("a handler's refusal is returned as the receipt and records no inbox row", async () => {
     const { db, rows } = fakeDb();
-    h.submitted.mockResolvedValueOnce({ ok: false, reason: "target-unavailable" });
+    h.submitted.mockResolvedValueOnce({ started: false, reason: "target-unavailable" });
     const receipt = await handleIncomingA2aRequest(db, { linkId: "link-1", activity: "dpf.a2a.task.submitted.v1", record: signed() }, context, h);
 
     expect(receipt).toMatchObject({ outcome: "rejected", reason: "target-unavailable" });

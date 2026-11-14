@@ -53,8 +53,8 @@ export interface A2aIngressDb {
 }
 
 export type A2aOperationStart =
-  | { ok: true; receiverTaskId: string; state: string }
-  | { ok: false; reason: A2aRequestRejection };
+  | { started: true; receiverTaskId: string; state: string }
+  | { started: false; reason: A2aRequestRejection };
 
 export interface A2aOperationHandler {
   /** Create the receiver-owned work. Runs inside the inbox transaction, on `tx`. */
@@ -166,7 +166,7 @@ export async function handleIncomingA2aRequest(
   try {
     return await db.$transaction(async (tx) => {
       const started = await handler.start(request, { linkId: link.linkId, tx, now: context.now });
-      if (!started.ok) return rejected(requestId, started.reason);
+      if (!started.started) return rejected(requestId, started.reason);
       await tx.federatedRecordMirror.create({
         data: {
           mirrorId: `fa2a_${a2aRequestDigest(request).slice(7, 31)}`,

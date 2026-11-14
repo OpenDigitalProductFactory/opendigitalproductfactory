@@ -50,17 +50,17 @@ export function taskSubmittedHandler(deps: TaskSubmittedDeps = {}): A2aOperation
       const payload = request.payload;
       const offerId = str(payload.offerId);
       const requestedOutcome = str(payload.requestedOutcome);
-      if (!offerId || !requestedOutcome) return { ok: false, reason: "malformed" };
+      if (!offerId || !requestedOutcome) return { started: false, reason: "malformed" };
       const actingAgentGaid = request.provenance.actingAgentGaid;
-      if (!actingAgentGaid) return { ok: false, reason: "not-authorized" };
+      if (!actingAgentGaid) return { started: false, reason: "not-authorized" };
       const contractContext = rec(payload.contractContext);
-      if (!str(contractContext?.termsRef) || !str(contractContext?.dataBoundaryRef)) return { ok: false, reason: "malformed" };
+      if (!str(contractContext?.termsRef) || !str(contractContext?.dataBoundaryRef)) return { started: false, reason: "malformed" };
 
       const catalog = await (deps.loadCatalog ?? loadCoworkerCatalog)();
       const offer = catalog.offers.find((candidate) => candidate.offerId === offerId);
-      if (!offer) return { ok: false, reason: "target-unavailable" };
+      if (!offer) return { started: false, reason: "target-unavailable" };
       const projection = projectCoworkerOfferAgentCard(offer, { accessProfile: PEER_ACCESS_PROFILE });
-      if (!projection.ok) return { ok: false, reason: "target-unavailable" };
+      if (!projection.ok) return { started: false, reason: "target-unavailable" };
 
       const engagementId = peerEngagementId(linkId, request.requestId);
       const createEngagement = deps.createEngagement ?? createCoworkerEngagement;
@@ -85,7 +85,7 @@ export function taskSubmittedHandler(deps: TaskSubmittedDeps = {}): A2aOperation
       }, {
         createEngagement: (input) => createEngagement(input, { db: tx as never, idFactory: () => engagementId }),
       });
-      return { ok: true, receiverTaskId: task.id, state: task.status.state };
+      return { started: true, receiverTaskId: task.id, state: task.status.state };
     },
     async readState(receiverTaskId) {
       const task = await (deps.readTask ?? readCoworkerA2aTask)(receiverTaskId);

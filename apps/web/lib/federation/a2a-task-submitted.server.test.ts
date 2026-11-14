@@ -68,7 +68,7 @@ describe("task.submitted handler (BI-B45BBD8A)", () => {
     const d = deps();
     const result = await taskSubmittedHandler(d as never).start(request(), ctx);
 
-    expect(result).toEqual({ ok: true, receiverTaskId: "CE-A2A-X", state: "submitted" });
+    expect(result).toEqual({ started: true, receiverTaskId: "CE-A2A-X", state: "submitted" });
     expect(d.createTask).toHaveBeenCalledWith(expect.objectContaining({
       offerId: "offer-sales",
       accessProfile: "partner-a2a",
@@ -90,19 +90,19 @@ describe("task.submitted handler (BI-B45BBD8A)", () => {
 
   it("a peer cannot reach an internal-only offer", async () => {
     const d = deps("internal");
-    expect(await taskSubmittedHandler(d as never).start(request(), ctx)).toEqual({ ok: false, reason: "target-unavailable" });
+    expect(await taskSubmittedHandler(d as never).start(request(), ctx)).toEqual({ started: false, reason: "target-unavailable" });
     expect(d.createTask).not.toHaveBeenCalled();
   });
 
   it("an unknown offer is target-unavailable", async () => {
     const d = deps();
-    expect(await taskSubmittedHandler(d as never).start(request({ offerId: "nope" }), ctx)).toEqual({ ok: false, reason: "target-unavailable" });
+    expect(await taskSubmittedHandler(d as never).start(request({ offerId: "nope" }), ctx)).toEqual({ started: false, reason: "target-unavailable" });
   });
 
   it("refuses a request with no acting GAID, or without terms and data boundary", async () => {
     const d = deps();
-    expect(await taskSubmittedHandler(d as never).start(request({}, null), ctx)).toEqual({ ok: false, reason: "not-authorized" });
-    expect(await taskSubmittedHandler(d as never).start(request({ contractContext: {} }), ctx)).toEqual({ ok: false, reason: "malformed" });
+    expect(await taskSubmittedHandler(d as never).start(request({}, null), ctx)).toEqual({ started: false, reason: "not-authorized" });
+    expect(await taskSubmittedHandler(d as never).start(request({ contractContext: {} }), ctx)).toEqual({ started: false, reason: "malformed" });
     expect(d.createTask).not.toHaveBeenCalled();
   });
 });
