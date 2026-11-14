@@ -111,6 +111,10 @@ import {
   type McpToolsCallResult,
 } from "@/lib/mcp/jsonrpc-response";
 
+function unknownMethod(id: JsonRpcId, method: string): Response {
+  return jsonRpcError(id, JSONRPC_METHOD_NOT_FOUND, `unknown method: ${method}`);
+}
+
 function scopeToCapability(scope: McpTokenScope): McpTokenCapability {
   return scope === "read" ? "read" : "write";
 }
@@ -303,7 +307,7 @@ async function handleTasksLifecycle(
   params: Record<string, unknown> | undefined,
 ): Promise<Response> {
   if (!tasksLifecycleEnabled()) {
-    return jsonRpcError(id, JSONRPC_METHOD_NOT_FOUND, `unknown method: ${method}`);
+    return unknownMethod(id, method);
   }
   if (
     method === "tasks/cancel"
@@ -337,7 +341,7 @@ async function handleTasksLifecycle(
       result = await handleTasksCancel(token.userId, params);
       break;
     default:
-      return jsonRpcError(id, JSONRPC_METHOD_NOT_FOUND, `unknown method: ${method}`);
+      return unknownMethod(id, method);
   }
   if (result.kind === "ok") return jsonRpcOk(id, result.value);
   return jsonRpcError(id, JSONRPC_INVALID_PARAMS, result.message);
@@ -438,6 +442,10 @@ async function handleToolsList(
     token.source === "session-jwt" ? [] : await getLoadedToolNames(token.tokenId),
   );
   const listed = selectToolsForListing(authorized, tier, loadedNames).map(annotateTool);
+  if (token.toolSurface) {
+    const names = new Set(token.toolSurface.toolNames);
+    return jsonRpcOk(id, { tools: listed.filter(tool => names.has(tool.name)) });
+  }
   return jsonRpcOk(id, { tools: [...listed, LOAD_TOOLS_LISTED] });
 }
 
@@ -454,6 +462,9 @@ async function handleToolsCall(
   }
   const toolName = canonicalWorkroomToolName(params["name"]);
   const args = (params["arguments"] as Record<string, unknown> | undefined) ?? {};
+  if (token.toolSurface && !token.toolSurface.toolNames.includes(toolName)) {
+    return jsonRpcOk(id, buildUnknownToolResult(toolName));
+  }
   const permitHandle = presentedPermitHandle(params["_meta"]);
 
   // load_tools is a transport-level meta-tool, not a governed domain tool:
@@ -660,6 +671,9 @@ export async function POST(request: Request): Promise<Response> {
   observeConnection({ request, token, method: body.method, params: body.params });
   // Notifications (no id) — return 202 Accepted, no body, per spec.
   const isNotification = body.id === undefined;
+  if (token.toolSurface && !["initialize", "notifications/initialized", "ping", "tools/list", "tools/call"].includes(body.method)) {
+    return isNotification ? new Response(null, { status: 202 }) : unknownMethod(body.id ?? null, body.method);
+  }
   const floorRefusal = isNotification ? null : await refuseBelowToolchainFloor(request, token, body); // BI-DFC0270C
   if (floorRefusal) return floorRefusal;
 
@@ -759,7 +773,7 @@ export async function POST(request: Request): Promise<Response> {
           // Unknown notifications are silently accepted per JSON-RPC 2.0.
           return new Response(null, { status: 202 });
         }
-        return jsonRpcError(body.id ?? null, JSONRPC_METHOD_NOT_FOUND, `unknown method: ${body.method}`);
+        return unknownMethod(body.id ?? null, body.method);
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown internal error";
@@ -772,14 +786,14 @@ export async function POST(request: Request): Promise<Response> {
 }
 
 /**
- * Streamable HTTP server-to-client lane. A notification is only a wake-up:
- * task frames carry the complete current Task projection, room frames only the
- * room's URI (BI-ED52AB82). TaskRun, tasks/get/list and read_room_messages
- * remain the durable reconciliation path after disconnects; a reconnect with
- * Last-Event-ID replays the room updates the stream missed.
+ * Streamable HTTP wake-ups carry complete task projections or room URIs.
+ * Reconcile through TaskRun, tasks/get/list and read_room_messages;
+ * Last-Event-ID replays missed room updates (BI-ED52AB82).
  */
 export async function GET(request: Request): Promise<Response> {
   const authentication = await authenticateMcpRequest(request);
   if (!authentication.ok) return authentication.response;
+  if (authentication.token.toolSurface)
+    return new Response(null, { status: 405, headers: { Allow: "POST" } });
   return openMcpTaskStatusStream(request, authentication.token, { rooms: roomUpdateFanout() });
 }

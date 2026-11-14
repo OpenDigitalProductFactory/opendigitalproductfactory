@@ -26,6 +26,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
+import { editClaimedPaths } from "./staged-scope.mjs";
 import { mcpCall } from "./mcp-client.mjs";
 import { MCP_CREDENTIAL_HELP, resolveMcpCredential } from "./mcp-credential.mjs";
 import { gitTextOrNull } from "./git.mjs";
@@ -106,7 +107,11 @@ export function resolveSessionRef({ worktreePath, env = process.env } = {}) {
     // caller's own claim (BI-144E4F92, BI-4BEEC539).
     || env.CLAUDE_CODE_SESSION_ID
     || env.CLAUDE_SESSION_ID
+    // BI-53BED66C: the gate records CODEX_THREAD_ID (scripts/lib/agent-identity.mjs);
+    // binding under another Codex id split one session across two names.
+    || env.CODEX_THREAD_ID
     || env.CODEX_SESSION_ID
+    || env.GROK_THREAD_ID
     || env.GROK_SESSION_ID
     || (worktreePath ? `worktree:${toPosixPath(worktreePath)}` : null)
   );
@@ -184,6 +189,11 @@ export function markerFromAdoption(payload, branch) {
     leaseExpiresAt,
     worktreePath: typeof capsule?.worktreePath === "string" ? capsule.worktreePath : null,
     backlogItemId: typeof capsule?.backlogItemId === "string" ? capsule.backlogItemId : null,
+    // BI-66236024: cache the edit-claimed paths alongside the claim itself, so
+    // the staged-scope guard reads one marker and makes no network call on the
+    // commit path. A capsule bound at birth has no scope yet and yields [],
+    // which the guard reports as inactive rather than treating as a pass.
+    scopePaths: editClaimedPaths(capsule?.scopeClaims),
   };
 }
 

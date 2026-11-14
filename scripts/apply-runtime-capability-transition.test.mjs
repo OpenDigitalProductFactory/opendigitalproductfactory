@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, cp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createHash, createHmac } from "node:crypto";
@@ -39,12 +39,30 @@ test("protocol probe reports packaged support without reading secrets or creatin
   const info = JSON.parse(result.stdout);
   assert.equal(info.schemaVersion, 1);
   assert.equal(info.sourceSha, "probe-fixture-source");
-  assert.deepEqual(info.signingVersions, [1, 2]);
-  assert.deepEqual(info.applyVersions, [1, 2]);
-  assert.deepEqual(info.reconciliationVersions, [2]);
+  assert.deepEqual(info.signingVersions, [1, 2, 3]);
+  assert.deepEqual(info.applyVersions, [1, 2, 3]);
+  assert.deepEqual(info.reconciliationVersions, [2, 3]);
+  assert.deepEqual(info.imageReconciliationVersions, [3]);
   assert.match(info.actuatorSha256, /^[a-f0-9]{64}$/);
   assert.match(info.signerSha256, /^[a-f0-9]{64}$/);
+  assert.equal(info.imageQualifierSha256, createHash('sha256').update(await readFile(new URL('./promoter-epoch-evidence.mjs', import.meta.url))).update('\0').update(await readFile(new URL('./lib/git.mjs', import.meta.url))).digest('hex'));
   assert.deepEqual(await readdir(dir), []);
+});
+
+test("N-1 staging without the optional Git reader preserves v2 and does not advertise image apply", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "dpf-image-n-minus-one-"));
+  try {
+    await cp(new URL('.', import.meta.url), join(dir, "scripts"), { recursive: true });
+    await cp(new URL('../apps/web/lib/work-capsules/', import.meta.url), join(dir, "apps/web/lib/work-capsules"), { recursive: true });
+    await rm(join(dir, "scripts/lib/git.mjs"));
+    const result = spawnSync(process.execPath, [join(dir, "scripts/apply-runtime-capability-transition.mjs"), "--runtime-capability-protocol-info"], { encoding: "utf8", env: { ...process.env, DPF_CANDIDATE_SOURCE_SHA: "a".repeat(40) } });
+    assert.equal(result.status, 0, result.stderr);
+    const info = JSON.parse(result.stdout);
+    assert.deepEqual(info.applyVersions, [1, 2]);
+    assert.deepEqual(info.reconciliationVersions, [2]);
+    assert.deepEqual(info.imageReconciliationVersions, []);
+    assert.equal(info.imageQualifierSha256, undefined);
+  } finally { await rm(dir, { recursive: true, force: true }); }
 });
 
 test("a protocol probe cannot be combined with a state-changing invocation", async () => {
@@ -210,6 +228,263 @@ async function reconciliationFixture(dir, { touched, databaseStates, ...options 
     DPF_RUNTIME_TRANSITION_SIGNATURE: signTransitionPayload(value, secret) });
   return { value, env };
 }
+
+async function imageReconciliationFixture(dir, fault = '', { platform, hostPlatform, extraRequested = [] } = {}) {
+  const requested = ['runtime:browser-automation', ...extraRequested];
+  const fixture = await reconciliationFixture(dir, { previousRequested: requested, desiredRequested: requested, touched: [], ...(platform ? { stateExtras: { platform }, hostPlatform } : {}) });
+  const sourceSha = fixture.value.protocolIdentity.sourceSha;
+  const oldImage = `sha256:${'e'.repeat(64)}`, newImage = `sha256:${'f'.repeat(64)}`;
+  const reference = `ghcr.io/fixture/dpf-browser-use@sha256:${'d'.repeat(64)}`;
+  const imagePlan = { schemaVersion: 1, sourceSha, platform: 'linux/amd64', operation: 'prepare', services: [{ service: 'browser-use', source: { kind: 'published', sourceSha, reference } }] };
+  fixture.value.version = 3;
+  const imageIssued = Date.now();
+  fixture.value.issuedAt = new Date(imageIssued).toISOString();
+  fixture.value.expiresAt = new Date(imageIssued + (fault === 'deadline' ? 60_000 : 600_000)).toISOString();
+  fixture.value.imagePlan = imagePlan;
+  fixture.value.protocolIdentity.imageQualifierSha256 = createHash('sha256').update(await readFile(new URL('./promoter-epoch-evidence.mjs', import.meta.url))).update('\0').update(await readFile(new URL('./lib/git.mjs', import.meta.url))).digest('hex');
+  const config = { name: 'dpf', services: Object.fromEntries(fixture.value.desiredServices.map(service => [service, {
+    image: service === 'portal' ? 'fixture-portal-current' : service === 'browser-use' ? reference : `fixture-${service}`,
+    labels: { 'dpf.recreate-class': service === 'browser-use' ? (fault === 'managed' ? 'managed' : 'stateless') : service === 'postgres' ? 'data-owner' : 'managed' },
+  }])) };
+  const containers = fixture.value.desiredServices.map(service => ({ service, project: 'dpf',
+    id: createHash('sha256').update(`before:${service}`).digest('hex'), imageId: service === 'browser-use' ? oldImage : `sha256:${createHash('sha256').update(service).digest('hex')}`,
+    running: !(fault === 'stopped' && service === 'browser-use'), health: 'healthy', recreateClass: service === 'browser-use' ? (fault === 'managed' ? 'managed' : 'stateless') : service === 'postgres' ? 'data-owner' : 'managed', configurationHash: 'b'.repeat(64) }));
+  config.services['browser-use'].environment = { E9_TEST_SECRET: 'synthetic-private-image-value' };
+  if (['volume-unproven', 'resources', 'resource-drift'].includes(fault)) {
+    config.services['browser-use'].volumes = [{ type: 'volume', source: 'browser_profiles', target: '/profiles' }];
+    config.volumes = { browser_profiles: { name: 'fixture-browser-profiles' } };
+    if (fault !== 'volume-unproven') {
+      config.services['browser-use'].networks = { default: {} };
+      config.networks = { default: { name: 'fixture-existing-network' } };
+      const browser = containers.find(row => row.service === 'browser-use');
+      browser.mounts = [{ Type: 'volume', Name: 'fixture-browser-profiles', Source: '/fixture/volume', Destination: '/profiles', RW: true }];
+      browser.networks = { 'fixture-existing-network': { NetworkID: 'c'.repeat(64) } };
+    }
+  }
+  const state = join(dir, 'image-containers.json'), calls = join(dir, 'image-calls.jsonl'), fakeDocker = join(dir, 'image-docker.mjs');
+  await writeFile(state, JSON.stringify(containers));
+  await writeFile(calls, '');
+  const scopeProof = { schemaVersion: 1, version: 1, sourceSha, sourceContentHash: 'b'.repeat(64), contractSha256: 'c'.repeat(64), writers: { 'scope-release-store.ts': 'd'.repeat(64) } };
+  await writeFile(fakeDocker, `import { readFileSync, writeFileSync, appendFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+const args = process.argv.slice(2), statePath = ${JSON.stringify(state)}, calls = ${JSON.stringify(calls)}, fault = ${JSON.stringify(fault)};
+appendFileSync(calls, JSON.stringify(args) + '\\n');
+let containers = JSON.parse(readFileSync(statePath, 'utf8'));
+if (args[0] === 'run' && args.includes('/app/apps/web-src/lib/work-capsules/scope-epoch-writer-probe.mjs')) process.stdout.write(${JSON.stringify(JSON.stringify(scopeProof))});
+else if (args[0] === 'image' && args[1] === 'inspect') {
+ const image = args[2];
+ if (args.includes('{{.Id}}')) process.stdout.write(image.startsWith('sha256:') ? image : ${JSON.stringify(oldImage)});
+ else process.stdout.write(JSON.stringify({ id: image === ${JSON.stringify(oldImage)} ? image : ${JSON.stringify(newImage)}, os: 'linux', architecture: 'amd64', sourceSha: fault === 'wrong-source' ? '0'.repeat(40) : ${JSON.stringify(sourceSha)}, inputTreeOid: '1'.repeat(40), repoDigests: [${JSON.stringify(reference)}] }));
+} else if (args[0] === 'pull') { if (fault === 'preparation-signal') process.kill(process.pid, 'SIGTERM'); }
+else if (args[0] === 'ps') process.stdout.write(containers.map(row => row.id).join('\\n'));
+else if (args[0] === 'inspect') {
+ const row = containers.find(row => row.id === args.at(-1));
+ if (!row) process.exit(71);
+ process.stdout.write(JSON.stringify(row));
+} else if (args.includes('config')) {
+ if (args.includes('--hash')) process.stdout.write('browser-use ' + (fault === 'config-drift' ? 'a' : 'b').repeat(64));
+ else process.stdout.write(${JSON.stringify(JSON.stringify(config))});
+} else if (args.includes('up')) {
+ if (!args.includes('--no-build') || !args.includes('--no-deps') || !args.includes('--wait') || args.includes('postgres') || args.at(-1) !== 'browser-use') process.exit(72);
+ const files = args.flatMap((value, index) => value === '-f' ? [args[index + 1]] : []);
+ const rendered = files.map(file => JSON.parse(readFileSync(file, 'utf8'))).find(value => value.services?.['browser-use']?.image?.startsWith('sha256:'));
+ if (!rendered) process.exit(73);
+ const target = rendered.services['browser-use'].image;
+ if (${JSON.stringify(['resources', 'resource-drift'])}.includes(fault)) {
+   if (Object.keys(rendered.services).join(',') !== 'browser-use' || rendered.volumes.browser_profiles.external !== true || rendered.volumes.browser_profiles.name !== 'fixture-browser-profiles' || rendered.networks.default.external !== true || rendered.networks.default.name !== 'fixture-existing-network') process.exit(76);
+ }
+ containers = containers.map(row => row.service === 'browser-use' ? { ...row, id: createHash('sha256').update(target).digest('hex'), imageId: target, running: true, health: fault === 'unhealthy' && target === ${JSON.stringify(newImage)} ? 'unhealthy' : 'healthy' } : row);
+ if (fault === 'unexpected-image') containers.find(row => row.service === 'browser-use').imageId = 'sha256:' + '0'.repeat(64);
+ if (fault === 'untouched-change') containers.find(row => row.service === 'postgres').id = '9'.repeat(64);
+ if (fault === 'resource-drift') containers.find(row => row.service === 'browser-use').mounts[0].Name = 'other-profile-volume';
+ writeFileSync(statePath, JSON.stringify(containers));
+ if (fault === 'signal') process.kill(process.pid, 'SIGTERM');
+} else if (args.includes('ps')) process.stdout.write(JSON.stringify(containers.map(row => ({ ID: row.id, Service: row.service, State: row.running ? 'running' : 'exited', Health: row.health }))));
+else process.exit(74);
+`);
+  return { ...fixture, state, calls, oldImage, newImage,
+    env: () => ({ ...fixture.env(), DPF_DOCKER_PREFIX_ARGS: JSON.stringify([fakeDocker]), HOSTNAME: 'promoter-fixture', PROMOTE_SOURCE: '/host-source' }) };
+}
+
+test('image reconciliation qualifies immutable bytes and applies only the selected running stateless service', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'dpf-image-apply-'));
+  try {
+    const fixture = await imageReconciliationFixture(dir), before = JSON.parse(await readFile(fixture.state, 'utf8'));
+    const result = run(fixture.env());
+    assert.equal(result.status, 0, result.stderr);
+    const receipt = JSON.parse(await readFile(join(dir, 'runtime-capability-transitions/RCT-test.json'), 'utf8'));
+    assert.equal(receipt.status, 'applied');
+    assert.equal(receipt.imageProof.services[0].priorImageId, fixture.oldImage);
+    assert.equal(receipt.imageProof.services[0].intendedImageId, fixture.newImage);
+    assert.equal(receipt.imageProof.services[0].observedImageId, fixture.newImage);
+    const after = JSON.parse(await readFile(fixture.state, 'utf8'));
+    assert.deepEqual(after.filter(row => row.service !== 'browser-use'), before.filter(row => row.service !== 'browser-use'));
+    const calls = (await readFile(fixture.calls, 'utf8')).trim().split(/\r?\n/).map(JSON.parse);
+    assert.equal(calls.filter(args => args.includes('up')).length, 1);
+    assert.equal(calls.some(args => args.includes('stop') || args.includes('rm') || args.includes('build')), false);
+  } finally { await rm(dir, { recursive: true, force: true }); }
+});
+
+test('image reconciliation preserves existing volumes and networks as external resources', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'dpf-image-resources-'));
+  try {
+    const fixture = await imageReconciliationFixture(dir, 'resources'), before = JSON.parse(await readFile(fixture.state, 'utf8'));
+    const result = run(fixture.env());
+    assert.equal(result.status, 0, result.stderr);
+    const after = JSON.parse(await readFile(fixture.state, 'utf8'));
+    assert.deepEqual(after.find(row => row.service === 'browser-use').mounts, before.find(row => row.service === 'browser-use').mounts);
+    assert.deepEqual(after.find(row => row.service === 'browser-use').networks, before.find(row => row.service === 'browser-use').networks);
+  } finally { await rm(dir, { recursive: true, force: true }); }
+});
+
+test('image reconciliation restores the exact prior image after unhealthy apply without a rebuild', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'dpf-image-rollback-'));
+  try {
+    const fixture = await imageReconciliationFixture(dir, 'unhealthy');
+    const result = run(fixture.env());
+    assert.equal(result.status, 78);
+    const receipt = JSON.parse(await readFile(join(dir, 'runtime-capability-transitions/RCT-test.json'), 'utf8'));
+    assert.equal(receipt.status, 'rolled_back');
+    assert.equal(receipt.imageProof.services[0].observedImageId, fixture.oldImage);
+    const calls = (await readFile(fixture.calls, 'utf8')).trim().split(/\r?\n/).map(JSON.parse);
+    assert.equal(calls.filter(args => args.includes('up')).length, 2);
+    assert.equal(calls.filter(args => args[0] === 'pull').length, 1);
+    assert.equal(calls.some(args => args.includes('build') || args.includes('stop') || args.includes('rm')), false);
+  } finally { await rm(dir, { recursive: true, force: true }); }
+});
+
+test('image reconciliation applies a signed exact-image compensation packet without rebuilding or pulling', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'dpf-image-compensation-'));
+  try {
+    const fixture = await imageReconciliationFixture(dir), before = JSON.parse(await readFile(fixture.state, 'utf8'));
+    before.find(row => row.service === 'browser-use').imageId = fixture.newImage;
+    await writeFile(fixture.state, JSON.stringify(before));
+    fixture.value.imagePlan = { ...fixture.value.imagePlan, operation: 'restore', services: [{ service: 'browser-use', source: { kind: 'restore', imageId: fixture.oldImage, expectedImageId: fixture.newImage } }] };
+    const result = run(fixture.env());
+    assert.equal(result.status, 0, result.stderr);
+    const receipt = JSON.parse(await readFile(join(dir, 'runtime-capability-transitions/RCT-test.json'), 'utf8'));
+    assert.equal(receipt.status, 'applied');
+    assert.equal(receipt.imageProof.services[0].priorImageId, fixture.newImage);
+    assert.equal(receipt.imageProof.services[0].observedImageId, fixture.oldImage);
+    const calls = (await readFile(fixture.calls, 'utf8')).trim().split(/\r?\n/).map(JSON.parse);
+    assert.equal(calls.some(args => args[0] === 'pull' || args.includes('build')), false);
+    assert.equal(calls.filter(args => args.includes('up')).length, 1);
+  } finally { await rm(dir, { recursive: true, force: true }); }
+});
+
+for (const fault of ['unexpected-image', 'untouched-change', 'resource-drift']) test(`image reconciliation retains unverified ${fault} without a blind rollback`, async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'dpf-image-unverified-'));
+  try {
+    const fixture = await imageReconciliationFixture(dir, fault), result = run(fixture.env());
+    assert.equal(result.status, 78);
+    const receipt = JSON.parse(await readFile(join(dir, 'runtime-capability-transitions/RCT-test.json'), 'utf8'));
+    assert.equal(receipt.status, 'rollback_failed');
+    assert.equal(receipt.imageProof, undefined);
+    const calls = (await readFile(fixture.calls, 'utf8')).trim().split(/\r?\n/).map(JSON.parse);
+    assert.equal(calls.filter(args => args.includes('up')).length, 1);
+  } finally { await rm(dir, { recursive: true, force: true }); }
+});
+
+for (const point of ['image-prepared', 'image-applied', 'image-reverted']) test(`image reconciliation replays ${point} with the original image IDs and no repeated operation`, async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'dpf-image-replay-'));
+  try {
+    const fixture = await imageReconciliationFixture(dir, point === 'image-reverted' ? 'unhealthy' : '');
+    const first = run({ ...fixture.env(), DPF_TEST_CRASH_AFTER_PHASE: point });
+    assert.equal(first.status, 86, first.stderr);
+    const base = join(dir, 'runtime-capability-transitions/RCT-test.image-baseline.json');
+    assert.equal((await stat(base)).mode & 0o777, 0o600);
+    assert((await readFile(base, 'utf8')).includes('synthetic-private-image-value'));
+    const journal = await readFile(join(dir, 'runtime-capability-transitions/RCT-test.journal.json'), 'utf8');
+    assert.equal(journal.includes('synthetic-private-image-value'), false);
+    const resumed = run(fixture.env());
+    assert.equal(resumed.status, point === 'image-reverted' ? 78 : 0, resumed.stderr);
+    const text = await readFile(join(dir, 'runtime-capability-transitions/RCT-test.json'), 'utf8'), receipt = JSON.parse(text);
+    assert.equal(receipt.status, point === 'image-reverted' ? 'rolled_back' : 'applied');
+    assert.equal(receipt.imageProof.services[0].priorImageId, fixture.oldImage);
+    assert.equal(receipt.imageProof.services[0].intendedImageId, fixture.newImage);
+    assert.equal(text.includes('synthetic-private-image-value'), false);
+    const calls = (await readFile(fixture.calls, 'utf8')).trim().split(/\r?\n/).filter(Boolean).map(JSON.parse);
+    assert.equal(calls.filter(args => args[0] === 'pull').length, 1);
+    assert.equal(calls.filter(args => args.includes('up')).length, point === 'image-reverted' ? 2 : 1);
+    await assert.rejects(stat(base), { code: 'ENOENT' });
+  } finally { await rm(dir, { recursive: true, force: true }); }
+});
+
+for (const point of ['image-preparing', 'image-applying']) test(`image reconciliation retains unknown ${point} without retrying IO`, async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'dpf-image-unknown-replay-'));
+  try {
+    const fixture = await imageReconciliationFixture(dir), first = run({ ...fixture.env(), DPF_TEST_CRASH_AFTER_PHASE: point });
+    assert.equal(first.status, 86, first.stderr);
+    const resumed = run(fixture.env());
+    assert.equal(resumed.status, 78);
+    const receipt = JSON.parse(await readFile(join(dir, 'runtime-capability-transitions/RCT-test.json'), 'utf8'));
+    assert.equal(receipt.status, 'rollback_failed');
+    assert.match(receipt.failure, /unsettled/);
+    assert.equal(receipt.imageProof, undefined);
+    const calls = (await readFile(fixture.calls, 'utf8')).trim().split(/\r?\n/).filter(Boolean).map(JSON.parse);
+    assert.equal(calls.filter(args => args[0] === 'pull').length, point === 'image-preparing' ? 0 : 1);
+    assert.equal(calls.some(args => args.includes('up')), false);
+  } finally { await rm(dir, { recursive: true, force: true }); }
+});
+
+test("image reconciliation fences an unsettled artifact child before any service apply", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "dpf-image-preparation-signal-"));
+  try {
+    const fixture = await imageReconciliationFixture(dir, "preparation-signal"), before = await readFile(fixture.state, "utf8");
+    const result = run(fixture.env());
+    assert.notEqual(result.status, 0);
+    const receipt = JSON.parse(await readFile(join(dir, "runtime-capability-transitions/RCT-test.json"), "utf8"));
+    assert.equal(receipt.status, "rollback_failed");
+    assert.equal(receipt.failure, "runtime_image_preparation_unsettled");
+    assert.equal(receipt.imageProof, undefined);
+    assert.equal(await readFile(fixture.state, "utf8"), before);
+    assert.equal((await readFile(fixture.calls, "utf8")).split("\n").filter(Boolean).map(line => JSON.parse(line)).some(args => args.includes("up")), false);
+  } finally { await rm(dir, { recursive: true, force: true }); }
+});
+
+test('image reconciliation retains a signalled apply as unverified instead of racing a rollback', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'dpf-image-child-signal-'));
+  try {
+    const fixture = await imageReconciliationFixture(dir, 'signal'), result = run(fixture.env());
+    assert.equal(result.status, 78);
+    const receipt = JSON.parse(await readFile(join(dir, 'runtime-capability-transitions/RCT-test.json'), 'utf8'));
+    assert.equal(receipt.status, 'rollback_failed');
+    assert.equal(receipt.failure, 'runtime_image_apply_unsettled');
+    assert.equal(receipt.imageProof, undefined);
+    const calls = (await readFile(fixture.calls, 'utf8')).trim().split(/\r?\n/).map(JSON.parse);
+    assert.equal(calls.filter(args => args.includes('up')).length, 1);
+  } finally { await rm(dir, { recursive: true, force: true }); }
+});
+
+for (const fault of ['managed', 'stopped', 'config-drift', 'wrong-source', 'volume-unproven', 'deadline']) test(`image reconciliation holds ${fault} before service effects`, async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'dpf-image-hold-'));
+  try {
+    const fixture = await imageReconciliationFixture(dir, fault), before = await readFile(fixture.state, 'utf8');
+    const result = run(fixture.env());
+    assert.notEqual(result.status, 0);
+    assert.equal(await readFile(fixture.state, 'utf8'), before);
+    const calls = (await readFile(fixture.calls, 'utf8')).trim().split(/\r?\n/).filter(Boolean).map(JSON.parse);
+    assert.equal(calls.some(args => args.includes('up') || args.includes('stop') || args.includes('rm')), false);
+    if (['volume-unproven', 'deadline'].includes(fault)) assert.equal(calls.some(args => args[0] === 'pull'), false, 'unverified resources or authority time must hold before image preparation');
+    const receipt = JSON.parse(await readFile(join(dir, 'runtime-capability-transitions/RCT-test.json'), 'utf8'));
+    assert.equal(receipt.status, 'failed');
+    assert.equal(receipt.failure, fault === 'deadline' ? 'runtime_image_deadline_unavailable' : ['config-drift', 'volume-unproven'].includes(fault) ? 'runtime_image_configuration_unverified'
+      : fault === 'wrong-source' ? 'runtime_service_image_unproven' : 'runtime_image_selection_unproven');
+  } finally { await rm(dir, { recursive: true, force: true }); }
+});
+
+for (const [platform, hostPlatform] of [["win32", "windows"], ["darwin", "macos"]]) test(`image reconciliation preserves the signed ${platform} service projection`, async () => {
+  const dir = await mkdtemp(join(tmpdir(), "dpf-image-platform-"));
+  try {
+    const fixture = await imageReconciliationFixture(dir, '', { platform, hostPlatform, extraRequested: ["runtime:external-ai"] });
+    assert.equal(fixture.value.desiredServices.includes("ollama"), false);
+    const result = run(fixture.env());
+    assert.equal(result.status, 0, result.stderr);
+    const receipt = JSON.parse(await readFile(join(dir, "runtime-capability-transitions/RCT-test.json"), "utf8"));
+    assert.equal(receipt.status, "applied");
+    assert.deepEqual(receipt.desiredServices, fixture.value.desiredServices);
+  } finally { await rm(dir, { recursive: true, force: true }); }
+});
 
 for (const [platform, hostPlatform] of [["win32", "windows"], ["darwin", "macos"], ["linux", "linux"]]) test(`reconciliation applies the signed ${platform} service projection`, async () => {
   const dir = await mkdtemp(join(tmpdir(), "dpf-reconciliation-platform-"));

@@ -742,6 +742,98 @@ would spend a dispatch attempt.
 Reviews that expired before this change keep their recorded outcome; they are
 not revived. Recovering an already-expired review is BI-49AA6BE8.
 
+### Spent reviews that never reached a provider — BI-49AA6BE8
+
+The credited wait above did not stop reviews expiring. On 2026-11-14, review
+TR-GATE-6DCB71CCA360AF37CF2008A2 (PR #7090) shows why, from its checkpoints
+and AdapterRunTelemetry:
+
+1. Each generation queues for the single local inference lane before the
+   capacity check runs. Recovery 1 sat 24 minutes in that queue, then got the
+   typed `local-ci-active-capacity-reservation` refusal. Only the wait after
+   the refusal was credited, so those 24 minutes spent the review's window.
+2. Each capacity-restored generation spends a recovery attempt and a dispatch
+   attempt, although nothing was dispatched. After three generations the
+   counters alone hold the review as exhausted.
+3. Once the window or attempts are spent, the only successor route needs a
+   hand-recorded health verification. No agent can honestly record one for a
+   review whose every branch is a typed pre-dispatch refusal, because there is
+   nothing to verify: nothing ran.
+
+Recovery 2 then hit the effective deadline while still queued for the lane.
+The governed inference deadline stopped it, and its checkpoints were written
+`providerOutcome: unknown`. That last step is the uncertain-outcome class and
+is not recovered by this slice (see BI-342E1F44).
+
+Decision: reuse the existing successor path and give it a second, server-owned
+admission basis. Kernel decision DI-9D81650D163D (server-proven, bounded
+recovery) covers this; no new table, task family, tool, provider or grant.
+
+- **Credit the queue.** A branch refused by the typed
+  `LocalProviderCapacityDeferredError` records `waitedBeforeRefusalMs`, the
+  time from its durable running checkpoint to the refusal. When every branch a
+  generation ran was refused this way, the new wait marker starts that many
+  milliseconds earlier (the shortest branch wait). The four-hour cap and the
+  rest of the BI-73D878A5 rules are unchanged.
+- **Server-proven no-dispatch lineage.** `hasProvenNoDispatchLineage` holds
+  only when every checkpoint the task ever wrote, including superseded ones, is
+  either a typed pre-dispatch capacity refusal bound to the request digest and
+  its own generation, or a completed passing verdict. A running, failed or
+  unknown branch, a failing verdict, a digest mismatch or a lookalike
+  inconclusive refuses it.
+- **Spent but proven waits keep waiting.** When the window or attempts are
+  spent and the lineage is proven, the review stays `input-required` with the
+  existing capacity marker and `successorOnCapacity: true`, instead of being
+  held or failed. That covers the capacity sweep, a resumed generation that
+  reaches its deadline before the worker starts, and the stale-submitted
+  sweep.
+- **Successor on capacity.** When the sweep sees capacity, it runs the same
+  checks as any capacity resumption (authority, quiescence, current source,
+  failure evidence), then calls `admitReviewSuccessor` with the
+  `proven-no-dispatch` basis. Inside one transaction, the predecessor is
+  fenced by compare-and-swap and its lineage is proved again before the
+  successor is created. The successor is the existing one: a fresh immutable
+  request for the identical input, gate key and tree, the next deterministic
+  task id, the passing branches reused, and fresh counters. The original
+  requester stays the actor. No checkpoint is rewritten and no verdict is
+  inferred.
+- **Bounded chain.** A remediation-admitted successor still allows exactly one
+  successor per lineage. A no-dispatch successor records `successorBasis` and
+  `successorAttempt`, and a chain of them stops after three. A chain that
+  includes a remediation successor never extends this way.
+- **Readback.** Recovery observation reports `capacity-wait`, not manual
+  recovery, and says the server will start one successor review when capacity
+  returns. It claims this only when the server set the marker.
+
+Integrity is unchanged. Receipts still bind to the exact tree and digest. A
+review that actually ran and returned a failing verdict, or whose provider
+outcome is unknown, is never succeeded by this path. No mode, policy or
+enforcement setting changes.
+
+Ordered delivery (atomic: each step depends on the one before):
+
+1. Failing worker tests: an expired lineage and an attempt-exhausted lineage
+   each admit exactly one server successor once capacity returns, without a
+   runtime verification read or any provider call. Capacity still unavailable
+   keeps waiting. An unknown branch, a failing verdict, a changed source,
+   revoked authority or an exhausted chain admits nothing. A 24-minute queue
+   before refusal is credited. A resumed generation past its deadline before
+   dispatch is parked for a successor, not failed.
+2. Lineage proof, queue credit and successor admission basis in
+   `semantic-review-capacity-recovery.ts`, `semantic-review-background.ts` and
+   `semantic-review-single-flight.ts`. Readback in
+   `semantic-review-recovery-policy.ts`.
+3. The change-review suite, the web typecheck and the governed gate, then
+   independent semantic review and protected DCO delivery.
+4. After the canonical upgrade, observe the next capacity-spent review recover
+   on its own. Historical reviews whose last branch is recorded `unknown`
+   (including TR-GATE-6DCB71CCA360AF37CF2008A2) are not revived by this slice.
+
+Out of scope, carried by BI-342E1F44: recording a deadline abort while queued
+for admission as not-dispatched, settling a genuinely uncertain provider
+outcome (BI-49AA6BE8 AC-2), and Failure Readiness wording for
+infrastructure-ended reviews (AC-3).
+
 ## Non-goals
 
 - Replacing GitHub review.

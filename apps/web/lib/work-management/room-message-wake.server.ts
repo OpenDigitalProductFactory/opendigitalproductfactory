@@ -38,7 +38,6 @@ import {
   type RoomSessionRef,
   type RoomWakePlan,
 } from "./room-message-addressing";
-import { encodeRoomMessageCursor } from "./room-message-cursor";
 import { encodeWorkCaseKey } from "./case-key";
 import {
   combineSupervisedWake,
@@ -106,21 +105,6 @@ async function writeWakeState(
     where: { id: message.id },
     data: { structuredPayload: { ...payload, addressing: { ...addressing, wake } } as Prisma.InputJsonValue },
   });
-}
-
-/** writeWakeState, but only if the message's wake is still pending; false when another run decided it first. */
-async function claimPendingWake(
-  deps: RoomWakeDeps,
-  message: { id: string; structuredPayload: unknown },
-  addressing: RoomMessageAddressing,
-  wake: RoomMessageAddressing["wake"],
-): Promise<boolean> {
-  const payload = payloadRecord(message.structuredPayload);
-  const claimed = await deps.db.workItemMessage.updateMany({
-    where: { id: message.id, structuredPayload: { path: ["addressing", "wake", "state"], equals: "pending" } },
-    data: { structuredPayload: { ...payload, addressing: { ...addressing, wake } } as Prisma.InputJsonValue },
-  });
-  return claimed.count === 1;
 }
 
 export type PreparedRoomAddressing =
@@ -424,20 +408,18 @@ export async function dispatchRoomMessage(messageId: string, depsIn?: RoomWakeDe
     ? { kind: "delivered", addressedAs: session.addressedAs }
     : session.kind === "not-named" ? session : { kind: session.kind, detail: session.detail };
   let combined = combineSupervisedWake(plan, outcome);
-  if (session.kind === "deliver") {
-    // Claim the wake before the turn, and only while it is still pending: a retry or a sweep
-    // re-publish racing this run must never hand the session the same message twice.
-    if (!await claimPendingWake(deps, message, addressing, { ...combined.wake, at: now.toISOString() })) {
-      return { messageId, plan: "skipped", woken: [] };
-    }
-  } else {
-    await writeWakeState(deps, message, addressing, { ...combined.wake, at: now.toISOString() });
-  }
   const payload = payloadRecord(message.structuredPayload);
   const workroom = payloadRecord(payload.workroom);
+  if (session.kind !== "deliver") {
+    await writeWakeState(deps, message, addressing, { ...combined.wake, at: now.toISOString() });
+  }
   if (session.kind === "deliver" && room && supervision) {
     const caseKey = typeof workroom.caseKey === "string" ? workroom.caseKey : null;
-    outcome = await deliverSupervisedTurn({ db: deps.db, port: supervision, addressedAs: session.addressedAs, room, message, addressing, caseKey });
+    // BI-C64EDA33 PR 2: "woken" commits in the same transaction as the turn decision, under one
+    // command id per message, so a retry or a concurrent sweep re-publish hands it over once and a
+    // crash before the hand-over leaves the message pending, not marked delivered.
+    const wake = { messageRowId: message.id, structuredPayload: { ...payload, addressing: { ...addressing, wake: { ...combined.wake, at: now.toISOString() } } } };
+    outcome = await deliverSupervisedTurn({ db: deps.db, port: supervision, addressedAs: session.addressedAs, room, message, addressing, caseKey, wake });
     if (outcome.kind !== "delivered") {
       combined = combineSupervisedWake(plan, outcome);
       await writeWakeState(deps, message, addressing, { ...combined.wake, at: now.toISOString() });
@@ -493,21 +475,12 @@ export async function runRoomWake(event: RoomWakeRequestedEvent, depsIn?: RoomWa
   if (agent.status && agent.status !== "active") return { outcome: "skipped", reason: `${event.agentId} is ${agent.status}.` };
   if (!owner) return { outcome: "skipped", reason: "The poster's account no longer exists." };
 
-  const lastOwn = await deps.db.workItemMessage.findFirst({
-    where: { workItemId: event.workItemId, senderAgentId: event.agentId },
-    orderBy: [{ createdAt: "desc" }, { messageId: "desc" }],
-    select: { createdAt: true, messageId: true },
-  });
   const now = clock(deps);
   const taskId = roomReplyTaskId(event.workItemId, event.agentId);
   const fields = {
     agentId: event.agentId,
     title: `Reply in ${event.caseKey}`,
-    prompt: buildRoomReplyPrompt({
-      caseKey: event.caseKey,
-      title: event.title,
-      sinceCursor: lastOwn ? encodeRoomMessageCursor(lastOwn) : null,
-    }),
+    prompt: buildRoomReplyPrompt({ caseKey: event.caseKey, title: event.title }),
     schedule: oneShotCronAt(now),
     ownerUserId: event.actingUserId,
     nextRunAt: now,

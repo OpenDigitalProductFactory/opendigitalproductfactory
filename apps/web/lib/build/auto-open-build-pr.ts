@@ -7,6 +7,8 @@
 // A PR is not a merge: required checks, the merge queue and human review still
 // decide what lands.
 
+import { PR_FOLLOW_UP_PREFIX, PR_FOLLOW_UP_UNCHANGED, PR_FOLLOW_UP_UNCHANGED_PREFIX } from "./pr-ci-repair-markers";
+
 export type AutoPrDeps = {
   phaseOf: (buildId: string) => Promise<string | null>;
   existingPrUrl: (buildId: string) => Promise<string | null>;
@@ -17,6 +19,10 @@ export type AutoPrDeps = {
    * never pass.
    */
   publishedIncomplete?: (buildId: string) => Promise<boolean>;
+  /** BI-085A37EC: a CI repair of the open PR still owes it a follow-up commit. */
+  followUpPending?: (buildId: string) => Promise<boolean>;
+  /** BI-085A37EC: the repair changed nothing, so a person is told once. */
+  followUpUnchanged?: (buildId: string, detail: string) => Promise<void>;
   createPr: (buildId: string, actorUserId: string) => Promise<{ success: boolean; message?: string; error?: string }>;
   log: (summary: string) => Promise<void>;
 };
@@ -29,14 +35,22 @@ export async function openBuildStudioPrAfterShip(input: {
   const deps = input.deps ?? (await productionDeps(input.buildId));
   if ((await deps.phaseOf(input.buildId)) !== "ship") return "skipped";
   const republish = Boolean(await deps.existingPrUrl(input.buildId));
-  if (republish && !(await deps.publishedIncomplete?.(input.buildId))) return "skipped";
+  const followUp = republish && Boolean(await deps.followUpPending?.(input.buildId));
+  if (republish && !followUp && !(await deps.publishedIncomplete?.(input.buildId))) return "skipped";
   const result = await deps.createPr(input.buildId, input.actorUserId);
   const detail = String(result.message ?? result.error ?? "").slice(0, 400);
   if (result.success) {
-    await deps.log(republish
-      ? `${REPUBLISHED_PREFIX} its pull request was missing files of the change: ${detail}`
-      : `Opened the pull request automatically after review: ${detail}`);
+    await deps.log(followUp
+      ? `${PR_FOLLOW_UP_PREFIX} ${detail}`
+      : republish
+        ? `${REPUBLISHED_PREFIX} its pull request was missing files of the change: ${detail}`
+        : `Opened the pull request automatically after review: ${detail}`);
     return "opened";
+  }
+  if (followUp && detail.includes(PR_FOLLOW_UP_UNCHANGED)) {
+    await deps.log(`${PR_FOLLOW_UP_UNCHANGED_PREFIX} ${detail}`);
+    await deps.followUpUnchanged?.(input.buildId, detail);
+    return "blocked";
   }
   await deps.log(`Pull request not opened; a publication guard refused: ${detail}`);
   return "blocked";
@@ -68,9 +82,12 @@ export async function retryBuildStudioPrForShipBuild(input: {
   lastAttemptAt: Date | null;
   now?: Date;
   deps?: AutoPrDeps;
+  /** BI-34A05E78: the ship refusal remedy backs this off while nothing changes. */
+  retryIntervalMs?: number;
 }): Promise<"opened" | "blocked" | "skipped"> {
   const now = input.now ?? new Date();
-  if (input.lastAttemptAt && now.getTime() - input.lastAttemptAt.getTime() < SHIP_PR_RETRY_MS) return "skipped";
+  const interval = input.retryIntervalMs ?? SHIP_PR_RETRY_MS;
+  if (input.lastAttemptAt && now.getTime() - input.lastAttemptAt.getTime() < interval) return "skipped";
   return openBuildStudioPrAfterShip({ buildId: input.buildId, actorUserId: input.actorUserId, deps: input.deps });
 }
 
@@ -78,17 +95,23 @@ export async function retryBuildStudioPrForShipBuild(input: {
  * The ship reconciler's hook: reads the build's owner and its last PR attempt,
  * then retries. Never throws; a failure is logged and the next tick tries again.
  */
-export async function retryPrForShipBuild(buildId: string, logger: Pick<Console, "error">): Promise<void> {
+export async function retryPrForShipBuild(
+  buildId: string,
+  logger: Pick<Console, "error">,
+  retryIntervalMs?: number,
+): Promise<"opened" | "blocked" | "skipped"> {
   try {
     const { prisma } = await import("@dpf/db");
     const build = await prisma.featureBuild.findUnique({ where: { buildId }, select: { createdById: true } });
-    if (!build?.createdById) return;
+    if (!build?.createdById) return "skipped";
     const lastAttempt = await prisma.buildActivity.findFirst({
       where: { buildId, tool: "auto_open_pr" },
       orderBy: { createdAt: "desc" },
       select: { createdAt: true },
     });
-    await retryBuildStudioPrForShipBuild({ buildId, actorUserId: build.createdById, lastAttemptAt: lastAttempt?.createdAt ?? null });
+    return await retryBuildStudioPrForShipBuild({
+      buildId, actorUserId: build.createdById, lastAttemptAt: lastAttempt?.createdAt ?? null, retryIntervalMs,
+    });
   } catch (error) {
     const { getErrorMessage } = await import("@/lib/shared/get-error-message");
     logger.error("[auto-complete] PR retry failed for %s: %s", buildId, getErrorMessage(error));
@@ -98,6 +121,7 @@ export async function retryPrForShipBuild(buildId: string, logger: Pick<Console,
     const { prisma } = await import("@dpf/db");
     await prisma.buildActivity.create({ data: { buildId, tool: "auto_open_pr",
       summary: `Pull request not opened; the attempt failed: ${getErrorMessage(error).slice(0, 400)}` } }).catch(() => {});
+    return "blocked";
   }
 }
 
@@ -146,6 +170,8 @@ async function productionDeps(forBuildId: string): Promise<AutoPrDeps> {
         return false; // could not tell; leave the pull request as it is
       }
     },
+    followUpPending: async (buildId) => (await import("./pr-ci-follow-up")).hasPendingPrFollowUp(buildId),
+    followUpUnchanged: async (buildId, detail) => (await import("./pr-ci-follow-up")).escalateUnchangedPrRepair(buildId, detail),
     createPr: async (buildId, actorUserId) => {
       const { executeTool } = await import("@/lib/mcp-tools");
       // Name the build in params: context.featureBuildId is read as a row cuid, so an FB- id there sets no hint.

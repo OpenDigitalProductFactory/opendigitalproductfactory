@@ -239,6 +239,9 @@ cat > "$CADDYFILE" <<EOF
     # Disable automatic HTTPS via ACME — we're using a fixed
     # self-signed cert on a LAN that has no public DNS / ACME path.
     auto_https off
+    # A client that connects by IP literal sends no server name; it gets
+    # the first hostname's certificate, which names every host (BI-4528CBDF).
+    default_sni ${HOSTNAMES[0]}
 }
 
 ${HOSTNAME_LINE}:443 {

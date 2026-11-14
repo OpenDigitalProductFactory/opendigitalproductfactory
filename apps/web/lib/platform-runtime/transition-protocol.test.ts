@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createHmac } from "node:crypto";
-import { canonicalTransitionPayload, prepareRuntimeReconciliationIntent, signTransitionPayload, validateRuntimeCapabilityProtocolInfo, verifyHistoricalTransitionReceipt, verifyTransitionReceipt, type RuntimeTransitionEnvelope } from "./transition-protocol";
+import { canonicalTransitionPayload, createRuntimeCompensationEnvelope, prepareRuntimeReconciliationIntent, signTransitionPayload, validateRuntimeCapabilityProtocolInfo, verifyHistoricalTransitionReceipt, verifyTransitionReceipt, type RuntimeTransitionEnvelope, type RuntimeTransitionReceipt } from "./transition-protocol";
 import { computeCapabilityStateVersion } from "../../../../scripts/lib/capability-state-hash.mjs";
 
 const secret = "s".repeat(32);
@@ -86,10 +86,87 @@ describe("runtime capability protocol discovery", () => {
     }
   });
 
+  it("requires an explicit image-reconciliation version in the identity-bound probe", () => {
+    const imageExpected = { ...expected, imageQualifierSha256: "d".repeat(64) };
+    const images = { ...info, ...imageExpected, signingVersions: [1, 2, 3], applyVersions: [1, 2, 3], reconciliationVersions: [2, 3], imageReconciliationVersions: [3] };
+    expect(validateRuntimeCapabilityProtocolInfo(images, imageExpected)).toEqual(images);
+    expect(() => validateRuntimeCapabilityProtocolInfo({ ...images, applyVersions: [1, 2] }, imageExpected)).toThrow("runtime_protocol_probe_invalid");
+    expect(() => validateRuntimeCapabilityProtocolInfo({ ...images, imageReconciliationVersions: [2] }, imageExpected)).toThrow("runtime_protocol_probe_invalid");
+    expect(() => validateRuntimeCapabilityProtocolInfo({ ...images, imageQualifierSha256: "e".repeat(64) }, imageExpected)).toThrow("runtime_protocol_probe_identity_mismatch");
+    expect(() => validateRuntimeCapabilityProtocolInfo({ ...images, imageQualifierSha256: undefined }, imageExpected)).toThrow("runtime_protocol_probe_identity_mismatch");
+  });
+
   it("refuses malformed or contradictory support instead of inferring compatibility", () => {
     for (const value of [null, [], {}, { ...info, schemaVersion: 2 }, { ...info, applyVersions: [2, 1] }, { ...info, signingVersions: [1, 1] }, { ...info, signingVersions: [0] }, { ...info, applyVersions: [3] }, { ...info, reconciliationVersions: [2] }, { ...info, signerSha256: "unknown" }]) {
       expect(() => validateRuntimeCapabilityProtocolInfo(value, expected)).toThrow("runtime_protocol_probe_invalid");
     }
+  });
+});
+
+describe("image-qualified reconciliation receipts", () => {
+  const sourceSha = "a".repeat(40);
+  const image = (letter: string) => `sha256:${letter.repeat(64)}`;
+  const request = () => ({ ...envelope, desiredStateHash: envelope.previousStateHash, previousServices: ["browser-use", "portal", "postgres"], desiredServices: ["browser-use", "portal", "postgres"], version: 3, kind: "runtime-capability-transition", mode: "reconciliation",
+    protocolIdentity: { sourceSha, actuatorSha256: "b".repeat(64), signerSha256: "c".repeat(64), imageQualifierSha256: "d".repeat(64), promoterDigest: image("d") },
+    imagePlan: { schemaVersion: 1, sourceSha, platform: "linux/amd64", operation: "prepare", services: [{ service: "browser-use", source: { kind: "source", sourceSha } }] },
+    reconciliation: { observedHost: { schemaVersion: 2, installerVersion: "fixture", platform: "linux", arch: "amd64", capabilityCatalogHash: envelope.catalogHash, capabilityStateVersion: envelope.previousStateHash, enabledRuntimeCapabilities: ["runtime:core"] },
+      observedDatabaseStates: { "runtime:core": "active" }, desiredHostEnabledKeys: ["runtime:core"], desiredDatabaseStates: { "runtime:core": "active" }, touchedKeys: [] },
+  }) as unknown as RuntimeTransitionEnvelope;
+  const proof = () => ({ schemaVersion: 1, sourceSha, services: [{ service: "browser-use", priorImageId: image("e"), intendedImageId: image("f"), observedImageId: image("f"), priorContainerId: "1".repeat(64), observedContainerId: "2".repeat(64), resourcesBeforeHash: "a".repeat(64), resourcesAfterHash: "a".repeat(64), source: { kind: "source", sourceSha, inputTreeOid: "3".repeat(40) } }], untouchedBefore: { portal: "7".repeat(64), postgres: "4".repeat(64) }, untouchedAfter: { portal: "7".repeat(64), postgres: "4".repeat(64) } });
+  const receipt = (imageProof: unknown) => {
+    const unsigned = { ...request(), status: "applied" as const, observedServices: ["browser-use", "portal"], observedHealth: { portal: "healthy" as const, "browser-use": "healthy" as const }, completedAt: new Date(2_000).toISOString(), beforeHash: envelope.previousStateHash, afterHash: envelope.previousStateHash, ...(imageProof === undefined ? {} : { imageProof }) };
+    return { ...unsigned, signature: signTransitionPayload(unsigned, secret) } as unknown as RuntimeTransitionReceipt;
+  };
+
+  it("refuses a signed healthy applied result without image proof", () => {
+    expect(() => verifyTransitionReceipt(receipt(undefined), secret, request(), 2_000)).toThrow("runtime_image_proof_invalid");
+  });
+
+  it.each(["image", "source", "untouched", "selection", "resources"])("refuses signed but wrong %s proof", kind => {
+    const value = proof();
+    if (kind === "image") value.services[0]!.observedImageId = image("e");
+    if (kind === "source") value.services[0]!.source.sourceSha = "5".repeat(40);
+    if (kind === "untouched") value.untouchedAfter.postgres = "6".repeat(64);
+    if (kind === "selection") value.services[0]!.service = "postgres";
+    if (kind === "resources") value.services[0]!.resourcesAfterHash = "b".repeat(64);
+    expect(() => verifyTransitionReceipt(receipt(value), secret, request(), 2_000)).toThrow("runtime_image_proof_invalid");
+  });
+
+  it("accepts exact image and preserved-service proof, including historical recovery", () => {
+    expect(verifyTransitionReceipt(receipt(proof()), secret, request(), 2_000)).toBe("applied");
+    expect(verifyHistoricalTransitionReceipt(receipt(proof()), secret, request())).toBe("applied");
+  });
+
+  it.each(["activation", "source", "path", "service", "published-tag", "missing-baseline", "host-projection"])("refuses an authenticated but unsafe %s image plan", kind => {
+    const changed = structuredClone(request()) as unknown as Record<string, any>;
+    if (kind === "activation") changed.desiredKeys.push("runtime:build");
+    if (kind === "source") changed.imagePlan.sourceSha = "5".repeat(40);
+    if (kind === "path") changed.imagePlan.services[0].source.contextPath = "/other/source";
+    if (kind === "service") changed.imagePlan.services[0].service = "postgres";
+    if (kind === "published-tag") changed.imagePlan.services[0].source = { kind: "published", sourceSha, reference: "ghcr.io/fixture/dpf-browser-use:latest" };
+    if (kind === "missing-baseline") { delete changed.reconciliation.observedDatabaseStates; delete changed.reconciliation.desiredDatabaseStates; }
+    if (kind === "host-projection") { changed.reconciliation.observedHost.enabledRuntimeCapabilities = ["runtime:build", "runtime:core"]; changed.reconciliation.desiredHostEnabledKeys = ["runtime:build", "runtime:core"]; }
+    const original = receipt(proof());
+    const { signature: _signature, ...unsigned } = { ...original, ...changed };
+    expect(() => verifyTransitionReceipt({ ...unsigned, signature: signTransitionPayload(unsigned, secret) }, secret, changed as RuntimeTransitionEnvelope, 2_000)).toThrow("runtime_image_plan_invalid");
+  });
+
+  it.each(["failed", "rollback_failed"] as const)("retains an authenticated %s result without inventing image proof", status => {
+    const { signature: _signature, ...unsigned } = { ...receipt(undefined), status, failure: "image_observation_unavailable" };
+    expect(verifyHistoricalTransitionReceipt({ ...unsigned, signature: signTransitionPayload(unsigned, secret) }, secret, request())).toBe(status);
+  });
+
+  it("derives exact image compensation only from the authenticated original applied receipt", () => {
+    expect(() => createRuntimeCompensationEnvelope(request(), 3_000)).toThrow("runtime_image_compensation_unproven");
+    const original = receipt(proof()) as unknown as RuntimeTransitionReceipt;
+    expect(() => createRuntimeCompensationEnvelope(request(), 3_000, { receipt: { ...original, signature: "0".repeat(64) }, secret })).toThrow("runtime_image_compensation_unproven");
+    const reverse = createRuntimeCompensationEnvelope(request(), 3_000, { receipt: original, secret });
+    expect(reverse.version).toBe(3);
+    if (reverse.version !== 3) throw new Error("expected image compensation");
+    expect(reverse.imagePlan.operation).toBe("restore");
+    expect(reverse.imagePlan.services).toEqual([{ service: "browser-use", source: { kind: "restore", imageId: image("e"), expectedImageId: image("f") } }]);
+    expect(reverse.imagePlan.sourceSha).toBe(sourceSha);
+    expect(reverse.reconciliation.touchedKeys).toEqual([]);
   });
 });
 

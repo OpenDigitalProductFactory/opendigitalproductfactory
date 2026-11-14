@@ -210,7 +210,10 @@ export function repairTaskFor(state: GauntletRepairState, guardOutput: string): 
   if (state.source === "review" && state.findings && state.findings.length > 0) {
     return buildReviewRepairTask({ findings: state.findings });
   }
-  return buildGauntletRepairTask({ failedGuards: state.failedGuards, output: guardOutput });
+  // A ship-side guard refusal has no gauntlet record; its findings carry the
+  // guard output the PR attempt recorded (BI-34A05E78).
+  const output = guardOutput || (state.findings ?? []).map((f) => f.description).join("\n");
+  return buildGauntletRepairTask({ failedGuards: state.failedGuards, output });
 }
 
 /** The owner-facing issues an escalation carries, by what is still failing. */

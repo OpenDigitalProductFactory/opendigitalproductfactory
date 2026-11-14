@@ -41,6 +41,20 @@ describe("ecosystem intake job reporting", () => {
     mocks.answer.mockResolvedValue({ sent: 0, withheld: [] });
   });
 
+  it("names an unreadable security surface as UNREADABLE, never as zero (BI-C67E5CCB AC-1, AC-5)", async () => {
+    mocks.run.mockResolvedValue({ ran: true, complete: false, ingested: 3, deduped: 0, failed: 0, itemIds: [],
+      sourceErrors: [{ source: "secret-scanning", error: "Secret scanning coverage unreadable (HTTP 403)" }],
+      security: { surfaces: { "dependabot-package": { alerts: 33, groups: 2 }, "code-scanning-rule": { alerts: 4, groups: 3 } },
+        lifecycle: { resolved: ["BI-H"], heldByBuild: [], reopened: [], regressions: [], reprioritized: ["BI-U"] } } });
+    await invoke();
+    const summary = mocks.upsert.mock.calls[0][0].update.lastRunSummary as string;
+    expect(summary).toContain("Dependabot 33 open, 2 items");
+    expect(summary).toContain("code scanning 4 open, 3 items");
+    expect(summary).toContain("secret scanning UNREADABLE");
+    expect(summary).toContain("Resolved 1");
+    expect(mocks.upsert.mock.calls[0][0].update.lastStatus).toBe("failed");
+  });
+
   it("never overwrites scheduled-job metadata, so a commission reference survives every heartbeat", async () => {
     mocks.run.mockResolvedValue({ ran: true, complete: true, ingested: 0, deduped: 0, failed: 0, itemIds: [], sourceErrors: [] });
     await invoke();

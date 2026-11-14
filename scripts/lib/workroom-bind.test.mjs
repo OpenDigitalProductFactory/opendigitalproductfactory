@@ -528,3 +528,9 @@ for (const code of ["mcp_authentication_failed", "mcp_authorization_failed"]) {
     assert.equal(writes, 0);
   });
 }
+
+// BI-53BED66C: the gate records CODEX_THREAD_ID, so the bind must too.
+test("binds a Codex thread under the id the gate records, and DPF_SESSION_REF first", () => {
+  assert.equal(resolveSessionRef({ worktreePath: "/wt/a", env: { CODEX_THREAD_ID: "thread-1", CODEX_SESSION_ID: "session-1" } }), "thread-1");
+  assert.equal(resolveSessionRef({ worktreePath: "/wt/a", env: { DPF_SESSION_REF: "ref", CODEX_THREAD_ID: "thread-1" } }), "ref");
+});

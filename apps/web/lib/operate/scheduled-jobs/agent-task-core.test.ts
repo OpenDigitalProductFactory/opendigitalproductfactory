@@ -2,6 +2,8 @@ import { describe, it, expect, vi } from "vitest";
 
 vi.mock("@dpf/db", () => ({
   prisma: {
+    $transaction: vi.fn(async (f: any) => { const {prisma}=await import("@dpf/db"); return f(prisma); }),
+    $queryRaw: vi.fn(),
     organization: {
       findFirst: vi.fn(async ({ where }: any) => ({ id: where.id })),
     },
@@ -471,4 +473,34 @@ describe("getScheduledAgentTasksFor", () => {
       expect.objectContaining({ where: { ownerUserId: "u1" } }),
     );
   });
+});
+
+
+describe("owned exact historical report diagnostics",()=>{
+ const task={taskId:"watch",ownerUserId:"owner",prompt:"private commission",updatedAt:new Date("2026-11-14T00:00:00Z")};
+ const selector=async()=>({taskRunId:"TR-OLD",expectedRevision:(await import("./scheduled-reporting-contract")).scheduledReportingRevision(task)});
+ it("reads the selected historical run without private content or substituting the latest run",async()=>{
+  const {prisma}=await import("@dpf/db");
+  vi.mocked(prisma.scheduledAgentTask.findUnique).mockResolvedValue({...task,taskRunId:"TR-NEW"} as never);
+  vi.mocked(prisma.$queryRaw).mockResolvedValue([{diagnostic:null}]);
+  const {getScheduledReportDiagnosticFor}=await import("./agent-task-core");
+  const result=await getScheduledReportDiagnosticFor("owner","watch",await selector());
+  expect(result).toMatchObject({taskId:"watch",taskRunId:"TR-OLD",retention:"not-retained"});
+  expect(JSON.stringify(result)).not.toContain("private commission");
+  expect(JSON.stringify(vi.mocked(prisma.$queryRaw).mock.calls.at(-1))).toContain("TR-OLD");
+ });
+ it("withholds a malformed stored diagnostic rather than mislabeling it as absent",async()=>{
+  const {prisma}=await import("@dpf/db");
+  vi.mocked(prisma.scheduledAgentTask.findUnique).mockResolvedValue(task as never);
+  vi.mocked(prisma.$queryRaw).mockResolvedValue([{diagnostic:{private:"untrusted"}}]);
+  const {getScheduledReportDiagnosticFor}=await import("./agent-task-core");
+  await expect(getScheduledReportDiagnosticFor("owner","watch",await selector())).rejects.toThrow("Scheduled report diagnostic is unavailable");
+ });
+ it.each(["owner","revision","source"])("refuses changed %s without disclosing another run",async(change)=>{
+  const {prisma}=await import("@dpf/db");
+  vi.mocked(prisma.scheduledAgentTask.findUnique).mockResolvedValue({...task,ownerUserId:change==="owner"?"other":"owner"} as never);
+  vi.mocked(prisma.$queryRaw).mockResolvedValue([]);
+  const {getScheduledReportDiagnosticFor}=await import("./agent-task-core");
+  await expect(getScheduledReportDiagnosticFor("owner","watch",{...await selector(),...(change==="revision"?{expectedRevision:"0".repeat(64)}:{})})).rejects.toThrow("Scheduled report diagnostic is unavailable");
+ });
 });

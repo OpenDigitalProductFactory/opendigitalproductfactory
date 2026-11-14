@@ -103,6 +103,7 @@ import {
   looksLikeCliRateLimit,
   looksLikeCliUnsupportedModel,
   cliFailureSignal,
+  describeCliFailure,
 } from "./codex-cli-adapter";
 import type { AdapterRequest } from "./adapter-types";
 import type { RoutedExecutionPlan } from "./recipe-types";
@@ -398,7 +399,7 @@ describe("Codex CLI failure verdict is never hidden", () => {
   });
 
   it("bounds and redacts what it logs", async () => {
-    const { logged } = await runFailing(`ERROR: upstream rejected Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ4In0.c2lnbmF0dXJl key sk-proj-ABCDEFGHIJKLMNOP ${"x".repeat(5_000)}\n`);
+    const { logged } = await runFailing(`ERROR: ${"x".repeat(5_000)} upstream rejected Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ4In0.c2lnbmF0dXJl key sk-proj-ABCDEFGHIJKLMNOP\n`);
     expect(logged).not.toMatch(/eyJhbGci|sk-proj-ABCDEFGH/);
     expect(logged).toContain("[redacted]");
     expect(logged.length).toBeLessThan(1_200);
@@ -592,6 +593,27 @@ describe("cliFailureSignal — classify the CLI's own error, not the echoed prom
     expect(looksLikeCliAuthFailure(cliFailureSignal(text))).toBe(true);
   });
 
+  // BI-F7D06E2D (live, 2026-11-13 05:23Z): `codex exec` exited 0 with empty
+  // stdout on a scheduled marketing run. With no ERROR line the signal is the
+  // stderr tail, which opens inside the echoed prompt. The log line kept the
+  // head of that tail, so it showed tool schema JSON and cut off what codex
+  // printed after the prompt.
+  it("logs the end of a failure with no ERROR line, where the CLI's own output is", () => {
+    const stderr = [
+      "user",
+      `Tools:\n- save_marketing_review: Parameters: ${JSON.stringify({ body: "x".repeat(2_500) })}`,
+      "Your turn: output the next tool_use JSON object, or your final answer.",
+      "codex",
+      "warning: model returned no final message",
+      "tokens used",
+      "41,207",
+    ].join("\n");
+    const { logLine } = describeCliFailure(stderr);
+    expect(logLine).toContain("warning: model returned no final message");
+    expect(logLine).toContain("tokens used");
+    expect(logLine.length).toBeLessThanOrEqual(501);
+  });
+
   it("falls back to the tail when the CLI printed no ERROR line", () => {
     const text = "x".repeat(10_000) + "\nnot logged in";
     expect(cliFailureSignal(text)).toContain("not logged in");
@@ -707,5 +729,53 @@ describe("codex text-tool mode runs codex as inference only", () => {
     const { prompt } = await runTextToolTurn();
     expect(prompt.trimEnd()).toMatch(/Your turn: output the next tool_use JSON object, or your final answer\.$/);
     expect(prompt).toMatch(/run by the platform when you output that JSON/);
+  });
+});
+
+// BI-F7D06E2D (live, 2026-11-13 05:23Z): a scheduled marketing run on codex
+// read its summary, then `codex exec` exited 0 with an empty final message.
+// The adapter held that as an uncertain native execution, which stops the
+// fallback chain, so the run failed with no draft while Claude was eligible.
+// Text-tool mode runs codex read-only with its own tools off: it cannot have
+// changed anything, so its failure is a provider error the chain moves past.
+describe("a codex text-tool failure falls through to the next provider", () => {
+  async function runTextToolFailure(outcome: { stdout?: string; stderr?: string; code: number }) {
+    vi.clearAllMocks();
+    const { getDecryptedCredential } = await import("@/lib/inference/ai-provider-internals");
+    vi.mocked(getDecryptedCredential).mockResolvedValue({ secretRef: "test-provider-key", cachedToken: null } as never);
+    mockExecAsync.mockResolvedValue({ stdout: "", stderr: "" });
+    mockSpawn.mockImplementation((_command: string, args: string[]) => {
+      const proc = makeMockProcess();
+      if (args.includes("-i")) {
+        proc.stdin.write.mockImplementation((_data: string, cb?: () => void) => { cb?.(); return true; });
+        proc.stdin.end.mockImplementation(() => process.nextTick(() => proc.emit("close", 0)));
+      } else process.nextTick(() => {
+        proc.emit("spawn");
+        if (outcome.stderr) proc.stderr.emit("data", Buffer.from(outcome.stderr));
+        if (outcome.stdout) proc.stdout.emit("data", Buffer.from(outcome.stdout));
+        proc.emit("close", outcome.code);
+      });
+      return proc;
+    });
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { codexCliAdapter } = await import("./codex-cli-adapter");
+    const error = await codexCliAdapter.execute(makeRequest({
+      messages: [{ role: "user", content: "Advance the current campaign." }],
+      tools: ["get_marketing_summary", "draft_marketing_asset"].map((name) => ({ type: "function", function: { name, parameters: { type: "object", properties: {} } } })),
+    })).catch((e: unknown) => e);
+    warn.mockRestore();
+    return error as { name: string; code?: string };
+  }
+
+  it("raises a provider error, not an uncertain execution, when codex returns no final message", async () => {
+    const error = await runTextToolFailure({ stderr: "user\nAdvance the current campaign.\ncodex\ntokens used\n41,207\n", code: 0 });
+    expect(error.name).toBe("InferenceError");
+    expect(error.code).toBe("provider_error");
+  });
+
+  it("raises a provider error when codex exits non-zero", async () => {
+    const error = await runTextToolFailure({ stderr: "ERROR: stream disconnected before completion\n", code: 1 });
+    expect(error.name).toBe("InferenceError");
+    expect(error.code).toBe("provider_error");
   });
 });

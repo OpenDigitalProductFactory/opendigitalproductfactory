@@ -25,6 +25,7 @@ vi.mock("./governed-work-claim", () => ({
 vi.mock("./capsule-workitem-anchor.server", () => ({
   ensureCapsuleWorkItemAnchorWithPrisma: mocks.ensureCapsuleWorkItemAnchorWithPrisma,
 }));
+vi.mock("@/lib/workroom-runtime/room-setup-effects.server", () => ({ kickRoomSetup: vi.fn(), oweRoomSetup: vi.fn() }));
 
 import { claimBacklogItemForWork } from "./claim-backlog-item-handler";
 import type { CapsuleDb } from "./work-capsule-store-types";
@@ -221,7 +222,12 @@ describe("the claim asks for the delivery shape (BI-02470C7E, design §3.3)", ()
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.ensureCapsuleWorkItemAnchorWithPrisma.mockResolvedValue({});
-    mocks.claimGovernedBacklogWorkspace.mockResolvedValue(okClaim());
+    // BI-C64EDA33 PR 3: the shape is written inside the claim's transaction, as the real claim runs it.
+    mocks.claimGovernedBacklogWorkspace.mockImplementation(async (args: { db: unknown; dependencies?: { afterClaimInTx?: (tx: unknown, claim: unknown) => Promise<void> } }) => {
+      const result = okClaim() as { data: { claim: unknown } };
+      await args.dependencies?.afterClaimInTx?.(args.db, result.data.claim);
+      return result;
+    });
     mocks.evaluateItemAdmission.mockResolvedValue({ verdict: "admit", reason: "fits" });
   });
 

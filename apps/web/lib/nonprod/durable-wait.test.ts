@@ -327,9 +327,35 @@ describe("durable nonproduction lease wait", () => {
       expect(result.headLeaseId).toBe("NPEL-ABANDONED");
     });
 
+    // BI-218A4555 AC-OVS-8: the wake goes to the overseer's policy head, not
+    // the oldest row, and passes over an AI turn (it has no task to wake).
+    it("wakes the policy head: a gate before an older preview, past an AI turn", async () => {
+      const olderPreview = {
+        ...lease({ id: "row-p", leaseId: "NPEL-PREVIEW", claimKey: "dev-portal:/wt:a", ownerSessionId: "s-p", taskRunId: "TR-P" }),
+        queuedAt: new Date(NOW.getTime() - 25 * 60_000),
+        heartbeatAt: new Date(NOW.getTime() - 10_000),
+      };
+      const aiTurn = {
+        ...lease({ id: "row-t", leaseId: "NPEL-TURN", claimKey: "inference-turn:local:NPEL-TURN", ownerSessionId: "local-inference" }),
+        queuedAt: new Date(NOW.getTime() - 22 * 60_000),
+        heartbeatAt: new Date(NOW.getTime() - 10_000),
+      };
+      const mock = queueDb([olderPreview, aiTurn, live]);
+      const result = await publishNonprodCapacityForHead({
+        db: mock,
+        environmentKey: "local-integration-ci",
+        causeLeaseId: "NPEL-OLD",
+        now: NOW,
+        emit: vi.fn(async () => undefined),
+      });
+      expect(result.headLeaseId).toBe("NPEL-LIVE");
+    });
+
     it("treats a waiter with no beat recorded at all as wakeable", async () => {
+      // BI-218A4555: a row with no queue time ranks last in policy order (as it
+      // does in PostgreSQL's NULLS LAST), so it is shown alone here.
       const noSignal = { ...lease({ leaseId: "NPEL-NO-SIGNAL", taskRunId: "TR-NONPROD-1" }) };
-      const mock = queueDb([noSignal, live]);
+      const mock = queueDb([noSignal]);
       const result = await publishNonprodCapacityForHead({
         db: mock,
         environmentKey: "local-integration-ci",

@@ -1,5 +1,6 @@
 import type { Prisma, PrismaClient } from "@dpf/db";
 import { readBuildPrDeliveryState } from "@/lib/build/build-pr-delivery-state";
+import { isDeliveryObservationDue } from "@/lib/build/build-pr-delivery-recheck";
 import { getCatalogEntry } from "@/lib/operate/scheduled-jobs/catalog";
 
 const ROOM_SCAN_WINDOW = 200;
@@ -24,8 +25,13 @@ const roomSelect = {
  * Claim the batch before effects: failed or stale-head observations still
  * yield to later rooms, and a crash defers this batch until the next sweep.
  * The cursor is scheduling evidence, never publication or cleanup evidence.
+ * A room backing off, or stopped on a cause GitHub can clear, is taken only
+ * when it is due (BI-0EDCF2EC).
  */
-export async function selectPrDeliveryRooms(db: Pick<PrismaClient, "scheduledJob" | "workroom">) {
+export async function selectPrDeliveryRooms(
+  db: Pick<PrismaClient, "scheduledJob" | "workroom">,
+  now: Date = new Date(),
+) {
   const definition = getCatalogEntry("build-pr-delivery-reconcile");
   if (!definition) throw new Error("PR delivery job catalog entry is missing");
   const job = await db.scheduledJob.upsert({
@@ -59,8 +65,7 @@ export async function selectPrDeliveryRooms(db: Pick<PrismaClient, "scheduledJob
   let nextCursor: string | null = null;
   for (const row of rows) {
     nextCursor = row.id;
-    const status = readBuildPrDeliveryState(row.workspaceState)?.status;
-    if (status === "escalated" || status === "closed" || status === "deployed") continue;
+    if (!isDeliveryObservationDue(readBuildPrDeliveryState(row.workspaceState), now)) continue;
     capsules.push(row);
     if (capsules.length === ROOMS_PER_RUN) break;
   }

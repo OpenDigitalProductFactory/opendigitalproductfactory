@@ -32,12 +32,14 @@ export default async function WorkspaceInboxPage({ searchParams }: { searchParam
   const outcomes = (await loadApprovalOutcomes(session.user.id, approvalId)).map((outcome) => ({
     ...outcome, label: t(`states.${outcome.state}.label`), nextAction: t(outcome.nextActionKey),
     ...(outcome.failureExplanationKey ? { failureExplanation: t(outcome.failureExplanationKey) } : {}),
+    ...(outcome.runtimeExplanationKey ? { runtimeExplanation: t(outcome.runtimeExplanationKey) } : {}),
     ...(outcome.decidedOnBehalf ? { onBehalfText: t("card.decidedOnBehalf", {
       by: outcome.decidedOnBehalf.by, owner: outcome.decidedOnBehalf.onBehalfOf, reason: outcome.decidedOnBehalf.reason,
     }) } : {}),
   }));
   const outcomeCopy = { result: t("result"), recent: t("recent"), unavailable: t("unavailable"), details: t("details"), open: t("open"),
-    inspectRoom: t("failure.inspectRoom"), roomUnavailable: t("failure.roomUnavailable"), evidence: t("failure.evidence") };
+    inspectRoom: t("failure.inspectRoom"), roomUnavailable: t("failure.roomUnavailable"), evidence: t("failure.evidence"),
+    runtimeEvidence: t("runtime.evidence"), hostUnproven: t("runtime.hostUnproven"), hostVerified: t("runtime.hostVerified") };
 
   // Best-effort auto-resolve so settled escalations clear when the inbox is viewed
   // (re-homed from /ops with the band; the 15-min cron still covers it). Idempotent,

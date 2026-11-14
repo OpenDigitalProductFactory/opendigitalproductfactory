@@ -37,10 +37,10 @@ function promoterParams(row: RuntimeTransitionReconcileRow, envelope: RuntimeTra
   const secretPath = process.env.DPF_RUNTIME_TRANSITION_SECRET_FILE_HOST;
   if (!hostInstallPath || !stateDirHostPath || !secretPath) throw new Error("runtime_transition_host_configuration_missing");
   const identity = envelope.protocolIdentity;
-  if (envelope.version === 2 && envelope.mode === "reconciliation"
+  if (envelope.version !== 1 && envelope.mode === "reconciliation"
     && (!identity || !/^sha256:[a-f0-9]{64}$/.test(identity.promoterDigest) || !/^[a-f0-9]{40}$/.test(identity.sourceSha))) throw new Error("runtime_transition_protocol_identity_missing");
   return {
-    ...runtimeTransitionHostContext(envelope.version === 2 && envelope.mode === "reconciliation" ? envelope.reconciliation?.observedHost : undefined), runtimeCapabilitySecretFileHostPath: secretPath,
+    ...runtimeTransitionHostContext(envelope.version !== 1 && envelope.mode === "reconciliation" ? envelope.reconciliation?.observedHost : undefined), runtimeCapabilitySecretFileHostPath: secretPath,
     targetSha: identity?.sourceSha ?? process.env.DEPLOYED_SHA ?? "runtime-capability-transition", ...(identity ? { promoterImage: identity.promoterDigest } : {}), backupPath: "/backups/runtime-capability-transition",
     healthUrl: `${process.env.APP_URL ?? "http://localhost:3000"}/api/health`,
     runtimeCapabilityTransitionId: envelope.transitionId,
@@ -73,9 +73,11 @@ export async function createProductionRuntimeTransitionHost() {
       const packet = row.failure?.compensation;
       if (!packet) throw new Error("runtime_transition_compensation_identity_missing");
       const reverse = packet.envelope;
+      if (row.envelope.version === 3 && !packet.imageRecoveryReceipt) throw new Error("runtime_image_compensation_unproven");
       if (packet.envelopeSignature !== signTransitionPayload(reverse, protocolSecret)
-        || canonicalTransitionPayload(reverse) !== canonicalTransitionPayload(createRuntimeCompensationEnvelope(row.envelope, Date.parse(reverse.issuedAt)))) throw new Error("runtime_transition_compensation_identity_mismatch");
-      if (row.envelope.version === 2 && row.envelope.mode === "reconciliation") {
+        || canonicalTransitionPayload(reverse) !== canonicalTransitionPayload(createRuntimeCompensationEnvelope(row.envelope, Date.parse(reverse.issuedAt),
+          row.envelope.version === 3 ? { receipt: packet.imageRecoveryReceipt!, secret: protocolSecret } : undefined))) throw new Error("runtime_transition_compensation_identity_mismatch");
+      if (row.envelope.version !== 1 && row.envelope.mode === "reconciliation") {
         const states = await prisma.platformCapability.findMany({ where: { capabilityId: { startsWith: "runtime:" } }, select: { capabilityId: true, state: true } });
         const current = Object.fromEntries(states.map(capability => [capability.capabilityId, capability.state]));
         assertRuntimeCompensationDatabaseBaseline(current, row.previousStates);
@@ -145,7 +147,7 @@ export async function reconcileRuntimeCapabilityTransitionsOnStartup(host: {
     classifyTerminalReceipt: async (row, receipt) => {
       const status = receipt.status === "rolled_back" ? "rolled_back" : receipt.status === "rollback_failed" ? "rollback_failed" : "failed";
       await prisma.$transaction(async (tx) => {
-        const changed = await tx.runtimeCapabilityTransition.updateMany({ where: { transitionId: row.transitionId, status: row.status, envelopeSignature: row.envelopeSignature }, data: { status, hostReceipt: receipt, failure: { code: receipt.failure ?? status }, completedAt: new Date() } });
+        const changed = await tx.runtimeCapabilityTransition.updateMany({ where: { transitionId: row.transitionId, status: row.status, envelopeSignature: row.envelopeSignature }, data: { status, hostReceipt: receipt, failure: { code: receipt.failure ?? status, ...(receipt.version === 3 && status === "rollback_failed" ? { recoveryRequired: true } : {}) }, completedAt: new Date() } });
         if (changed.count !== 1) return;
         await tx.runtimeCapabilityTransitionEvent.create({ data: { transitionId: row.transitionId, outcome: status, detail: { receipt, source: "startup-reconciler" } } });
       });

@@ -95,23 +95,30 @@ export function isReusableLiveCapsule(
 }
 
 /** Independent missing bindings: a pre-bound backlog must not prevent session binding. */
-export function planLiveCapsuleBinding(existing: Pick<BranchCapsuleRecord, "backlogItemId" | "executorRef" | "epicId">, input: CapsuleAdoptionInput) {
+export function planLiveCapsuleBinding(existing: Pick<BranchCapsuleRecord, "backlogItemId" | "executorRef" | "epicId" | "executorKind">, input: CapsuleAdoptionInput) {
   const backlogBound = Boolean(input.backlogItemId) && existing.backlogItemId == null;
   const sessionBound = Boolean(input.executorRef) && existing.executorRef == null;
+  // BI-E1020AAE: an adopt that omitted the executor kind left a room no claim
+  // could match. The room's own session (or a room with none) may fill it; a
+  // recorded kind is never rewritten here — that is the handover's job.
+  const kindBound = Boolean(input.executorKind) && existing.executorKind == null
+    && (existing.executorRef == null || existing.executorRef === input.executorRef);
   return {
-    changed: backlogBound || sessionBound,
+    changed: backlogBound || sessionBound || kindBound,
     backlogBound,
     // A concurrent session assignment must refuse rather than be overwritten.
-    where: sessionBound ? { executorRef: null } : {},
+    where: { ...(sessionBound ? { executorRef: null } : {}), ...(kindBound ? { executorKind: null } : {}) },
     data: {
       ...(backlogBound ? { backlogItemId: input.backlogItemId,
         ...(input.epicId && existing.epicId == null ? { epicId: input.epicId } : {}),
       } : {}),
       ...(sessionBound ? { executorRef: input.executorRef } : {}),
+      ...(kindBound ? { executorKind: input.executorKind } : {}),
     },
     evidence: {
       ...(backlogBound ? { backlogItemId: input.backlogItemId, lateBind: true } : {}),
       ...(sessionBound ? { executorRef: input.executorRef, sessionLateBind: true } : {}),
+      ...(kindBound ? { executorKind: input.executorKind, executorKindLateBind: true } : {}),
     },
   };
 }

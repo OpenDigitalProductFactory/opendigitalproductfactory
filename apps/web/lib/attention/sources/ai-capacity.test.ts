@@ -62,6 +62,15 @@ describe("aiCapacityToAttentionItem", () => {
     expect(item.createdAtIso).toBe("2026-10-27T11:30:00.000Z");
   });
 
+  it("marks a usage limit as recovering on its own and every other capacity loss as needing the operator (BI-ACE041FE)", () => {
+    const usage = aiCapacityToAttentionItem({ ...providerRow, details: { ...(providerRow.details as object), cause: "usage-limit" } });
+    expect(usage.triage.residueReason).toBe("self-heals");
+    expect(aiCapacityToAttentionItem(providerRow).triage.residueReason).toBe("no-self-heal");
+    const signIn = aiCapacityToAttentionItem({ ...providerRow, details: { ...(providerRow.details as object), cause: "sign-in" } });
+    expect(signIn.triage.residueReason).toBe("needs-credential");
+    expect(aiCapacityToAttentionItem(platformRow).triage.residueReason).toBe("no-self-heal");
+  });
+
   it("ranks a platform collapse as high risk", () => {
     const item = aiCapacityToAttentionItem(platformRow);
     expect(item.riskClass).toBe("high-risk");

@@ -3,6 +3,7 @@ vi.mock("server-only", () => ({}));
 vi.mock("@dpf/db", () => ({ prisma: {} }));
 import { fingerprintCoworkerInput } from "@/lib/govern/authority/coworker-authority-decision";
 import { readApprovalActionEvidence } from "./approval-action-evidence";
+import { MCP_ROUTE_TOOL_RESULT_CHAR_CAP } from "@/lib/tak/tool-result-budget";
 
 const now = new Date("2026-10-21T00:00:00Z");
 const createdAt = new Date("2026-10-16T00:00:00Z");
@@ -115,4 +116,66 @@ it("preserves unsupported-operation classification even when its result is malfo
   f.envelope.argsJson.approvalBinding.inputFingerprint = changed;
   f.run.result.success = false;
   expect(await f.read()).toEqual({ state: "unsupported", reason: "operation-unsupported" });
+});
+
+function runtimeFixture() {
+  const f = fixture();
+  const parameters = { transitionId: "RCT-original-fixture", imageServices: ["browser-use"], reconciliation: {
+    observedHost: { schemaVersion: 1, installerVersion: "fixture", platform: "darwin", arch: "arm64",
+      capabilityCatalogHash: "a".repeat(64), capabilityStateVersion: "b".repeat(64), enabledRuntimeCapabilities: [] },
+    observedDatabaseStates: {}, desiredHostEnabledKeys: [], desiredDatabaseStates: {}, touchedKeys: [],
+  } };
+  Object.assign(f.envelope, { manifestActionId: "reconcile_runtime_capabilities" });
+  Object.assign(f.run, { toolName: "reconcile_runtime_capabilities", parameters, success: false,
+    result: { success: false, error: "runtime_transition_database_stale", message: "SECRET private handler message" } });
+  const digest = fingerprintCoworkerInput(parameters);
+  f.envelope.inputFingerprint = digest;
+  Object.assign(f.envelope.argsJson.approvalBinding, { toolName: "reconcile_runtime_capabilities", inputFingerprint: digest });
+  return f;
+}
+
+describe("the original runtime reconciliation result (BI-08B1B79B)", () => {
+  it("shows the bound recorded refusal without replaying it or exposing private payload", async () => {
+    const f = runtimeFixture();
+    const result = await f.read();
+    expect(result).toMatchObject({ state: "available", toolName: "reconcile_runtime_capabilities",
+      operation: "reconciliation", transitionId: "RCT-original-fixture", outcome: "failed",
+      failureCode: "runtime_transition_database_stale" });
+    expect(JSON.stringify(result)).not.toContain("SECRET");
+    expect(f.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { envelopeId: "e1", toolName: "reconcile_runtime_capabilities" }, take: 11,
+    }));
+    expect(Object.keys(f.db)).toEqual(["toolExecution"]);
+  });
+  it("keeps an incomplete host observation distinct from a failed approval", async () => {
+    const f = runtimeFixture();
+    Object.assign(f.run, { result: { success: false, data: { status: "host_applied_pending_verification" } } });
+    expect(await f.read()).toMatchObject({ state: "available", outcome: "incomplete",
+      operationStatus: "host_applied_pending_verification" });
+  });
+  it("does not expose an arbitrary handler error as a verified cause", async () => {
+    const f = runtimeFixture();
+    Object.assign(f.run, { result: { success: false, error: "SECRET private runtime detail" } });
+    const result = await f.read();
+    expect(result).toMatchObject({ state: "available", outcome: "failed", failureCode: null });
+    expect(JSON.stringify(result)).not.toContain("SECRET");
+  });
+  it("refuses contradictory successful audit and failed operation result", async () => {
+    const f = runtimeFixture();
+    Object.assign(f.run, { success: true, result: { success: true, data: { status: "failed" } } });
+    expect(await f.read()).toEqual({ state: "missing", reason: "result-unproven" });
+  });
+  it.each(["userId", "agentId", "threadId", "envelopeId", "toolName"])("rejects a foreign runtime execution %s", async key => {
+    const f = runtimeFixture(); Object.assign(f.run, { [key]: "foreign" });
+    expect(await f.read()).toMatchObject({ state: "conflicting", reason: "execution-binding-mismatch" });
+  });
+  it("rejects oversized saved runtime payloads without projecting their contents", async () => {
+    const f = runtimeFixture();
+    Object.assign(f.run, { result: { success: false, error: "runtime_transition_database_stale", message: "x".repeat(MCP_ROUTE_TOOL_RESULT_CHAR_CAP + 1) } });
+    expect(await f.read()).toEqual({ state: "missing", reason: "result-unproven" });
+  });
+  it("keeps ambiguous runtime executions unproven rather than choosing a newer result", async () => {
+    const f = runtimeFixture(); f.findMany.mockResolvedValue([f.run, { ...f.run, id: "second-runtime-execution" }]);
+    expect(await f.read()).toMatchObject({ state: "conflicting", reason: "execution-ambiguous" });
+  });
 });

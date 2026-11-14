@@ -169,6 +169,8 @@ describe("assessAiCapacity", () => {
     expect(result.findings).toHaveLength(1);
     expect(result.findings[0]).toMatchObject({ cause: "usage-limit", retryAtIso: "2026-10-27T15:30:00.000Z" });
     expect(result.findings[0].explanation).toContain("2026-10-27 15:30 UTC");
+    // The title is what Needs-you and the handling strip show (BI-ACE041FE).
+    expect(result.findings[0].title).toBe("Codex has hit its usage limit until 2026-10-27 15:30 UTC");
   });
 
   it("raises one platform-level item when total usable capacity collapses", () => {

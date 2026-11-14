@@ -13,6 +13,13 @@
 //                         `git add` the result. Prints exactly what it did,
 //                         itemized — mirrors the pre-commit Guard 2 (Prisma
 //                         client) precedent: loud, never silent, fast.
+//   regenerate-affected <baseRef>
+//                         Build Studio, after a build is refreshed onto
+//                         upstream (BI-A9E32D80): for every registered artifact
+//                         whose sources the change since baseRef touches, run
+//                         its generate command and `git add` the result. The
+//                         caller commits. Same plan as regenerate-staged, over
+//                         the branch's diff instead of the index.
 //   push-exempt <baseRef> pre-push gate: decide whether the diff since
 //                         baseRef needs the local-CI sandbox gate. Replaces
 //                         the old docs-only path-regex exemption — "docs
@@ -38,6 +45,20 @@ import { resolveHostCommandInvocation } from "./lib/host-command-invocation.mjs"
 import { availableMermaidRenderer } from "./lib/mermaid-renderer.mjs";
 import { gitText, gitTextOrNull } from "./lib/git.mjs";
 import { classifySpawnResult, SPAWN_OUTCOME } from "./check-guards.mjs";
+
+// BI-31C988D5: the runtime-bound classifiers load lazily. If either cannot load
+// (a trimmed copy of this module, a missing file), admission fails closed to
+// "every code change takes the local slot" rather than exempting anything.
+let runtimeClassifiers = null;
+try {
+  const [convergence, data] = await Promise.all([
+    import("./check-convergence-impact.mjs"),
+    import("./check-data-impact.mjs"),
+  ]);
+  runtimeClassifiers = { classifyConvergenceSurfaces: convergence.classifyConvergenceSurfaces, persistentRules: data.PERSISTENT_SURFACE_RULES };
+} catch {
+  runtimeClassifiers = null;
+}
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -119,6 +140,56 @@ export function evaluatePushExemption(diffFiles, registry = DERIVED_ARTIFACTS, r
   return { exempt: true, reason: affected.length > 0 ? "docs diff, all affected artifacts fresh" : "docs-only diff, no registered artifact touched" };
 }
 
+/**
+ * Files that need the shared local-CI sandbox: the ones a real install
+ * exercises and cloud CI cannot — install/compose/image/upgrade convergence
+ * (the Convergence-Impact classifier) and persistent data surfaces (the
+ * Data-Impact classifier). Reuses both gates' own rules; no new path list.
+ */
+export function runtimeBoundFiles(diffFiles, {
+  classifiers = runtimeClassifiers,
+  classifyConvergence = classifiers ? (files) => classifiers.classifyConvergenceSurfaces(files) : null,
+} = {}) {
+  if (!classifiers || !classifyConvergence) return null;
+  const bound = new Set();
+  for (const surface of classifyConvergence(diffFiles)) for (const f of surface.files) bound.add(f);
+  for (const f of diffFiles) {
+    if (classifiers.persistentRules.some((rule) => rule.re.test(f))) bound.add(f);
+  }
+  return [...bound].sort();
+}
+
+/**
+ * Whether a push needs the single local-CI sandbox (EP-DELIVERY-ENGINE-V2 E3,
+ * BI-31C988D5). Cloud CI is the gate of record: it typechecks, runs the unit
+ * suites, applies migrations against Postgres, builds the production bundle and
+ * runs the UX route sweep. The local slot is reserved for runtime-bound
+ * changes. A docs-only diff keeps its existing exemption (evaluatePushExemption
+ * stays the single docs-only definition); a code diff with no runtime-bound
+ * file is exempt when every registered derived artifact it touches is fresh.
+ * DPF_PREPUSH_REQUIRE_LOCAL_CI=1 restores "every code change takes the slot".
+ */
+export function evaluateLocalCiAdmission(diffFiles, registry = DERIVED_ARTIFACTS, runCheck = () => true, {
+  env = process.env,
+  classifyRuntime = (files) => runtimeBoundFiles(files),
+} = {}) {
+  const docs = evaluatePushExemption(diffFiles, registry, runCheck);
+  if (docs.exempt || docs.staleArtifacts || env.DPF_PREPUSH_REQUIRE_LOCAL_CI === "1") return docs;
+  if (!diffFiles.length) return docs;
+  const runtime = classifyRuntime(diffFiles);
+  if (runtime === null) return docs;
+  if (runtime.length > 0) {
+    return { exempt: false, reason: "runtime-bound changes present (install, compose, image, upgrade or data surface)", files: runtime };
+  }
+  const stale = affectedEntries(diffFiles, registry)
+    .filter((entry) => normalizeDerivedCheckResult(runCheck(entry)) === "stale")
+    .map((entry) => entry.id);
+  if (stale.length > 0) {
+    return { exempt: false, reason: "change invalidates a registered derived artifact", staleArtifacts: stale };
+  }
+  return { exempt: true, reason: "no runtime-bound surface; cloud CI is the gate of record" };
+}
+
 /** A boolean check stays compatible; "unrun" is an environment result, not stale. */
 export function normalizeDerivedCheckResult(value) {
   if (value === true || value === "fresh") return "fresh";
@@ -166,13 +237,13 @@ export function decideSandboxAdmission(exemption) {
     const reason = exemption?.reason ?? "docs-only diff";
     return {
       claim: false,
-      message: `docs-only diff — sandbox not claimed (${reason}). Mixing a code file into this change is what would cost the exemption.`,
+      message: `sandbox not claimed (${reason}). A runtime-bound file (install, compose, image, upgrade or data surface) is what would require it.`,
     };
   }
   if (Array.isArray(exemption.files) && exemption.files.length > 0) {
     return {
       claim: true,
-      message: `sandbox required (${exemption.reason}) — these files forfeit the docs-only exemption: ${exemption.files.join(", ")}`,
+      message: `sandbox required (${exemption.reason}) — these files need the local runtime: ${exemption.files.join(", ")}`,
     };
   }
   const stale = Array.isArray(exemption.staleArtifacts) && exemption.staleArtifacts.length > 0
@@ -197,7 +268,7 @@ export function sandboxDecisionForHead({
   if (diff == null) return null;
   const files = String(diff).split(/\r?\n/).filter(Boolean);
   try {
-    return decideSandboxAdmission(evaluatePushExemption(files, registry, runCheck));
+    return decideSandboxAdmission(evaluateLocalCiAdmission(files, registry, runCheck));
   } catch {
     // An unreadable evidence policy cannot classify anything; it is not exempt.
     return null;
@@ -351,42 +422,59 @@ function stageArtifact(artifactPath) {
 // ── subcommands ──────────────────────────────────────────────────────────
 
 function cmdRegenerateStaged() {
-  const plan = planRegenerate(stagedFiles(), DERIVED_ARTIFACTS, binaryAvailable);
-  if (plan.length === 0) return 0;
+  return regenerate(planRegenerate(stagedFiles(), DERIVED_ARTIFACTS, binaryAvailable), "pre-commit")
+    ? 0
+    : rejectCommit();
+}
+
+function rejectCommit() {
+  console.error("");
+  console.error("Commit rejected. A derived-artifact generator failed — see errors above.");
+  console.error("");
+  return 1;
+}
+
+// BI-A9E32D80: a generator that fails here is not fatal to the caller's
+// refresh; the artifact stays stale and its guard names it in the gauntlet.
+function cmdRegenerateAffected(baseRef) {
+  if (!baseRef) {
+    console.error("[derived-artifacts] regenerate-affected requires a base ref argument.");
+    return 2;
+  }
+  return regenerate(planRegenerate(diffFiles(baseRef), DERIVED_ARTIFACTS, binaryAvailable), "derived-artifacts") ? 0 : 1;
+}
+
+/** Run a regenerate plan and stage what it wrote. Returns false when a generator failed. */
+function regenerate(plan, label) {
+  if (plan.length === 0) return true;
 
   let failed = false;
   for (const { entry, action } of plan) {
     if (action === "skip-missing-binary") {
-      console.log(`[pre-commit] derived-artifact "${entry.id}": sources changed but ${entry.requiresBinary} is not installed — SKIPPED (CI is the backstop via --check).`);
+      console.log(`[${label}] derived-artifact "${entry.id}": sources changed but ${entry.requiresBinary} is not installed — SKIPPED (CI is the backstop via --check).`);
       continue;
     }
     if (action === "advisory") {
-      console.log(`[pre-commit] derived-artifact "${entry.id}": sources changed (${entry.description}).`);
-      console.log(`[pre-commit]   This artifact requires a deliberate decision, not auto-regeneration. If needed, run:`);
-      console.log(`[pre-commit]     ${entry.generate.join(" ")}`);
-      console.log(`[pre-commit]   and review + stage ${entry.artifactPaths.join(", ")} yourself.`);
+      console.log(`[${label}] derived-artifact "${entry.id}": sources changed (${entry.description}).`);
+      console.log(`[${label}]   This artifact requires a deliberate decision, not auto-regeneration. If needed, run:`);
+      console.log(`[${label}]     ${entry.generate.join(" ")}`);
+      console.log(`[${label}]   and review + stage ${entry.artifactPaths.join(", ")} yourself.`);
       continue;
     }
-    console.log(`[pre-commit] derived-artifact "${entry.id}": sources changed (${entry.description}) — regenerating...`);
+    console.log(`[${label}] derived-artifact "${entry.id}": sources changed (${entry.description}) — regenerating...`);
     try {
       runCommand(entry.generate);
     } catch (err) {
-      console.error(`[pre-commit] ERROR: "${entry.generate.join(" ")}" failed for derived-artifact "${entry.id}".`);
+      console.error(`[${label}] ERROR: "${entry.generate.join(" ")}" failed for derived-artifact "${entry.id}".`);
       console.error(String(err?.message ?? err));
       failed = true;
       continue;
     }
     for (const artifactPath of entry.artifactPaths) stageArtifact(artifactPath);
-    console.log(`[pre-commit] derived-artifact "${entry.id}": regenerated and staged ${entry.artifactPaths.join(", ")}.`);
+    console.log(`[${label}] derived-artifact "${entry.id}": regenerated and staged ${entry.artifactPaths.join(", ")}.`);
   }
 
-  if (failed) {
-    console.error("");
-    console.error("Commit rejected. A derived-artifact generator failed — see errors above.");
-    console.error("");
-    return 1;
-  }
-  return 0;
+  return !failed;
 }
 
 function cmdPushExempt(baseRef) {
@@ -394,14 +482,14 @@ function cmdPushExempt(baseRef) {
     console.error("[pre-push-gate] push-exempt requires a base ref argument.");
     return 2;
   }
-  const result = evaluatePushExemption(diffFiles(baseRef), DERIVED_ARTIFACTS, runCheckLive);
+  const result = evaluateLocalCiAdmission(diffFiles(baseRef), DERIVED_ARTIFACTS, runCheckLive);
   if (result.exempt) {
     console.log(`[pre-push-gate] derived-artifact registry: exempt (${result.reason}).`);
     return 0;
   }
   console.log(`[pre-push-gate] derived-artifact registry: NOT exempt (${result.reason}).`);
   if (result.files?.length) {
-    console.log(`[pre-push-gate]   non-docs: ${result.files.join(", ")}`);
+    console.log(`[pre-push-gate]   needs local runtime: ${result.files.join(", ")}`);
   }
   if (result.staleArtifacts) {
     for (const id of result.staleArtifacts) {
@@ -449,6 +537,9 @@ function main() {
     case "regenerate-staged":
       process.exit(cmdRegenerateStaged());
       break;
+    case "regenerate-affected":
+      process.exit(cmdRegenerateAffected(rest[0]));
+      break;
     case "push-exempt":
       process.exit(cmdPushExempt(rest[0]));
       break;
@@ -459,7 +550,7 @@ function main() {
       process.exit(cmdList());
       break;
     default:
-      console.error("Usage: node scripts/derived-artifacts-gate.mjs <regenerate-staged|push-exempt <baseRef>|check-all|list>");
+      console.error("Usage: node scripts/derived-artifacts-gate.mjs <regenerate-staged|regenerate-affected <baseRef>|push-exempt <baseRef>|check-all|list>");
       process.exit(2);
   }
 }

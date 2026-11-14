@@ -4,6 +4,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { REPUBLISHED_PREFIX, SHIP_PR_RETRY_MS, missingPublishedPaths, openBuildStudioPrAfterShip, retryBuildStudioPrForShipBuild } from "./auto-open-build-pr";
+import { PR_FOLLOW_UP_PREFIX, PR_FOLLOW_UP_UNCHANGED, PR_FOLLOW_UP_UNCHANGED_PREFIX } from "./pr-ci-repair-markers";
 
 const deps = (overrides = {}) => ({
   phaseOf: vi.fn().mockResolvedValue("ship"),
@@ -34,6 +35,38 @@ describe("openBuildStudioPrAfterShip", () => {
     const d = deps({ createPr: vi.fn().mockResolvedValue({ success: false, message: "Blocked: preflight record missing for tree abc" }) });
     expect(await openBuildStudioPrAfterShip({ buildId: "FB-1", actorUserId: "u1", deps: d })).toBe("blocked");
     expect(d.log).toHaveBeenCalledWith(expect.stringContaining("preflight record missing"));
+  });
+});
+
+// BI-085A37EC: a build sent back to repair because its PR went red returns to
+// ship with the PR still open; the repair must reach that PR as a follow-up.
+describe("a CI repair reaches the open pull request", () => {
+  const existing = { existingPrUrl: vi.fn().mockResolvedValue("https://github.com/o/r/pull/6983") };
+
+  it("publishes the repaired build onto its open PR as a follow-up", async () => {
+    const d = deps({ ...existing, followUpPending: vi.fn().mockResolvedValue(true) });
+    expect(await openBuildStudioPrAfterShip({ buildId: "FB-1", actorUserId: "u1", deps: d })).toBe("opened");
+    expect(d.createPr).toHaveBeenCalledWith("FB-1", "u1");
+    expect(d.log).toHaveBeenCalledWith(expect.stringMatching(new RegExp(`^${PR_FOLLOW_UP_PREFIX.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`)));
+  });
+
+  it("leaves an open PR alone when no repair is pending", async () => {
+    const d = deps({ ...existing, followUpPending: vi.fn().mockResolvedValue(false) });
+    expect(await openBuildStudioPrAfterShip({ buildId: "FB-1", actorUserId: "u1", deps: d })).toBe("skipped");
+    expect(d.createPr).not.toHaveBeenCalled();
+  });
+
+  it("settles a repair that changed nothing and tells a person, instead of retrying it", async () => {
+    const followUpUnchanged = vi.fn().mockResolvedValue(undefined);
+    const d = deps({
+      ...existing,
+      followUpPending: vi.fn().mockResolvedValue(true),
+      followUpUnchanged,
+      createPr: vi.fn().mockResolvedValue({ success: false, error: PR_FOLLOW_UP_UNCHANGED }),
+    });
+    expect(await openBuildStudioPrAfterShip({ buildId: "FB-1", actorUserId: "u1", deps: d })).toBe("blocked");
+    expect(d.log).toHaveBeenCalledWith(expect.stringContaining(PR_FOLLOW_UP_UNCHANGED_PREFIX));
+    expect(followUpUnchanged).toHaveBeenCalledWith("FB-1", expect.stringContaining("changed nothing"));
   });
 });
 

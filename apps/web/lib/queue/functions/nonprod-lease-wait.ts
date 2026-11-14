@@ -8,6 +8,8 @@ import {
 } from "@/lib/nonprod/durable-wait";
 import { jobs } from "@/lib/jobs";
 import { gateAtEntry } from "../quiescence-gates";
+import { reapExpiredNonprodEnvironmentLeases } from "@/lib/nonprod/environment-lease";
+import { fenceEndedPreviewRuntimes } from "@/lib/nonprod/preview-runtime-fence";
 
 const RECONCILE_CRON = "3,8,13,18,23,28,33,38,43,48,53,58 * * * *";
 
@@ -43,11 +45,17 @@ export const nonprodCapacityAvailable = jobs.createFunction(
     concurrency: { limit: 1, key: "event.data.environmentKey" },
     triggers: [{ event: "nonprod/capacity.available" }],
   },
-  async ({ event, step }) => step.run("checkpoint-capacity-event", () =>
-    applyNonprodCapacityEvent({
+  async ({ event, step }) => {
+    const checkpoint = await step.run("checkpoint-capacity-event", () => applyNonprodCapacityEvent({
       db: prisma as never,
       event: event.data as NonprodCapacityEvent,
-    })),
+    }));
+    const gate = await gateAtEntry(step, "nonprod/capacity-available");
+    const previewFence = gate.proceed
+      ? await step.run("fence-ended-preview-runtimes", () => fenceEndedPreviewRuntimes())
+      : { skipped: true, reason: gate.reason };
+    return { checkpoint, previewFence };
+  },
 );
 
 export const nonprodLeaseWaitReconciliation = jobs.createFunction(
@@ -60,6 +68,9 @@ export const nonprodLeaseWaitReconciliation = jobs.createFunction(
   async ({ step }) => {
     const gate = await gateAtEntry(step, "nonprod/lease-wait-reconciliation");
     if (!gate.proceed) return { skipped: true, reason: gate.reason };
-    return step.run("reconcile-durable-nonprod-waits", () => reconcileNonprodLeaseWaits({}));
+    const expiry = await step.run("expire-stale-nonprod-leases", () => reapExpiredNonprodEnvironmentLeases());
+    const previewFence = await step.run("fence-ended-preview-runtimes", () => fenceEndedPreviewRuntimes());
+    const waits = await step.run("reconcile-durable-nonprod-waits", () => reconcileNonprodLeaseWaits({}));
+    return { ...waits, expiry, previewFence };
   },
 );

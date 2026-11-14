@@ -66,6 +66,22 @@ export const demandReconciliationScheduled = jobs.createFunction(
       const { reconcileOrganizationMembership } = await import("@/lib/federation/organization-membership");
       return reconcileOrganizationMembership();
     });
-    return { guidance, posture, peerTargets, demand, work, workClaims, links, membership };
+    // A link that has not synced for over 6 hours gets one Needs-you item, and
+    // the item clears on the next good pull (BI-85DE8EBD). Last, and it reports
+    // a failure instead of throwing, so it never retries or holds up the steps above.
+    const workWatch = await step.run("watch-federated-work", async () => {
+      const { prisma } = await import("@dpf/db");
+      const { runWorkSyncWatchSafely } = await import("@/lib/federation/work-sync-watch");
+      const { notifyAttentionLive, resolveOperatorRecipient } = await import("@/lib/attention/notify-live");
+      return runWorkSyncWatchSafely(prisma as never, {
+        notify: async (notice) => {
+          const recipient = await resolveOperatorRecipient();
+          // No resolvable owner: notification is best-effort; the row still projects.
+          if (!recipient) return;
+          await notifyAttentionLive({ source: "platform-health", userId: recipient, ...notice });
+        },
+      });
+    });
+    return { guidance, posture, peerTargets, demand, work, workWatch, workClaims, links, membership };
   },
 );

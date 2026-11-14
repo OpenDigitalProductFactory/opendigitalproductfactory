@@ -527,6 +527,8 @@ describe("dispatchApprovedIdeateBuilds (BI-3E0EE3BA recovery)", () => {
           phase: "ideate",
           draftApprovedAt: { not: null },
           abandonedAt: null,
+          // A build parked on an owner answer is not re-driven (BI-B6894001).
+          waitingOnOwnerSince: null,
         }),
       }),
     );
@@ -771,7 +773,7 @@ describe("dispatchDesignReviewFixLoop (design-review fix loop)", () => {
     const res = await dispatchDesignReviewFixLoop({ buildId: "FB-Y", userId: "u-1" });
     expect(res).toMatchObject({ kind: "escalated-fix-diagnosis", rounds: 0 });
     expect(mockEscalate).toHaveBeenCalledWith(
-      expect.objectContaining({ buildId: "FB-Y", phase: "ideate", selfFixClass: "needs-human" }),
+      expect.objectContaining({ buildId: "FB-Y", phase: "ideate" }),
     );
     expect(mockDispatchIdeateResearch).not.toHaveBeenCalled(); // never tried to regenerate
   });

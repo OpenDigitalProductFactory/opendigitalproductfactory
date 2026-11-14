@@ -124,6 +124,18 @@ function queuePositionFromState(state) {
   return ahead === null ? null : ahead + 1;
 }
 
+/** BI-218A4555: the overseer's estimate and reason from the newest queued event. */
+function queueEstimateFromState(state) {
+  const events = Array.isArray(state?.leaseEvents) ? state.leaseEvents : [];
+  for (let i = events.length - 1; i >= 0; i -= 1) {
+    if (events[i]?.type !== "queued") continue;
+    const estimatedWaitMs = Number.isFinite(events[i].estimatedWaitMs) ? events[i].estimatedWaitMs : null;
+    const queueReason = typeof events[i].queueReason === "string" && events[i].queueReason ? events[i].queueReason : null;
+    return estimatedWaitMs === null && queueReason === null ? null : { estimatedWaitMs, queueReason };
+  }
+  return null;
+}
+
 function rank(verdict) {
   const index = PREGATE_VERDICTS.indexOf(verdict);
   return index < 0 ? -1 : index;
@@ -411,6 +423,7 @@ export function classifySlotRecord({ state, metadata, headSha, headBranch = "", 
     boundSha, boundBranch, candidateSha, evidenceId, recordedAt, expiresAt,
     gateStatus: String(state?.status || ""), staleness: "",
     queuePosition: state?.status === "queued" ? queuePositionFromState(state) : null,
+    ...(state?.status === "queued" && queueEstimateFromState(state) ? { queueEstimate: queueEstimateFromState(state) } : {}),
   };
 
   if (!state) {
@@ -633,7 +646,7 @@ export function applyLiveGate(reconciled, { live = null, queuedWaiter = null, sl
     verdict,
     priorVerdict: reconciled.verdict,
     reason: `pregate is still working (pid ${pid ?? "unknown"}): ${where}. This is not a verdict and not a failure — wait, then read pregate:status again.${prior}`,
-    live: { pid, stage: stageText, queuePosition },
+    live: { pid, stage: stageText, queuePosition, ...(queuePosition !== null && result.queueEstimate ? { queueEstimate: result.queueEstimate } : {}) },
   };
 }
 
@@ -674,7 +687,12 @@ export function formatStatusReport(result, { headBranch, headSha, now = Date.now
     lines.push(`  pid         ${result.live.pid ?? "unknown"}`);
     lines.push(`  stage       ${result.live.stage}`);
     if (result.live.queuePosition !== null && result.live.queuePosition !== undefined) {
-      lines.push(`  queue       position ${result.live.queuePosition}`);
+      const estimate = result.live.queueEstimate;
+      const minutes = Number.isFinite(estimate?.estimatedWaitMs)
+        ? `, about ${Math.max(1, Math.round(estimate.estimatedWaitMs / 60_000))} min`
+        : "";
+      lines.push(`  queue       position ${result.live.queuePosition}${minutes}`);
+      if (estimate?.queueReason) lines.push(`  why         ${estimate.queueReason}`);
     }
   }
   if (result.slot) lines.push(`  slot        ${result.slot}`);

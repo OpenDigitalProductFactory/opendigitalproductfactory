@@ -182,6 +182,32 @@ describe("writeSandboxFile (BI-AFEF038A — content via stdin, not argv)", () =>
     expect(inner).not.toContain("chmod");
   });
 
+  // BI-4F89896B (live 2026-11-13): single-quoting '~/.config/opencode' kept the
+  // shell from expanding ~, so the opencode provider config was written to a
+  // literal /workspace/~/ directory. That dirtied the shared workspace and every
+  // review build's refresh onto upstream was refused as "Sandbox source dirty".
+  it("expands a leading ~ to the exec user's $HOME while keeping the rest of the path quoted", async () => {
+    const proc = makeMockProcess();
+    mockSpawn.mockReturnValue(proc);
+
+    const p = writeSandboxFile({
+      containerId: "dpf-sandbox-1",
+      path: "~/.config/opencode/opencode.json",
+      content: "{}",
+      mode: "600",
+      asNodeUser: true,
+      mkdirParents: "~/.config/opencode",
+    });
+    proc.emit("close", 0);
+    await p;
+
+    const inner = (mockSpawn.mock.calls[0] as [string, string[]])[1].at(-1) as string;
+    expect(inner).toBe(
+      `mkdir -p "$HOME"'/.config/opencode' && base64 -d > "$HOME"'/.config/opencode/opencode.json' && chmod 600 "$HOME"'/.config/opencode/opencode.json'`,
+    );
+    expect(inner).not.toContain("'~");
+  });
+
   it("rejects secret-free when docker exits non-zero (no payload in the error)", async () => {
     const proc = makeMockProcess();
     mockSpawn.mockReturnValue(proc);

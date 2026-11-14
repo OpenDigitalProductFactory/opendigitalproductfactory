@@ -192,7 +192,7 @@ function providerCopy(name: string, providerId: string, cause: CapacityCause, at
       };
     case "usage-limit":
       return {
-        title: `${name} has hit its usage limit`,
+        title: retryAt ? `${name} has hit its usage limit until ${formatUtc(retryAt)}` : `${name} has hit its usage limit`,
         explanation: retryAt
           ? `${failed} Its plan's usage limit is reached and resets at ${formatUtc(retryAt)}. Work goes to other providers until then; open the provider page if you want to change the plan.`
           : `${failed} Its plan's usage limit is reached. Work goes to other providers until it resets; open the provider page to see when, or to change the plan.`,

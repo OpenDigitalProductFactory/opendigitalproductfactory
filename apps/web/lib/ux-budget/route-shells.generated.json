@@ -1,12 +1,12 @@
 {
   "generator": "apps/web/scripts/build-route-shells.ts",
-  "pageRouteCount": 336,
+  "pageRouteCount": 337,
   "migratedCount": 1,
   "summary": {
     "cockpit": 17,
     "list": 6,
     "detail": 262,
-    "settings": 13,
+    "settings": 14,
     "form": 17,
     "public": 21,
     "unclassified": 0
@@ -1754,6 +1754,18 @@
     },
     {
       "routePath": "/finance/settings/setup",
+      "shell": "settings",
+      "audience": "owner",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "sweepEligible": true,
+      "confidence": "high"
+    },
+    {
+      "routePath": "/finance/settings/statutory-rates",
       "shell": "settings",
       "audience": "owner",
       "migrated": false,

@@ -128,6 +128,23 @@ When nobody qualifies, the summary lists the item as unroutable with the
 reason: `no-eligible-reviewer` (grant the lane to a coworker other than the
 author) or `no-in-platform-coworker` (only external agents hold it).
 
+An item whose newest delivery or acceptance check is a recorded failure does
+not wait for the aged threshold. A merge cannot replace that failure; only a
+new passing check can. If a coworker can record that check, the item gets its
+room from its second day in awaiting acceptance, which gives the nightly
+upgrade a chance to put the fix on the live install first. This applies to
+every size of item. For medium and larger items, the failed delivery check
+goes to the same coworker that small items use (BI-1D5FCEBE).
+
+The sweep binds a coworker only if its grants let it call
+`record_workroom_evidence` (the room's own evidence writer) and the writer for
+each check it owes. Otherwise every run of the room is refused before it
+starts. The item is listed as unroutable with the reason
+`verifier-missing-writer:<tool>`. A room that is already bound to such a
+coworker is listed as routed-unresolved with the same reason, so the
+summary names the missing grant. The sweep does not change any coworker's
+grants.
+
 ## How the portal knows work was merged
 
 Merged platform work closes on the merge signal: the portal checks whether the

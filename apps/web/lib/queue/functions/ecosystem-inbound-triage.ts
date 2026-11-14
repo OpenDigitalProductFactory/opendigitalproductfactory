@@ -23,7 +23,28 @@ function summarizeScan(result: RanOutcome): string {
     .join("; ") + (allReviews.length > 10 ? `; +${allReviews.length - 10} more` : "");
   return `${result.complete ? "Complete" : "Incomplete"} scan: ${result.ingested} created, ${unchanged} unchanged, `
     + `${changed} changed, ${recurred} recurred, ${needsReview} needs review, ${result.failed} failed; `
-    + `${result.sourceErrors.length} unread source(s).${reviews ? ` Needs review: ${reviews}.` : ""}`;
+    + `${result.sourceErrors.length} unread source(s).${summarizeSecurity(result)}${reviews ? ` Needs review: ${reviews}.` : ""}`;
+}
+
+const SECURITY_SURFACE_LABELS = [
+  ["dependabot-package", "Dependabot"], ["code-scanning-rule", "code scanning"], ["secret-scanning-alert", "secret scanning"],
+] as const;
+
+/** Per-surface counts, so an unreadable surface reads as unreadable, never as zero (BI-C67E5CCB). */
+export function summarizeSecurity(result: RanOutcome): string {
+  const security = result.security;
+  if (!security) return "";
+  const surfaces = SECURITY_SURFACE_LABELS.map(([kind, label]) => {
+    const counts = security.surfaces[kind];
+    return counts ? `${label} ${counts.alerts} open, ${counts.groups} items` : `${label} UNREADABLE`;
+  }).join("; ");
+  const life = security.lifecycle;
+  const moves = life
+    ? ` Resolved ${life.resolved.length}, held by build ${life.heldByBuild.length}, reopened ${life.reopened.length}, `
+      + `regressions ${life.regressions.length}${life.regressions.length ? ` (${life.regressions.slice(0, 10).join(", ")})` : ""}, `
+      + `reprioritised ${life.reprioritized.length}.`
+    : "";
+  return ` Security: ${surfaces}.${moves}`;
 }
 
 async function recordScanOutcome(result: InboundTriageOutcome, arbitration: string | null = null): Promise<void> {

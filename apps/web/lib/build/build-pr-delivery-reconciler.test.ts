@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { decideBuildPrDeliveryAction, executeBuildPrDeliveryAction } from "./build-pr-delivery-reconciler";
+import { decideBuildPrDeliveryAction, executeBuildPrDeliveryAction, initializeAndReconcileBuildPrDelivery } from "./build-pr-delivery-reconciler";
 import { projectGithubPrReadiness, type GithubPrObservation } from "./github-pr-readiness";
-import { createBuildPrDeliveryState } from "./build-pr-delivery-state";
+import { createBuildPrDeliveryState, readBuildPrDeliveryState, writeBuildPrDeliveryState, type BuildPrDeliveryStateV1 } from "./build-pr-delivery-state";
 
 const state = createBuildPrDeliveryState({
   repository: "o/r",
@@ -56,10 +56,11 @@ describe("decideBuildPrDeliveryAction", () => {
       state,
       readiness: { kind: "checking", headSha: "abc", reason: "checks-pending" },
     })).toEqual({ kind: "wait", status: "checking", headSha: "abc", reason: "checks-pending" });
+    // BI-0EDCF2EC: the lifetime observation count is not an unknown streak.
     expect(decideBuildPrDeliveryAction({
       state: { ...state, reconciliationAttempts: 6 },
       readiness: { kind: "unknown", headSha: "abc", reason: "merge-state-unknown" },
-    })).toEqual({ kind: "escalate", status: "escalated", headSha: "abc", reason: "observation-budget-exhausted:merge-state-unknown" });
+    })).toEqual({ kind: "wait", status: "checking", headSha: "abc", reason: "merge-state-unknown" });
   });
 });
 
@@ -197,5 +198,84 @@ describe("executeBuildPrDeliveryAction — PR follow-through (BI-88341B5D)", () 
     const b = await run({ observed: redDefect, repairAuthority: "propose" });
     expect(a.followThrough).toEqual(b.followThrough);
     expect(a.state.followThrough).toEqual(b.state.followThrough);
+  });
+});
+
+// BI-085A37EC: a repaired build republishes onto its open PR. Starting a fresh
+// delivery record there would reset the PR's repair budget, so the loop could
+// never reach its limit.
+describe("initializeAndReconcileBuildPrDelivery keeps the PR's repair budget", () => {
+  function db(workspaceState: unknown) {
+    let stored = workspaceState;
+    const updatedAt = new Date("2026-11-13T00:00:00Z");
+    return {
+      read: () => stored,
+      workroom: {
+        findMany: vi.fn(async () => [{ id: "room", workspaceState: stored, updatedAt }]),
+        updateMany: vi.fn(async (args: { data: { workspaceState: unknown } }) => {
+          stored = args.data.workspaceState;
+          return { count: 1 };
+        }),
+      },
+    };
+  }
+
+  it("carries the attempts spent on the same PR across a republish", async () => {
+    const prior = createBuildPrDeliveryState({ repository: "o/r", prNumber: 42, prUrl: "https://github.com/o/r/pull/42" });
+    prior.followThrough.attempts.attempts["post-push-ci-failure"] = 1;
+    const fake = db(writeBuildPrDeliveryState({}, prior));
+    await initializeAndReconcileBuildPrDelivery({
+      db: fake as never, featureBuildId: "fb", owner: "o", repo: "r", prNumber: 42,
+      prUrl: "https://github.com/o/r/pull/42", token: "t", eligible: false,
+    });
+    expect(readBuildPrDeliveryState(fake.read())?.followThrough.attempts.attempts["post-push-ci-failure"]).toBe(1);
+  });
+
+  it("starts a different PR with a fresh budget", async () => {
+    const prior = createBuildPrDeliveryState({ repository: "o/r", prNumber: 41, prUrl: "https://github.com/o/r/pull/41" });
+    prior.followThrough.attempts.attempts["post-push-ci-failure"] = 2;
+    const fake = db(writeBuildPrDeliveryState({}, prior));
+    await initializeAndReconcileBuildPrDelivery({
+      db: fake as never, featureBuildId: "fb", owner: "o", repo: "r", prNumber: 42,
+      prUrl: "https://github.com/o/r/pull/42", token: "t", eligible: false,
+    });
+    expect(readBuildPrDeliveryState(fake.read())?.followThrough.attempts.attempts["post-push-ci-failure"]).toBeUndefined();
+  });
+});
+
+// BI-0EDCF2EC AC-3: PR #6983 (WC-8B8A9D6F) after its 06:18Z republish. Its
+// required checks went green while GitHub, recomputing after main moved,
+// reported mergeStateStatus UNKNOWN; at 08:02Z the room was stopped for good
+// although GitHub later reported UNSTABLE/MERGEABLE.
+describe("executeBuildPrDeliveryAction — PR #6983's undecided merge state (BI-0EDCF2EC)", () => {
+  const green = (mergeStateStatus: string) => observation({
+    mergeStateStatus,
+    checks: [
+      { name: "Merge Readiness", status: "COMPLETED", conclusion: "SUCCESS", required: true },
+      { name: "Failure Readiness", status: "COMPLETED", conclusion: "FAILURE", required: false },
+    ],
+  });
+
+  it("keeps observing through any run of UNKNOWN and arms the merge queue once GitHub decides", async () => {
+    let current: BuildPrDeliveryStateV1 = { ...state, reconciliationAttempts: 7, lastReadiness: "checking", lastObservedHeadSha: "sha1" };
+    const t0 = Date.parse("2026-11-13T08:02:06Z");
+    for (let i = 0; i < 12; i++) {
+      const outcome = await executeBuildPrDeliveryAction({
+        state: current, observation: green("UNKNOWN"), readiness: projectGithubPrReadiness(green("UNKNOWN")),
+        mode: "enforce", token: "t", owner: "o", repo: "r", now: new Date(t0 + i * 5 * 60_000),
+        fetchImpl: githubFake().fetchImpl,
+      });
+      expect(outcome.action.kind).toBe("wait");
+      expect(outcome.state.status).toBe("checking");
+      expect(outcome.state.escalationKey).toBeNull();
+      current = outcome.state;
+    }
+    expect(current.unknownObservations).toBe(12);
+    expect(current.nextObservationAt).not.toBeNull();
+
+    const decided = await run({ observed: green("UNSTABLE"), from: current });
+    expect(decided.action).toEqual({ kind: "queue", headSha: "sha1" });
+    expect(decided.state).toMatchObject({ status: "queued", unknownObservations: 0, nextObservationAt: null });
+    expect(decided.calls.some((call) => call.body?.includes("enablePullRequestAutoMerge"))).toBe(true);
   });
 });

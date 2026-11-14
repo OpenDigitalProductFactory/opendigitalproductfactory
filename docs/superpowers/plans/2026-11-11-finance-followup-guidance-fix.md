@@ -107,3 +107,42 @@ The affected grounding, registry and wrapper suites pass42 tests after this
 correction (initial RED3failed/21passed). The previous canonical/native receipts
 qualify the older source only. New exact-tree verification, independent review,
 publication and served acceptance remain required.
+
+
+## Served assignment-marker regression — 13 November 2026
+
+On served0dde, new native requests434401 and9d5d3 both initially generated the
+correct entry link, then the evidence gate requested a tool and the provider
+claimed a permission blocker without executing a tool. The second request was
+the covered phrase “Where do I enter an expense?”. Both failed runtime receipts
+are retained. No grant change or old request replay is authorized by this fact.
+
+The native caller appends its Active assignment marker to the current user
+message. The shared seam qualifies the entire marked string against the strict
+Finance vocabulary. Existing raw-string tests omit that production boundary.
+
+Carry the original current assignment content and message identity from the
+trusted native caller alongside the unchanged marked history. The seam may use
+the original text only when the latest user message exactly matches that text
+plus the platform-generated marker. Otherwise retain the existing conservative
+classification. Do not strip arbitrary user text or broaden the Finance grammar.
+
+First reproduce through the real history builder and real classifier: covered
+guidance must remain eligible, while mixed live-value requests, imperative
+actions, forged/mismatched identity and content remain tool-backed. Retain
+human Finance authorization, source grounding, later request identity, and all
+provider/evidence guards. Run related tests and both typechecks, current review
+and canonical gates, then land normally. The two failed live cases remain
+failed until a containing deployment and genuinely new useful-answer check.
+
+Source regression results: the real history-builder/classifier seam failed two
+covered guidance cases (13 controls passed), then passed after exact original
+assignment matching. Four focused suites pass53 tests; 13 related suites pass156.
+Both production and test typechecks pass. These are source-local results only;
+current independent review, canonical gate, publication and live proof remain owed.
+
+The native sendMessage wiring regression also calls the real shared seam and
+classifier with a mocked authorized surface/provider. Removing only the new
+caller assignment field makes its original-text assertion fail; restoring it
+passes. Final affected caller/seam run passes30 tests in two suites. This adds
+production assembly coverage without a provider call or a production fixture.

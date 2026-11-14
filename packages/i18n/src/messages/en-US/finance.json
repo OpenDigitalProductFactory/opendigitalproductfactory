@@ -1,0 +1,24 @@
+{
+  "subscriptionCosts": {
+    "summary": "Subscription costs",
+    "intro": "A subscription is not free: its fee is spread over the work it can do between limit resets. Resets make this uncertain, so each estimate is a range. Budgets count subscription use at this estimate; the daily paid AI allowance does not.",
+    "unpricedTitle": "Fee not recorded",
+    "unpriced": ".input {$count :number}\n.match $count\none {{{$names} is still counted at $0. Record each plan's payment below to price it.}}\n* {{{$names} are still counted at $0. Record each plan's payment below to price it.}}",
+    "covers": "Covers {$providers}",
+    "coversNone": "Covers no provider",
+    "fee": "Monthly fee: {$fee}",
+    "feeNotRecorded": "Monthly fee: not recorded",
+    "confidence": {
+      "high": "high confidence",
+      "medium": "medium confidence",
+      "low": "low confidence"
+    },
+    "costRange": "About {$point} per million tokens (likely between {$low} and {$high})",
+    "costCeiling": "About {$point} per million tokens at most",
+    "basis": "Based on {$days} days of use. Limits were reached in {$limited} of {$active} {$hours}-hour windows.",
+    "basisCeiling": "Its limits were not reached in {$days} days of use, so this is the most it costs; the real figure is probably lower.",
+    "feeMissing": "Record the plan's payment to estimate its cost.",
+    "noUsage": "No use recorded in the last 30 days, so there is nothing to divide the fee by yet.",
+    "currencyUnsupported": "The fee is in {$currency}; only USD fees are estimated so far."
+  }
+}

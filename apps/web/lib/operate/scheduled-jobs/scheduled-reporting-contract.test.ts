@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 vi.mock("@dpf/db", () => ({ prisma: {}, DATA_MODEL_MIRROR_TASK_ID: "data-mirror", SYSML_PROJECTION_TASK_ID: "sysml", SELF_OPTIMIZATION_SWEEP_TASK_ID: "optimization" }));
-import { assertScheduledReportingEligible, parseScheduledReport, scheduledReportingRevision } from "./scheduled-reporting-contract";
+import { assertScheduledReportingEligible, parseScheduledReport, scheduledReportingRevision, projectScheduledReportDiagnostic, readScheduledReportDiagnostic } from "./scheduled-reporting-contract";
 
 const task = { taskId: "agent-task-56e05d88", ownerUserId: "owner", agentId: "platform-engineer", title: "Observe",
   prompt: "Private original commission; do not disclose or rewrite.", routeContext: "/platform", schedule: "23 */6 * * *",
@@ -49,4 +49,21 @@ describe("scheduled reporting contract", () => {
       expect(() => parseScheduledReport(content)).toThrow();
     }
   });
+});
+
+
+describe("report format diagnostic privacy",()=>{
+ const original={text:"private report and rejected values",sha256:"a".repeat(64),bytes:34,truncated:false,redacted:false};
+ it("projects only fixed classification and attribution fields, never raw content or arbitrary check messages",()=>{
+  const result=projectScheduledReportDiagnostic({check:{complete:false,code:"report-invalid-json",message:"private exception"},original});
+  expect(result).toEqual({version:1,code:"report-invalid-json",original:{sha256:"a".repeat(64),bytes:34,truncated:false,redacted:false}});
+  expect(JSON.stringify(result)).not.toMatch(/private|text|message/);
+ });
+ it.each([{complete:true,code:"report-invalid-json"},{complete:false,code:"report-format-accepted"},{complete:false,code:"unknown"}])("refuses inconsistent or unrecognized inspection %j",check=>{
+  expect(projectScheduledReportDiagnostic({check:{...check,message:"private"},original})).toBeUndefined();
+ });
+ it("does not expose malformed persisted projections or legacy raw content",()=>{
+  const safe=projectScheduledReportDiagnostic({check:{complete:true,code:"report-format-accepted",message:"accepted"},original})!;
+  for(const value of [{...safe,original},{...safe,extra:"private"},{...safe,original:{...safe.original,bytes:-1}},{...safe,original:{...safe.original,sha256:"not a digest"}},null]) expect(readScheduledReportDiagnostic(value)).toBeNull();
+ });
 });

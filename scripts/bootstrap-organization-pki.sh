@@ -652,9 +652,14 @@ old_ifs="$IFS"
 IFS=','
 for san in $SANS; do HOSTS="$HOSTS, $san:443"; done
 IFS="$old_ifs"
+# default_sni: a client that connects by IP literal (https://127.0.0.1) sends no
+# server name, and Caddy then finds no certificate for the container-side address
+# the connection arrived on. Such a connection gets the primary host's
+# certificate, which also carries the address SANs (BI-4528CBDF).
 cat > "$CADDYFILE" <<EOF
 {
     auto_https off
+    default_sni $HOSTNAME_VALUE
 }
 
 $HOSTS {

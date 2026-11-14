@@ -157,9 +157,9 @@ export async function setBacklogDeliveryBudgetHandler(params: Record<string, unk
     select: { backlogTeeUpDailyCap: true, governedBacklogEnabled: true, wipAdmissionMode: true, capacityDrainEnabled: true },
   });
 
-  const { sandboxPoolSize, TERMINAL_BUILD_PHASES } = await import("@/lib/build/wip-cap");
+  const { sandboxPoolSize, TERMINAL_BUILD_PHASES, ACTIVE_BUILD_WHERE } = await import("@/lib/build/wip-cap");
   const activeBuilds = await prisma.featureBuild.count({
-    where: { phase: { notIn: [...TERMINAL_BUILD_PHASES] }, abandonedAt: null, parentEpicId: null },
+    where: { phase: { notIn: [...TERMINAL_BUILD_PHASES] }, ...ACTIVE_BUILD_WHERE, parentEpicId: null },
   });
 
   const dailyBudget = fresh?.backlogTeeUpDailyCap ?? 3;
@@ -362,6 +362,10 @@ export async function mergeBacklogItemsHandler(
     return { success: false, error: "already_closed", message: `${duplicateItemId} was merged by another call; nothing changed.` };
   }
   await cancelSupersededMergeCards(duplicateItemId);
+  // BI-A63A9476: what referenced the duplicate now references the survivor.
+  const survivor = await prisma.backlogItem.findUnique({ where: { itemId: canonicalItemId }, select: { organizationId: true } });
+  const { repointBacklogReferences } = await import("@/lib/references/sync-references");
+  await repointBacklogReferences(duplicateItemId, { itemId: canonicalItemId, organizationId: survivor?.organizationId ?? null });
   return {
     success: true,
     entityId: canonicalItemId,

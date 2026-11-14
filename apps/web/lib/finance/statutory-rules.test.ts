@@ -9,6 +9,7 @@ import {
   missingRatifiedRules,
   resolveStatutoryRule,
   rulesSupersededBy,
+  statutoryQualifierKey,
   type ResolvableStatutoryRule,
   type StatutoryProposalInput,
 } from "./statutory-rules";
@@ -185,6 +186,34 @@ describe("rulesSupersededBy", () => {
       existing,
     );
     expect(got.map((r) => r.id)).toEqual(["earlier"]);
+  });
+});
+
+describe("qualified figures (BI-2BC8D614)", () => {
+  const band = (id: string, over: number, from = "2025-01-01") =>
+    rule({ id, taxType: "federal_withholding", effectiveFrom: new Date(from),
+      qualifierKey: statutoryQualifierKey({ filingStatus: "single", schedule: "standard", over }) });
+
+  it("keys qualifiers in a stable order and ignores non-scalars", () => {
+    expect(statutoryQualifierKey({ schedule: "standard", over: 7500, filingStatus: "single", note: { x: 1 } }))
+      .toBe("filingStatus=single;over=7500;schedule=standard");
+    expect(statutoryQualifierKey(undefined)).toBe("");
+  });
+
+  it("one bracket never supersedes another bracket of the same table", () => {
+    const got = rulesSupersededBy(
+      { taxType: "federal_withholding", ruleKind: "rate", side: "employee_withheld",
+        effectiveFrom: new Date("2026-01-01"), qualifierKey: band("x", 19_900).qualifierKey },
+      [band("low", 7_500), band("same-band-last-year", 19_900)],
+    );
+    expect(got.map((r) => r.id)).toEqual(["same-band-last-year"]);
+  });
+
+  it("resolves the bracket asked for, not a sibling bracket", () => {
+    const rows = [band("low", 7_500, "2026-01-01"), band("high", 19_900, "2026-01-01")];
+    const sel = { taxType: "federal_withholding", ruleKind: "rate" as const, side: "employee_withheld" };
+    expect(resolveStatutoryRule(rows, ON, { ...sel, qualifierKey: rows[1]!.qualifierKey })?.id).toBe("high");
+    expect(resolveStatutoryRule(rows, ON, sel)).toBeNull();
   });
 });
 

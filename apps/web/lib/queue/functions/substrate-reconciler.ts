@@ -3,6 +3,7 @@
 // a self-upgrade (the swap owns container lifecycle then). Logic and tests live in
 // lib/platform-runtime/substrate-reconciler.ts; this file only wires real I/O.
 
+import { AI_TURN_CLAIM_PREFIX } from "@/lib/nonprod/environment-lease-overseer";
 import { hostname as osHostname } from "node:os";
 
 import { cron } from "@/lib/jobs/triggers";
@@ -145,6 +146,10 @@ export const substrateReconciler = jobs.createFunction(
         where: {
           environmentKey: "local-integration-ci",
           admittedAt: { gte: new Date(Date.now() - LOCAL_CI_LIVENESS_WINDOW_MS) },
+          // BI-218A4555: a served AI turn is a queue placeholder, not a gate
+          // run, so it never records a result and must not read as a stall.
+          // (SQL NOT on a NULL claimKey is NULL, so keep keyless rows explicitly.)
+          OR: [{ claimKey: null }, { NOT: { claimKey: { startsWith: AI_TURN_CLAIM_PREFIX } } }],
         },
         select: { leaseId: true, admittedAt: true, releasedAt: true, evidenceRecordId: true, status: true },
       }),

@@ -8,6 +8,7 @@ import {
   TOOL_TO_GRANTS,
 } from "@/lib/tak/agent-grants";
 import type { ToolDefinition, ToolExecutionContext, ToolResult } from "@/lib/mcp-tool-types";
+import { roomAuthorizesTool } from "@/lib/work-management/room-turn-authority";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
 
 const MODE_VALUES: SurfaceMode[] = [
@@ -112,7 +113,8 @@ function tokenAllows(
 }
 
 async function authorizedToolNames(context: ToolExecutionContext): Promise<Set<string>> {
-  if (!context.agentId || !context.userContext) return new Set();
+  if (!context.agentId || !context.userContext || !context.governedRoomAuthority) return new Set();
+  const roomAuthority = context.governedRoomAuthority();
   const [{ PLATFORM_TOOLS }, grants] = await Promise.all([
     import("@/lib/mcp-tools"),
     getAgentToolGrantsAsync(context.agentId),
@@ -122,6 +124,7 @@ async function authorizedToolNames(context: ToolExecutionContext): Promise<Set<s
       || can(context.userContext!, tool.requiredCapability as CapabilityKey);
     return userAllowed
       && isToolAllowedByGrants(tool.name, grants)
+      && roomAuthorizesTool(tool.name, roomAuthority?.authorizedGrants, tool.discoveredPolicyGrants)
       && tokenAllows(tool.name, tool, context);
   }).map((tool) => tool.name));
 }
@@ -154,6 +157,10 @@ async function principalContext(
     },
   }, {
     authorizedToolNames: authorized,
+    currentToolAuthority: async (toolName, principal) => {
+      if (!context.governedSource || principal.delegatingUserId !== userId || principal.actingAgentId !== context.agentId) return false;
+      return (await authorizedToolNames(context)).has(toolName);
+    },
     governedDispatch: context.governedDispatch
       ? async (toolName, toolParams, invocation) => context.governedDispatch!(toolName, toolParams, invocation)
       : undefined,
@@ -195,20 +202,24 @@ const handlers: Record<string, ToolPackHandler> = {
     }));
   },
   surface_snapshot: async (params, userId, context) => {
-    if (!context?.agentId) return denied();
+    const principal = await principalContext({}, userId, context);
+    if (!principal) return denied();
     const { authorizedSurfaceRuntime } = await surfaceRegistry();
     return resultData(await authorizedSurfaceRuntime.snapshot({
       sessionId: asString(params, "sessionId") ?? "",
-      caller: { delegatingUserId: userId, actingAgentId: context.agentId },
+      caller: { delegatingUserId: principal.delegatingUserId, actingAgentId: principal.actingAgentId },
+      context: principal,
       sinceRevision: asString(params, "sinceRevision"),
     }));
   },
   surface_query: async (params, userId, context) => {
-    if (!context?.agentId) return denied();
+    const principal = await principalContext({}, userId, context);
+    if (!principal) return denied();
     const { authorizedSurfaceRuntime } = await surfaceRegistry();
     return resultData(await authorizedSurfaceRuntime.query({
       sessionId: asString(params, "sessionId") ?? "",
-      caller: { delegatingUserId: userId, actingAgentId: context.agentId },
+      caller: { delegatingUserId: principal.delegatingUserId, actingAgentId: principal.actingAgentId },
+      context: principal,
       text: asString(params, "text"),
       kind: asString(params, "kind"),
       limit: typeof params["limit"] === "number" ? params["limit"] : undefined,
@@ -216,11 +227,13 @@ const handlers: Record<string, ToolPackHandler> = {
     }));
   },
   surface_act: async (params, userId, context) => {
-    if (!context?.agentId) return denied();
+    const principal = await principalContext({}, userId, context);
+    if (!principal) return denied();
     const { authorizedSurfaceRuntime } = await surfaceRegistry();
     return resultData(await authorizedSurfaceRuntime.act({
       sessionId: asString(params, "sessionId") ?? "",
-      caller: { delegatingUserId: userId, actingAgentId: context.agentId },
+      caller: { delegatingUserId: principal.delegatingUserId, actingAgentId: principal.actingAgentId },
+      context: principal,
       actionId: asString(params, "actionId") ?? "",
       expectedRevision: asString(params, "expectedRevision") ?? "",
       args: params["args"] && typeof params["args"] === "object" && !Array.isArray(params["args"])
@@ -230,11 +243,13 @@ const handlers: Record<string, ToolPackHandler> = {
     }));
   },
   surface_close: async (params, userId, context) => {
-    if (!context?.agentId) return denied();
+    const principal = await principalContext({}, userId, context);
+    if (!principal) return denied();
     const { authorizedSurfaceRuntime } = await surfaceRegistry();
     const closed = await authorizedSurfaceRuntime.close(
       asString(params, "sessionId") ?? "",
-      { delegatingUserId: userId, actingAgentId: context.agentId },
+      { delegatingUserId: principal.delegatingUserId, actingAgentId: principal.actingAgentId },
+      principal,
     );
     return { success: closed, message: closed ? "Authorized Surface session closed." : "Surface session was unavailable or not owned by this principal.", ...(closed ? {} : { error: "surface_not_authorized" }) };
   },

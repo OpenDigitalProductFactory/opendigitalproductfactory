@@ -17,7 +17,7 @@ export type RelationClass = "semantic" | "structural" | "navigational" | "proven
 export type RelationStatus = "active" | "deprecated" | "retired";
 
 export type RelationStandard = {
-  vocabulary: "archimate-3.2" | "bpmn-2.0" | "sysml-v2" | "skos" | "prov-o" | "schema.org" | "sql" | "rfc-8288" | "csdm";
+  vocabulary: "archimate-3.2" | "bpmn-2.0" | "sysml-v2" | "skos" | "prov-o" | "schema.org" | "sql" | "rfc-8288" | "csdm" | "owl" | "dcterms";
   term: string;
 };
 
@@ -130,6 +130,35 @@ export function toRelationType(raw: string): RelationType {
   if (!def) throw new RelationTypeError(`"${raw}" is not a registered graph_edge rel_type.`, "unregistered");
   if (def.status === "retired") throw new RelationTypeError(`"${raw}" is a retired graph_edge rel_type.`, "retired");
   return raw as RelationType;
+}
+
+/**
+ * The registry key an inventory or discovery relationship type is stored as (BI-92804832).
+ * Collectors emitted "hosts" and "HOSTS" for the same fact; a registered key is matched
+ * case-insensitively. An unregistered type is returned unchanged for the caller to handle.
+ */
+export function canonicalRelationKey(raw: string): string {
+  const upper = raw.trim().toUpperCase();
+  return BY_KEY.has(upper) ? upper : raw;
+}
+
+/** DocumentReference.refType → the typed graph relation it projects as (BI-92804832). */
+const DOCUMENT_REF_TYPE_RELATION: Readonly<Record<string, RelationType>> = {
+  "canonical-source": "HAD_PRIMARY_SOURCE",
+  "source-artifact": "WAS_DERIVED_FROM",
+  "derived-from": "WAS_DERIVED_FROM",
+  // The unqualified legacy "source" names where the document came from: PROV-O derivation.
+  source: "WAS_DERIVED_FROM",
+  "provided-rendered-input": "USED",
+  "capture-context": "WAS_INFORMED_BY",
+  cites: "CITES",
+  supersedes: "SUPERSEDES",
+  contains: "CONTAINS",
+};
+
+/** A refType outside the map stays a DOC_REFERENCES edge whose required refType prop qualifies it. */
+export function documentReferenceRelation(refType: string): RelationType {
+  return DOCUMENT_REF_TYPE_RELATION[refType.trim().toLowerCase()] ?? "DOC_REFERENCES";
 }
 
 /** Registry problems: bad keys, duplicates, generic active names, dangling replacements. Empty when sound. */

@@ -34,6 +34,7 @@
 import { runAsBuildPhase } from "@/lib/build/build-phase-inference-origin";
 import { prisma } from "@dpf/db";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
+import { ACTIVE_BUILD_WHERE } from "@/lib/build/wip-cap";
 import { classifyRetrySafePreDispatchFailure } from "./build-engine-selection";
 
 /** BI-0B95D268: poll the sandbox container until it runs again (bounded). */
@@ -692,7 +693,8 @@ export async function dispatchApprovedIdeateBuilds(params: {
     where: {
       phase: "ideate",
       draftApprovedAt: { not: null },
-      abandonedAt: null,
+      // Not abandoned and not parked on an owner answer (BI-B6894001).
+      ...ACTIVE_BUILD_WHERE,
       parentEpicId: null,
       originatingBacklogItemId: { not: null },
     },
@@ -789,7 +791,7 @@ export async function dispatchDesignReviewFixLoop(params: {
       .catch(() => {});
 
   const escalate = async (build: { id: string; title: string; originatingBacklogItemId: string | null }, review: DesignReviewVerdict, rounds: number, expectedUpdatedAt?: string) => {
-    const { escalateBuildToHuman, SELF_FIX_CLASS } = await import("@/lib/build/escalate-build-to-human");
+    const { escalateBuildToHuman } = await import("@/lib/build/escalate-build-to-human");
     let biTitle: string | null = null;
     if (build.originatingBacklogItemId) {
       biTitle = (await prisma.backlogItem
@@ -805,7 +807,6 @@ export async function dispatchDesignReviewFixLoop(params: {
       phase: "ideate",
       rounds,
       issues: (review?.issues ?? []).map((i) => ({ severity: i.severity, description: i.description })),
-      selfFixClass: SELF_FIX_CLASS.NEEDS_HUMAN,
       expectedUpdatedAt,
       log,
     });

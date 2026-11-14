@@ -18,6 +18,7 @@ import type {
 } from "@/lib/platform-runtime/workforce-activity";
 import { BREAK_FIX_SHARE_FINDING_THRESHOLD } from "@/lib/platform-runtime/break-fix-share";
 import { encodeWorkCaseKey } from "@/lib/work-management/case-key";
+import { useT } from "@/lib/i18n/use-t";
 
 const REFRESH_INTERVAL_MS = 12_000;
 
@@ -48,6 +49,7 @@ function daysSince(iso: string | null): string {
 }
 
 export function WorkforceNowShell({ initialData }: { initialData: WorkforceActivity }) {
+  const t = useT("shell");
   const [data, setData] = useState(initialData);
   const [lastUpdatedAt, setLastUpdatedAt] = useState<number | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -123,11 +125,12 @@ export function WorkforceNowShell({ initialData }: { initialData: WorkforceActiv
         <Kpi
           label="Tokens today"
           value={fmtTokens(pulse.tokensToday)}
-          sub={
-            pulse.tokensUnattributed > 0
-              ? `~${fmtCost(pulse.costToday)} · ${fmtTokens(pulse.tokensUnattributed)} unattributed`
-              : `~${fmtCost(pulse.costToday)}`
-          }
+          sub={t("aiCoworkers.usageBreakdown", {
+            roster: fmtTokens(pulse.tokensRoster ?? Math.max(0, pulse.tokensToday - (pulse.tokensWorkroom ?? 0) - pulse.tokensUnattributed)),
+            workrooms: fmtTokens(pulse.tokensWorkroom ?? 0),
+            unattributed: fmtTokens(pulse.tokensUnattributed),
+            cost: fmtCost(pulse.costToday),
+          })}
           flag={pulse.tokensUnattributed > 0}
         />
         <Kpi
@@ -160,11 +163,50 @@ export function WorkforceNowShell({ initialData }: { initialData: WorkforceActiv
         </ul>
       )}
 
+      <SectionHead title={t("aiCoworkers.workroomsHeading")} hint={t("aiCoworkers.workroomsHint")} />
+      {(data.workrooms ?? []).length === 0 ? (
+        <Empty>{t("aiCoworkers.workroomsEmpty")}</Empty>
+      ) : (
+        <ul className="space-y-2">
+          {(data.workrooms ?? []).map((room) => (
+            <li key={room.capsuleId} id={`workroom-${room.capsuleId}`}>
+              <Surface className="p-3">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="rounded-full border border-[var(--dpf-border)] px-2 py-0.5 text-dpf-caption font-semibold uppercase tracking-wide text-[var(--dpf-muted)]">
+                        {room.recency}
+                      </span>
+                      <span className="font-mono text-dpf-caption text-[var(--dpf-muted)]">{room.capsuleId}</span>
+                      <span className="rounded border border-[var(--dpf-border)] px-1.5 py-0.5 font-mono text-dpf-caption uppercase text-[var(--dpf-muted)]">
+                        {room.status}
+                      </span>
+                    </div>
+                    <a
+                      className="mt-1 block font-semibold text-[var(--dpf-text)] hover:text-[var(--dpf-accent)] hover:underline"
+                      href={`/workspace/cases/${encodeWorkCaseKey({ sourceType: "work-capsule", sourceId: room.capsuleId })}`}
+                    >
+                      {room.title}
+                    </a>
+                    <p className="mt-1 line-clamp-2 text-sm text-[var(--dpf-muted)]">{room.objective}</p>
+                  </div>
+                  <div className="shrink-0 text-end text-dpf-caption text-[var(--dpf-muted)]">
+                    <div>{fmtTokens(room.tokensToday)} tokens · {fmtCost(room.costToday)}</div>
+                    <div>{room.executorKind ?? "unassigned"}{room.executorRef ? ` · ${room.executorRef}` : ""}</div>
+                    <div>updated {daysSince(room.updatedAt).replace("quiet ", "")}</div>
+                  </div>
+                </div>
+              </Surface>
+            </li>
+          ))}
+        </ul>
+      )}
+
       {data.platformWork.length > 0 ? (
         <>
           <SectionHead
-            title="Platform work in flight"
-            hint="live runs no coworker owns — this is what is on the model runner"
+            title={t("aiCoworkers.unattachedHeading")}
+            hint={t("aiCoworkers.unattachedHint")}
           />
           <ul className="space-y-1.5">
             {data.platformWork.map((run) => (

@@ -1,13 +1,13 @@
 {
   "generator": "apps/web/scripts/build-route-audience.ts",
-  "pageRouteCount": 374,
+  "pageRouteCount": 375,
   "summary": {
     "byAudience": {
       "admin": 154,
       "auth-setup": 10,
       "builder": 3,
       "customer": 11,
-      "owner": 173,
+      "owner": 174,
       "public": 21,
       "worker": 2
     },
@@ -16,7 +16,7 @@
       "detail": 257,
       "legacy-internal": 38,
       "section-home": 32,
-      "settings-config": 13,
+      "settings-config": 14,
       "workflow-step": 9
     },
     "overrideCount": 9,
@@ -1132,6 +1132,13 @@
     },
     {
       "routePath": "/finance/settings/setup",
+      "audience": "owner",
+      "destinationKind": "settings-config",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/finance/settings/statutory-rates",
       "audience": "owner",
       "destinationKind": "settings-config",
       "confidence": "high",

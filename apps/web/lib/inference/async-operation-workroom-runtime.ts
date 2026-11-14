@@ -7,7 +7,7 @@ import {
   parseDurableInferenceProgress,
   parseDurableInferenceTaskMetadata,
 } from "@/lib/mcp-task-durable-inference-contract";
-import { admitRuntimeGuardedWork } from "@/lib/platform-runtime/work-admission";
+import { admitRuntimeGuardedWork, lockRuntimeTransitionAdmission } from "@/lib/platform-runtime/work-admission";
 import {
   resolveServerOwnedAsyncOperationAuthority,
   type AsyncOperationAuthorityDatabase,
@@ -95,6 +95,7 @@ async function createOrReplayPrismaWorkroomDurableTaskRun(
   input: WorkroomDurableTaskRunInput,
 ): Promise<{ id: string; taskRunId: string; replayed: boolean }> {
   const attempt = () => prisma.$transaction(async (tx) => {
+    await lockRuntimeTransitionAdmission(tx);
     await tx.$queryRaw`SELECT "id" FROM "WorkCapsule" WHERE "id" = ${input.workroom.id} FOR UPDATE`;
     const authority = await resolveServerOwnedAsyncOperationAuthority({
       target: { kind: "workroom", workroomId: input.workroom.capsuleId }, actor: input.actor,

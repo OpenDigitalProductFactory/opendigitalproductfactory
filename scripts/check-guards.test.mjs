@@ -16,8 +16,7 @@ import {
   coerceRetryCount,
   spawnWithRunnerRetry,
   runGuards,
-  summarizeGuardRun,
-} from "./check-guards.mjs";
+  summarizeGuardRun, excludeStandaloneGuards } from "./check-guards.mjs";
 
 // ── classifySpawnResult — the exact injections the BI requires ───────────────
 
@@ -250,4 +249,29 @@ test("formatChildOutput keeps the tail, where node --test puts the failure", () 
   assert.ok(!rendered.includes("line 1\n"), "early lines are elided");
   assert.equal(formatChildOutput(""), "");
   assert.equal(formatChildOutput(undefined), "");
+});
+
+test("excludeStandaloneGuards drops a guard whose self-test also runs standalone", () => {
+  const discovered = {
+    guards: ["check-no-a.mjs", "check-no-b.mjs", "check-no-c.mjs"],
+    tests: new Set(["check-no-a.test.mjs", "check-no-b.test.mjs"]),
+  };
+  const standalone = {
+    guards: new Set(["check-no-a.mjs", "check-no-b.mjs", "check-no-c.mjs"]),
+    tests: new Set(["check-no-a.test.mjs"]),
+  };
+  const r = excludeStandaloneGuards(discovered, standalone);
+  // a: guard and self-test both run standalone -> skipped
+  // b: self-test runs only in the loop -> kept, so the self-test is not lost
+  // c: no self-test -> skipped
+  assert.deepEqual(r.guards, ["check-no-b.mjs"]);
+  assert.deepEqual([...r.tests], ["check-no-b.test.mjs"]);
+  assert.deepEqual(r.skipped, ["check-no-a.mjs", "check-no-c.mjs"]);
+});
+
+test("excludeStandaloneGuards with an empty standalone set changes nothing", () => {
+  const discovered = { guards: ["check-no-a.mjs"], tests: new Set(["check-no-a.test.mjs"]) };
+  const r = excludeStandaloneGuards(discovered, { guards: new Set(), tests: new Set() });
+  assert.deepEqual(r.guards, ["check-no-a.mjs"]);
+  assert.deepEqual(r.skipped, []);
 });

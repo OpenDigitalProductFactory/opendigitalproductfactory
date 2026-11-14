@@ -13,6 +13,7 @@ import { loadEffectiveAuthContext } from "@/lib/identity/load-effective-auth-con
 import { getGrantedCapabilities } from "@/lib/permissions";
 import { loadWorkspaceMentionRoster } from "./mention-roster.server";
 import { postWorkItemComment, type PostCommentDb } from "./post-work-item-comment";
+import { syncWorkroomMessageReferences } from "@/lib/references/sync-references";
 import { prepareRoomAddressing, publishRoomMessagePosted } from "./room-message-wake.server";
 import { encodeWorkCaseKey } from "./workspace-case-loader";
 import { authorizeWorkspaceRoomItem } from "./workspace-room-access";
@@ -110,6 +111,7 @@ export async function submitWorkItemComment(input: {
       label: me?.email?.split("@")[0] || "Someone",
     },
     roster,
+    syncReferences: syncWorkroomMessageReferences,
     ...(prepared.refused ? {} : { addressing: prepared.build }),
   });
   if (result.addressed) await publishRoomMessagePosted(result.messageId);

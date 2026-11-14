@@ -67,6 +67,106 @@ function reconciliationDeps() {
   return d;
 }
 
+function imageCoordinatorFixture() {
+  const ids = [...reconciliationIds, "runtime:browser-automation"], keys = ["runtime:browser-automation", "runtime:core"];
+  const states = { "runtime:core": "active", "runtime:build": "active", "runtime:local-ai": "operator-paused", "runtime:browser-automation": "active" };
+  const sourceSha = "a".repeat(40), oldImage = `sha256:${"e".repeat(64)}`, newImage = `sha256:${"f".repeat(64)}`;
+  const hostHash = computeHostStateVersion(request.catalogHash, keys, ids);
+  const input = { ...request, previousKeys: keys, desiredKeys: [...keys], previousStates: { ...states }, desiredStates: { ...states },
+    reconciliation: { observedHost: { schemaVersion: 2, installerVersion: "fixture", platform: "linux", arch: "amd64", capabilityCatalogHash: request.catalogHash, capabilityStateVersion: hostHash, enabledRuntimeCapabilities: keys },
+      observedDatabaseStates: { ...states }, desiredHostEnabledKeys: [...keys], desiredDatabaseStates: { ...states }, touchedKeys: [] },
+    imagePlan: { schemaVersion: 1 as const, sourceSha, platform: "linux/amd64" as const, operation: "prepare" as const,
+      services: [{ service: "browser-use" as const, source: { kind: "published" as const, sourceSha, reference: `ghcr.io/fixture/dpf-browser-use@sha256:${"d".repeat(64)}` } }] },
+  };
+  const d = reconciliationDeps();
+  d.catalogCapabilityIds = ids;
+  d.reconciliationProtocol = { ...d.reconciliationProtocol!, imageQualifierSha256: "d".repeat(64), signingVersions: [1, 2, 3], applyVersions: [1, 2, 3], reconciliationVersions: [2, 3], imageReconciliationVersions: [3] };
+  d.resolveProjection = vi.fn(async requested => ({ catalogHash: request.catalogHash, stateHash: computeHostStateVersion(request.catalogHash, requested, ids), enabledKeys: [...requested], composeProfiles: ["runtime-browser-automation"], requiredServices: ["browser-use", "portal", "postgres"] }));
+  d.readHostReceipt = vi.fn(async id => {
+    const primary = vi.mocked(d.receipts.createPending).mock.calls[0]![0].envelope;
+    const last = vi.mocked(d.runPromoter).mock.calls.at(-1)?.[0];
+    const envelope = id === primary.transitionId ? primary : JSON.parse(Buffer.from(last!.runtimeCapabilityEnvelope!, "base64url").toString("utf8"));
+    const restore = envelope.imagePlan?.operation === "restore";
+    const imageProof = { schemaVersion: 1 as const, sourceSha,
+      services: [{ service: "browser-use" as const, priorImageId: restore ? newImage : oldImage, intendedImageId: restore ? oldImage : newImage,
+        observedImageId: restore ? oldImage : newImage, priorContainerId: "1".repeat(64), observedContainerId: "2".repeat(64),
+        resourcesBeforeHash: "a".repeat(64), resourcesAfterHash: "a".repeat(64), source: envelope.imagePlan?.services[0].source ?? input.imagePlan.services[0]!.source }],
+      untouchedBefore: { portal: "7".repeat(64), postgres: "4".repeat(64) }, untouchedAfter: { portal: "7".repeat(64), postgres: "4".repeat(64) } };
+    const unsigned = { ...envelope, status: "applied" as const, observedServices: ["browser-use", "portal", "postgres"], observedHealth: { "browser-use": "healthy" as const, portal: "healthy" as const, postgres: "healthy" as const },
+      completedAt: new Date(1_000_001).toISOString(), beforeHash: envelope.previousStateHash, afterHash: envelope.desiredStateHash, imageProof };
+    return { ...unsigned, signature: signTransitionPayload(unsigned, d.protocolSecret!) };
+  });
+  return { d, input, oldImage, newImage };
+}
+
+describe("image-qualified runtime coordinator", () => {
+  it("never uses unchanged capability keys as proof that an interrupted image operation did nothing", async () => {
+    const { d, input } = imageCoordinatorFixture();
+    await coordinateRuntimeCapabilityTransition(input, d);
+    const pending = vi.mocked(d.receipts.createPending).mock.calls[0]![0];
+    const row = { ...pending, previousKeys: [...pending.previousKeys], desiredKeys: [...pending.desiredKeys], previousProfiles: [...pending.previousProfiles!], desiredProfiles: [...pending.desiredProfiles!], previousServices: [...pending.previousServices!], desiredServices: [...pending.desiredServices!], status: "applying", createdAt: new Date(0) };
+    expect(classifyRuntimeInstallState(input.reconciliation.observedHost, row)).toBe("unknown");
+  });
+  it("persists the recovery barrier for an uncertain image receipt", async () => {
+    const { d, input } = imageCoordinatorFixture();
+    await coordinateRuntimeCapabilityTransition(input, d);
+    const original = await d.readHostReceipt!(input.transitionId);
+    const { signature: _signature, imageProof: _proof, ...base } = original;
+    const unsigned = { ...base, status: "rollback_failed" as const, afterHash: original.beforeHash, failure: "runtime_image_apply_unsettled" };
+    const receipt = { ...unsigned, signature: signTransitionPayload(unsigned, d.protocolSecret!) };
+    const updateMany = vi.fn(async () => ({ count: 1 }));
+    const tx = { runtimeCapabilityTransition: { updateMany }, runtimeCapabilityTransitionEvent: { create: vi.fn(async () => undefined) } };
+    const adapter = createPrismaRuntimeTransitionReceipts({ $transaction: async (operation: (tx: unknown) => unknown) => operation(tx) } as never);
+    await adapter.markHostOutcome!(input.transitionId, receipt);
+    expect(updateMany).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: "rollback_failed", failure: { code: "runtime_image_apply_unsettled", recoveryRequired: true } }) }));
+  });
+  it("persists and verifies the exact image plan instead of downgrading to health-only reconciliation", async () => {
+    const { d, input } = imageCoordinatorFixture();
+    expect(await coordinateRuntimeCapabilityTransition(input, d)).toEqual({ status: "succeeded" });
+    const pending = vi.mocked(d.receipts.createPending).mock.calls[0]![0];
+    expect(pending.envelope.version).toBe(3);
+    expect(pending.envelope).toMatchObject({ imagePlan: input.imagePlan, protocolIdentity: { imageQualifierSha256: "d".repeat(64) } });
+    expect(d.receipts.commitSuccess).toHaveBeenCalledOnce();
+  });
+
+  it("refuses an old packaged actuator before persisting or launching image work", async () => {
+    const { d, input } = imageCoordinatorFixture();
+    d.reconciliationProtocol = { ...d.reconciliationProtocol!, imageReconciliationVersions: [] };
+    expect(await coordinateRuntimeCapabilityTransition(input, d)).toMatchObject({ status: "failed", failure: "runtime_service_image_protocol_unsupported" });
+    expect(d.receipts.createPending).not.toHaveBeenCalled();
+    expect(d.runPromoter).not.toHaveBeenCalled();
+  });
+
+  it("compensates a post-apply database failure using authenticated prior bytes, never the prepare plan", async () => {
+    const { d, input, oldImage, newImage } = imageCoordinatorFixture();
+    d.receipts.commitSuccess = vi.fn(async () => { throw new Error("database_commit_failed"); });
+    d.receipts.markCompensating = vi.fn(async () => undefined);
+    d.receipts.markRolledBack = vi.fn(async () => undefined);
+    d.receipts.markRollbackFailed = vi.fn(async () => undefined);
+    d.receipts.assertCompensationOwnership = vi.fn(async () => undefined);
+    expect(await coordinateRuntimeCapabilityTransition(input, d)).toMatchObject({ status: "rolled_back" });
+    const packet = vi.mocked(d.receipts.markCompensating).mock.calls[0]![2]!;
+    expect(packet.envelope).toMatchObject({ version: 3, imagePlan: { operation: "restore", services: [{ service: "browser-use", source: { kind: "restore", imageId: oldImage, expectedImageId: newImage } }] } });
+    expect(packet.imageRecoveryReceipt).toMatchObject({ status: "applied", imageProof: { services: [{ observedImageId: newImage }] } });
+    expect(d.runPromoter).toHaveBeenCalledTimes(2);
+  });
+
+  it("retains a missing host image proof without deriving or launching a blind compensation", async () => {
+    const { d, input } = imageCoordinatorFixture(), read = d.readHostReceipt!;
+    d.readHostReceipt = vi.fn(async id => {
+      const { signature: _signature, imageProof: _proof, ...unsigned } = await read(id);
+      return { ...unsigned, signature: signTransitionPayload(unsigned, d.protocolSecret!) };
+    });
+    d.receipts.markCompensating = vi.fn(async () => undefined);
+    d.receipts.markRolledBack = vi.fn(async () => undefined);
+    d.receipts.markRollbackFailed = vi.fn(async () => undefined);
+    expect(await coordinateRuntimeCapabilityTransition(input, d)).toMatchObject({ status: "host_applied_pending_verification" });
+    expect(d.receipts.markCompensating).not.toHaveBeenCalled();
+    expect(d.runPromoter).toHaveBeenCalledTimes(1);
+    expect(d.receipts.commitSuccess).not.toHaveBeenCalled();
+  });
+});
+
 describe("dual-baseline reconciliation coordinator", () => {
   it.each(["failed", "threw"])("does not compensate over a later database writer when health %s", async outcome => {
     const d = reconciliationDeps();
@@ -105,7 +205,7 @@ describe("dual-baseline reconciliation coordinator", () => {
     const replay = { ...input, envelope: structuredClone(input.envelope), status: "pending" };
     const changed = { ...input, envelope: structuredClone(input.envelope) };
     changed.envelope.protocolIdentity!.promoterDigest = `sha256:${"f".repeat(64)}`;
-    const tx = { $executeRaw: vi.fn(), runtimeCapabilityTransition: { findUnique: vi.fn(async () => replay) } };
+    const tx = { $queryRaw: vi.fn(async () => [{ transaction_isolation: "read committed" }]), $executeRaw: vi.fn(), runtimeCapabilityTransition: { findUnique: vi.fn(async () => replay) } };
     const receipts = createPrismaRuntimeTransitionReceipts({ $transaction: vi.fn(async (fn) => fn(tx)) } as never);
     await expect(receipts.createPending(changed)).rejects.toThrow("transition_id_conflict");
   });
@@ -136,7 +236,7 @@ describe("dual-baseline reconciliation coordinator", () => {
     await coordinateRuntimeCapabilityTransition(input, d);
     const envelope = vi.mocked(d.receipts.createPending).mock.calls[0]![0].envelope;
     const states = { ...input.previousStates, ...(stale ? { "runtime:build": "disabled" } : {}) };
-    const tx = { $executeRaw: vi.fn(async () => 1),
+    const tx = { $queryRaw: vi.fn(async () => [{ transaction_isolation: "read committed" }]), $executeRaw: vi.fn(async () => 1),
       runtimeCapabilityTransition: { findUnique: vi.fn(async () => ({ status: "host_applied", envelope, previousStates: input.previousStates, desiredStates: input.desiredStates, hostReceipt: null as RuntimeTransitionReceipt | null })), updateMany: vi.fn(async () => ({ count: 1 })) },
       platformCapability: { findMany: vi.fn(async () => Object.entries(states).map(([capabilityId, state]) => ({ capabilityId, state }))), updateMany: vi.fn(async () => ({ count: 1 })) },
       runtimeCapabilityTransitionEvent: { create: vi.fn(async () => undefined) } };
@@ -237,7 +337,7 @@ describe("runtime capability transition coordinator", () => {
     { "runtime:core": "active" },
   ])("rejects a changed complete database baseline before creating a receipt", async (states) => {
     const model = { findFirst: vi.fn(async () => null), findUnique: vi.fn(async () => null), create: vi.fn(), updateMany: vi.fn() };
-    const tx = { $executeRaw: vi.fn(), runtimeCapabilityTransition: model,
+    const tx = { $queryRaw: vi.fn(async () => [{ transaction_isolation: "read committed" }]), $executeRaw: vi.fn(), runtimeCapabilityTransition: model,
       platformCapability: { findMany: vi.fn(async () => Object.entries(states).map(([capabilityId, state]) => ({ capabilityId, state }))) } };
     const receipts = createPrismaRuntimeTransitionReceipts({ $transaction: vi.fn(async (fn) => fn(tx)) } as never);
     await expect(receipts.createPending({ ...request, previousProfiles: ["build"], desiredProfiles: [], previousStateHash: "before", desiredStateHash: "after", envelope: persistedEnvelope, envelopeSignature: "a".repeat(64) })).rejects.toThrow("runtime_transition_database_baseline_changed");
@@ -251,7 +351,7 @@ describe("runtime capability transition coordinator", () => {
   ])("rejects replay with a different owner or complete state map", async (change) => {
     const row = { ...request, ...persistedEnvelope, status: "pending", envelope: persistedEnvelope, envelopeSignature: "a".repeat(64), ...change };
     const model = { findUnique: vi.fn(async () => row), findFirst: vi.fn(), create: vi.fn() };
-    const tx = { $executeRaw: vi.fn(), runtimeCapabilityTransition: model };
+    const tx = { $queryRaw: vi.fn(async () => [{ transaction_isolation: "read committed" }]), $executeRaw: vi.fn(), runtimeCapabilityTransition: model };
     const receipts = createPrismaRuntimeTransitionReceipts({ $transaction: vi.fn(async (fn) => fn(tx)) } as never);
     await expect(receipts.createPending({ ...request, previousProfiles: ["build"], desiredProfiles: [], previousStateHash: "before", desiredStateHash: "after", envelope: persistedEnvelope, envelopeSignature: "a".repeat(64) })).rejects.toThrow("transition_id_conflict");
     expect(model.create).not.toHaveBeenCalled();
@@ -347,7 +447,7 @@ describe("runtime capability transition coordinator", () => {
 
   it("rechecks attributed work under the receipt lock and returns drain_required", async () => {
     const model = { findFirst: vi.fn(async () => null), findUnique: vi.fn(async () => null), create: vi.fn(), updateMany: vi.fn() };
-    const tx = { $executeRaw: vi.fn(async () => []), runtimeCapabilityTransition: model };
+    const tx = { $queryRaw: vi.fn(async () => [{ transaction_isolation: "read committed" }]), $executeRaw: vi.fn(async () => []), runtimeCapabilityTransition: model };
     const receipts = createPrismaRuntimeTransitionReceipts({ runtimeCapabilityTransition: model, $transaction: vi.fn(async (fn) => fn(tx)) } as never);
     const d = deps({ receipts, recheckAttributedWork: vi.fn(async () => ({ "build-studio-active": 1 })) });
     await expect(coordinateRuntimeCapabilityTransition(request, d)).resolves.toEqual({ status: "drain_required", blockingCounts: { "build-studio-active": 1 } });
@@ -357,12 +457,14 @@ describe("runtime capability transition coordinator", () => {
 
   it("creates sorted durable receipts under an advisory lock and serializable transaction", async () => {
     const model = { findFirst: vi.fn(async () => null), findUnique: vi.fn(async () => null), create: vi.fn(async () => ({})), updateMany: vi.fn(async () => ({ count: 1 })) };
-    const tx = { $executeRaw: vi.fn(async () => []), runtimeCapabilityTransition: model, platformCapability: { findMany: vi.fn(async () => Object.entries(request.previousStates).map(([capabilityId, state]) => ({ capabilityId, state }))) } };
+    const tx = { $queryRaw: vi.fn(async () => [{ transaction_isolation: "read committed" }]), $executeRaw: vi.fn(async (_strings: TemplateStringsArray, ..._values: unknown[]) => []), runtimeCapabilityTransition: model, platformCapability: { findMany: vi.fn(async () => Object.entries(request.previousStates).map(([capabilityId, state]) => ({ capabilityId, state }))) } };
     const prisma = { runtimeCapabilityTransition: model, $transaction: vi.fn(async (fn) => fn(tx)) };
     const receipts = createPrismaRuntimeTransitionReceipts(prisma as never);
     const envelope = { ...persistedEnvelope, previousKeys: ["z", "a"], desiredKeys: ["z", "b"], previousProfiles: [], desiredProfiles: [] };
     await expect(receipts.createPending({ ...request, previousKeys: ["z", "a"], desiredKeys: ["z", "b"], previousProfiles: [], desiredProfiles: [], previousStateHash: "before", desiredStateHash: "after", envelope, envelopeSignature: "a".repeat(64) })).resolves.toEqual({ created: true, envelope, envelopeSignature: "a".repeat(64) });
-    expect(tx.$executeRaw).toHaveBeenCalledOnce();
+    expect(tx.$executeRaw).toHaveBeenCalledTimes(2);
+    expect(tx.$executeRaw.mock.calls[0]![0].join("")).toContain('LOCK TABLE "RuntimeCapabilityTransition"');
+    expect(tx.$executeRaw.mock.calls[1]![0].join("")).toContain("pg_advisory_xact_lock");
     expect(prisma.$transaction).toHaveBeenCalledWith(expect.any(Function), { isolationLevel: "Serializable" });
     expect(model.create).toHaveBeenCalledWith({ data: expect.objectContaining({ previousKeys: ["a", "z"], desiredKeys: ["b", "z"], status: "pending" }) });
   });
@@ -370,7 +472,7 @@ describe("runtime capability transition coordinator", () => {
   it("reconciles an idempotent transition-id retry without creating another row", async () => {
     const identity = persistedEnvelope;
     const model = { findFirst: vi.fn(), findUnique: vi.fn(async () => ({ ...request, status: "host_applied", ...identity, envelope: identity, envelopeSignature: "a".repeat(64) })), create: vi.fn(), updateMany: vi.fn() };
-    const tx = { $executeRaw: vi.fn(async () => []), runtimeCapabilityTransition: model };
+    const tx = { $queryRaw: vi.fn(async () => [{ transaction_isolation: "read committed" }]), $executeRaw: vi.fn(async () => []), runtimeCapabilityTransition: model };
     const prisma = { runtimeCapabilityTransition: model, $transaction: vi.fn(async (fn) => fn(tx)) };
     const receipts = createPrismaRuntimeTransitionReceipts(prisma as never);
     await expect(receipts.createPending({ ...request, previousProfiles: ["build"], desiredProfiles: [], previousStateHash: "before", desiredStateHash: "after", envelope: identity, envelopeSignature: "a".repeat(64) })).resolves.toEqual({ created: false, kind: "replay", status: "host_applied", envelope: identity, envelopeSignature: "a".repeat(64) });
@@ -379,14 +481,14 @@ describe("runtime capability transition coordinator", () => {
 
   it("fails closed when a replayed transition id carries a different immutable envelope", async () => {
     const model = { findFirst: vi.fn(), findUnique: vi.fn(async () => ({ status: "pending", catalogHash: request.catalogHash, previousStateHash: "different", desiredStateHash: "after", previousKeys: [...request.previousKeys], desiredKeys: [...request.desiredKeys] })), create: vi.fn(), updateMany: vi.fn() };
-    const tx = { $executeRaw: vi.fn(async () => []), runtimeCapabilityTransition: model };
+    const tx = { $queryRaw: vi.fn(async () => [{ transaction_isolation: "read committed" }]), $executeRaw: vi.fn(async () => []), runtimeCapabilityTransition: model };
     const receipts = createPrismaRuntimeTransitionReceipts({ runtimeCapabilityTransition: model, $transaction: vi.fn(async (fn) => fn(tx)) } as never);
     await expect(receipts.createPending({ ...request, previousProfiles: ["build"], desiredProfiles: [], previousStateHash: "before", desiredStateHash: "after", envelope: {} as never, envelopeSignature: "a".repeat(64) })).rejects.toThrow("transition_id_conflict");
   });
 
   it("surfaces a different active receipt as transition_in_progress through the Prisma repository", async () => {
     const model = { findUnique: vi.fn(async () => null), findFirst: vi.fn(async () => ({ transitionId: "RCT-OTHER", status: "applying" })), create: vi.fn(), updateMany: vi.fn() };
-    const tx = { $executeRaw: vi.fn(async () => []), runtimeCapabilityTransition: model };
+    const tx = { $queryRaw: vi.fn(async () => [{ transaction_isolation: "read committed" }]), $executeRaw: vi.fn(async () => []), runtimeCapabilityTransition: model };
     const receipts = createPrismaRuntimeTransitionReceipts({ runtimeCapabilityTransition: model, $transaction: vi.fn(async (fn) => fn(tx)) } as never);
     const d = deps({ receipts });
     await expect(coordinateRuntimeCapabilityTransition(request, d)).resolves.toEqual({ status: "transition_in_progress" });

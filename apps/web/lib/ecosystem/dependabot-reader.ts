@@ -9,6 +9,8 @@ export interface RepositoryAlert {
   number: number;
   state: string;
   packageName: string;
+  /** Package ecosystem as GitHub names it (npm, pip, ...); "unknown" when absent. */
+  ecosystem: string;
   manifest: string;
   severity: string;
   advisory: string;
@@ -33,6 +35,7 @@ function parseAlert(value: unknown, repo: RepoIdentity): RepositoryAlert | null 
       || typeof advisory.summary !== "string" || typeof vulnerability.vulnerable_version_range !== "string") return null;
   return {
     number: Number(value.number), state: value.state, packageName: pkg.name,
+    ecosystem: typeof pkg.ecosystem === "string" && pkg.ecosystem.trim() ? pkg.ecosystem : "unknown",
     manifest: dep.manifest_path, severity: advisory.severity, advisory: advisory.ghsa_id,
     summary: advisory.summary, vulnerable: vulnerability.vulnerable_version_range,
     patched: typeof patched.identifier === "string" ? patched.identifier : null,

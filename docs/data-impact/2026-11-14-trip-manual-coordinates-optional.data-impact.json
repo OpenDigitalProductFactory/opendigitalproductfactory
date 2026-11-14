@@ -1,0 +1,38 @@
+{
+  "version": "1",
+  "accountableOwner": "business-operator",
+  "summary": "BI-3DD6EFEB (EP-MILEAGE-ABSORB). Migration 20261114170000_trip_manual_coordinates_optional drops NOT NULL from Trip.startLatitude, startLongitude, endLatitude and endLongitude, so a drive a person types into the portal stores its unknown position as NULL instead of a fabricated 0,0. Mileage rates are written by a person into the existing MileageRatePlan / MileageRate tables; no table or column is added.",
+  "affectedCopies": [
+    "Trip: four columns become nullable. Every existing row keeps its coordinates; only captureKind manual rows written by the portal carry NULL.",
+    "MileageRatePlan / MileageRate: no schema change. A person with manage_finance now creates the company plan and rates from /finance/mileage."
+  ],
+  "privacyAssessment": {
+    "personalData": true,
+    "sensitivity": "Trip coordinates are location data about a driver and stay governed as such. This change only allows LESS of it: a manual drive stores no position at all.",
+    "dataSubjectRights": "Unchanged. Manual drives are deleted and exported with the driver's other trips.",
+    "reviewDisposition": "Relaxing NOT NULL on location fields reduces collection; no new personal data is stored."
+  },
+  "migration": {
+    "name": "20261114170000_trip_manual_coordinates_optional",
+    "backfill": "None. Existing rows are unchanged.",
+    "rollback": "Forward-only. Restoring NOT NULL would first require deleting or capturing positions for manual drives, which must not be fabricated."
+  },
+  "tests": [
+    "apps/web/lib/mileage/manual-entry.test.ts",
+    "apps/web/lib/mileage/trip-service.test.ts"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:mileage-trip",
+      "prismaModel": "Trip",
+      "lifecycleDisposition": "Unchanged: trips keep their existing lifecycle and retention. Nullability only.",
+      "fields": [
+        { "fieldId": "data:mileage-trip#startLatitude", "resolution": "inherited", "reason": "Existing location field, now nullable for typed-in drives. Governance and protection unchanged.", "provenance": "apps/web/lib/govern/data/mileage-assets.ts", "flags": [] },
+        { "fieldId": "data:mileage-trip#startLongitude", "resolution": "inherited", "reason": "Existing location field, now nullable for typed-in drives. Governance and protection unchanged.", "provenance": "apps/web/lib/govern/data/mileage-assets.ts", "flags": [] },
+        { "fieldId": "data:mileage-trip#endLatitude", "resolution": "inherited", "reason": "Existing location field, now nullable for typed-in drives. Governance and protection unchanged.", "provenance": "apps/web/lib/govern/data/mileage-assets.ts", "flags": [] },
+        { "fieldId": "data:mileage-trip#endLongitude", "resolution": "inherited", "reason": "Existing location field, now nullable for typed-in drives. Governance and protection unchanged.", "provenance": "apps/web/lib/govern/data/mileage-assets.ts", "flags": [] }
+      ]
+    }
+  ]
+}

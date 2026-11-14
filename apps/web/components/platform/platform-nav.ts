@@ -65,7 +65,7 @@ export const PLATFORM_FAMILIES: PlatformFamily[] = [
       // BI-1A68257F: "Right Now" is the live workforce activity view — what each
       // coworker is doing, what they got done today, and where nobody is acting.
       // Sits beside the Operations Map (the deep topology/replay/forecast altitude).
-      { label: "Right Now", href: "/platform/ai/right-now" },
+      { label: "Right Now", href: "/workforce?view=activity" },
       { label: "Operations Map", href: "/platform/ai/operations-map" },
       { label: "Capacity Continuity", href: "/platform/ai/capacity-continuity" },
       // EP-GOLDEN-TRIANGLE surface consolidation: the everyday Cost/Quality/Time

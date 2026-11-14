@@ -23,6 +23,15 @@
 // build has since been abandoned/finished/superseded. Those rows kept telling the
 // owner "build FB-XXXXXXXX stays blocked" about dead builds on /workspace/inbox.
 // See sweepDecisionResidue below and decision-residue-staleness.ts for the rule.
+//
+// BI-5BF1D4D0 closes the loop on the ITEM side. escalateBuildToHuman parks the
+// originating backlog item as deferred "until the escalation is answered", and
+// this sweep (or the owner, or triage) is what answers it. After resolving, the
+// sweep re-evaluates every item parked on a now-resolved escalation, whatever
+// path resolved it: it re-opens the item, or routes a repeated same-cause stall
+// instead of looping. It then checks the invariant: the count of locally owned
+// items still deferred on a resolved escalation must be 0. See
+// lib/backlog/escalation-parked-return.ts.
 
 import { Prisma, prisma } from "@dpf/db";
 import { ISSUE_REPORT_STATUS } from "@/lib/quality/issue-report-status";
@@ -35,6 +44,10 @@ import {
   selectWithdrawableDecisions,
   type DecisionResidueRow,
 } from "@/lib/quality/decision-residue-staleness";
+import {
+  countEscalationParkedOrphans,
+  reconcileEscalationParkedItems,
+} from "@/lib/backlog/escalation-parked-return";
 
 const SWEEP_LIMIT = 200;
 
@@ -45,6 +58,16 @@ export type EscalationHygieneResult = {
   decisionsScanned: number;
   /** Residue rows auto-withdrawn because their build's life is over. */
   decisionsWithdrawn: number;
+  /** Items parked on a resolved escalation that came back to the open pool (BI-5BF1D4D0). */
+  parkedItemsReopened: number;
+  /** Repeated same-cause stalls re-deferred for a routing decision instead of re-opened. */
+  parkedItemsRedeferred: number;
+  /**
+   * Invariant (BI-5BF1D4D0 AC-1): locally owned items still deferred on a
+   * resolved escalation after this sweep. Must be 0; null when the check
+   * itself could not run.
+   */
+  parkedOrphansRemaining: number | null;
 };
 
 export async function runEscalationHygiene(): Promise<EscalationHygieneResult> {
@@ -114,13 +137,54 @@ export async function runEscalationHygiene(): Promise<EscalationHygieneResult> {
   }
 
   const decisions = await sweepDecisionResidue();
+  const parked = await returnParkedItems();
 
   return {
     scanned: rows.length,
     resolved: resolvable.length,
     decisionsScanned: decisions.scanned,
     decisionsWithdrawn: decisions.withdrawn,
+    parkedItemsReopened: parked.reopened,
+    parkedItemsRedeferred: parked.redeferred,
+    parkedOrphansRemaining: parked.orphansRemaining,
   };
+}
+
+/**
+ * Re-evaluate items parked on escalations that have resolved by ANY path, then
+ * assert the invariant (BI-5BF1D4D0). Runs after this sweep's own resolves so an
+ * item comes back in the same pass; escalations resolved by the owner or by
+ * triage are picked up on the next pass. A non-zero remainder is an invariant
+ * violation and is logged loudly rather than swallowed. Never throws: the
+ * sweep's other work must not fail because of it.
+ */
+async function returnParkedItems(): Promise<{
+  reopened: number;
+  redeferred: number;
+  orphansRemaining: number | null;
+}> {
+  let reopened = 0;
+  let redeferred = 0;
+  try {
+    const result = await reconcileEscalationParkedItems();
+    reopened = result.reopened;
+    redeferred = result.redeferred;
+  } catch (err) {
+    console.error("[escalation-hygiene] parked-item re-evaluation failed", err);
+  }
+  let orphansRemaining: number | null = null;
+  try {
+    orphansRemaining = await countEscalationParkedOrphans();
+  } catch (err) {
+    console.error("[escalation-hygiene] parked-orphan invariant check failed to run", err);
+  }
+  if (orphansRemaining !== null && orphansRemaining > 0) {
+    console.error(
+      `[escalation-hygiene] INVARIANT VIOLATION (BI-5BF1D4D0): ${orphansRemaining} backlog item(s) ` +
+        "still deferred on an escalation that has resolved.",
+    );
+  }
+  return { reopened, redeferred, orphansRemaining };
 }
 
 /**

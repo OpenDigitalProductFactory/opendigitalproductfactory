@@ -139,4 +139,10 @@ describe("withAcceptanceBacklogTile", () => {
       expect(metric.color).toMatch(/^var\(--dpf-[a-z-]+\)$/);
     }
   });
+  it("marks peer copies stale while work sync with the peer is failing (BI-85DE8EBD)", () => {
+    const tiles = withAcceptanceBacklogTile(baseTiles(), { awaiting: 1, aged: 0, agedByCreation: 0, peerOwned: 341, peerStaleSince: new Date("2026-11-08T14:40:00.000Z") });
+    const row = tiles.backlog!.metrics!.find((metric) => metric.label.startsWith("Awaiting at peer installation"))!;
+    expect(row.label).toMatch(/^Awaiting at peer installation \(stale since .+\)$/);
+    expect(row.value).toBe(341);
+  });
 });

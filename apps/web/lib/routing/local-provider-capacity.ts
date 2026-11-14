@@ -1,5 +1,6 @@
 import { listCapacityReservingNonprodEnvironmentLeases } from "@/lib/nonprod/environment-lease";
 import { isLocalProviderId } from "./provider-locality";
+import { isAiTurnClaimKey } from "@/lib/nonprod/environment-lease-overseer";
 
 export type LocalProviderCapacityDeferralReason =
   | "local-ci-active-capacity-reservation"
@@ -115,13 +116,54 @@ export async function inspectLocalProviderCapacity(input: {
   }
 }
 
+/**
+ * BI-218A4555: local AI work waits in the overseer's queue as an "AI turn",
+ * so gates cannot starve it (lib/nonprod/local-ai-turn.ts). Bookkeeping only:
+ * a failure here never changes whether inference may run.
+ */
+export type LocalAiTurnBook = {
+  recordDemand: () => Promise<unknown>;
+  settle: () => Promise<unknown>;
+};
+
+const defaultLocalAiTurnBook: LocalAiTurnBook = {
+  recordDemand: async () => (await import("@/lib/nonprod/local-ai-turn")).recordLocalAiDemand(),
+  settle: async () => (await import("@/lib/nonprod/local-ai-turn")).settleLocalAiTurn(),
+};
+
+/** Note that local AI work is waiting behind an active gate. Never throws. */
+export async function noteLocalAiDemand(
+  status: LocalProviderCapacityStatus,
+  book: LocalAiTurnBook = defaultLocalAiTurnBook,
+): Promise<void> {
+  if (status.available || status.reason !== "local-ci-active-capacity-reservation") return;
+  await book.recordDemand().catch(() => undefined);
+}
+
 export async function assertLocalProviderCapacityAvailable(input: {
   listCapacityLeases?: LeaseReader;
+  /** Injected in tests; the default only applies to the real lease reader. */
+  aiTurnBook?: LocalAiTurnBook | null;
 } = {}): Promise<void> {
-  const status = await inspectLocalProviderCapacity(input);
+  let pendingAiTurn = false;
+  const listCapacityLeases = input.listCapacityLeases
+    ?? (() => listCapacityReservingNonprodEnvironmentLeases({}));
+  const status = await inspectLocalProviderCapacity({
+    listCapacityLeases: async () => {
+      const leases = await listCapacityLeases();
+      pendingAiTurn = leases.some((lease) => lease.status === "queued" && isAiTurnClaimKey(lease.claimKey));
+      return leases;
+    },
+  });
+  const book = input.aiTurnBook !== undefined
+    ? input.aiTurnBook
+    : input.listCapacityLeases ? null : defaultLocalAiTurnBook;
   if (!status.available) {
+    if (book) await noteLocalAiDemand(status, book);
     throw new LocalProviderCapacityDeferredError(status.reason, status.expectedFreeAt ?? null);
   }
+  // The host is free and this dispatch proceeds: the waiting turn is served.
+  if (book && pendingAiTurn) await book.settle().catch(() => undefined);
 }
 
 /** Completion-adapter boundary: remote providers remain independent of host leases. */

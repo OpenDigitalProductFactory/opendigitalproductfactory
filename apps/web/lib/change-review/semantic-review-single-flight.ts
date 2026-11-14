@@ -85,7 +85,9 @@ function mapTaskRun(row: TaskRunRecord): SemanticReviewRunRow {
 
 export function createPrismaSemanticReviewSingleFlightStore(
   db: SemanticReviewTaskRunDb,
-  durable?: { packet: SemanticReviewRequest; predecessorTaskRunId?: string; remediationVerificationId?: string },
+  durable?: { packet: SemanticReviewRequest; predecessorTaskRunId?: string; remediationVerificationId?: string;
+    /** BI-49AA6BE8: position in a lineage of server-admitted no-dispatch successors (default 1). */
+    successorAttempt?: number; successorBasis?: "proven-no-dispatch" },
 ): SemanticReviewSingleFlightStore {
   return {
     async list(repeatedPatternKey) {
@@ -160,8 +162,10 @@ export function createPrismaSemanticReviewSingleFlightStore(
             progressPayload: { semanticReview: {
               schemaVersion: 1, state: "pending", requestDigest: packet.digest,
               deadlineAt: packet.deadlineAt, dispatchAttempt: 0,
-              ...(durable?.predecessorTaskRunId ? { predecessorTaskRunId: durable.predecessorTaskRunId, successorAttempt: 1,
-                remediationVerificationId: durable.remediationVerificationId } : {}),
+              ...(durable?.predecessorTaskRunId ? { predecessorTaskRunId: durable.predecessorTaskRunId,
+                successorAttempt: durable.successorAttempt ?? 1,
+                ...(durable.successorBasis ? { successorBasis: durable.successorBasis }
+                  : { remediationVerificationId: durable.remediationVerificationId }) } : {}),
             } },
           } : {}),
         },

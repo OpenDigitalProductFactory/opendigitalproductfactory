@@ -92,6 +92,14 @@ shows **Waiting for governed release** until the self-upgrade path proves the me
 running version. The completion reconciler then rechecks release eligibility, marks the existing
 promotion deployed, and advances `ship -> complete`.
 
+A PR can merge after its Workroom has already closed, and older rooms may lack a recorded
+repository or head. The PR reconciler only watches open rooms. So before each completion pass, the
+reconciler reads the PR of each closed room whose build is still in `ship` once from GitHub. It
+records what that read proves: the repository and head (it never replaces a different recorded
+head), the delivery state, and the verified, fingerprinted observation. The deployment check uses
+that recorded observation when the contributor inventory no longer holds the PR. It still requires
+the canonical self-upgrade run and the git lineage check (BI-8129F585).
+
 Private and `fork_only` installs preserve their existing local-delivery path. The registered local
 product version is their delivery evidence; they do not fabricate a PR.
 

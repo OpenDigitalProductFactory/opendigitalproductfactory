@@ -321,6 +321,9 @@ describe("runRoomWake", () => {
     const task = tasks.get("room-reply-wi-1-AGT-B")!;
     expect(task).toMatchObject({ agentId: "AGT-B", ownerUserId: "user-1", schedule: "0 5 11 11 *", isActive: true, nextRunAt: NOW });
     expect(String(task.prompt)).toContain("backlog-item:BI-1");
+    // BI-31E0C874 (AC-RRC-05): the woken coworker reads from its own stored position.
+    expect(String(task.prompt)).toContain("unreadForMe true");
+    expect(String(task.prompt)).not.toContain("sinceCursor");
   });
 
   it("skips a wake it cannot reply to, scheduling nothing", async () => {

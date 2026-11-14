@@ -253,8 +253,8 @@ export async function observeGithubPullRequest(input: {
 }
 
 const ENABLE_AUTOMERGE_MUTATION = `
-mutation DpfEnableAutoMerge($id:ID!){
-  enablePullRequestAutoMerge(input:{pullRequestId:$id,mergeMethod:SQUASH}) {
+mutation DpfEnableAutoMerge($id:ID!,$expectedHeadOid:GitObjectID){
+  enablePullRequestAutoMerge(input:{pullRequestId:$id,mergeMethod:SQUASH,expectedHeadOid:$expectedHeadOid}) {
     pullRequest { number }
   }
 }`;
@@ -287,12 +287,14 @@ export async function resolvePullRequestNodeId(input: {
 export async function enablePullRequestAutoMerge(input: {
   nodeId: string;
   token: string;
+  /** GitHub refuses when the PR head has moved off this commit (BI-53BED66C). */
+  expectedHeadOid?: string;
   fetchImpl?: typeof fetch;
 }): Promise<void> {
   await githubGraphql({
     token: input.token,
     query: ENABLE_AUTOMERGE_MUTATION,
-    variables: { id: input.nodeId },
+    variables: { id: input.nodeId, expectedHeadOid: input.expectedHeadOid ?? null },
     fetchImpl: input.fetchImpl,
   });
 }

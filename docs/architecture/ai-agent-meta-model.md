@@ -391,3 +391,12 @@ preflight, execution, approval return and task settlement recheck the same reque
 reservation, dispatch claim and authority digest. Held or displaced executions
 cannot run tools or settle the task. The owner can still read its existing
 `tasks/get` and `tasks/result` evidence without authorizing more execution.
+
+For native task-bound terminal writers, the loop also carries the originally
+admitted token grants independently of the final provider tool list. The session
+signs those grants as authority and a versioned tool surface as presentation.
+Direct listing and calls obey that surface; nested dispatch keeps the original
+grant checks and current human, coworker, task and captured fence checks. The
+restricted audience makes incompatible receivers refuse the session, and an
+issuance failure cannot downgrade it to unconstrained text tools. See the
+[native session authorization contract](mcp-tool-authorization-runbook.md#canonical-review-writer-execution-identity).

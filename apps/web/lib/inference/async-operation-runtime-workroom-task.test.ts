@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => ({
   resolveBinding: vi.fn(),
   admitDurableOperation: vi.fn(),
   admitRuntimeGuardedWork: vi.fn(),
+  lockRuntimeTransitionAdmission: vi.fn(),
   enqueueWake: vi.fn(),
 }));
 
@@ -30,6 +31,7 @@ vi.mock("./async-operation-lifecycle", () => ({
 }));
 vi.mock("@/lib/platform-runtime/work-admission", () => ({
   admitRuntimeGuardedWork: mocks.admitRuntimeGuardedWork,
+  lockRuntimeTransitionAdmission: mocks.lockRuntimeTransitionAdmission,
 }));
 vi.mock("@/lib/execution/adapters/async-operation-events", () => ({
   enqueueAsyncOperationWake: mocks.enqueueWake,
@@ -191,6 +193,8 @@ describe("Prisma Workroom-bound durable task admission", () => {
       mocks.tx,
       "task-run:proactive",
     );
+    expect(mocks.lockRuntimeTransitionAdmission).toHaveBeenCalledWith(mocks.tx);
+    expect(mocks.lockRuntimeTransitionAdmission.mock.invocationCallOrder[0]).toBeLessThan(mocks.tx.$queryRaw.mock.invocationCallOrder[0]);
     expect(mocks.tx.taskRun.create).toHaveBeenCalledOnce();
     expect(mocks.tx.taskRun.create).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({
