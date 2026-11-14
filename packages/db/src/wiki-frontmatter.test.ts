@@ -3,6 +3,7 @@ import {
   deriveSlug,
   entityKindOfId,
   extractEntityIds,
+  extractWikilinkOccurrences,
   extractWikilinks,
   kernelWikiPageSlug,
   parseFrontmatter,
@@ -163,5 +164,25 @@ describe("extractEntityIds — the one entity-id extractor (BI-A63A9476)", () =>
     expect(entityKindOfId("KA-1")).toBe("knowledge-article");
     expect(entityKindOfId("WC-1")).toBe("workroom");
     expect(entityKindOfId("XX-1")).toBeNull();
+  });
+});
+
+describe("extractWikilinkOccurrences — the same extractor with line numbers (BI-2F7BE778)", () => {
+  it("reports every link with its 1-based line, labelled or plain, repeats included", () => {
+    const body = ["Intro [[a]].", "", "Then [[b|bee]] and [[a]] again."].join("\n");
+    expect(extractWikilinkOccurrences(body)).toEqual([
+      { slug: "a", line: 1 },
+      { slug: "b", line: 3 },
+      { slug: "a", line: 3 },
+    ]);
+  });
+
+  it("skips code exactly as extractWikilinks does, keeping line numbers true", () => {
+    const body = ["```", "[[fenced]]", "```", "Inline `see [[inline]]` and `[[sole]]`.", "Last [[real]]."].join("\n");
+    expect(extractWikilinkOccurrences(body)).toEqual([
+      { slug: "sole", line: 4 },
+      { slug: "real", line: 5 },
+    ]);
+    expect(extractWikilinks(body)).toEqual(["sole", "real"]);
   });
 });

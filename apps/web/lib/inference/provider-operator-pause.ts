@@ -8,6 +8,8 @@ export type PauseDependencies = {
   newId?: () => string;
   send?: (event: { name: string; data: Record<string, unknown>; id: string }) => unknown;
   probe?: (providerId: string) => Promise<boolean>;
+  /** Re-applies host runner config after a local resume (BI-37A470F0 follow-up). */
+  reconcileLocalRuntime?: () => Promise<unknown>;
 };
 export type PauseDuration = { value: number; unit: "hours" | "days" };
 /** Who asked, from where (BI-1C36C88A). Request headers are client-supplied and
@@ -281,7 +283,7 @@ export async function resumeOperatorProvider(input: { providerId: string; operat
     return probeLocalRunner(resolveOpencodeProviderBaseUrl(provider));
   });
   const healthy = isLocal(input.providerId) ? await probe(input.providerId).catch(() => false) : false;
-  return db.$transaction(async tx => {
+  const result = await db.$transaction(async tx => {
     await lockProvider(tx, input.providerId);
     const current = await getOperatorProviderPause(input.providerId, tx);
     if (current?.operationId !== pause.operationId) return { outcome: "superseded" as const };
@@ -308,6 +310,19 @@ export async function resumeOperatorProvider(input: { providerId: string; operat
     await auditPause(tx, pause, input.automatic ? "expire" : "resume", now, input.actorId, input.automatic, { client: input.provenance });
     return { outcome: "resumed" as const, status, connectionStatus };
   });
+  // The pause deferred every runner config write (configure POSTs can preload a
+  // model), and the next periodic pass is 20 minutes away. Queued work loads the
+  // model within seconds of a resume, and DMR refuses to reconfigure an active
+  // runner, so re-apply context, residency, flags and embedder placement now.
+  if (result.outcome === "resumed" && isLocal(input.providerId)) {
+    const reconcile = deps.reconcileLocalRuntime ?? (async () => {
+      const { reconcileLocalModelContext, reconcileLocalEmbedderPlacement } = await import("./local-model-context-reconcile");
+      await reconcileLocalModelContext();
+      await reconcileLocalEmbedderPlacement();
+    });
+    await reconcile().catch(() => {});
+  }
+  return result;
 }
 
 // Compatibility for the original local-provider callers; one lifecycle owns both.

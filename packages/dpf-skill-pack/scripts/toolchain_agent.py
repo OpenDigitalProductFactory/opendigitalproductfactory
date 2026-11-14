@@ -4,7 +4,16 @@ BI-65C17737 (S3 of BI-63672FBE; spec
 docs/superpowers/specs/2026-10-27-self-converging-agent-toolchain-design.md M2).
 The pack changes about eleven times a week. Detection already worked, but
 nothing remediated until a person asked an agent to run the updater. This is
-the per-user job that does it: hourly and at login, outside any client session.
+the per-user job that does it, outside any client session.
+
+BI-590DD63E: it runs on events, and DPF installs no operating-system
+scheduler for it. The platform owns scheduling; the host only executes. A
+client session whose SessionStart hook finds a stale copy starts one run,
+detached and windowless (hooks/toolchain-freshness.mjs). A completed platform
+upgrade, and the platform's own daily safety net, reach the host through the
+native edge node (BI-6ABE989B). Earlier packs registered a launchd job, a
+systemd user timer or a Windows scheduled task; `retire_schedule` removes it
+on every OS, from every updater run and after every agent run.
 
 It adds no new trust and no new update logic. Each run:
 
@@ -52,10 +61,53 @@ AGENT_ENV = "DPF_TOOLCHAIN_AGENT"
 LOCK_HELD_ENV = "DPF_TOOLCHAIN_LOCK_HELD"
 # EX_TEMPFAIL: another convergence on this host owns the run; try later.
 EXIT_BUSY = 75
+# Names of the OS registrations earlier packs created. Kept only so they can be removed.
 LAUNCHD_LABEL = "local.dpf.toolchain-agent"
 SYSTEMD_UNIT = "dpf-toolchain-agent"
 WINDOWS_TASK = "DPF Toolchain Agent"
+# CREATE_NO_WINDOW: a console child of a windowless process must not open a window.
+WINDOWS_CREATE_NO_WINDOW = 0x08000000
 LOG_LIMIT_BYTES = 1_000_000
+
+
+# Set on the windowless relaunch so it never relaunches again.
+HIDDEN_CONSOLE_ENV = "DPF_TOOLCHAIN_AGENT_HIDDEN_CONSOLE"
+
+
+def quiet_kwargs(platform: Optional[str] = None) -> dict[str, Any]:
+    """subprocess keyword arguments that keep a child windowless on Windows."""
+    return {"creationflags": WINDOWS_CREATE_NO_WINDOW} if (platform or sys.platform) == "win32" else {}
+
+
+def _has_console() -> bool:
+    try:
+        import ctypes
+
+        return bool(ctypes.windll.kernel32.GetConsoleWindow())  # type: ignore[attr-defined]
+    except Exception:
+        return True
+
+
+def relaunch_windowless(
+    env: Mapping[str, str],
+    platform: Optional[str] = None,
+    has_console: Callable[[], bool] = _has_console,
+    popen: Callable[..., Any] = subprocess.Popen,
+) -> bool:
+    """On Windows, re-run in a hidden console when started without one. True when relaunched.
+
+    The SessionStart hook starts the agent detached, so it has no console.
+    Every console program it then runs (client --version probes, the updater
+    and its git and CLI children) would open a window of its own. One hop
+    into a console created with CREATE_NO_WINDOW gives the whole tree a
+    console nobody sees.
+    """
+    if (platform or sys.platform) != "win32" or env.get(HIDDEN_CONSOLE_ENV) == "1" or has_console():
+        return False
+    popen([sys.executable, str(Path(__file__).resolve()), "run"], env={**env, HIDDEN_CONSOLE_ENV: "1"},
+          stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+          close_fds=True, creationflags=WINDOWS_CREATE_NO_WINDOW)
+    return True
 
 
 # ---------------------------------------------------------------- paths
@@ -125,7 +177,7 @@ def _pid_alive(pid: int) -> bool:
     if pid <= 0:
         return False
     if os.name == "nt":
-        completed = subprocess.run(["tasklist", "/FI", f"PID eq {pid}", "/NH"], capture_output=True, text=True)
+        completed = subprocess.run(["tasklist", "/FI", f"PID eq {pid}", "/NH"], capture_output=True, text=True, **quiet_kwargs())
         return str(pid) in (completed.stdout or "")
     try:
         os.kill(pid, 0)
@@ -235,7 +287,7 @@ def _git_is_ancestor(root: str, older: str, newer: str) -> Optional[bool]:
     """True when `older` is contained in `newer` in the checkout at `root`; None when git cannot tell."""
     try:
         completed = subprocess.run(["git", "-C", root, "merge-base", "--is-ancestor", older, newer],
-                                   capture_output=True, text=True, timeout=15)
+                                   capture_output=True, text=True, timeout=15, **quiet_kwargs())
     except (OSError, subprocess.SubprocessError):
         return None
     if completed.returncode == 0:
@@ -392,6 +444,11 @@ def run_once(
             return finish("offline", None, str(error)[:200])
         except Exception as error:  # PortalRefusal and malformed manifests
             code = getattr(error, "code", "manifest-refused")
+            if code == "unreachable":
+                # portal_source reports a network failure as a refusal coded
+                # "unreachable". A portal restarting for an upgrade is that, and
+                # it needs no person: the next event or the daily run retries.
+                return finish("offline", None, str(getattr(error, "message", error))[:200])
             return finish("needs-operator", str(code), str(getattr(error, "message", error))[:200])
         ahead = checkout_precedence(home, manifest, is_ancestor)
         if ahead:
@@ -410,7 +467,8 @@ def run_once(
         command = [sys.executable, str(script), "--from-portal", str(origin),
                    "--expect-installation", str(device_id), "--report-json", str(report)]
         state["lastAttemptAt"] = now
-        completed = runner(command, env={**env, AGENT_ENV: "1", LOCK_HELD_ENV: "1"}, capture_output=True, text=True)
+        completed = runner(command, env={**env, AGENT_ENV: "1", LOCK_HELD_ENV: "1"}, capture_output=True, text=True,
+                           **quiet_kwargs())
         code_out = int(getattr(completed, "returncode", 1))
         parsed = _read_json(report)
         result, detail = _summarize(parsed)
@@ -433,129 +491,65 @@ def run_once(
         release_lock(home)
 
 
-# ---------------------------------------------------------------- schedule
+# ---------------------------------------------------------------- no OS schedule
 
 
-def _plist(python: str, script: str, log: Path) -> str:
-    arguments = "".join(f"    <string>{value}</string>\n" for value in (python, script, "run"))
-    return (
-        '<?xml version="1.0" encoding="UTF-8"?>\n'
-        '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n'
-        '<plist version="1.0">\n<dict>\n'
-        f"  <key>Label</key><string>{LAUNCHD_LABEL}</string>\n"
-        "  <key>ProgramArguments</key>\n  <array>\n" + arguments + "  </array>\n"
-        "  <key>StartInterval</key><integer>3600</integer>\n"
-        "  <key>RunAtLoad</key><true/>\n"
-        "  <key>ProcessType</key><string>Background</string>\n"
-        f"  <key>StandardOutPath</key><string>{log}</string>\n"
-        f"  <key>StandardErrorPath</key><string>{log}</string>\n"
-        "</dict>\n</plist>\n"
-    )
-
-
-def _systemd(python: str, script: str) -> tuple[str, str]:
-    service = (
-        "[Unit]\nDescription=DPF agent toolchain convergence (BI-65C17737)\n\n"
-        f"[Service]\nType=oneshot\nExecStart={python} {script} run\n"
-    )
-    timer = (
-        "[Unit]\nDescription=Converge the DPF agent toolchain hourly\n\n"
-        "[Timer]\nOnBootSec=2min\nOnUnitActiveSec=1h\nPersistent=true\n\n"
-        "[Install]\nWantedBy=timers.target\n"
-    )
-    return service, timer
-
-
-def _write_if_changed(path: Path, content: str) -> bool:
-    if path.is_file() and path.read_text(encoding="utf-8") == content:
-        return False
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(content, encoding="utf-8")
-    return True
-
-
-def _remove_schedule(home: Path, platform: str, runner: Callable[..., Any], uid: int) -> None:
+def _legacy_registration(home: Path, platform: str, runner: Callable[..., Any]) -> Optional[str]:
+    """Name the OS registration an earlier pack left on this host, or None."""
     if platform == "darwin":
-        runner(["launchctl", "bootout", f"gui/{uid}/{LAUNCHD_LABEL}"], capture_output=True, text=True)
         plist = home / "Library" / "LaunchAgents" / f"{LAUNCHD_LABEL}.plist"
-        if plist.exists():
-            plist.unlink()
-    elif platform.startswith("linux"):
-        runner(["systemctl", "--user", "disable", "--now", f"{SYSTEMD_UNIT}.timer"], capture_output=True, text=True)
-        for suffix in (".timer", ".service"):
-            unit = home / ".config" / "systemd" / "user" / f"{SYSTEMD_UNIT}{suffix}"
-            if unit.exists():
-                unit.unlink()
-    elif platform == "win32":
-        runner(["schtasks", "/Delete", "/F", "/TN", WINDOWS_TASK], capture_output=True, text=True)
+        return f"launchd {LAUNCHD_LABEL}" if plist.exists() else None
+    if platform.startswith("linux"):
+        unit_dir = home / ".config" / "systemd" / "user"
+        present = any((unit_dir / f"{SYSTEMD_UNIT}{suffix}").exists() for suffix in (".timer", ".service"))
+        return f"systemd user timer {SYSTEMD_UNIT}.timer" if present else None
+    if platform == "win32":
+        if (agent_dir(home) / "schedule.json").exists():
+            return f"scheduled task {WINDOWS_TASK}"
+        # The marker can be lost while the task survives; ask Task Scheduler.
+        completed = runner(["schtasks", "/Query", "/TN", WINDOWS_TASK], capture_output=True, text=True,
+                           **quiet_kwargs(platform))
+        return f"scheduled task {WINDOWS_TASK}" if int(getattr(completed, "returncode", 1)) == 0 else None
+    return None
 
 
-def ensure_schedule(
+def retire_schedule(
     home: Path,
-    python: str,
-    script: str,
     env: Mapping[str, str],
     platform: Optional[str] = None,
     runner: Callable[..., Any] = subprocess.run,
     uid: Optional[int] = None,
 ) -> str:
-    """Register the hourly job for this user, idempotently. Returns a one-line status."""
+    """Remove the OS scheduler entry an earlier pack registered. Idempotent; registers nothing.
+
+    BI-590DD63E: DPF installs no operating-system scheduler. The platform owns
+    scheduling and reaches the host through events (a client session start,
+    or a platform upgrade dispatched to the edge node).
+    """
     platform = platform or sys.platform
     uid = os.getuid() if uid is None and hasattr(os, "getuid") else (uid or 0)
     if env.get(AGENT_ENV) == "1":
-        # Reloading a launchd job terminates the running instance: the agent
-        # never re-registers itself from the updater it is running.
+        # An updater the agent started must not boot out the job running it;
+        # the agent retires its own registration after its run.
         return "skipped: running under the toolchain agent"
-    if load_config(home).get("enabled") is False:
-        _remove_schedule(home, platform, runner, uid)
-        return "opted-out: no schedule (config.json enabled=false)"
+    found = _legacy_registration(home, platform, runner)
+    if found is None:
+        return "none: no OS schedule (BI-590DD63E)"
     if platform == "darwin":
+        # Delete the file first: bootout of a running job terminates it.
         plist = home / "Library" / "LaunchAgents" / f"{LAUNCHD_LABEL}.plist"
-        if not _write_if_changed(plist, _plist(python, script, agent_dir(home) / "agent.out")):
-            return f"unchanged: launchd {LAUNCHD_LABEL}"
+        plist.unlink(missing_ok=True)
         runner(["launchctl", "bootout", f"gui/{uid}/{LAUNCHD_LABEL}"], capture_output=True, text=True)
-        completed = runner(["launchctl", "bootstrap", f"gui/{uid}", str(plist)], capture_output=True, text=True)
-        if int(getattr(completed, "returncode", 1)) != 0:
-            return f"failed: launchctl bootstrap exited {getattr(completed, 'returncode', '?')}"
-        return f"scheduled: launchd {LAUNCHD_LABEL}, hourly and at login"
-    if platform.startswith("linux"):
-        unit_dir = home / ".config" / "systemd" / "user"
-        service, timer = _systemd(python, script)
-        changed = _write_if_changed(unit_dir / f"{SYSTEMD_UNIT}.service", service)
-        changed = _write_if_changed(unit_dir / f"{SYSTEMD_UNIT}.timer", timer) or changed
-        if not changed:
-            return f"unchanged: systemd user timer {SYSTEMD_UNIT}.timer"
+    elif platform.startswith("linux"):
+        runner(["systemctl", "--user", "disable", "--now", f"{SYSTEMD_UNIT}.timer"], capture_output=True, text=True)
+        for suffix in (".timer", ".service"):
+            (home / ".config" / "systemd" / "user" / f"{SYSTEMD_UNIT}{suffix}").unlink(missing_ok=True)
         runner(["systemctl", "--user", "daemon-reload"], capture_output=True, text=True)
-        completed = runner(["systemctl", "--user", "enable", "--now", f"{SYSTEMD_UNIT}.timer"], capture_output=True, text=True)
-        if int(getattr(completed, "returncode", 1)) != 0:
-            return f"failed: systemctl --user enable exited {getattr(completed, 'returncode', '?')}"
-        return f"scheduled: systemd user timer {SYSTEMD_UNIT}.timer, hourly and at boot"
-    if platform == "win32":
-        marker = agent_dir(home) / "schedule.json"
-        wanted = {"python": python, "script": script}
-        if _read_json(marker) == wanted:
-            return f"unchanged: scheduled task {WINDOWS_TASK}"
-        completed = runner(["schtasks", "/Create", "/F", "/SC", "HOURLY", "/TN", WINDOWS_TASK,
-                            "/TR", f'"{python}" "{script}" run'], capture_output=True, text=True)
-        if int(getattr(completed, "returncode", 1)) != 0:
-            return f"failed: schtasks exited {getattr(completed, 'returncode', '?')}"
-        _write_json_atomic(marker, wanted)
-        return f"scheduled: task {WINDOWS_TASK}, hourly"
-    return f"unsupported: no user scheduler for platform {platform}"
-
-
-def schedule_status(home: Path, platform: Optional[str] = None) -> str:
-    platform = platform or sys.platform
-    if platform == "darwin":
-        present = (home / "Library" / "LaunchAgents" / f"{LAUNCHD_LABEL}.plist").exists()
-        return f"launchd {LAUNCHD_LABEL}: {'registered' if present else 'not registered'}"
-    if platform.startswith("linux"):
-        present = (home / ".config" / "systemd" / "user" / f"{SYSTEMD_UNIT}.timer").exists()
-        return f"systemd {SYSTEMD_UNIT}.timer: {'registered' if present else 'not registered'}"
-    if platform == "win32":
-        present = (agent_dir(home) / "schedule.json").exists()
-        return f"task {WINDOWS_TASK}: {'registered' if present else 'not registered'}"
-    return f"unsupported platform {platform}"
+    elif platform == "win32":
+        runner(["schtasks", "/Delete", "/F", "/TN", WINDOWS_TASK], capture_output=True, text=True,
+               **quiet_kwargs(platform))
+        (agent_dir(home) / "schedule.json").unlink(missing_ok=True)
+    return f"removed: {found} (DPF installs no OS schedule; BI-590DD63E)"
 
 
 def main(argv: Optional[list[str]] = None) -> int:
@@ -565,18 +559,20 @@ def main(argv: Optional[list[str]] = None) -> int:
 
     home = updater.home_dir()
     if command == "run":
+        if relaunch_windowless(os.environ):
+            return 0
         state = run_once(home, os.environ)
         print(json.dumps({key: state.get(key) for key in ("status", "code", "lastDecision", "detail")}))
+        # Last, after the state is written and the lock released: on macOS
+        # removing the old launch agent ends this process.
+        retire_schedule(home, os.environ)
         return 0 if state.get("status") in ("ok", "busy", "opted-out", "offline", "ahead-of-portal") else 1
-    if command == "install":
-        print(ensure_schedule(home, sys.executable, str(Path(__file__).resolve()), os.environ))
-        return 0
-    if command == "uninstall":
-        _remove_schedule(home, sys.platform, subprocess.run, os.getuid() if hasattr(os, "getuid") else 0)
-        print("removed")
+    if command in ("install", "uninstall"):
+        # `install` is kept for callers of earlier packs; it registers nothing.
+        print(retire_schedule(home, os.environ))
         return 0
     if command == "status":
-        print(schedule_status(home))
+        print(_legacy_registration(home, sys.platform, subprocess.run) or "no OS schedule (BI-590DD63E)")
         print(json.dumps(load_state(home), indent=2, sort_keys=True))
         return 0
     print(__doc__)

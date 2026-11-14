@@ -10,6 +10,7 @@ import { workCapsuleActor } from "@/lib/work-capsules/handler-actor";
 
 import { createClaudeAdapter } from "./claude-stream-adapter";
 import { createCodexAdapter } from "./codex-app-server-adapter";
+import { buildRuntimeHandoff } from "./runtime-handoff";
 import { sandboxRuntimeLauncher } from "./sandbox-launcher";
 import { createRuntimeSupervisor, type RuntimeSupervisor } from "./supervisor";
 import type { RuntimeDecision, RuntimeProvider } from "./types";
@@ -33,18 +34,26 @@ export function workroomRuntimeSupervisor(): RuntimeSupervisor {
     },
     issueToken: issueWorkroomSessionToken,
     revokeTokens: revokeWorkroomSessionTokens,
+    buildHandoff: buildRuntimeHandoff,
     // BI-F5D58F29: the room hears that supervision was lost, and its coordinator is woken.
     onSupervisionLost: async (input) => {
       const { announceSupervisionLost } = await import("@/lib/work-management/room-message-wake.server");
       await announceSupervisionLost(input);
     },
   });
+  // BI-C64EDA33: the room outbox runs on this process's effect worker (idempotent).
+  globalRuntime.__dpfWorkroomRuntime.startEffectWorker?.();
   return globalRuntime.__dpfWorkroomRuntime;
 }
 
 /** Boot (BI-F5D58F29): re-attach every supervised session, or mark it supervision-lost on its room. */
 export async function reattachSupervisedSessionsOnBoot(): Promise<void> {
-  const outcome = await workroomRuntimeSupervisor().reattachSupervised();
+  const runtime = workroomRuntimeSupervisor();
+  const outcome = await runtime.reattachSupervised();
+  // Effects decided for the processes that died with the old portal are retired; the rest run now.
+  await runtime.drainEffects().catch((error: unknown) => {
+    console.error("[workroom-runtime] boot effect pass failed: %s", error instanceof Error ? error.message : "unknown");
+  });
   if (outcome.reattached.length + outcome.lost.length + outcome.closed.length > 0) {
     console.log("[workroom-runtime] boot re-attach: %d re-attached, %d supervision-lost, %d closed", outcome.reattached.length, outcome.lost.length, outcome.closed.length);
   }
