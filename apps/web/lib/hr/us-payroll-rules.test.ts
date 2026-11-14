@@ -1,7 +1,17 @@
-import { describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { buildFederalPayrollRules, FEDERAL_RULE_CONVENTIONS, type QualifiedRule } from "./us-payroll-rules";
 import { statutoryQualifierKey } from "@/lib/finance/statutory-rules";
+
+// Nothing here reads the clock (the pay date is passed in); pinned so fixed
+// fixture dates can never start meaning something else.
+beforeAll(() => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date("2026-03-15T12:00:00.000Z"));
+});
+afterAll(() => {
+  vi.useRealTimers();
+});
 
 const ON = new Date("2026-03-15T00:00:00.000Z");
 let seq = 0;
