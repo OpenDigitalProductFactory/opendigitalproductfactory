@@ -29,7 +29,7 @@ import { prisma } from "@dpf/db";
 import { denialForNextAttempt, denyAfterUnparseable } from "@/lib/build/plan-generation-retry";
 import { nearestExistingDirectory, normalizeBuildPlanPaths, type UnresolvedModifyPathHint } from "./build-plan-paths";
 import { buildDesignAcceptanceCriteria } from "@/lib/backlog/initiative-readiness/render-build-design-text";
-import { escalateBuildToHuman, SELF_FIX_CLASS } from "@/lib/build/escalate-build-to-human";
+import { escalateBuildToHuman } from "@/lib/build/escalate-build-to-human";
 
 function logBuildActivity(buildId: string, tool: string, summary: string): Promise<void> {
   return prisma.buildActivity.create({ data: { buildId, tool, summary } }).then(() => void 0).catch(() => void 0);
@@ -604,7 +604,6 @@ async function dispatchPlanForApprovedBuildInner(params: {
         phase: "plan",
         rounds: round,
         issues: review.issues,
-        selfFixClass: SELF_FIX_CLASS.NEEDS_HUMAN,
         log,
       });
       return { kind: "dispatched-failure", error: "escalated-to-human", durationMs: Date.now() - t0 };

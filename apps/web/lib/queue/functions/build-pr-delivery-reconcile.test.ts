@@ -473,7 +473,7 @@ describe("runBuildPrDeliveryReconcile — re-evaluating stopped rooms (BI-0EDCF2
     expect(mocks.activityCreate).not.toHaveBeenCalled();
   });
 
-  it("tells a person once when the merge state stays undecided past the budget, and keeps observing", async () => {
+  it("routes an undecided merge state away from the owner once past the budget, and keeps observing", async () => {
     const streak = {
       ...createBuildPrDeliveryState({ repository: "o/r", prNumber: 9, prUrl: "https://github.com/o/r/pull/9" }),
       status: "checking" as const, lastReadiness: "unknown" as const, lastObservedHeadSha: "sha1", unknownObservations: 5,
@@ -487,9 +487,14 @@ describe("runBuildPrDeliveryReconcile — re-evaluating stopped rooms (BI-0EDCF2
     expect(write.data.workspaceState.prDelivery).toMatchObject({ status: "checking", unknownObservations: 6, escalationKey: null });
     expect(write.data.workspaceState.prDelivery.nextObservationAt).toEqual(expect.any(String));
     expect(mocks.createIssue).toHaveBeenCalledTimes(1);
+    // Waiting on GitHub is not damaging, so the escalation gate keeps it away
+    // from the owner (BI-5E067004): it is filed as routed work, not a
+    // needs-human report.
     expect(mocks.createIssue).toHaveBeenCalledWith(expect.objectContaining({
-      dedupeKey: "build-pr-delivery:9:merge-state-undecided:sha1",
+      type: "routed-repair",
+      dedupeKey: "build-pr-delivery:9:merge-state-undecided:sha1:routed",
     }));
+    expect(mocks.createIssue.mock.calls[0][0].selfFixClass).toBeUndefined();
   });
 });
 

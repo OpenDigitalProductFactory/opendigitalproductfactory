@@ -36,3 +36,14 @@ describe("confirmed feedback refresh",()=>{
   await screen.findByText("Could not save. Check current feedback before trying again.");expect(fetcher).not.toHaveBeenCalled();expect(screen.getByText("No recorded feedback")).toBeTruthy();
  });
 });
+
+describe("history traversal",()=>{
+ it("fetches the immediately preceding evidence window",async()=>{
+  const fetcher=vi.fn().mockResolvedValue({ok:true,json:async()=>snapshot(null)});vi.stubGlobal("fetch",fetcher);
+  render(withMessages(<OperationsMapLiveShell initialData={snapshot(null)}/>));
+  fireEvent.click(screen.getByRole("button",{name:"Previous window"}));
+  await waitFor(()=>expect(fetcher).toHaveBeenCalledTimes(1));
+  const span=end-start;
+  expect(fetcher.mock.calls[0][0]).toBe(`/api/platform/operations-map?start=${start-span}&end=${start}`);
+ });
+});

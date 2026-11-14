@@ -319,12 +319,6 @@
       "docs/security/2026-05-24-shift-left-rollout.md",
       "docs/security/secrets-scan.md"
     ],
-    ".github/workflows/security-inflow-gate.yml": [
-      "docs/maintenance/staleness-report.md",
-      "docs/security/2026-05-24-shift-left-rollout.md",
-      "docs/security/README.md",
-      "docs/security/secrets-scan.md"
-    ],
     ".github/workflows/stuck-auto-merge-alarm.yml": [
       "docs/architecture/build-gate-runbook.md"
     ],
@@ -1004,6 +998,9 @@
     ],
     "apps/web/lib/govern/authority/resolve-coworker-tool-authority.ts": [
       "docs/user-guide/ai-workforce/coworker-proactivity.md"
+    ],
+    "apps/web/lib/govern/authority/route-to-human.ts": [
+      "docs/founder-kernel/wiki/principles/escalation-is-a-gate-not-a-trust-tier.md"
     ],
     "apps/web/lib/govern/data/field-classification.ts": [
       "docs/architecture/backlog-and-planning-runbook.md"
@@ -1913,9 +1910,6 @@
       "docs/architecture/2026-08-20-assurance-operating-loop-and-capability-completeness.md",
       "docs/architecture/vector-decisioning-and-jsi.md"
     ],
-    "docs/security/codeql-baseline.json": [
-      "docs/security/2026-05-24-shift-left-rollout.md"
-    ],
     "docs/testing/ci-observation-baseline.json": [
       "docs/testing/ci-evidence.md"
     ],
@@ -2586,6 +2580,9 @@
     "scripts/check-no-unreachable-room-links.mjs": [
       "docs/founder-kernel/wiki/principles/a-room-is-reachable-by-construction.md",
       "docs/testing/pre-pr-gate.md"
+    ],
+    "scripts/check-no-unrouted-owner-escalation.mjs": [
+      "docs/founder-kernel/wiki/principles/escalation-is-a-gate-not-a-trust-tier.md"
     ],
     "scripts/check-no-url-pathname-fs.mjs": [
       "docs/install/platform-support-watchlist.md"
@@ -4116,7 +4113,9 @@
       "scripts/pre-push-dco-check.mjs"
     ],
     "docs/founder-kernel/wiki/principles/escalation-is-a-gate-not-a-trust-tier.md": [
-      "apps/web/lib/govern/authority/escalation-gate.conformance.test.ts"
+      "apps/web/lib/govern/authority/escalation-gate.conformance.test.ts",
+      "apps/web/lib/govern/authority/route-to-human.ts",
+      "scripts/check-no-unrouted-owner-escalation.mjs"
     ],
     "docs/founder-kernel/wiki/principles/gates-proportional-to-shape.md": [
       "apps/web/lib/backlog/initiative-readiness/backlog-completion-evaluation.ts",
@@ -4240,7 +4239,6 @@
       "scripts/measure-doc-staleness-coverage.mjs"
     ],
     "docs/maintenance/staleness-report.md": [
-      ".github/workflows/security-inflow-gate.yml",
       "apps/mobile/eas.json",
       "apps/web/components/shell/SectionNav.tsx",
       "apps/web/instrumentation.ts",
@@ -4426,12 +4424,7 @@
       ".github/workflows/ci.yml",
       ".github/workflows/codeql.yml",
       ".github/workflows/secrets-scan.yml",
-      ".github/workflows/security-inflow-gate.yml",
-      "docs/security/codeql-baseline.json",
       "scripts/check-mobile-jest-pin.mjs"
-    ],
-    "docs/security/README.md": [
-      ".github/workflows/security-inflow-gate.yml"
     ],
     "docs/security/codeql-advanced-setup.md": [
       ".github/codeql/codeql-config.yml",
@@ -4441,8 +4434,7 @@
     ],
     "docs/security/secrets-scan.md": [
       ".github/workflows/codeql.yml",
-      ".github/workflows/secrets-scan.yml",
-      ".github/workflows/security-inflow-gate.yml"
+      ".github/workflows/secrets-scan.yml"
     ],
     "docs/security/tool-evaluations/2026-08-01-marketing-media-stack.md": [
       "packages/db/data/approved_tools_registry.json",

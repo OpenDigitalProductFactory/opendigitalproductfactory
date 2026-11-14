@@ -1560,6 +1560,7 @@
         "the-remediation-ladder-when-a-floor-wont-work",
         "owning-a-fix-pnpm-patch-when-upstream-is-dead",
         "axis-3-acquisition-control-the-new-dependency-gate",
+        "disposition-ledger-and-generated-matrix",
         "why-this-shape-wwmd",
         "doctrine-rent-vs-own-and-validate-the-rent",
         "build-time-tools-are-tools-not-workspace-dependencies",
@@ -9988,14 +9989,9 @@
       "publishedPublic": true,
       "publishedPortal": false,
       "anchors": [
-        "security-findings-workflow-and-baseline",
-        "the-two-loop-model",
-        "files",
-        "what-the-baseline-contains",
-        "when-you-need-to-regenerate-the-baseline",
-        "what-this-gate-is-not",
-        "why-workflowrun-trigger-not-pullrequest",
-        "trust-boundary-note",
+        "security-findings-how-they-are-caught-and-tracked",
+        "the-loops",
+        "retired-the-codeql-inflow-gate",
         "trust-boundary-paths"
       ]
     },
