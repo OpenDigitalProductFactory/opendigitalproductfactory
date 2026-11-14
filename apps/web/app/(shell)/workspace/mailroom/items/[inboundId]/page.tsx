@@ -88,17 +88,7 @@ export default async function MailroomItemPage({ params }: Props) {
         <h2 id="actions-heading" className="text-sm font-medium text-[var(--dpf-text-muted)]">Actions</h2>
         {draft && item.repliedAt ? <Notice variant="success" title="Replied">Sent {timeFormat.format(item.repliedAt)} to {item.fromAddress}.</Notice> : null}
         <div data-evidence-key="reply">
-          {reason?.privileged ? (
-            <Notice variant="info" title="Privileged correspondence">
-              This is from counsel or about a legal matter. The Mailroom does not draft replies to it. Answer it directly.
-            </Notice>
-          ) : null}
-          <MailroomItemActions
-            inboundId={inboundId}
-            status={status}
-            draft={draft}
-            canReply={status !== "noise" && Boolean(item.fromAddress) && !reason?.privileged}
-          />
+          <MailroomItemActions inboundId={inboundId} status={status} draft={draft} canReply={status !== "noise" && Boolean(item.fromAddress)} />
         </div>
       </section>
 
