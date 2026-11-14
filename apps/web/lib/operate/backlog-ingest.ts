@@ -210,6 +210,8 @@ export interface IngestBacklogStore {
 
 export interface BacklogIngestDeps {
   store?: IngestBacklogStore;
+  /** BI-A63A9476: project the body's entity ids (default: the reference writer, only with the default store). */
+  syncReferences?: (where: { itemId: string }, writtenBy: string | null) => Promise<void>;
   /** Override knowledge indexing (default: fire-and-forget semantic-memory store). */
   indexKnowledge?: (args: { entityId: string; title: string; content: string }) => void;
   /**
@@ -563,6 +565,11 @@ export async function ingestBacklogItem(
     });
   }
   indexKnowledge({ entityId: item.itemId, title: input.title, content: [itemOutcome.outcome, intakeBody ?? ""].filter(Boolean).join("\n\n") });
+  const references = await import("@/lib/references/sync-references");
+  const syncReferences = deps.syncReferences ?? (deps.store ? null : references.syncBacklogItemReferences);
+  if (syncReferences && body !== null) {
+    await syncReferences({ itemId: item.itemId }, references.referenceWriter({ userId: input.submittedById, agentId: input.agentId }));
+  }
 
   // ─── Implementation scan (BI-1A1EC5EC) ──────────────────────────────────────
   // Runs AFTER the create, deliberately. It is advisory, and a filing surface

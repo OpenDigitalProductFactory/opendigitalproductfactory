@@ -26,6 +26,7 @@ import {
   normalizeDeferralInput,
 } from "@/lib/backlog/deferral-contract";
 import { resolvePrincipalRecordIdForSessionIdentity } from "@/lib/identity/principal-linking";
+import { referenceWriter, removeReferences, syncBacklogItemReferences, syncEpicReferences } from "@/lib/references/sync-references";
 
 async function requireManageBacklog(): Promise<void> {
   await requireCapability("manage_backlog");
@@ -162,6 +163,8 @@ export async function createBacklogItem(input: BacklogItemInput): Promise<void> 
   // BI-PORTPRIO-1: attribute the new item to its portfolio (product → taxonomy
   // node → epic precedence) so it groups/budgets/ranks per portfolio immediately.
   await attributeBacklogPortfolio(created.id);
+  // BI-A63A9476: the body's entity ids become MENTIONS edges.
+  await syncBacklogItemReferences({ id: created.id }, referenceWriter({ userId: createData.submittedById }));
 }
 
 export async function updateBacklogItem(id: string, input: BacklogItemInput): Promise<void> {
@@ -310,7 +313,7 @@ export async function updateBacklogItem(id: string, input: BacklogItemInput): Pr
       });
     }
   });
-
+  await syncBacklogItemReferences({ id }, referenceWriter({ userId: await getSessionUserId() }));
 }
 
 /**
@@ -439,17 +442,19 @@ export async function updateBacklogItemFields(id: string, patch: BacklogFieldPat
       throw new Error(`This item is not ready to complete: ${codes.join(", ")}.`);
     }
     if (existing.epicId) await attemptEpicAutoClose(existing.epicId, actorUserId);
+    if (patch.body !== undefined) await syncBacklogItemReferences({ id }, referenceWriter({ userId: actorUserId }));
     return;
   }
   await prisma.backlogItem.update({ where: { id }, data });
-
+  if (patch.body !== undefined) await syncBacklogItemReferences({ id }, referenceWriter({ userId: await getSessionUserId() }));
 }
 
 export async function deleteBacklogItem(id: string): Promise<void> {
   await requireManageBacklog();
   const { assertBacklogItemGovernanceDeletable } = await import("@/lib/backlog/initiative-governance-deletion");
   await assertBacklogItemGovernanceDeletable(id);
-  await prisma.backlogItem.delete({ where: { id } });
+  const deleted = await prisma.backlogItem.delete({ where: { id }, select: { itemId: true } });
+  await removeReferences(deleted.itemId);
 }
 
 // ─── Upstream escalation ──────────────────────────────────────────────────────
@@ -516,7 +521,7 @@ export async function createEpic(input: EpicInput): Promise<CreateEpicResult> {
     // Semantic search unavailable — proceed without overlap check
   }
 
-  await prisma.$transaction(async (tx) => {
+  const createdEpicId = await prisma.$transaction(async (tx) => {
     const epic = await tx.epic.create({
       data: {
         epicId:        `EP-${crypto.randomUUID()}`,
@@ -546,7 +551,9 @@ export async function createEpic(input: EpicInput): Promise<CreateEpicResult> {
         content: input.description ?? "",
       })
     ).catch(() => {});
+    return epic.id;
   });
+  await syncEpicReferences({ id: createdEpicId }, referenceWriter({ userId: await getSessionUserId() }));
 
   return { created: true, similarEpics };
 }
@@ -615,12 +622,14 @@ export async function updateEpic(id: string, input: EpicInput): Promise<void> {
       });
     }
   });
+  await syncEpicReferences({ id }, referenceWriter({ userId: await getSessionUserId() }));
 }
 
 export async function deleteEpic(id: string): Promise<void> {
   await requireManageBacklog();
   const { assertEpicGovernanceDeletable } = await import("@/lib/backlog/initiative-governance-deletion");
   await assertEpicGovernanceDeletable(id);
-  await prisma.epic.delete({ where: { id } });
+  const deletedEpic = await prisma.epic.delete({ where: { id }, select: { epicId: true } });
+  await removeReferences(deletedEpic.epicId);
   // onDelete: SetNull in schema handles nullifying BacklogItem.epicId automatically
 }

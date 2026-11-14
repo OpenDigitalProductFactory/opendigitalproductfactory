@@ -52,6 +52,8 @@ const GLOBAL_NAMESPACES = (language: string) => ({
   shell: namespaceMessages(language, "shell"),
   // BI-B1B44777: the backlog intake form (Outcome field) renders under /ops.
   backlog: namespaceMessages(language, "backlog"),
+  // BI-A63A9476: "Referenced by" in the /ops backlog panel and epic cards.
+  references: namespaceMessages(language, "references"),
 });
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {

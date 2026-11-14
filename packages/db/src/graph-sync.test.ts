@@ -12,7 +12,7 @@ vi.mock("./client", () => ({
 }));
 
 import { prisma } from "./client";
-import { projectWikiLinksToGraph, replaceGraphEdgesFromSource, syncDocumentReference, syncInfraCI, syncInventoryRelationship } from "./graph-sync";
+import { projectWikiLinksToGraph, replaceGraphEdgesFromSource, syncDocumentReference, syncInfraCI, syncInventoryRelationship, upsertContentFreeNode } from "./graph-sync";
 
 const exec = vi.mocked(prisma.$executeRawUnsafe);
 
@@ -278,5 +278,48 @@ describe("projectWikiLinksToGraph (BI-23900D0A)", () => {
   it("replaces the page's LINKS_TO edges", async () => {
     await projectWikiLinksToGraph("page-a", ["page-b"]);
     expect(exec.mock.calls[0]?.slice(1)).toEqual(["page-a", "LINKS_TO", ["page-b"]]);
+  });
+});
+
+describe("content-free nodes and reference edges (BI-A63A9476)", () => {
+  beforeEach(() => exec.mockReset().mockResolvedValue(1 as never));
+
+  it("replaceGraphEdgesFromSource writes each wanted edge with its own props", async () => {
+    await replaceGraphEdgesFromSource("BI-AAA111", "MENTIONS", [
+      { dstKey: "EP-BBB222", props: { projection: "references", writtenBy: "user:u1", sourceScope: "install" } },
+    ]);
+    const [del, upsert] = exec.mock.calls;
+    expect(del?.slice(1)).toEqual(["BI-AAA111", "MENTIONS", ["EP-BBB222"]]);
+    expect(edgeCall(upsert!)).toMatchObject({
+      src: "BI-AAA111",
+      dst: "EP-BBB222",
+      relType: "MENTIONS",
+      props: { projection: "references", writtenBy: "user:u1", sourceScope: "install" },
+    });
+  });
+
+  it("a MENTIONS edge without writtenBy is refused before any write", async () => {
+    await expect(
+      replaceGraphEdgesFromSource("BI-AAA111", "MENTIONS", [{ dstKey: "EP-BBB222", props: { projection: "references" } }]),
+    ).rejects.toThrow(/writtenBy/);
+  });
+
+  it("document nodes carry no title or name, and the upsert strips any left from before", async () => {
+    await syncDocumentReference({
+      sourceDocumentId: "DOC-AAA11111", sourceTitle: "Secret plan", targetDocumentId: "DOC-BBB22222",
+      targetTitle: "Other", refType: "cites",
+    });
+    for (const call of exec.mock.calls.slice(0, 2)) {
+      const node = nodeCall(call);
+      expect(node.props).not.toHaveProperty("title");
+      expect(node.props).not.toHaveProperty("name");
+      expect(node.sql).toContain("- ARRAY['title', 'name', 'snippet', 'body', 'description']");
+    }
+    expect(JSON.stringify(exec.mock.calls)).not.toContain("Secret plan");
+  });
+
+  it("upsertContentFreeNode refuses a key already held under another label", async () => {
+    exec.mockResolvedValueOnce(0 as never);
+    await expect(upsertContentFreeNode("BI-AAA111", "BacklogItem", { organizationId: null })).rejects.toThrow(/label/);
   });
 });

@@ -11,6 +11,8 @@ import {
 } from "@/lib/backlog";
 import { AGENT_NAME_MAP } from "@/lib/agent-routing";
 import { BacklogItemRow } from "./BacklogItemRow";
+import { EntityReferencesSection } from "@/components/references/EntityReferencesSection";
+import { EPIC_DESCRIPTION_OPTIONS, epicDescriptionMarkdown } from "@/lib/backlog/epic-description-markdown";
 import {
   summarizeBacklogStatuses,
   visibleUnderActiveOnly,
@@ -109,7 +111,7 @@ function EpicCardImpl({ epic, sort, activeOnly, onEdit, onItemEdit, focusedItemI
 
 
   return (
-    <div className="border-b border-[var(--dpf-border)] last:border-b-0">
+    <div id={epic.epicId} className="border-b border-[var(--dpf-border)] last:border-b-0">
       {/* Row — columns must match EpicListHeader widths */}
       <div className="flex items-center gap-2 px-2 py-1.5 hover:bg-[var(--dpf-surface-1)] group">
         {/* col: expand — w-4 */}
@@ -208,38 +210,15 @@ function EpicCardImpl({ epic, sort, activeOnly, onEdit, onItemEdit, focusedItemI
       {/* Expanded: description + item list */}
       {expanded && (
         <div className="border-t border-[var(--dpf-border)] px-8 py-2 bg-[var(--dpf-surface-2)]">
-          {epic.description && (
-            <p className="text-[11px] text-[var(--dpf-muted)] mb-2 whitespace-pre-line">
-              {epic.description.split(/((?:https?|file):\/\/[^\s]+|docs\/[^\s]+\.md)/g).map((part, i) => {
-                // Internal docs path → serve through portal
-                if (/^docs\/.*\.md$/.test(part)) {
-                  return (
-                    <a key={i} href={`/api/docs?path=${encodeURIComponent(part)}`} target="_blank" rel="noopener noreferrer" className="text-[var(--dpf-accent)] hover:underline break-all">
-                      {part}
-                    </a>
-                  );
-                }
-                // file:// URLs with docs/ path → also serve through portal
-                const fileMatch = part.match(/^file:\/\/\/.*?\/(docs\/.*\.md)$/);
-                if (fileMatch?.[1]) {
-                  return (
-                    <a key={i} href={`/api/docs?path=${encodeURIComponent(fileMatch[1])}`} target="_blank" rel="noopener noreferrer" className="text-[var(--dpf-accent)] hover:underline break-all">
-                      {fileMatch[1]}
-                    </a>
-                  );
-                }
-                // External URLs
-                if (/^https?:\/\//.test(part)) {
-                  return (
-                    <a key={i} href={part} target="_blank" rel="noopener noreferrer" className="text-[var(--dpf-accent)] hover:underline break-all">
-                      {part}
-                    </a>
-                  );
-                }
-                return <span key={i}>{part}</span>;
-              })}
-            </p>
-          )}
+          {/* BI-A63A9476: the shared renderer (readable ids linked), then "Referenced by". */}
+          <div className="mb-2">
+            <EntityReferencesSection
+              kind="epic"
+              entityKey={epic.epicId}
+              body={epic.description ? epicDescriptionMarkdown(epic.description) : null}
+              bodyOptions={EPIC_DESCRIPTION_OPTIONS}
+            />
+          </div>
           {epic.items.length === 0 ? (
             <p className="text-xs text-[var(--dpf-muted)]">No items in this epic yet.</p>
           ) : visibleItems.length === 0 ? (
