@@ -11,6 +11,7 @@ import { useState, useTransition } from "react";
 import { Button } from "@/components/ui/Button";
 import { Surface } from "@/components/ui/Surface";
 import { useT } from "@/lib/i18n/use-t";
+import type { ActionResult } from "@/lib/shared/action-result";
 import {
   claimMyMileageAction,
   recordManualDriveAction,
@@ -49,7 +50,7 @@ export function MileageEntryPanel({
   const [claim, setClaim] = useState({ periodStart: monthStart, periodEnd: today });
   const [rate, setRate] = useState({ amountPerMile: "", effectiveFrom: today, sourceUrl: "" });
 
-  const report = (res: { ok: true } | { ok: false; error: string }, done: string) =>
+  const report = (res: ActionResult<unknown>, done: string) =>
     setNotice(res.ok ? { kind: "ok", text: done } : { kind: "error", text: res.error });
 
   const addDrive = () => start(async () => {
