@@ -79,6 +79,8 @@ const definitions: ToolDefinition[] = [
       type: "object",
       properties: {
         taskId: { type: "string", description: "Optional exact task id; returns only this owned task and its current revision without expanding its prompt." },
+        reportDiagnostic: { type: "object", description: "Read safe format metadata for one exact historical run of the owned task; requires taskId and its current revision. No raw report, execution proof or replay.",
+          properties: { taskRunId: { type: "string" }, expectedRevision: { type: "string" } }, required: ["taskRunId", "expectedRevision"], additionalProperties: false },
         organizationId: { type: "string" },
         productLineId: { type: "string" },
         businessProductId: { type: "string" },
@@ -245,6 +247,25 @@ async function listScheduledAgentTasksHandler(
 ): Promise<ToolResult> {
   if (params.taskId !== undefined && (typeof params.taskId !== "string" || !params.taskId.trim() || params.taskId.length > 128)) {
     return { success: false, error: "invalid_task_selector", message: "Provide one exact scheduled task id." };
+  }
+  if (params.reportDiagnostic !== undefined) {
+    const value = params.reportDiagnostic;
+    if (typeof params.taskId !== "string" || !value || typeof value !== "object" || Array.isArray(value)
+      || Object.keys(value).some(key => !["taskRunId", "expectedRevision"].includes(key))
+      || typeof (value as Record<string, unknown>).taskRunId !== "string"
+      || !(value as Record<string, string>).taskRunId.trim() || (value as Record<string, string>).taskRunId.length > 128
+      || typeof (value as Record<string, unknown>).expectedRevision !== "string"
+      || !/^[a-f0-9]{64}$/.test((value as Record<string, string>).expectedRevision)
+      || ["organizationId", "productLineId", "businessProductId"].some(key => params[key] !== undefined)) {
+      return { success: false, error: "invalid_report_selector", message: "Provide one exact owned task, run and current revision." };
+    }
+    try {
+      const { getScheduledReportDiagnosticFor } = await import("@/lib/operate/scheduled-jobs/agent-task-core");
+      const data = await getScheduledReportDiagnosticFor(userId, params.taskId, value as { taskRunId: string; expectedRevision: string });
+      return { success: true, message: "Historical report format metadata; this does not establish successful observations or authorize replay.", data };
+    } catch {
+      return { success: false, error: "report_diagnostic_unavailable", message: "Scheduled report diagnostic is unavailable." };
+    }
   }
   const { getScheduledAgentTasksFor } = await import("@/lib/operate/scheduled-jobs/agent-task-core");
   const scope =

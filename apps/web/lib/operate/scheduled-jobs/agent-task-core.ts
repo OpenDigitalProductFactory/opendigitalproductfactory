@@ -38,7 +38,7 @@ import {
   productManagementPlaybookScopeKind,
 } from "@/lib/product-management/product-management-playbook";
 import { parseBusinessAnalysisWatchConfig } from "@/lib/performance/business-analysis-watch";
-import { scheduledReportingRevision } from "./scheduled-reporting-contract";
+import { readScheduledReportDiagnostic, scheduledReportingRevision } from "./scheduled-reporting-contract";
 
 export type ScheduleAgentTaskInput = {
   agentId: string;
@@ -362,4 +362,32 @@ export async function rerunAgentTaskFor(
     })
     .catch(() => {});
   return { success: true };
+}
+
+
+/** Owner-bound historical format metadata. Never reads run messages, objective or raw output.
+ * The selected run need not be the latest/active run; this read never authorizes replay. */
+export async function getScheduledReportDiagnosticFor(userId: string, taskId: string,
+  selector: { taskRunId: string; expectedRevision: string }, database = prisma) {
+  const unavailable = () => new Error("Scheduled report diagnostic is unavailable.");
+  if (!taskId.trim() || taskId.length > 128 || !selector.taskRunId.trim() || selector.taskRunId.length > 128
+    || !/^[a-f0-9]{64}$/.test(selector.expectedRevision)) throw unavailable();
+  return database.$transaction(async tx => {
+    const task = await tx.scheduledAgentTask.findUnique({ where: { taskId } });
+    if (!task || task.ownerUserId !== userId || scheduledReportingRevision(task) !== selector.expectedRevision) throw unavailable();
+    // Project only the fixed diagnostic object; source binding is checked in SQL,
+    // so private execution context never crosses into this reader.
+    const rows = await tx.$queryRaw<Array<{ diagnostic: unknown }>>`
+      SELECT "progressPayload"->'scheduledReporting'->'diagnostic' AS diagnostic FROM "TaskRun"
+      WHERE "taskRunId" = ${selector.taskRunId} AND "userId" = ${userId}
+        AND "a2aMetadata"->'sourceRef'->>'kind' = 'scheduled-task'
+        AND "a2aMetadata"->'sourceRef'->>'id' = ${taskId}
+        AND "a2aMetadata"->'scheduledReporting'->>'mode' = 'read-only-history' LIMIT 1`;
+    if (rows.length !== 1) throw unavailable();
+    const diagnostic = readScheduledReportDiagnostic(rows[0]!.diagnostic);
+    if (rows[0]!.diagnostic != null && !diagnostic) throw unavailable();
+    return { taskId, taskRunId: selector.taskRunId, revision: selector.expectedRevision,
+      retention: diagnostic ? "retained" as const : "not-retained" as const,
+      ...(diagnostic ? { diagnostic } : {}) };
+  }, { isolationLevel: "RepeatableRead" });
 }

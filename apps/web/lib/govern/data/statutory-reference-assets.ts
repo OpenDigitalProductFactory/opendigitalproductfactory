@@ -44,7 +44,7 @@ export const STATUTORY_REFERENCE_ASSETS: readonly DataAssetDefinition[] = [
       // facts an authority publishes; nothing here points at a person.
       ...([
         "id", "payrollTaxRuleId", "jurisdictionRefId", "taxType", "ruleKind",
-        "side", "taxYear", "value", "currency", "qualifiers",
+        "side", "taxYear", "value", "currency", "qualifiers", "qualifierKey",
         "effectiveFrom", "effectiveTo", "status",
       ] as const).map((physicalName) => ({
         id: `data:payroll-tax-rule#${physicalName}` as DataFieldId,

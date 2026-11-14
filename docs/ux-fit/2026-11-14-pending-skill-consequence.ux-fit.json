@@ -1,0 +1,20 @@
+{
+  "version": "1",
+  "decidedOption": "bounded-existing-parent-repair",
+  "decisionInteractionId": "DI-02FAA51A6ECA",
+  "scope": { "files": ["apps/web/lib/attention/owner-decision-copy.ts"] },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": ["bounded-existing-parent-repair", "wait-for-broad-inbox-owner"]
+  },
+  "verification": {
+    "designDecision": "The recorded choice repairs the proven false consequence in the existing card, preserving the independently owned broader inbox work and all publication review controls.",
+    "owningArea": "Workspace /workspace/inbox; founder/operator reviewing a pending skill draft. Existing contextual review link only.",
+    "sourceTruth": "The existing skill-proposal projection represents an unpublished ImprovementProposal. Its prospective blast radius is not a present blocked dependency; the current skill remains in use.",
+    "fit": "fits-with-guardrails: use the existing consequenceFor source-specific copy boundary; preserve routing, counts, attribution, triage, actions, theme and stored state. No new component or navigation.",
+    "beforeEvidence": "Actual canonical0037 desktop dark capture DOC-4785399F/version cmwgvwatg030q0el7s5zbxewg, immutable manifest DOC-1A217301/version cmwgvwioa031a0el7p2gybhxp. CE-908CD7DF is the same finite advisory UX review, not a completed contribution.",
+    "sourceChecks": "Executed actual skillProposalToAttentionItem plus consequenceFor before/after proof; existing related attention and skill projection suites cover unchanged actions and other consequences.",
+    "servedChecks": "After protected publication, verify the existing skill cards on an admitted containing runtime. No after-state screenshot, mobile/light-mode, accessibility, measured route-budget or final-acceptance pass is asserted by this decision manifest.",
+    "baseline": "Existing committed route budgets remain unchanged. Original useful monitoring, broader notice routing and required-control acceptance remain open where unmet."
+  }
+}

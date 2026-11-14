@@ -1,5 +1,6 @@
 import { prisma, type Prisma } from "@dpf/db";
 import { mergeHappyPathStateIntoPlan } from "@/lib/feature-build-types";
+import { TERMINAL_BUILD_PHASES } from "@/lib/build/wip-cap";
 
 // Shared Build Studio tool helpers. Previously defined inline in mcp-tools.ts
 // and replicated verbatim into several ToolPacks (model-provider, taxonomy-
@@ -35,8 +36,9 @@ export function recordAutoIntakeFailure(
  * Phases that exclude a FeatureBuild from "active" auto-resolution.
  * `abandoned` is included because abandoned builds from prior runs would
  * otherwise shadow the freshly promoted build (BI-E9CD1B92, 2026-05-13).
+ * One definition, in lib/build/wip-cap.ts (BI-B6894001).
  */
-export const TERMINAL_BUILD_PHASES = ["complete", "failed", "abandoned"] as const;
+export { TERMINAL_BUILD_PHASES };
 
 const FB_ID_RE = /\b(FB-[A-Za-z0-9]+)\b/;
 
