@@ -22,9 +22,7 @@ The four phases are one deliverable, delivered in one PR. None is independently 
 | --- | --- | --- |
 | Per-participant read cursor and the `unreadForMe` read | `BI-31E0C874` | AC-RRC-01 to AC-RRC-05 |
 
-Out of scope, owned elsewhere:
-- calling the helper from the push channel (`BI-ED52AB82`);
-- calling the helper from supervised turns (`BI-F5D58F29`).
+Out of scope: the push channel (`BI-ED52AB82`) and supervised turns (`BI-F5D58F29`) are built and do not move the read cursor. Design §5 says why, so neither item needs a change.
 
 ## Phase 1: schema and migration
 

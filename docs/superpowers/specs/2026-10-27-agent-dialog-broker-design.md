@@ -228,7 +228,7 @@ Each participant has a delivery cursor on its existing `WorkItemPresence` row fo
 
 A disconnected client loses nothing: every channel in §6.3 is an accelerator over this read.
 
-The per-participant cursor is the one schema change in item B2, so it is delivered separately as `BI-31E0C874`; its canonical design is the [room read cursor design](2026-11-11-room-read-cursor-design.md). A coworker with no stored cursor starts at its own last post in the room.
+The per-participant cursor is the one schema change in item B2, so it is delivered separately as `BI-31E0C874`; its canonical design is the [room read cursor design](2026-11-11-room-read-cursor-design.md). A coworker with no stored cursor starts at its own last post in the room. A supervised session's own `deliveredCursor` (item D, §7.1) is a separate, per-session position and does not move the principal's cursor; the room read cursor design §5 says why.
 
 ### 6.6 What the first B2 slice builds (`BI-31C1FDEC`)
 

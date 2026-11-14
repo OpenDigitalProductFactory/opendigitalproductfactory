@@ -22,12 +22,13 @@ A coworker can read a Work Room with `unreadForMe: true` and get only what it ha
 
 Nothing else changes. Without `unreadForMe`, `read_room_messages` behaves as it does today.
 
-## 2. What exists today (origin/main `aee1da65778`)
+## 2. What exists today (origin/main `aee1da65778`, re-checked at `89b09949eb0f` on 2026-11-13)
 
 - **Paging.** `read_room_messages` (`apps/web/lib/mcp/packs/room-messaging-pack.ts`) pages a room's messages, and its admitted child rooms', by an opaque `(createdAt, messageId)` cursor from `room-message-cursor.ts`. The caller has to keep that cursor itself. A disconnected client that lost it can only re-read the newest page.
 - **Addressing.** A message records who it is addressed to in `structuredPayload.addressing` (`room-message-addressing.ts`): agent ids, the roles `coordinator` and `accountable`, and GAID `#session=` qualifiers. A message with no `addressing` is addressed to the room.
 - **The wake.** An addressed message wakes its in-platform recipient through `room-message-wake.server.ts`. The woken coworker's prompt hands it a `sinceCursor` at its own last post in the room. That is the stand-in §6.1 names until this item lands.
 - **Where people are.** Messages belong to a `WorkItem`. `WorkItemPresence` is the existing row per (work item, principal type, principal), written when a coworker posts (`room-agent-presence.server.ts`) and when a person views the room.
+- **Push and supervised turns (built since, PRs #6977 and #6981).** Item C stores `McpResourceSubscription` rows and sends a content-free `notifications/resources/updated`. Item D gives a supervised session an addressed message as its next turn, with at most 20 room-wide messages since the session's own `deliveredCursor`, which is kept in the Workroom's `workspaceState.runtimeSession` (`apps/web/lib/workroom-runtime/supervised-turn-delivery.ts`).
 - **Workrooms.** A `Workroom` is one claim of the work, and a work item can carry several over its life. The B2 live fix (PR #6964) says so: "A work item can carry several Workrooms over its life." `WorkroomParticipant` is one principal's place in one Workroom.
 
 ## 3. Where the cursor lives, and why §6.1 is amended
@@ -80,10 +81,15 @@ A message addressed only to someone else is passed over, and the cursor still mo
 
 ## 5. Channels that hand messages over
 
-§6.1 says the cursor records the newest message handed to a participant on any channel. One helper, `advanceRoomReadCursor({ workItemId, principalType, principalId, to })`, moves a cursor forward and never back. It creates the presence row when there is none.
+§6.1 says the cursor records the newest message handed to a participant on any channel. Precisely, it records the newest message handed to the principal itself, by a read or by any channel that hands over everything up to a position. One helper, `advanceRoomReadCursor({ workItemId, principalType, principalId, to })`, moves a cursor forward and never back. It creates the presence row when there is none.
 
 - **B2 wake (built).** The wake hands over no message, only a prompt to read the room, so it does not move the cursor. Its prompt changes from "read with `sinceCursor` at your own last post" to "read with `unreadForMe: true`". The cursor then decides what the woken coworker sees.
-- **C push (`BI-ED52AB82`) and D supervised turns (`BI-F5D58F29`) (not built).** A push notification is a hint that carries no message, so it does not move the cursor. A supervised turn that puts message text into a session's input does hand it over, and calls the helper with the newest message it included. Both items are in flight in other sessions, and the helper is the contract they call.
+- **C push (`BI-ED52AB82`, built).** A push notification is a hint that carries no message, so it does not move the cursor. The client then reads with `unreadForMe`, and that read moves it.
+- **D supervised turns (`BI-F5D58F29`, built).** D keeps its own position per session, `deliveredCursor` on the Workroom's runtime session, which decides the room context a turn carries. It does not move the principal's read cursor, for two reasons:
+  - **The session is a sub-unit of the principal.** It is one `<gaid>#session=` of an agent, the way a Matrix device belongs to a user. Read markers are kept per user, not per device.
+  - **A turn hands over only some of what is unread.** It carries one addressed message and at most 20 context messages. Advancing the principal's cursor to that message would skip addressed messages outside those 20.
+
+  A principal that later reads with `unreadForMe` may therefore see a message its session was already given as a turn. That is at least once, never a loss. The helper stays exported, so a channel that hands over everything up to a position can call it.
 - **Client hooks.** A hook may call `read_room_messages` with `unreadForMe` at session start or on prompt submit. That needs no new endpoint.
 
 ## 6. Data, migration and rollout
