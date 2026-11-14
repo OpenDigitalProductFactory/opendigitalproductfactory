@@ -105,7 +105,7 @@
 | `README.md` | 30d | `AGENTS.md` (+30d)<br>`docs/install/macos.md` (+30d)<br>`docs/architecture/platform-overview.md` (+28d)<br>…+12 more |
 | `docs/architecture/archetype-operating-model-audit.md` | 29d | `docs/architecture/archetypes/pet-rescue-operating-model.md` (+29d)<br>`docs/architecture/four-portfolio-archetype-ai-workforce-operating-standard.md` (+7d)<br>`docs/architecture/archetype-business-value-streams.md` (+4d) |
 | `docs/architecture/capability-driven-runtime-profiles.md` | 29d | `docs/superpowers/specs/2026-07-18-install-state-readiness-migration-design.md` (+29d)<br>`docs/superpowers/specs/2026-10-06-running-service-compose-convergence-design.md` (+29d) |
-| `docs/architecture/data-model-stewardship-runbook.md` | 27d | `apps/web/lib/shared/markdown.ts` (+27d)<br>`AGENTS.md` (+26d)<br>`apps/web/lib/datetime.ts` (+23d)<br>…+1 more |
+| `docs/architecture/data-model-stewardship-runbook.md` | 27d | `apps/web/lib/shared/markdown.ts` (+27d)<br>`packages/db/scripts/schema-regression-guard.mjs` (+27d)<br>`AGENTS.md` (+26d)<br>…+2 more |
 | `docs/founder-kernel/wiki/principles/prose-is-not-a-control-gate.md` | 27d | `docs/founder-kernel/wiki/principles/structural-verification-is-not-functional.md` (+27d) |
 | `docs/user-guide/storefront/index.md` | 27d | `docs/user-guide/market-archetypes.md` (+27d) |
 | `docs/architecture/2026-04-18-trusted-ai-agent-governance-white-paper.md` | 26d | `docs/architecture/gated-permissions-process.md` (+26d)<br>`docs/architecture/agent-standards-family.md` (+5d)<br>`docs/architecture/trusted-ai-kernel.md` (+5d) |
@@ -146,6 +146,7 @@
 | `docs/architecture/agent-client-governance.md` | 15d | `docs/architecture/failure-analysis-and-recovery.md` (+15d) |
 | `docs/architecture/review-reliability-recovery.md` | 15d | `docs/founder-kernel/wiki/principles/absorb-dont-adopt.md` (+15d)<br>`docs/architecture/contributor-procedure-runbook.md` (+13d) |
 | `docs/founder-kernel/wiki/principles/architecture-over-shortcuts.md` | 15d | `docs/founder-kernel/wiki/principles/absorb-dont-adopt.md` (+15d) |
+| `docs/user-guide/wiki/index.md` | 15d | `docs/user-guide/ai-workforce/coworker-proactivity.md` (+15d) |
 | `docs/founder-kernel/wiki/principles/data-sovereignty-follows-control.md` | 14d | `docs/strategy/2026-10-11-rea-absorption-and-hardware-neutral-business-ai.md` (+14d) |
 | `docs/professions/legal-compliance/wiki/ai-provider-account-and-sovereignty-review.md` | 14d | `docs/strategy/2026-10-11-rea-absorption-and-hardware-neutral-business-ai.md` (+14d) |
 | `docs/professions/software-engineer/wiki/tool-evaluation-pipeline.md` | 14d | `docs/strategy/2026-10-11-rea-absorption-and-hardware-neutral-business-ai.md` (+14d) |
@@ -166,10 +167,10 @@
 | `docs/architecture/job-specific-intelligence.md` | 9d | `docs/architecture/agent-standards-dpf-conformance.md` (+9d)<br>`docs/architecture/agent-standards-external-alignment.md` (+5d)<br>`docs/architecture/trusted-ai-kernel.md` (+5d) |
 | `docs/founder-kernel/wiki/principles/claim-a-workroom-before-you-work.md` | 9d | `docs/founder-kernel/wiki/principles/worktree-selection-and-reaping.md` (+9d) |
 | `docs/founder-kernel/wiki/principles/responsible-capacity-utilization.md` | 9d | `docs/founder-kernel/wiki/principles/autonomous-directives-are-blanket-approval.md` (+9d) |
+| `docs/maintenance/README.md` | 9d | `docs/maintenance/staleness-report.md` (+9d) |
 | `docs/operations/dpf-production-runtime.md` | 9d | `docs/superpowers/specs/2026-05-09-deployment-contracts.md` (+9d) |
-| `docs/user-guide/ai-workforce/how-governed-work-runs.md` | 9d | `docs/user-guide/contributing/agent-dev-environments.md` (+9d)<br>`docs/user-guide/workspace/work-rooms.md` (+9d)<br>`docs/architecture/initiative-readiness-runbook.md` (+8d)<br>…+5 more |
+| `docs/user-guide/ai-workforce/how-governed-work-runs.md` | 9d | `docs/user-guide/ai-workforce/coworker-proactivity.md` (+9d)<br>`docs/user-guide/contributing/agent-dev-environments.md` (+9d)<br>`docs/user-guide/workspace/work-rooms.md` (+9d)<br>…+5 more |
 | `docs/user-guide/compliance/incidents-risks-and-response.md` | 9d | `docs/user-guide/compliance/controls-and-evidence.md` (+9d) |
-| `docs/user-guide/ai-workforce/coworker-proactivity.md` | 8d | `docs/user-guide/workspace/work-rooms.md` (+8d)<br>`docs/user-guide/workspace/attention-inbox.md` (+7d) |
 | `docs/user-guide/ai-workforce/decision-perspective-in-practice.md` | 8d | `docs/user-guide/ai-workforce/index.md` (+8d)<br>`docs/user-guide/platform/authority-and-audit.md` (+8d)<br>`docs/user-guide/ai-workforce/decision-perspective.md` (+6d)<br>…+1 more |
 | `docs/user-guide/build-studio/sandbox.md` | 8d | `docs/user-guide/build-studio/deployment.md` (+8d) |
 | `docs/architecture/archetypes/campground-operating-model.md` | 7d | `docs/architecture/archetype-operating-model-audit.md` (+7d) |
@@ -177,7 +178,6 @@
 | `docs/founder-kernel/wiki/principles/relations-are-typed-never-generic.md` | 7d | `docs/superpowers/specs/2026-10-27-typed-relation-vocabulary-design.md` (+7d) |
 | `docs/user-guide/ai-workforce/connecting-providers.md` | 7d | `docs/user-guide/ai-workforce/sensitive-data-policy-packs.md` (+7d) |
 | `docs/edge-node/unifi-adapter.md` | 6d | `services/edge-node/src/collectors/unifi.ts` (+6d) |
-| `docs/user-guide/wiki/index.md` | 6d | `docs/user-guide/ai-workforce/coworker-proactivity.md` (+6d) |
 | `docs/architecture/agent-standards-contribution-roadmap.md` | 5d | `docs/architecture/agent-standards-external-alignment.md` (+5d)<br>`docs/architecture/agent-standards-family.md` (+5d) |
 | `docs/architecture/GAID.md` | 5d | `docs/architecture/agent-standards-external-alignment.md` (+5d)<br>`docs/architecture/agent-standards-family.md` (+5d)<br>`docs/architecture/trusted-ai-kernel.md` (+5d) |
 | `docs/operations/mobile-store-launch-runbook.md` | 5d | `apps/mobile/eas.json` (+5d) |

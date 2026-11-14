@@ -822,8 +822,7 @@
       "docs/architecture/agent-standards-dpf-conformance.md"
     ],
     "apps/web/lib/datetime.ts": [
-      "docs/architecture/data-model-stewardship-runbook.md",
-      "docs/maintenance/staleness-report.md"
+      "docs/architecture/data-model-stewardship-runbook.md"
     ],
     "apps/web/lib/decision-perspective/build-studio-gate.ts": [
       "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md"
@@ -2021,7 +2020,8 @@
     ],
     "packages/db/scripts/schema-regression-guard.mjs": [
       "docs/architecture/data-model-stewardship-runbook.md",
-      "docs/architecture/tax-period-component-migration.md"
+      "docs/architecture/tax-period-component-migration.md",
+      "docs/maintenance/staleness-report.md"
     ],
     "packages/db/scripts/seed-cada-regulation.ts": [
       "docs/strategy/2026-09-cada-architects-forum-deck.md"
@@ -4260,7 +4260,6 @@
     ],
     "docs/maintenance/staleness-report.md": [
       "apps/mobile/eas.json",
-      "apps/web/lib/datetime.ts",
       "apps/web/lib/inference/routed-inference.ts",
       "apps/web/lib/queue/functions/index.ts",
       "apps/web/lib/routing/cost-ranking.ts",
@@ -4270,6 +4269,7 @@
       "docker-compose.edge.macvlan.yml",
       "packages/db/prisma/schema/ai-coworker.prisma",
       "packages/db/prisma/schema/work-coordination.prisma",
+      "packages/db/scripts/schema-regression-guard.mjs",
       "packages/validators/src/field-dispatch.ts",
       "scripts/build-docs-staleness.mjs",
       "scripts/check-no-private-identity.mjs",
