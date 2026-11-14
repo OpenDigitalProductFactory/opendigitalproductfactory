@@ -58,6 +58,27 @@
       "patterns": ["^config/"]
     }
   ],
+  "composeConvergence": {
+    "$comment": "BI-205A85C0 (D5 of BI-C54E691E): an auto-converges claim on a compose change is checked per changed service. #6020 attested auto-converges for portal-tls, but no step recreated a running stateless sidecar, so the fix never arrived. chainFiles are the files scripts/installer/lib/compose.sh and promote.sh can put in a chain; activationTable adds the overlays an .env marker switches on. mechanisms names, per dpf.recreate-class, the self-upgrade step that recreates a CHANGED RUNNING service; null means none does yet, and pending says why. Flip stateless to step 7e when 7e enforces, and data-owner to step 3c when D4 (BI-7F2709F9) ships.",
+    "chainFiles": [
+      "docker-compose.yml",
+      "docker-compose.release.yml",
+      "docker-compose.macos.yml",
+      "docker-compose.linux.yml",
+      "docker-compose.edge.yml"
+    ],
+    "activationTable": "scripts/installer/lib/activation-overlays.txt",
+    "mechanisms": {
+      "managed": "its own promote.sh lifecycle step (portal and inngest step 4, sandbox step 7b, init jobs rerun)",
+      "stateless": null,
+      "data-owner": null
+    },
+    "pending": {
+      "stateless": "self-upgrade step 7e only reports changed running sidecars (shadow mode, WWMD DI-C04ABC76BBF4); nothing recreates them yet",
+      "data-owner": "no self-upgrade step recreates a changed data owner yet (step 3c, BI-7F2709F9)"
+    },
+    "newService": "promote.sh step 7d creates required services that are missing"
+  },
   "platformCoverage": {
     "$comment": "BI-084F85E5: a change to a kind listed here must say how an EXISTING install converges on EVERY target platform. The decision reasons, together, must name each platform below: a decision per platform, or one reason naming all three. Saying it for one OS is how the others were stranded.",
     "kinds": ["host-runtime"],
