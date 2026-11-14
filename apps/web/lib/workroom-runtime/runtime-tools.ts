@@ -41,12 +41,19 @@ export function workroomRuntimeSupervisor(): RuntimeSupervisor {
       await announceSupervisionLost(input);
     },
   });
+  // BI-C64EDA33: the room outbox runs on this process's effect worker (idempotent).
+  globalRuntime.__dpfWorkroomRuntime.startEffectWorker?.();
   return globalRuntime.__dpfWorkroomRuntime;
 }
 
 /** Boot (BI-F5D58F29): re-attach every supervised session, or mark it supervision-lost on its room. */
 export async function reattachSupervisedSessionsOnBoot(): Promise<void> {
-  const outcome = await workroomRuntimeSupervisor().reattachSupervised();
+  const runtime = workroomRuntimeSupervisor();
+  const outcome = await runtime.reattachSupervised();
+  // Effects decided for the processes that died with the old portal are retired; the rest run now.
+  await runtime.drainEffects().catch((error: unknown) => {
+    console.error("[workroom-runtime] boot effect pass failed: %s", error instanceof Error ? error.message : "unknown");
+  });
   if (outcome.reattached.length + outcome.lost.length + outcome.closed.length > 0) {
     console.log("[workroom-runtime] boot re-attach: %d re-attached, %d supervision-lost, %d closed", outcome.reattached.length, outcome.lost.length, outcome.closed.length);
   }

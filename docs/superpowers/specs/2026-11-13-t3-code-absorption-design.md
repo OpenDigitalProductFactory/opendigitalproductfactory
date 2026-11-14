@@ -147,7 +147,7 @@ The `#instance=` and `#session=` qualifiers above match it: a process carries it
 
 ## Target architecture
 
-1. **Workroom runtime core.** Adopted from T3's Orchestrator, EventSink and EffectWorker.
+1. **Workroom runtime core.** Adopted from T3's Orchestrator, EventSink and EffectWorker. Built in S2 (BI-C64EDA33, plan `docs/superpowers/plans/2026-11-14-workroom-runtime-core.md`).
    - Commands are decided without I/O.
    - Each decision commits its `WorkroomActivity` rows, the room projection, the receipt and any `WorkroomEffect` outbox rows in one transaction.
    - A leased effect worker starts turns, captures checkpoints and calls providers, then reports back as commands.
