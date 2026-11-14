@@ -4,6 +4,7 @@ import { assessDeliverySensitivity, buildPlanPaths } from "@/lib/backlog/initiat
 import { type InheritanceDb, loadInheritedInitiativeScope } from "@/lib/backlog/initiative-readiness/parent-scope-inheritance";
 import { randomUUID } from "node:crypto";
 import { digestBuildArtifactValue } from "@/lib/build/build-artifact-provenance";
+import { reviewedDesignScope } from "@/lib/build/record-build-plan-coverage";
 
 import { prisma } from "@dpf/db";
 import { CLAIM_READINESS_ACTIVITY_KINDS } from "@/lib/work-capsules/governed-work-claim";
@@ -102,6 +103,8 @@ function codes(decision: InitiativeReadinessDecision) {
 }
 
 export type BuildReadinessFactsInput = {
+  /** Names the design scope a plan without a baseline is traced to (BI-9FA1F9CF). */
+  buildId?: string;
   kind: string;
   designDoc: unknown;
   designReview: unknown;
@@ -152,6 +155,9 @@ export async function loadBuildReadinessFacts(db: BuildEntryGateDb, build: Build
     buildDesign: {
       reviewPassed: designReviewPassed(build.designReview),
       acceptanceCriteriaCount: designAcceptanceCriteriaCount(build.designDoc),
+      scope: build.buildId
+        ? reviewedDesignScope({ buildId: build.buildId, designDoc: build.designDoc, designReview: build.designReview })?.baseline ?? null
+        : null,
     },
   };
 }

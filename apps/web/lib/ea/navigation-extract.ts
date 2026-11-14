@@ -167,7 +167,7 @@ export function buildNavigationModel(input: NavigationModelInput): SysmlDesiredM
     });
     relationships.push({ fromKey: surfaceKey, toKey: entryKey, relSlug: "contains" });
     // Cross-layer: this nav entry traces to (navigates to) the route-surface node.
-    crossLayerRelationships.push({ fromKey: entryKey, toKey: ROUTE_KEY(entry.path), relSlug: "traces" });
+    crossLayerRelationships.push({ fromKey: entryKey, toKey: ROUTE_KEY(entry.path), relSlug: "traces", traceKind: "navigates-to" });
 
     // Teleport: the entry's EFFECTIVE target route lives in a different domain than the
     // entry. Two flavours, surfaced as distinct findings so structural analysis can tell
