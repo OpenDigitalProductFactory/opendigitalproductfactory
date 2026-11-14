@@ -533,3 +533,50 @@ crash boundary, parent-death/lost-reply/late-child reconciliation, refusal of
 forged actor/command/runtime bindings and production-resource exclusion. Canonical
 deployment and real acquisition/refusal evidence remain AC-4 obligations. A
 successful design decision would authorize neither those executions nor delivery.
+
+### Parse-only packaging observations and approval-result boundary
+
+At source `1ebd3a6f94c733107e61a3da054c1fcd00f64b87`, an in-memory esbuild
+0.28.2 parse of the actual `claimCapsuleScopeTool` export reached 1,574 source
+inputs, 29,940,083 input bytes and 19,598,781 output bytes. Its first attempt
+could not resolve four `server-only` imports. The successful parse used the exact
+server marker aliases found in the installed Next compiler; no source module
+was executed, no image was built and no database was accessed.
+
+A narrower export set (claim core, preparation, receipt wrapper, provisioning
+gate and impact computation) reached 787 parsed inputs, including 607 with
+nonzero output contribution, and produced 16,792,051 bytes. The emitted bundle
+retained one non-builtin external import, `pg-native`. Seven non-builtin edges
+in the *input* metadata include erased/type-only or unused edges; they are not
+seven emitted runtime dependencies. Neither a clean parse nor absence of compiler
+warnings establishes native/dynamic dependency closure or executable packaging.
+The 607 included inputs exceed the proposed 512-module ceiling; do not omit
+dependencies or raise a profile limit without a substantive reviewed revision.
+These are local source observations, not canonical build or runtime evidence.
+
+Another source boundary requires an explicit result contract before worker
+selection: `governedExecuteTool` already calls `handApprovalToToolRun` before
+handler dispatch, preventing its outer error path from releasing that handed-off
+reservation. However, the handler catch converts a thrown transport error into
+`tool_threw`, and then finalizes the approval using `result.success`. A lost
+child reply can be an unknown effect, not a known failed action. A closed worker
+must preserve that distinction through the existing approval/consequential
+receipt owner and reconcile the original command and process before terminal
+finalization. This is a required production-contract correction, not a missing
+handoff, permission to retry, or a new approval ledger.
+
+A second parse-only investigation simulated selective imports from the actual
+database leaf owners, without editing repository source. The minimum core fell
+from 607 to 275 included inputs. That is **not** a complete worker fit: retaining
+the actual heartbeat and Windows qualification action materializer reached 764
+included inputs and 19,427,548 output bytes; the full current handler with the
+same virtual leaf strategy reached 979 included inputs and 19,598,904 bytes.
+`materializeQualificationWindowsAction` also reads immutable provider blobs and
+queues its action within the bound receipt transaction. A smaller design must
+preserve those obligations and their atomicity, not omit them to fit a ceiling
+or move them to an unreceipted parent continuation. A reviewed extraction can
+separate its existing `readBlob` port from the pure materialization owner;
+the worker's fixed producer channel would then need real blob responses bound
+to the already admitted repository, commit, paths and hashes, without giving
+the worker a GitHub credential or unrestricted network access. No such extraction,
+channel implementation or complete executable closure has been established.
