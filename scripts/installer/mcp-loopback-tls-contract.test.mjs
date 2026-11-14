@@ -83,3 +83,29 @@ test("the session-start MCP health hook reads the OAuth challenge on https inste
   // The token is never printed.
   assert.doesNotMatch(shell, /echo "?\$DPF_MCP_BEARER_TOKEN|printf.*\$DPF_MCP_BEARER_TOKEN/);
 });
+
+test("the TLS front answers a client that names no host, in every Caddyfile the scripts write", async () => {
+  // BI-4528CBDF. A client that connects by IP literal sends no server name
+  // (RFC 6066 section 3). Caddy then looks for a certificate by the address the
+  // connection arrived on, which behind a published container port is the
+  // container's own address and never the 127.0.0.1 the certificate names, so
+  // the handshake ends in "tlsv1 alert internal error" (curl exit 35) while the
+  // same front answers by name. default_sni gives a nameless connection the
+  // primary host name, whose certificate also carries the address SANs.
+  const [shell, powershell, lanHelper] = await Promise.all([
+    read("scripts/bootstrap-organization-pki.sh"),
+    read("scripts/bootstrap-organization-pki.ps1"),
+    read("scripts/issue-authority-tls-cert.sh"),
+  ]);
+
+  // The option sits in the global block, next to auto_https, ahead of the site block.
+  assert.match(shell, /\{\n {4}auto_https off\n {4}default_sni \$HOSTNAME_VALUE\n\}\n\n\$HOSTS \{/);
+  assert.match(powershell, /\{\r?\n {4}auto_https off\r?\n {4}default_sni \$Hostname\r?\n\}\r?\n\r?\n\$hosts \{/);
+  // The LAN helper accepts several names; the first is the certificate's subject.
+  assert.match(lanHelper, /\n {4}auto_https off\n(?: {4}#[^\n]*\n)* {4}default_sni \$\{HOSTNAMES\[0\]\}\n\}\n\n\$\{HOSTNAME_LINE\}:443 \{/);
+  // One global block per file: a second one is a Caddy parse error.
+  for (const source of [shell, powershell, lanHelper]) {
+    assert.equal((source.match(/^ {4}auto_https off$/gm) ?? []).length, 1);
+    assert.equal((source.match(/^ {4}default_sni /gm) ?? []).length, 1);
+  }
+});
