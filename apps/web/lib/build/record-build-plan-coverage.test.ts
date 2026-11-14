@@ -17,12 +17,17 @@ const baselinePayload = {
   acceptanceStatements: [{ acceptanceId: "AC-1" }, { acceptanceId: "AC-2" }],
 };
 
+const designDoc = { problemStatement: "Problem", acceptanceCriteria: ["First criterion", "Second criterion"] };
+const DESIGN_HEX = digestBuildArtifactValue(designDoc);
+
 function build(overrides: Record<string, unknown> = {}) {
   return {
     buildId: "FB-1",
     phase: "plan",
     buildPlan: plan,
     planReview: { decision: "pass" },
+    designDoc,
+    designReview: { decision: "pass" },
     createdById: "user-1",
     originator: {
       id: "item-row",
@@ -120,10 +125,36 @@ describe("recordBuildPlanCoverage (BI-6F2872FC)", () => {
     expect(db.created).toHaveLength(0);
   });
 
-  it("records nothing for an item without its own scope baseline", async () => {
+  // BI-9FA1F9CF: a fix judged on the unshaped table owes PLAN_REQUIRED but no
+  // spec approval, so its item never holds a scope baseline. The reviewed build
+  // design is the scope its plan is traced to.
+  it("traces the plan to the reviewed build design when the item has no scope baseline of its own", async () => {
     const row = build();
     db = makeDb({ ...row, originator: { ...row.originator, activities: [] } });
-    expect(await recordBuildPlanCoverage({ buildId: "FB-1", db, now })).toMatchObject({ recorded: false, reason: "no-own-scope-baseline" });
+    expect(await recordBuildPlanCoverage({ buildId: "FB-1", db, now })).toMatchObject({ recorded: true });
+    expect(db.created[0]).toMatchObject({ data: {
+      kind: "plan_backlog_coverage",
+      payload: {
+        scopeBaselineId: "build-design:FB-1",
+        scopeBaselineArtifactDigest: `sha256:${DESIGN_HEX}`,
+        deliverables: [{ backlogItemId: "BI-1", verificationRefs: ["AC-1", "AC-2"] }],
+      },
+    } });
+  });
+
+  it("prefers the item's own scope baseline over the build design", async () => {
+    await recordBuildPlanCoverage({ buildId: "FB-1", db, now });
+    expect(db.created[0]).toMatchObject({ data: { payload: { scopeBaselineId: "baseline-1" } } });
+  });
+
+  it.each([
+    ["the design review did not pass", { designReview: { decision: "fail" } }],
+    ["the design states no acceptance criteria", { designDoc: { problemStatement: "Problem" } }],
+  ])("records nothing without a scope baseline when %s", async (_label, overrides) => {
+    const row = build(overrides);
+    db = makeDb({ ...row, originator: { ...row.originator, activities: [] } });
+    expect(await recordBuildPlanCoverage({ buildId: "FB-1", db, now })).toMatchObject({ recorded: false, reason: "no-scope-baseline" });
+    expect(db.created).toHaveLength(0);
   });
 
   it("does not record against a plan revision that was not accepted", async () => {
@@ -142,9 +173,16 @@ describe("describeBuildPlanCoverageOutcome", () => {
     expect(describeBuildPlanCoverageOutcome({ recorded: false, reason: "plan-untraced" })).toContain("cannot be traced");
   });
 
+  // BI-9FA1F9CF: this refusal used to be silent, so the build sat at plan with
+  // a "nothing is waiting on your input" message and nobody was told why.
+  it("tells the owner when there is no scope to trace the plan to", async () => {
+    const { describeBuildPlanCoverageOutcome } = await import("./record-build-plan-coverage");
+    expect(describeBuildPlanCoverageOutcome({ recorded: false, reason: "no-scope-baseline" })).toContain("no approved scope");
+  });
+
   it("stays quiet for routine no-ops", async () => {
     const { describeBuildPlanCoverageOutcome } = await import("./record-build-plan-coverage");
-    for (const reason of ["already-covered", "not-in-plan", "plan-review-not-passed", "no-own-scope-baseline"]) {
+    for (const reason of ["already-covered", "not-in-plan", "plan-review-not-passed"]) {
       expect(describeBuildPlanCoverageOutcome({ recorded: false, reason })).toBeNull();
     }
   });

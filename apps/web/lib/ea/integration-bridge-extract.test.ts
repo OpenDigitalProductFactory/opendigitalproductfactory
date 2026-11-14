@@ -33,8 +33,8 @@ describe("buildIntegrationModel", () => {
 
   it("traces each connected app to the IntegrationCredential data-model element (cross-layer)", () => {
     expect(model.crossLayerRelationships).toEqual([
-      { fromKey: "integration:app:adp", toKey: "prisma:model:IntegrationCredential", relSlug: "traces" },
-      { fromKey: "integration:app:qb", toKey: "prisma:model:IntegrationCredential", relSlug: "traces" },
+      { fromKey: "integration:app:adp", toKey: "prisma:model:IntegrationCredential", relSlug: "traces", traceKind: "instance-of" },
+      { fromKey: "integration:app:qb", toKey: "prisma:model:IntegrationCredential", relSlug: "traces", traceKind: "instance-of" },
     ]);
   });
 });
