@@ -38,7 +38,7 @@ import { inviteRoomParticipantConsequence } from "@/lib/work-management/room-cha
 import { decodeRoomMessageCursor, encodeRoomMessageCursor } from "@/lib/work-management/room-message-cursor";
 import { roomMessageAddressingView } from "@/lib/work-management/room-message-addressing";
 import { prepareRoomAddressing, publishRoomMessagePosted } from "@/lib/work-management/room-message-wake.server";
-import { readUnreadRoomMessages } from "@/lib/work-management/room-read-cursor.server";
+import { readUnreadForMe } from "@/lib/mcp/room-unread-handler";
 
 type PackContext = { agentId?: string; apiTokenId?: string };
 
@@ -159,17 +159,9 @@ async function readRoomMessagesHandler(
   }
   const sinceRaw = str(params, "sinceCursor");
   const beforeRaw = str(params, "beforeCursor");
-  if (sinceRaw && beforeRaw) {
-    return { success: false, error: "invalid_input", message: "Pass sinceCursor or beforeCursor, not both." };
-  }
-  // BI-31E0C874: unreadForMe reads from the caller's own stored position.
-  const unreadForMe = params.unreadForMe === true;
-  if (unreadForMe && (sinceRaw || beforeRaw)) {
-    return {
-      success: false,
-      error: "invalid_input",
-      message: "unreadForMe reads from your own position in the room; do not pass sinceCursor or beforeCursor with it.",
-    };
+  const unreadForMe = params.unreadForMe === true; // BI-31E0C874: reads from the caller's own stored position
+  if ((sinceRaw && beforeRaw) || (unreadForMe && (sinceRaw || beforeRaw))) {
+    return { success: false, error: "invalid_input", message: unreadForMe ? "unreadForMe reads from your own position in the room; do not pass sinceCursor or beforeCursor with it." : "Pass sinceCursor or beforeCursor, not both." };
   }
   const cursorRaw = sinceRaw ?? beforeRaw;
   const cursor = cursorRaw ? decodeRoomMessageCursor(cursorRaw) : null;
@@ -208,16 +200,7 @@ async function readRoomMessagesHandler(
     const childAccess = await resolveAgentRoomAccess({ agentId, userId, requested: "content", workItem: child });
     if (childAccess.decision.level === "content") admittedChildIds.push(child.id);
   }
-  if (unreadForMe) {
-    return readUnreadForMeHandler({
-      caseKey,
-      roomWorkItemId: item.id,
-      workItemIds: [item.id, ...admittedChildIds],
-      agentId,
-      principalId: access.agentPrincipalId,
-      limit,
-    });
-  }
+  if (unreadForMe) return readUnreadForMe({ caseKey, roomWorkItemId: item.id, workItemIds: [item.id, ...admittedChildIds], agentId, principalId: access.agentPrincipalId, limit, label: await agentLabel(agentId) });
   // since: strictly after the cursor, oldest first. Default and before: newest
   // first, strictly before the cursor when one is given. One extra row says
   // whether more remain in the paging direction.
@@ -268,66 +251,6 @@ async function readRoomMessagesHandler(
       newestCursor,
       oldestCursor,
       messages: rows.map((row) => ({
-        messageId: row.messageId,
-        senderType: row.senderType,
-        senderId: row.senderAgentId ?? row.senderUserId ?? null,
-        messageType: row.messageType,
-        body: row.body,
-        at: row.createdAt.toISOString(),
-        ...roomMessageAddressingView(row.structuredPayload, row.senderAgentId ? senderGaids.get(row.senderAgentId) ?? null : null),
-      })),
-    },
-  };
-}
-
-/**
- * BI-31E0C874: what is unread for the acting coworker, oldest first. The
- * position is the coworker's own and moves forward as it reads, so two reads
- * never return the same message (design 2026-11-11-room-read-cursor §4).
- */
-async function readUnreadForMeHandler(args: {
-  caseKey: string;
-  roomWorkItemId: string;
-  workItemIds: string[];
-  agentId: string;
-  principalId: string | null;
-  limit: number;
-}): Promise<ToolResult> {
-  if (!args.principalId) {
-    return { success: false, error: "forbidden", message: `Not admitted to read ${args.caseKey} as a coworker with an identity.` };
-  }
-  const ownGaid = (await getAgentGaidMap([args.agentId])).get(args.agentId) ?? null;
-  const result = await readUnreadRoomMessages({
-    roomWorkItemId: args.roomWorkItemId,
-    workItemIds: args.workItemIds,
-    agentId: args.agentId,
-    principalId: args.principalId,
-    gaid: ownGaid,
-    limit: args.limit,
-    label: await agentLabel(args.agentId),
-  });
-  if (!result.ok) {
-    return {
-      success: false,
-      error: "conflict",
-      message: `Another read of ${args.caseKey} by you moved your position at the same moment. Read again; nothing was skipped.`,
-    };
-  }
-  const senderGaids = await getAgentGaidMap(result.messages.flatMap((row) => (row.senderAgentId ? [row.senderAgentId] : [])));
-  const readCursor = result.readCursor ? encodeRoomMessageCursor(result.readCursor) : null;
-  const first = result.messages[0];
-  return {
-    success: true,
-    message: `${result.messages.length} unread message(s) for you in ${args.caseKey}${result.hasMore ? "; more remain, read again" : ""}.`,
-    data: {
-      caseKey: args.caseKey,
-      order: "oldest-first",
-      unreadForMe: true,
-      hasMore: result.hasMore,
-      readCursor,
-      newestCursor: readCursor,
-      oldestCursor: first ? encodeRoomMessageCursor(first) : null,
-      messages: result.messages.map((row) => ({
         messageId: row.messageId,
         senderType: row.senderType,
         senderId: row.senderAgentId ?? row.senderUserId ?? null,

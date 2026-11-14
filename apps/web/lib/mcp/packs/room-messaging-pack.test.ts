@@ -447,7 +447,7 @@ describe("unreadForMe (BI-31E0C874)", () => {
   });
 
   it("reads past the caller's own position, oldest first, and returns the new readCursor (AC-RRC-01)", async () => {
-    mocks.readUnread.mockResolvedValue({ ok: true, messages: [row(1), row(2)], hasMore: false, readCursor: { createdAt: row(2).createdAt, messageId: "MSG-2" } });
+    mocks.readUnread.mockResolvedValue({ ok: true, data: { messages: [row(1), row(2)], hasMore: false, readCursor: { createdAt: row(2).createdAt, messageId: "MSG-2" } } });
     const result = await roomMessagingPack.handlers.read_room_messages({ caseKey: "parent", unreadForMe: true }, "alice", { agentId: "agent" });
     expect(result.success).toBe(true);
     expect(mocks.readUnread).toHaveBeenCalledWith(expect.objectContaining({
@@ -484,7 +484,7 @@ describe("unreadForMe (BI-31E0C874)", () => {
   });
 
   it("answers conflict when concurrent reads kept moving the position", async () => {
-    mocks.readUnread.mockResolvedValue({ ok: false, reason: "conflict" });
+    mocks.readUnread.mockResolvedValue({ ok: false, error: "conflict" });
     const result = await roomMessagingPack.handlers.read_room_messages({ caseKey: "parent", unreadForMe: true }, "alice", { agentId: "agent" });
     expect(result).toMatchObject({ success: false, error: "conflict" });
   });

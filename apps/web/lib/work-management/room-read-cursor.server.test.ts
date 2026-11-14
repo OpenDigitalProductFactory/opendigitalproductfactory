@@ -148,7 +148,7 @@ const READ = {
 
 function ids(result: Awaited<ReturnType<typeof readUnreadRoomMessages>>): string[] {
   if (!result.ok) throw new Error("conflict");
-  return result.messages.map((m) => m.messageId);
+  return result.data.messages.map((m) => m.messageId);
 }
 
 describe("readUnreadRoomMessages", () => {
@@ -168,10 +168,10 @@ describe("readUnreadRoomMessages", () => {
     messages.push(msg(2), msg(3, { structuredPayload: addressedTo(["AGT-ME"]) }), msg(4));
     const first = await readUnreadRoomMessages({ ...READ, limit: 2 }, db);
     expect(ids(first)).toEqual(["MSG-002", "MSG-003"]);
-    expect(first.ok && first.hasMore).toBe(true);
+    expect(first.ok && first.data.hasMore).toBe(true);
     const second = await readUnreadRoomMessages({ ...READ, limit: 2 }, db);
     expect(ids(second)).toEqual(["MSG-004"]);
-    expect(second.ok && second.hasMore).toBe(false);
+    expect(second.ok && second.data.hasMore).toBe(false);
   });
 
   it("counts a role the reader holds on a live Workroom", async () => {
@@ -195,7 +195,7 @@ describe("readUnreadRoomMessages", () => {
   it("writes nothing when there is nothing past the position", async () => {
     const { db, presence } = fakeDb({ messages: [] });
     const result = await readUnreadRoomMessages(READ, db);
-    expect(result).toEqual({ ok: true, messages: [], hasMore: false, readCursor: null });
+    expect(result).toEqual({ ok: true, data: { messages: [], hasMore: false, readCursor: null } });
     expect(presence).toEqual([]);
   });
 
@@ -223,7 +223,7 @@ describe("readUnreadRoomMessages", () => {
       presence: [{ workItemId: "room", principalType: "agent", principalId: "PRN-me", displayLabel: null, readCursorAt: null, readCursorMessageId: null }],
     });
     db.workItemPresence.updateMany.mockResolvedValue({ count: 0 });
-    expect(await readUnreadRoomMessages(READ, db)).toEqual({ ok: false, reason: "conflict" });
+    expect(await readUnreadRoomMessages(READ, db)).toEqual({ ok: false, error: "conflict" });
     expect(db.workItemPresence.updateMany).toHaveBeenCalledTimes(3);
   });
 });

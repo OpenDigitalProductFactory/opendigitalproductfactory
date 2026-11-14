@@ -7,6 +7,8 @@
 // or supervised turn only makes a reader look sooner; an "unread for me" read
 // returns what it has not yet been handed and moves the position forward.
 
+import { err, ok, type ActionResult } from "@/lib/shared/action-result";
+
 import { ROOM_ADDRESS_ROLES, type RoomAddressRole } from "./room-message-addressing";
 import type { RoomMessageCursor } from "./room-message-cursor";
 import {
@@ -154,9 +156,10 @@ export type UnreadRoomMessage = RoomUnreadCandidate & {
   body: string;
 };
 
-export type UnreadRoomReadResult =
-  | { ok: true; messages: UnreadRoomMessage[]; hasMore: boolean; readCursor: RoomMessageCursor | null }
-  | { ok: false; reason: "conflict" };
+export type UnreadRoomPage = { messages: UnreadRoomMessage[]; hasMore: boolean; readCursor: RoomMessageCursor | null };
+
+/** Fails only with "conflict": three concurrent moves of this reader's position in a row. */
+export type UnreadRoomReadResult = ActionResult<UnreadRoomPage>;
 
 /**
  * The "unread for me" read (design §4). Starts at the stored position, else
@@ -206,7 +209,7 @@ export async function readUnreadRoomMessages(
       select: UNREAD_SELECT,
     });
     const page = planUnreadPage(fetched, reader, args.limit);
-    if (!page.consumed) return { ok: true, messages: [], hasMore: false, readCursor: start };
+    if (!page.consumed) return ok({ messages: [], hasMore: false, readCursor: start });
 
     const next = { readCursorAt: page.consumed.createdAt, readCursorMessageId: page.consumed.messageId };
     if (!stored.exists) {
@@ -214,7 +217,7 @@ export async function readUnreadRoomMessages(
         await client.workItemPresence.create({
           data: { ...key, displayLabel: args.label?.trim() || null, ...next },
         });
-        return { ok: true, messages: page.delivered, hasMore: page.hasMore, readCursor: page.consumed };
+        return ok({ messages: page.delivered, hasMore: page.hasMore, readCursor: page.consumed });
       } catch (error) {
         if (!isUniqueViolation(error)) throw error;
         continue;
@@ -231,8 +234,8 @@ export async function readUnreadRoomMessages(
       data: next,
     });
     if (swapped.count === 1) {
-      return { ok: true, messages: page.delivered, hasMore: page.hasMore, readCursor: page.consumed };
+      return ok({ messages: page.delivered, hasMore: page.hasMore, readCursor: page.consumed });
     }
   }
-  return { ok: false, reason: "conflict" };
+  return err("conflict");
 }
