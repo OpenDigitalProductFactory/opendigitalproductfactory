@@ -42,3 +42,58 @@ describe("mandatory failure analysis", () => {
     expect(validateFailureAnalysis({ ...analysis, scenarios: [scenario] }, identity, evidence).valid).toBe(false);
   });
 });
+
+// BI-09FB398D: a risk outside the change is accepted only on a platform-written
+// authority the boundary resolves: bound to this room, this exact change and
+// this scenario, and naming the item that owns the risk.
+describe("risk acceptance needs a resolved authority, never a narrative", () => {
+  const authority = {
+    id: "risk-acceptance-1", kind: "risk-acceptance" as const, ...identity, status: "accepted",
+    expected: "WWMD consult through the escalation gate", observed: "route-to-agent (high), DI-1",
+    completedAt: "2026-11-14T10:00:00Z", scenarioKey: "stale-review", followUpReference: "PIR-OWNER",
+  };
+  const accepted = (residual: Record<string, unknown>) => ({
+    ...analysis,
+    scenarios: [{ ...analysis.scenarios[0], residualRisk: {
+      owner: "platform", disposition: "accepted", rationale: "Outside this change; owned by the follow-up item", ...residual,
+    } }],
+  });
+
+  it("accepts a risk whose authority resolves for this scenario and change", () => {
+    const out = validateFailureAnalysis(
+      accepted({ authorityEvidenceId: authority.id, followUpReference: "PIR-OWNER" }), identity, [...evidence, authority]);
+    expect(out).toMatchObject({ valid: true, reasons: [] });
+  });
+
+  it("refuses an authority id that did not resolve", () => {
+    const out = validateFailureAnalysis(accepted({ authorityEvidenceId: authority.id, followUpReference: "PIR-OWNER" }), identity, evidence);
+    expect(out.reasons).toContain("risk-disposition-requires-authority:stale-review");
+  });
+
+  it("refuses an authority for another scenario, another change, or another owner", () => {
+    for (const other of [
+      { ...authority, scenarioKey: "different" },
+      { ...authority, headTreeHash: "c".repeat(40) },
+      { ...authority, followUpReference: "PIR-ELSEWHERE" },
+    ]) {
+      const out = validateFailureAnalysis(
+        accepted({ authorityEvidenceId: authority.id, followUpReference: "PIR-OWNER" }), identity, [...evidence, other]);
+      expect(out.valid).toBe(false);
+    }
+  });
+
+  it("refuses an authority with no named owning item", () => {
+    expect(validateFailureAnalysis(accepted({ authorityEvidenceId: authority.id }), identity, [...evidence, authority]).valid).toBe(false);
+  });
+
+  it("never counts an authority as verification evidence", () => {
+    const citing = { ...analysis, scenarios: [{ ...analysis.scenarios[0], evidenceIds: [authority.id] }] };
+    expect(validateFailureAnalysis(citing, identity, [...evidence, authority]).reasons).toContain(`unverified-evidence:${authority.id}`);
+  });
+
+  it("still refuses a blocked risk whatever authority exists", () => {
+    const out = validateFailureAnalysis(
+      accepted({ disposition: "blocked", authorityEvidenceId: authority.id, followUpReference: "PIR-OWNER" }), identity, [...evidence, authority]);
+    expect(out.valid).toBe(false);
+  });
+});

@@ -207,5 +207,13 @@ export type DiscoverySyncTx = InventoryEntityHeapIntegrityTx & {
 };
 
 export type DiscoverySyncClient = {
-  $transaction<T>(fn: (tx: DiscoverySyncTx) => Promise<T>): Promise<T>;
+  $transaction<T>(fn: (tx: DiscoverySyncTx) => Promise<T>, options?: { maxWait?: number; timeout?: number }): Promise<T>;
 };
+
+/**
+ * The sweep persists in one interactive transaction. Prisma's 5 s default is
+ * shorter than a sweep on a loaded host: the transaction expired (P2028), the
+ * DiscoveryRun rolled back, the next write failed (P2025), and the retried
+ * sweeps exhausted the portal heap (DEV, 2026-11-13).
+ */
+export const DISCOVERY_PERSIST_TRANSACTION_OPTIONS = { maxWait: 10_000, timeout: 120_000 } as const;

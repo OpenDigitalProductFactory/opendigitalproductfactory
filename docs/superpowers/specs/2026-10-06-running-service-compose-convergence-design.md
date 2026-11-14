@@ -322,3 +322,28 @@ Source tests use injected process adapters and isolated temporary files. Their
 passing results do not establish served owner acceptance. Exact-tree gate,
 independent review, protected delivery and governed runtime verification remain
 required before D6 is complete.
+
+## Shadow inventory qualification prerequisite (BI-BD708C80)
+
+DI-9546056ED84F sequences this independently shippable correction before D4
+enforcement. The existing shadow report reads full container IDs from the
+project-filtered inventory and groups observations before judging a service.
+Duplicate service owners, reused or malformed IDs and missing or malformed
+running config hashes produce a failed/degraded report, never a change candidate.
+Stopped data owners are skipped before hash comparison; unchanged running data
+owners join `unchanged`. Qualified changed data owners remain report-only.
+Managed and out-of-chain exclusions, published-bind drift protection and sorted
+output remain intact. No service is started, removed, restarted or recreated.
+
+The motivating read-only observation on deployed 62368996 was a shadow entry
+for postgres with an empty prior hash, although the canonical container already
+matched the target hash. A separate diagnostic container shared the project and
+service labels without a config hash. That proves ambiguous observations, not
+that either container should change. The correction never cleans up that
+container and does not turn the report into D6 image proof.
+
+D4 remains incomplete until its stable-render, recovery and pre-swap health
+requirements are independently satisfied. Source delivery of this prerequisite
+does not deliver D4, enable shadow enforcement, or supersede existing recovery
+restrictions. Its existing fake-Docker dry-run harness must prove classification
+and no effects; a later governed canonical report supplies separate live evidence.
