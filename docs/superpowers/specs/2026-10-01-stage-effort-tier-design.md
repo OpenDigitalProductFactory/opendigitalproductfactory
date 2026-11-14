@@ -43,7 +43,7 @@ cost rule.
 
 ## 4. Design
 
-1. `WorkShapeStage.effort?: EffortLevel`. `resolveStageEffort(stage)` returns
+1. `WorkShapeStage.effort?: WorkShapeStageEffort` (see §6). `resolveStageEffort(stage)` returns
    `high` for a `governed-decision` stage, the declared tier otherwise, and
    `null` when undeclared.
 2. The drive writes the resolved tier into `taskConfig.workroomStage.effort`,
@@ -81,8 +81,46 @@ cost rule.
 | AC-G4 | OBJ-ROUTE | `stage-effort-routing` maps low/minimal to minimize_cost with the floor kept, medium to unchanged, high to frontier minimums (stage-effort-routing and agentic-loop tests). |
 | AC-G5 | OBJ-DECLARE, OBJ-NEVER-DEMOTE | Every agent-principal stage of every standing (cadence) shape declares a tier, and no governed-decision stage is declared below high in source (registry guard test in work-shapes tests). |
 | AC-G6 | OBJ-ROUTE, OBJ-NEVER-DEMOTE | Live: after deploy, scheduled stage runs for declared-low stages record a declared warrant and cost-first routing, and governed-decision stages keep high effort. |
+| AC-G7 | OBJ-DECLARE | The `effort` stage field round-trips losslessly through the GPP compiler and decompiler: the registry-wide losslessness suite passes with tiers declared, and the document-compiled `inquiry-response-watch` declares its tiers in its `.gpp.json` source and regenerates identically (§6). |
+| AC-G8 | OBJ-NEVER-DEMOTE | The GPP compiler refuses a shape document whose governed-decision stage declares an effort below `high`, with design rule D-11 and the stage's element id (DRC fixture corpus, §6). |
 
-## 6. Out of scope
+## 6. GPP portable contract (amendment, 2026-11-14)
+
+The October design put `effort` on the app-local `WorkShapeStage`. Since then
+the stage type moved into the portable GPP contract
+(`packages/validators/src/gpp/work-shape-contracts.ts`), and the GPP compiler
+and decompiler round-trip every stage field under a registry-wide losslessness
+suite (#5948). A stage field that only the app knows about would be dropped by
+a compile/decompile round trip. So the field is part of the contract, the way
+`tools`, `deadline`, `subShape` and `mandatedTools` are.
+
+1. **Vocabulary in the contract.** `WORK_SHAPE_STAGE_EFFORTS = ["minimal",
+   "low", "medium", "high"]` and `WorkShapeStageEffort` live in
+   `work-shape-contracts.ts`. The portable package cannot import the app, so
+   the app's `EffortLevel` is checked equal to it by a type-level parity test.
+   There is one vocabulary.
+2. **Document schema.** `gpp-shape-schema.ts` accepts an optional `effort` on a
+   stage, restricted to that vocabulary and described like the other stage
+   fields. Absent stays absent.
+3. **Compile and decompile.** `emit.ts` and `decompile.ts` copy `effort` when it
+   is present and never invent it. The existing losslessness suite then covers
+   every registered shape. A fixture with a declared tier is added beside it.
+4. **Design rule D-11, governed effort.** A governed-decision stage that
+   declares an effort below `high` is an error, reported with the stage's
+   element id. `resolveStageEffort` already pins such a stage to `high` at run
+   time; D-11 refuses the misleading declaration at compile time, so the source
+   never says something the runtime will not do. D-11 joins D-1…D-10 in the
+   notation spec's rule table and the DRC fixture corpus.
+5. **The document-compiled shape.** `inquiry-response-watch` declares its tiers
+   in `shape-documents/inquiry-response-watch.gpp.json` and is regenerated with
+   `build:gpp-shapes`. It is not edited in the generated file.
+6. **No version bump.** Effort is routing metadata, not reach (§2), so
+   `diffWorkShapeBinding` classifies a stage that only gains `effort` as
+   `unchanged`, and a test pins that. Declaring tiers bumps no shape version and
+   strands no pinned room. Frozen definitions in `work-shape-prior-versions.ts`
+   are not edited.
+
+## 7. Out of scope
 
 - **Board report.** The board's spend-per-stage-against-declared-tier report depends on the parent's Phase A board.
 - **Loop envelope.** Most stage briefs exceed the 1,500-character long-input threshold, so a `low` stage's warrant is raised to `medium` in the loop envelope. The saving comes from routing, not from that envelope.
