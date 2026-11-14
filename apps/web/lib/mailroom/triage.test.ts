@@ -66,6 +66,23 @@ describe("hint matching", () => {
     expect(result.source).toBe("rule-hint");
     expect(classify).not.toHaveBeenCalled();
   });
+  // BI-757C961E: an advice letter from counsel routes to the Legal queue, not the owner's desk.
+  it("an advice letter from counsel hits legal-correspondence on the Legal queue with no model call", async () => {
+    const classify = vi.fn();
+    const result = await triageInboundMail({
+      profile: resolveMailroomProfile(null),
+      mail: mail({
+        from: { address: "partner@lawfirm.example", name: "A Partner" },
+        subject: "RE: Engagement Letter",
+        textBody: "Per your request, this brief analysis outlines the issues facing your proposed venture. Our legal advice follows.",
+      }),
+      classify,
+    });
+    expect(result.reasonKey).toBe("legal-correspondence");
+    expect(result.queueKey).toBe("legal");
+    expect(result.source).toBe("rule-hint");
+    expect(classify).not.toHaveBeenCalled();
+  });
   it("two reasons matching means no rule hit", () => {
     expect(matchReasonByHints(profile, mail({ textBody: "I want to adopt and also donate" }))).toBeNull();
   });
