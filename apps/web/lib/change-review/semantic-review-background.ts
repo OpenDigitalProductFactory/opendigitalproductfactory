@@ -54,6 +54,9 @@ async function settle(row: Run, status: "failed" | "auth-required" | "input-requ
   return { taskRunId: row.taskRunId, status: current, changed: changed.count === 1 };
 }
 
+const successorDeps = { enqueue: (taskRunId: string) => enqueueSemanticReview(taskRunId),
+  quiescenceLevel: async () => (await import("@/lib/self-upgrade/quiescence")).getQuiescenceLevel() };
+
 /** The TaskRun is the outbox; event delivery is advisory and duplicate-safe. */
 export async function enqueueSemanticReview(taskRunId: string): Promise<boolean> {
   const row = await prisma.taskRun.findUnique({ where: { taskRunId }, select });
@@ -266,7 +269,7 @@ export async function retryPersistedSemanticReview(taskRunId: string, operatorUs
   const eligibilityBlocked = readSemanticReviewBudget(row.progressPayload).eligibilityBlocked === true
     || semanticReviewNodeEligibility(recordedNodes, packet.digest).length > 0;
   if (budget === "expired" && successor) return admitReviewSuccessor(row, packet,
-    { kind: "remediation", operatorUserId, recovery: successor, eligibilityBlocked }, enqueueSemanticReview);
+    { kind: "remediation", operatorUserId, recovery: successor, eligibilityBlocked }, successorDeps);
   if (successor && !eligibilityBlocked) throw new Error("semantic-review-successor-requires-expired-request");
   if (budget === "expired") throw new Error("semantic-review-deadline-exhausted");
   if (budget !== "available" || typeof previousAttempt !== "number") throw new Error("semantic-review-recovery-exhausted");
@@ -600,7 +603,7 @@ async function resumeCapacityWait(row: Run, now: Date): Promise<boolean> {
     return hold("failure-analysis-evidence-changed", "Submit a refreshed immutable review request with current failure evidence.");
   }
   if (spent) {
-    try { await admitReviewSuccessor(row, packet, { kind: "proven-no-dispatch" }, enqueueSemanticReview); }
+    try { await admitReviewSuccessor(row, packet, { kind: "proven-no-dispatch" }, successorDeps); }
     catch (error) {
       const message = error instanceof Error ? error.message : "";
       // A refusal is durable; anything else is re-observed on the next check without dispatching.

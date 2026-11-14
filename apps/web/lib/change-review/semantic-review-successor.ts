@@ -38,8 +38,11 @@ export type SuccessorAdmission =
  * request identity, failure evidence and authority are rechecked, and the
  * predecessor is fenced before its checkpoints are read.
  */
+/** Supplied by the worker so this module stays out of the portal's import cycle. */
+export type SuccessorAdmissionDeps = { enqueue: (taskRunId: string) => Promise<boolean>; quiescenceLevel: () => Promise<string> };
+
 export async function admitReviewSuccessor(row: Run, packet: SemanticReviewRequest, admission: SuccessorAdmission,
-  enqueue: (taskRunId: string) => Promise<boolean>) {
+  deps: SuccessorAdmissionDeps) {
   const remediation = admission.kind === "remediation" ? admission : null;
   if (object(row.progressPayload).resultClass === "fail") throw new Error("semantic-review-failed-verdict-requires-repair");
   if (remediation && remediation.recovery.expectedRequestDigest !== packet.digest) throw new Error("semantic-review-recovery-digest-mismatch");
@@ -48,8 +51,7 @@ export async function admitReviewSuccessor(row: Run, packet: SemanticReviewReque
     throw new Error("semantic-review-successor-budget-exhausted");
   }
   if (!(await verifySemanticReviewAuthority(packet, row.taskRunId))) throw new Error("semantic-review-recovery-authority-denied");
-  const { getQuiescenceLevel } = await import("@/lib/self-upgrade/quiescence");
-  if (await getQuiescenceLevel() !== "normal") throw new Error("semantic-review-recovery-quiescing");
+  if (await deps.quiescenceLevel() !== "normal") throw new Error("semantic-review-recovery-quiescing");
   const capsule = await prisma.workroom.findUnique({ where: { capsuleId: packet.input.identity.capsuleId }, select: { id: true } });
   if (!capsule) throw new Error("semantic-review-workroom-missing");
   const evidence = await resolveFailureAnalysisEvidence(packet.input.failureAnalysis, capsule.id);
@@ -125,7 +127,7 @@ export async function admitReviewSuccessor(row: Run, packet: SemanticReviewReque
     return activity;
   });
   publishRecordedWorkCapsuleActivity(capsule.id, publication.id);
-  await enqueue(newTaskRunId);
+  await deps.enqueue(newTaskRunId);
   revalidatePortalContext();
   return { newTaskRunId, predecessorTaskRunId: row.taskRunId, strategy: "bounded-review-successor" };
 }
