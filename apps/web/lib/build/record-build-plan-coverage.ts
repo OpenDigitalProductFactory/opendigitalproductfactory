@@ -99,6 +99,21 @@ function latestCoverage(activities: readonly ActivityRow[]): ActivityRow | null 
     .sort((left, right) => right.recordedAt.getTime() - left.recordedAt.getTime() || right.id.localeCompare(left.id))[0] ?? null;
 }
 
+/**
+ * BI-9FA1F9CF: the reviewed design as a plan-coverage scope. The one place its
+ * digest is computed: the writer records against it and the plan -> build gate
+ * (build-entry-gate.ts) judges against it, so the two can never drift into
+ * reading every design-scoped coverage as stale.
+ */
+export function reviewedDesignScope(build: { buildId: string; designDoc?: unknown; designReview?: unknown }) {
+  return buildDesignScope({
+    buildId: build.buildId,
+    designDoc: build.designDoc,
+    designReviewPassed: record(build.designReview)?.decision === "pass",
+    designDigest: build.designDoc == null ? null : `sha256:${digestBuildArtifactValue(build.designDoc)}`,
+  });
+}
+
 /** Record platform plan coverage for a Build Studio build whose plan passed its review. Never throws. */
 export async function recordBuildPlanCoverage(args: {
   buildId: string;
@@ -129,12 +144,7 @@ export async function recordBuildPlanCoverage(args: {
     // the parent's coverage, which this build does not own. Without one, the
     // build's reviewed design is the scope (BI-9FA1F9CF).
     const baseline = parseReadinessBaselines(item.activities, item.itemId).current;
-    const designScope = baseline ? null : buildDesignScope({
-      buildId: build.buildId,
-      designDoc: build.designDoc,
-      designReviewPassed: record(build.designReview)?.decision === "pass",
-      designDigest: build.designDoc == null ? null : `sha256:${digestBuildArtifactValue(build.designDoc)}`,
-    });
+    const designScope = baseline ? null : reviewedDesignScope(build);
     const scope = baseline
       ? { baselineId: baseline.baselineId, artifactDigest: baseline.artifactDigest }
       : designScope?.baseline ?? null;

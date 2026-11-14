@@ -1,9 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { buildDesignScope, buildPlanCoveragePayload, traceBuildPlanToAcceptance } from "@/lib/backlog/initiative-readiness/build-plan-coverage";
+import { buildPlanCoveragePayload, traceBuildPlanToAcceptance } from "@/lib/backlog/initiative-readiness/build-plan-coverage";
 import { receipt } from "@/lib/backlog/initiative-readiness/entry-adapter.test-fixtures";
 import { digestBuildArtifactValue } from "./build-artifact-provenance";
 import { enforceBuildInitiativeReadiness } from "./build-entry-gate";
+import { reviewedDesignScope } from "./record-build-plan-coverage";
 
 // BI-9FA1F9CF: FB-9CAA65DE and FB-ADFA9D58 on the live install. Their items are
 // bugs sized large and medium, so no delivery shape derives (§3.4 rules 1 and 3
@@ -18,10 +19,8 @@ const buildPlan = { tasks: [{ title: "Sweep", satisfies: ["AC-1"] }, { title: "I
 const PLAN_DIGEST = `sha256:${digestBuildArtifactValue(buildPlan)}`;
 
 function coverageFor(design: unknown): Activity {
-  const scope = buildDesignScope({
-    buildId: "FB-BUG", designDoc: design, designReviewPassed: true,
-    designDigest: `sha256:${digestBuildArtifactValue(design)}`,
-  })!;
+  // The writer's own scope helper: the gate must read what the writer records.
+  const scope = reviewedDesignScope({ buildId: "FB-BUG", designDoc: design, designReview: { decision: "pass" } })!;
   const trace = traceBuildPlanToAcceptance(buildPlan, scope.acceptanceIds);
   if (!trace.complete) throw new Error("fixture");
   return {

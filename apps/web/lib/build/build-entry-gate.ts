@@ -1,10 +1,10 @@
 import { describeReadinessRefusal } from "@/lib/build/readiness-refusal-message";
 import { type BoundWorkShapeDb, type NativeBuildRoomDb, type NativeBuildRoomBinding, readBoundEditPaths, readBoundWorkShapeRef, readNativeBuildDeliveryFacts } from "@/lib/backlog/initiative-readiness/bound-work-shape";
-import { buildDesignScope } from "@/lib/backlog/initiative-readiness/build-plan-coverage";
 import { assessDeliverySensitivity, buildPlanPaths } from "@/lib/backlog/initiative-readiness/delivery-sensitivity";
 import { type InheritanceDb, loadInheritedInitiativeScope } from "@/lib/backlog/initiative-readiness/parent-scope-inheritance";
 import { randomUUID } from "node:crypto";
 import { digestBuildArtifactValue } from "@/lib/build/build-artifact-provenance";
+import { reviewedDesignScope } from "@/lib/build/record-build-plan-coverage";
 
 import { prisma } from "@dpf/db";
 import { CLAIM_READINESS_ACTIVITY_KINDS } from "@/lib/work-capsules/governed-work-claim";
@@ -156,12 +156,7 @@ export async function loadBuildReadinessFacts(db: BuildEntryGateDb, build: Build
       reviewPassed: designReviewPassed(build.designReview),
       acceptanceCriteriaCount: designAcceptanceCriteriaCount(build.designDoc),
       scope: build.buildId
-        ? buildDesignScope({
-          buildId: build.buildId,
-          designDoc: build.designDoc,
-          designReviewPassed: designReviewPassed(build.designReview),
-          designDigest: build.designDoc == null ? null : `sha256:${digestBuildArtifactValue(build.designDoc)}`,
-        })?.baseline ?? null
+        ? reviewedDesignScope({ buildId: build.buildId, designDoc: build.designDoc, designReview: build.designReview })?.baseline ?? null
         : null,
     },
   };
