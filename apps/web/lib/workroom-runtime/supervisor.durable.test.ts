@@ -277,4 +277,41 @@ describe("the room outbox across a restart (BI-C64EDA33, AC-4)", () => {
     expect(h.session.startTurn).toHaveBeenCalledTimes(1);
     expect(store.effectRows.filter((e) => e.kind === "start-turn")).toHaveLength(1);
   });
+
+  it("input handed to an idle session is not lost when the portal dies before its turn starts", async () => {
+    const before = portal();
+    await before.runtime.start({ capsuleId: "WC-1", provider: "codex", actor });
+    await before.settle();
+    // The turn is decided, and the portal dies before the worker sends it.
+    before.session.startTurn.mockImplementationOnce(() => new Promise(() => {}));
+    await before.runtime.deliver({ capsuleId: "WC-1", prompt: "room says hi", deliveredCursor: "cur-1" });
+    expect(stored()).toMatchObject({ inFlight: { prompt: "room says hi", deliveredCursor: "cur-1" }, deliveredCursor: null });
+
+    const after = portal(before.held);
+    await after.runtime.reattachSupervised();
+    await after.settle();
+    expect(after.session.startTurn).toHaveBeenCalledWith("room says hi");
+    expect(store.effectRows.filter((e) => e.kind === "start-turn" && e.status === "retired")).toHaveLength(1);
+    after.emit({ type: "turn-started", turnId: "turn-9" });
+    await after.settle();
+    // The room message's cursor moves only once its turn really started.
+    expect(stored()).toMatchObject({ deliveredCursor: "cur-1", inFlight: null, activeTurnId: "turn-9" });
+  });
+
+  it("a stop decided just before a crash still revokes the credential after the restart", async () => {
+    const before = portal();
+    await before.runtime.start({ capsuleId: "WC-1", provider: "codex", actor });
+    await before.settle();
+    const token = stored()["tokenId"];
+    // The stop commits; the portal dies before the worker closes the session.
+    before.session.close.mockImplementationOnce(() => new Promise(() => {}));
+    await before.runtime.stop({ capsuleId: "WC-1", reason: "done", actor });
+
+    const after = portal(before.held);
+    await after.runtime.reattachSupervised();
+    await after.settle();
+    expect(store.effectRows.find((e) => e.kind === "close-session")?.status).toBe("retired");
+    expect(after.revokeTokens).toHaveBeenCalledWith(expect.objectContaining({ tokenId: token, reason: "done" }));
+    expect(store.effectRows.every((e) => !["pending", "running"].includes(e.status))).toBe(true);
+  });
 });

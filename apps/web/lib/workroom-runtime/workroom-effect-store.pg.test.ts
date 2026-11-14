@@ -10,7 +10,7 @@ import type { Pool } from "pg";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { createJobsPool } from "@/lib/jobs/postgres/pool";
-import { claimEffects, insertEffects, recoverExpiredLeases, retireEffects, settleEffect, type SqlRunner } from "./workroom-effect-store";
+import { claimEffects, insertEffects, recoverExpiredLeases, retireEffects, retireOrphanedEffects, settleEffect, type SqlRunner } from "./workroom-effect-store";
 
 const DATABASE_URL = process.env.DPF_JOBS_TEST_DATABASE_URL?.trim() ?? "";
 const MIGRATION = join(__dirname, "../../../../packages/db/prisma/migrations/20261114050000_workroom_effect_outbox/migration.sql");
@@ -26,7 +26,7 @@ describe.skipIf(!DATABASE_URL)("Workroom runtime outbox (real database)", () => 
     run = { query: async <T>(sql: string, params: unknown[]) => (await pool.query(sql, params)).rows as T[] };
     await pool.query(`DROP TABLE IF EXISTS "WorkroomEffect", "WorkCapsule" CASCADE`);
     await pool.query(`DROP TYPE IF EXISTS "WorkroomEffectKind", "WorkroomEffectStatus"`);
-    await pool.query(`CREATE TABLE "WorkCapsule" (id TEXT PRIMARY KEY, "capsuleId" TEXT UNIQUE NOT NULL)`);
+    await pool.query(`CREATE TABLE "WorkCapsule" (id TEXT PRIMARY KEY, "capsuleId" TEXT UNIQUE NOT NULL, "workspaceState" JSONB)`);
     const sql = readFileSync(MIGRATION, "utf8");
     await pool.query(sql);
     await pool.query(sql); // additive and re-runnable
@@ -98,5 +98,21 @@ describe.skipIf(!DATABASE_URL)("Workroom runtime outbox (real database)", () => 
     ]);
     await retireEffects(run, { roomRowId: "row-1", keepGeneration: null, reason: "stopped", now: T0 });
     expect((await statuses()).map((r) => r.status)).toEqual(["retired", "pending", "retired"]);
+  });
+
+  it("at boot, retires what no surviving process can run: a stopped room's close, an older generation's answer", async () => {
+    await pool.query(`UPDATE "WorkCapsule" SET "workspaceState"=$1 WHERE id='row-1'`, [JSON.stringify({ runtimeSession: { status: "closed", generation: "gen-1" } })]);
+    await pool.query(`UPDATE "WorkCapsule" SET "workspaceState"=$1 WHERE id='row-2'`, [JSON.stringify({ runtimeSession: { status: "supervised", generation: "gen-2" } })]);
+    await insertEffects(run, { roomRowId: "row-1", commandId: "stop", generation: "gen-1",
+      effects: [{ kind: "close-session", payload: {} }, { kind: "revoke-token", payload: {} }], now: T0 });
+    await insertEffects(run, { roomRowId: "row-2", commandId: "old", generation: "gen-1", effects: [{ kind: "answer-request", payload: {} }], now: T0 });
+    await insertEffects(run, { roomRowId: "row-2", commandId: "current", generation: "gen-2", effects: [{ kind: "start-turn", payload: {} }], now: T0 });
+    expect(await retireOrphanedEffects(run, T0)).toBe(2);
+    expect(await statuses()).toEqual([
+      { commandId: "stop", status: "retired" }, { commandId: "stop", status: "pending" },
+      { commandId: "old", status: "retired" }, { commandId: "current", status: "pending" },
+    ]);
+    // The revoke behind the retired close is runnable again.
+    expect((await claim([])).map((e) => e.kind)).toEqual(["revoke-token"]);
   });
 });

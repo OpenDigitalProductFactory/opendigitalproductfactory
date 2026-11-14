@@ -85,6 +85,15 @@ export function createMemoryRuntimeStore(rooms: (capsuleId: string) => Room | nu
       }
       return claimed.map((e) => ({ ...e }));
     },
+    async retireOrphaned() {
+      let retired = 0;
+      for (const e of effects) {
+        if (!e.processBound || !["pending", "running"].includes(e.status)) continue;
+        const session = readStoredRuntimeSession(rooms(e.capsuleId)?.workspaceState);
+        if (session?.status !== "supervised" || session.generation !== e.sessionGeneration) { e.status = "retired"; retired += 1; }
+      }
+      return retired;
+    },
     async recoverExpired() {
       const expired = effects.filter((e) => e.status === "running" && e.leaseExpiresAt !== null && e.leaseExpiresAt < now());
       for (const e of expired) { e.status = "pending"; e.leaseExpiresAt = null; }

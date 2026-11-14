@@ -37,12 +37,13 @@ import {
   type SupervisionActor,
 } from "./supervised-session";
 import type { ExecutorAdapter, RuntimeDecision, RuntimeEvent, RuntimeProvider, RuntimeRequest, RuntimeSession } from "./types";
-import { claimEffects, recoverExpiredLeases, type ClaimedEffect, type SqlRunner } from "./workroom-effect-store";
+import { claimEffects, recoverExpiredLeases, retireOrphanedEffects, type ClaimedEffect, type SqlRunner } from "./workroom-effect-store";
 
 export { DEFAULT_RUNTIME_CWD, readStoredRuntimeSession, type StoredRuntimeSession };
 
 /** A session not heard from for this long is not re-attached on boot: it is marked lost, quietly. */
 export const REATTACH_HORIZON_MS = 24 * 60 * 60_000;
+const EVENT_COMMIT_ATTEMPTS = 8;
 
 type LiveSession = {
   capsuleId: string;
@@ -72,6 +73,8 @@ export type SupervisionLost = {
 export type EffectStorePort = {
   claim(input: { owner: string; liveGenerations: string[]; limit: number; leaseMs: number }): Promise<ClaimedEffect[]>;
   recoverExpired(): Promise<number>;
+  /** Boot: retire process-bound effects no surviving process can run. */
+  retireOrphaned(): Promise<number>;
 };
 
 export type RuntimeSupervisorDeps = {
@@ -79,6 +82,8 @@ export type RuntimeSupervisorDeps = {
   mcpUrl: string;
   issueToken(input: { userId: string; agentId: string | null; capsuleId: string; runRef: string | null }): Promise<{ tokenId: string; plaintext: string }>;
   revokeTokens(input: { capsuleId: string; reason: string; tokenId?: string }): Promise<number>;
+  /** BI-1687CCD2: the handoff a session of another provider starts from (runtime-handoff.ts). */
+  buildHandoff?(input: { roomId: string; fromProvider: RuntimeProvider; toProvider: RuntimeProvider; since: string | null }): Promise<{ text: string; included: number; omitted: number; bytes: number }>;
   /** Held questions; defaults to CoworkerActionEnvelope rows. */
   held?: HeldRequestStore;
   /** The provider client's GAID, from which a session's address hangs. */
@@ -133,6 +138,7 @@ function defaultEffectStore(clock: () => Date): EffectStorePort {
   return {
     claim: (input) => claimEffects(run, { ...input, now: clock() }),
     recoverExpired: () => recoverExpiredLeases(run, clock()),
+    retireOrphaned: () => retireOrphanedEffects(run, clock()),
   };
 }
 
@@ -175,16 +181,21 @@ export function createRuntimeSupervisor(deps: RuntimeSupervisorDeps) {
     const commandId = `runtime-event:${entry.generation}:${entry.eventSeq}`;
     const command: RuntimeCommand = { type: "runtime.event", generation: entry.generation, event, at: at() };
     entry.commits = entry.commits.then(async () => {
-      for (let attempt = 1; ; attempt += 1) {
-        try {
-          await commit(entry.capsuleId, commandId, command, entry.actor);
-          break;
-        } catch (error) {
-          if (attempt >= 3) throw error;
-          await new Promise((resolve) => setTimeout(resolve, 200 * attempt));
+      try {
+        // A dropped event would leave the record wrong (a turn that never ends), so it is retried hard.
+        for (let attempt = 1; ; attempt += 1) {
+          try {
+            await commit(entry.capsuleId, commandId, command, entry.actor);
+            break;
+          } catch (error) {
+            if (attempt >= EVENT_COMMIT_ATTEMPTS) throw error;
+            await new Promise((resolve) => setTimeout(resolve, Math.min(5000, 200 * 2 ** attempt)));
+          }
         }
+      } finally {
+        // A process that exited is gone whether or not its exit was recorded; never keep it as the live session.
+        if (event.type === "session-exited" && live.get(entry.capsuleId) === entry) live.delete(entry.capsuleId);
       }
-      if (event.type === "session-exited" && live.get(entry.capsuleId) === entry) live.delete(entry.capsuleId);
     }).catch((error: unknown) => {
       console.error("[workroom-runtime] event commit failed for %s: %s", JSON.stringify(entry.capsuleId), describe(error));
     });
@@ -221,8 +232,12 @@ export function createRuntimeSupervisor(deps: RuntimeSupervisorDeps) {
     const entry = liveFor(effect);
     const p = effect.payload;
     switch (effect.kind) {
-      case "start-turn":
+      case "start-turn": {
+        // At most once: a retry after an unanswered start finds the turn already running and does not send it again.
+        const running = effect.attemptCount > 1 ? entry!.session.activeTurnId() : null;
+        if (running) return { turnId: running, alreadyRunning: true };
         return { turnId: (await entry!.session.startTurn(String(p["prompt"] ?? ""))).turnId };
+      }
       case "steer-turn":
         return { steered: await entry!.session.steerTurn(String(p["prompt"] ?? "")) };
       case "interrupt-turn":
@@ -314,9 +329,14 @@ export function createRuntimeSupervisor(deps: RuntimeSupervisorDeps) {
     try {
       const threadId = await session.ensureThread();
       const addressedAs = sessionQualifier(await clientGaid(input.provider).catch(() => null), threadId);
+      // BI-1687CCD2: a thread only resumes in its own CLI; the other one starts from the room's log.
+      const built = stored && stored.provider !== input.provider && deps.buildHandoff
+        ? await deps.buildHandoff({ roomId: room.id, fromProvider: stored.provider, toProvider: input.provider, since: stored.openedAt || null })
+        : null;
+      const handoff = built && stored ? { ...built, fromProvider: stored.provider, fromThreadId: stored.threadId } : null;
       const reply = await commit(input.capsuleId, `session-open:${generation}`, {
         type: "session.open", provider: input.provider, threadId, tokenId: token.tokenId, cwd, actor: supervisionActor(input.actor),
-        addressedAs, generation, hostId, reattach: input.reattach === true, prompt: input.prompt?.trim() || null, at: at(),
+        addressedAs, generation, hostId, reattach: input.reattach === true, prompt: input.prompt?.trim() || null, handoff, at: at(),
       }, input.actor);
       if (!reply) throw new Error(`Workroom ${input.capsuleId} not found`);
       releaseEvents();
@@ -387,11 +407,11 @@ export function createRuntimeSupervisor(deps: RuntimeSupervisorDeps) {
         // Decided elsewhere (the inbox) while the Codex session still waits on it: pass that decision on.
         const recorded = DECISION_FOR_STATUS[found.status];
         if (!recorded || !waiting) return refuse("already_decided", `${input.requestId} was already decided or has expired (${found.status}).`);
-        await commit(input.capsuleId, `request-decided:${input.requestId}`, { type: "request.decided", requestId: input.requestId, decision: recorded,
+        await commit(input.capsuleId, `request-decided:${input.requestId}:${randomUUID()}`, { type: "request.decided", requestId: input.requestId, decision: recorded,
           summary: found.request.summary, reason: "decided elsewhere", answerWaitingSession: true }, input.actor);
         return { success: true, message: `${input.requestId} was already decided ${recorded}; the waiting session is answered with that decision.` };
       }
-      await commit(input.capsuleId, `request-decided:${input.requestId}`, { type: "request.decided", requestId: input.requestId, decision: input.decision,
+      await commit(input.capsuleId, `request-decided:${input.requestId}:${randomUUID()}`, { type: "request.decided", requestId: input.requestId, decision: input.decision,
         summary: found.request.summary, reason: input.reason, answerWaitingSession: waiting }, input.actor);
       return { success: true, message: `Recorded ${input.decision} for ${input.requestId}. ${waiting ? "The waiting session is answered." : "The decision applies when the session asks again."}` };
     },
@@ -444,6 +464,10 @@ export function createRuntimeSupervisor(deps: RuntimeSupervisorDeps) {
      */
     async reattachSupervised(): Promise<{ reattached: string[]; lost: string[]; closed: string[] }> {
       const outcome = { reattached: [] as string[], lost: [] as string[], closed: [] as string[] };
+      // No provider process survived the restart: steps decided for one that is not coming back are retired first.
+      await effects.retireOrphaned().catch((error: unknown) => {
+        console.error("[workroom-runtime] boot retire failed: %s", describe(error));
+      });
       const rooms = await (deps.listSupervisedRooms ?? defaultListSupervisedRooms)();
       const now = clock().getTime();
       for (const room of rooms) {

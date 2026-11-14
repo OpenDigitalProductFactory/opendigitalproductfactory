@@ -320,6 +320,13 @@ and a supervisor that writes every event to the room's sequenced log. A live
 session is process-bound: after a restart the next start records
 `cancelled_after_process_loss` and resumes the stored provider thread.
 
+**Provider handoff (`BI-1687CCD2`, 2026-10-28).** A provider thread only
+resumes in its own CLI. Starting the other provider builds a handoff from the
+room's runtime log since the previous session opened (`runtime-handoff.ts`):
+the runtime's own entries rendered oldest first, the newest kept within 64 KB,
+with the count carried and left out recorded on the room as an `action`. It is
+the new session's first turn, ahead of any prompt.
+
 **Runtime core, 2026-11-14** (`BI-C64EDA33`, plan
 `docs/superpowers/plans/2026-11-14-workroom-runtime-core.md`): the supervisor
 is now the process host only.
@@ -331,8 +338,14 @@ is now the process host only.
   per-room order and reports each result as a command with a deterministic id.
 - Each provider process is a generation. Effects decided for a dead
   generation are retired, not replayed.
-- Input a session has not received is kept in `runtimeSession.queuedInputs`
-  and runs after a re-attach.
+- Input a session has not received is kept in `runtimeSession.queuedInputs`.
+  The input being started is `runtimeSession.inFlight` until its turn
+  reports started. A retired start puts it back at the head of the queue, so
+  it runs after a re-attach, and a room message's cursor moves only when its
+  turn starts.
+- At boot, process-bound effects that no surviving process can run are
+  retired first, so a stop decided just before a crash still revokes the
+  session's credential.
 
 An executor adapter contract with DPF-owned ids and provider ids as references:
 `openSession`, `ensureThread`, `resumeThread`, `startTurn`, `steerTurn`,

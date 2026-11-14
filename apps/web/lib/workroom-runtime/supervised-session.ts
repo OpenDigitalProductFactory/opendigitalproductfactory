@@ -48,11 +48,16 @@ export type StoredRuntimeSession = {
   queuedInputs?: QueuedInput[];
   /** The provider turn in progress, from the session's own turn events. */
   activeTurnId?: string | null;
-  /** A turn was requested and has not reported started yet. */
-  turnPending?: boolean;
+  /**
+   * The input handed to the provider and not yet reported started. It stays
+   * here, not only on its outbox effect, so a restart that retires the effect
+   * puts the input back at the head of the queue instead of losing it.
+   */
+  inFlight?: QueuedInput | null;
 };
 
-export type QueuedInput = { commandId: string; prompt: string };
+/** One turn's input; a room message carries the cursor the session reaches once the turn starts. */
+export type QueuedInput = { commandId: string; prompt: string; deliveredCursor?: string | null };
 
 /** The provider client agent a session runs as; a session qualifier hangs from its GAID. */
 export function providerClientAgentId(provider: RuntimeProvider): "AGT-EXT-CLAUDE" | "AGT-EXT-CODEX" {
@@ -105,7 +110,7 @@ export function readStoredRuntimeSession(workspaceState: unknown): StoredRuntime
     hostId: str("hostId") ?? null,
     queuedInputs: readQueuedInputs(record["queuedInputs"]),
     activeTurnId: str("activeTurnId") ?? null,
-    turnPending: record["turnPending"] === true,
+    inFlight: readQueuedInputs([record["inFlight"]])[0] ?? null,
   };
 }
 
@@ -113,8 +118,9 @@ function readQueuedInputs(value: unknown): QueuedInput[] {
   if (!Array.isArray(value)) return [];
   return value.flatMap((item) => {
     if (!item || typeof item !== "object") return [];
-    const { commandId, prompt } = item as Record<string, unknown>;
-    return typeof commandId === "string" && typeof prompt === "string" ? [{ commandId, prompt }] : [];
+    const { commandId, prompt, deliveredCursor } = item as Record<string, unknown>;
+    if (typeof commandId !== "string" || typeof prompt !== "string") return [];
+    return [{ commandId, prompt, ...(typeof deliveredCursor === "string" ? { deliveredCursor } : {}) }];
   });
 }
 

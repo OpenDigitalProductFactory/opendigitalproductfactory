@@ -109,3 +109,26 @@ export async function recoverExpiredLeases(run: SqlRunner, now: Date): Promise<n
   );
   return rows.length;
 }
+
+/**
+ * Boot: no provider process survived the restart, so every unsettled
+ * process-bound effect of a room whose session is not supervised any more, or
+ * that belongs to another generation than the room's current one, is retired.
+ * Without this a stop decided just before a crash would leave its
+ * close-session unclaimable and the revoke behind it blocked for good. A
+ * supervised room's current-generation effects are left to its re-attach,
+ * which retires them as it opens the new generation and requeues its input.
+ */
+export async function retireOrphanedEffects(run: SqlRunner, now: Date): Promise<number> {
+  const rows = await run.query<{ id: string }>(
+    `UPDATE "WorkroomEffect" e SET "status"='retired'::"WorkroomEffectStatus", "lastError"='the provider process ended with the portal',
+       "settledAt"=${utc("$1")}, "updatedAt"=${utc("$1")}, "leaseOwner"=NULL, "leaseExpiresAt"=NULL
+     FROM "WorkCapsule" r
+     WHERE r."id"=e."workCapsuleId" AND e."processBound"=true AND e."status"::text IN ${UNSETTLED}
+       AND (COALESCE(r."workspaceState"->'runtimeSession'->>'status', '') NOT IN ('supervised', 'open')
+         OR (r."workspaceState"->'runtimeSession'->>'generation') IS DISTINCT FROM e."sessionGeneration")
+     RETURNING e."id"`,
+    [now],
+  );
+  return rows.length;
+}

@@ -10,6 +10,7 @@ import { workCapsuleActor } from "@/lib/work-capsules/handler-actor";
 
 import { createClaudeAdapter } from "./claude-stream-adapter";
 import { createCodexAdapter } from "./codex-app-server-adapter";
+import { buildRuntimeHandoff } from "./runtime-handoff";
 import { sandboxRuntimeLauncher } from "./sandbox-launcher";
 import { createRuntimeSupervisor, type RuntimeSupervisor } from "./supervisor";
 import type { RuntimeDecision, RuntimeProvider } from "./types";
@@ -33,6 +34,7 @@ export function workroomRuntimeSupervisor(): RuntimeSupervisor {
     },
     issueToken: issueWorkroomSessionToken,
     revokeTokens: revokeWorkroomSessionTokens,
+    buildHandoff: buildRuntimeHandoff,
     // BI-F5D58F29: the room hears that supervision was lost, and its coordinator is woken.
     onSupervisionLost: async (input) => {
       const { announceSupervisionLost } = await import("@/lib/work-management/room-message-wake.server");

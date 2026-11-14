@@ -51,10 +51,30 @@ export function createEffectWorker(deps: EffectWorkerDeps) {
   let again = false;
   let timer: ReturnType<typeof setInterval> | null = null;
 
+  async function reportWithRetry(effect: ClaimedEffect, report: EffectReport): Promise<void> {
+    for (let attempt = 1; ; attempt += 1) {
+      try {
+        await deps.report(effect, report);
+        return;
+      } catch (error) {
+        if (attempt >= 3) {
+          // The lease expires and the effect runs again; the report's id makes the next report a replay.
+          log(`report for ${effect.kind as EffectKind} ${effect.id} failed: ${error instanceof Error ? error.message : "unknown"}`);
+          return;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 100 * attempt));
+      }
+    }
+  }
+
   async function runOne(effect: ClaimedEffect): Promise<void> {
     let report: EffectReport;
+    let timer: ReturnType<typeof setTimeout> | null = null;
     try {
-      const result = await deps.execute(effect);
+      // Give up well inside the lease, so no second claim of this effect can start while this one still runs.
+      const timeoutMs = Math.floor((deps.leaseMs ?? EFFECT_LEASE_MS) * 0.75);
+      const timeout = new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error(`timed out after ${timeoutMs} ms`)), timeoutMs); });
+      const result = await Promise.race([deps.execute(effect), timeout]);
       report = { outcome: "succeeded", final: true, result: result ?? {} };
     } catch (error) {
       const message = error instanceof Error ? error.message : "unknown error";
@@ -64,23 +84,31 @@ export function createEffectWorker(deps: EffectWorkerDeps) {
         const final = effect.attemptCount >= effect.maxAttempts;
         report = { outcome: "failed", final, error: message, retryAfterMs: final ? undefined : effectBackoffMs(effect.attemptCount) };
       }
+    } finally {
+      if (timer) clearTimeout(timer);
     }
-    try {
-      await deps.report(effect, report);
-    } catch (error) {
-      // The lease expires and the effect runs again; the report's id makes a second report a replay.
-      log(`report for ${effect.kind as EffectKind} ${effect.id} failed: ${error instanceof Error ? error.message : "unknown"}`);
-    }
+    await reportWithRetry(effect, report);
   }
 
+  /**
+   * Claim and run until nothing is runnable. Rooms run side by side: a claim
+   * yields at most one effect per room (a room's later effects wait behind its
+   * running one), and a slow effect holds only its own room.
+   */
   async function drainOnce(): Promise<number> {
     let ran = 0;
     await deps.recoverExpired().catch((error: unknown) => log(`lease recovery failed: ${error instanceof Error ? error.message : "unknown"}`));
+    const running = new Set<Promise<void>>();
     for (;;) {
       const claimed = await deps.claim({ owner: deps.owner, liveGenerations: deps.liveGenerations(), limit: deps.batch ?? 10, leaseMs: deps.leaseMs ?? EFFECT_LEASE_MS });
-      if (claimed.length === 0) return ran;
-      for (const effect of claimed) await runOne(effect);
+      for (const effect of claimed) {
+        const task: Promise<void> = runOne(effect).finally(() => { running.delete(task); });
+        running.add(task);
+      }
       ran += claimed.length;
+      if (running.size === 0) return ran;
+      // Something finished (its room's next effect may now run), or poll again for other rooms' new work.
+      await Promise.race([...running, new Promise((resolve) => setTimeout(resolve, 250))]);
     }
   }
 

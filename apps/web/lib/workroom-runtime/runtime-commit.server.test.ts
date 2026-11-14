@@ -19,7 +19,7 @@ type State = { activities: Row[]; effects: Row[]; workspaceState: Record<string,
 const actor = { userId: "user-1", agentId: "agent-1", principalId: "prn-1" };
 const supervised = {
   provider: "codex", threadId: "thr-1", tokenId: "tok-1", status: "supervised", openedAt: "x", cwd: "/workspace", actor,
-  generation: "gen-1", queuedInputs: [], activeTurnId: null, turnPending: false,
+  generation: "gen-1", queuedInputs: [], activeTurnId: null, inFlight: null,
 };
 
 function fakeDb(failOnEffectInsert = { value: false }) {
@@ -66,7 +66,7 @@ describe("commitRuntimeCommand", () => {
     const { db, state } = fakeDb(fail);
     const commit = createRuntimeCommitter({ db, now: () => new Date("2026-11-14T05:00:00Z") });
     await expect(commit({ capsuleId: "WC-1", commandId: "cmd-1", command: request, actor })).resolves.toEqual({ outcome: "started" });
-    expect(state().workspaceState["runtimeSession"]).toMatchObject({ turnPending: true });
+    expect(state().workspaceState["runtimeSession"]).toMatchObject({ inFlight: { commandId: "cmd-1", prompt: "go" } });
     expect(state().effects).toEqual([{ commandId: "cmd-1", ordinal: 0, kind: "start-turn", processBound: true, sessionGeneration: "gen-1" }]);
     expect(state().activities).toEqual([expect.objectContaining({ kind: "command-accepted", commandScopeKey: "workroom-runtime:WC-1", commandKey: "cmd-1" })]);
   });

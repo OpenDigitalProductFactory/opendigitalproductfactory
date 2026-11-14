@@ -40,10 +40,11 @@ function harness() {
   };
   const issueToken = vi.fn(async () => ({ tokenId: "tok-1", plaintext: "dpfroom_x" }));
   const revokeTokens = vi.fn(async () => 1);
-  const runtime = createRuntimeSupervisor({ adapters: { codex: adapter, claude: adapter }, mcpUrl: "http://portal/api/mcp/v1", issueToken, revokeTokens,
+  const buildHandoff = vi.fn(async () => ({ text: "HANDOFF FROM LOG", included: 3, omitted: 1, bytes: 16 }));
+  const runtime = createRuntimeSupervisor({ adapters: { codex: adapter, claude: adapter }, mcpUrl: "http://portal/api/mcp/v1", issueToken, revokeTokens, buildHandoff,
     held: createMemoryHeldRequestStore(), clientGaid: async () => "gaid:priv:dpf.internal:agt-ext-codex", commit: store.commit, effects: store.effects });
   const emitted = (event: RuntimeEvent) => emit(event);
-  return { runtime, session, adapter, issueToken, revokeTokens, emit: emitted, settle: () => settle(runtime) };
+  return { runtime, session, adapter, issueToken, revokeTokens, buildHandoff, emit: emitted, settle: () => settle(runtime) };
 }
 
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
@@ -63,13 +64,49 @@ beforeEach(() => {
   db.workroom.findUnique.mockImplementation(async () => room);
 });
 
+// BI-1687CCD2: a thread moves to the other CLI through a handoff built from the room log.
+describe("provider handoff", () => {
+  const stored = (provider: string) => ({ runtimeSession: { provider, threadId: "thr-old", tokenId: "tok-old", status: "closed", openedAt: "2026-10-28T10:00:00.000Z", cwd: "/workspace" } });
+
+  it("starts the other CLI from the room's log, records the coverage, and does not resume the foreign thread", async () => {
+    room.workspaceState = stored("codex");
+    const h = harness();
+    await h.runtime.start({ capsuleId: "WC-1", provider: "claude", actor, prompt: "carry on" });
+    await h.settle();
+    expect(h.buildHandoff).toHaveBeenCalledWith({ roomId: "row-1", fromProvider: "codex", toProvider: "claude", since: "2026-10-28T10:00:00.000Z" });
+    expect(h.adapter.openSession).toHaveBeenCalledWith(expect.objectContaining({ resumeThreadId: null }), expect.any(Function));
+    expect(h.session.startTurn).toHaveBeenCalledWith("HANDOFF FROM LOG\n\ncarry on");
+    expect(store.activities.map((a) => a.summary)).toContainEqual(expect.stringMatching(/^Handed the runtime thread from codex to claude: 3 log entries carried, 1 left out/));
+  });
+
+  it("resumes the same CLI's thread with no handoff", async () => {
+    room.workspaceState = stored("claude");
+    const h = harness();
+    await h.runtime.start({ capsuleId: "WC-1", provider: "claude", actor, prompt: "carry on" });
+    await h.settle();
+    expect(h.buildHandoff).not.toHaveBeenCalled();
+    expect(h.adapter.openSession).toHaveBeenCalledWith(expect.objectContaining({ resumeThreadId: "thr-old" }), expect.any(Function));
+    expect(h.session.startTurn).toHaveBeenCalledWith("carry on");
+  });
+
+  it("keeps the session's open time on the stored session after it closes", async () => {
+    const h = harness();
+    await h.runtime.start({ capsuleId: "WC-1", provider: "codex", actor });
+    const openedAt = (room.workspaceState["runtimeSession"] as { openedAt: string }).openedAt;
+    await h.runtime.stop({ capsuleId: "WC-1", reason: "done", actor });
+    await h.settle();
+    expect(room.workspaceState["runtimeSession"]).toMatchObject({ status: "closed", openedAt });
+    expect(openedAt).not.toBe("");
+  });
+});
+
 describe("start", () => {
   it("issues the room's own credential, opens the session, stores its thread and runs the first turn", async () => {
     const h = harness();
     const result = await h.runtime.start({ capsuleId: "WC-1", provider: "codex", actor, prompt: "begin" });
     expect(result).toMatchObject({ success: true, data: { threadId: "thr-1" } });
     // Acknowledged once the intent committed; the turn runs from the outbox.
-    expect(store.effectRows).toEqual([expect.objectContaining({ kind: "start-turn", processBound: true, payload: { prompt: "begin" } })]);
+    expect(store.effectRows).toEqual([expect.objectContaining({ kind: "start-turn", processBound: true, payload: expect.objectContaining({ prompt: "begin" }) })]);
     await h.settle();
     expect(h.issueToken).toHaveBeenCalledWith({ userId: "user-1", agentId: "agent-1", capsuleId: "WC-1", runRef: "TR-1" });
     expect(h.adapter.openSession).toHaveBeenCalledWith(expect.objectContaining({ mcp: { url: "http://portal/api/mcp/v1", bearerToken: "dpfroom_x" }, cwd: "/workspace" }), expect.any(Function));
@@ -118,7 +155,7 @@ describe("a live session", () => {
     h.emit({ type: "turn-completed", turnId: "turn-1", status: "completed" });
     await h.settle();
     expect(h.session.startTurn).toHaveBeenLastCalledWith("next");
-    expect(room.workspaceState["runtimeSession"]).toMatchObject({ queuedInputs: [], turnPending: true });
+    expect(room.workspaceState["runtimeSession"]).toMatchObject({ queuedInputs: [], inFlight: null });
   });
 
   it("accepts a workspace command, holds an outward one for the room, and answers it when decided", async () => {
