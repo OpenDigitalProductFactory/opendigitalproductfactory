@@ -1165,6 +1165,45 @@ class ClaudeProjectScopeConvergenceTest(unittest.TestCase):
         self.assertEqual(result["failed"], [str(stale)])
         self.assertIn("did not establish", result["reasons"][str(stale)])
 
+    def test_a_checkouts_own_marketplace_declaration_is_withheld_during_the_reinstall(self) -> None:
+        """BI-13A73D53: an older branch's settings re-point the marketplace when the CLI runs there."""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            stale = self._project(root, "stale")
+            settings = stale / ".claude" / "settings.json"
+            settings.parent.mkdir()
+            original = json.dumps({"enabledPlugins": {"dpf-platform@dpf-platform-local": True},
+                                   "extraKnownMarketplaces": {"dpf-platform-local": {"source": {"source": "directory", "path": "."}}}})
+            settings.write_text(original)
+            home = self._home(root, [{"scope": "project", "projectPath": str(stale), "version": "0.2.5"}])
+            seen = []
+
+            def cli(command, **kwargs):
+                seen.append(json.loads(settings.read_text()))
+                return self._Result()
+            with patch.object(updater, "resolve_claude_binary", return_value="/fake/claude"), patch(
+                "subprocess.run", side_effect=cli
+            ):
+                updater.converge_claude_project_plugins(home, "0.2.8", dry_run=False)
+            self.assertEqual(settings.read_text(), original)
+        self.assertEqual(len(seen), 2)
+        self.assertTrue(all("extraKnownMarketplaces" not in data for data in seen), seen)
+        self.assertTrue(all(data["enabledPlugins"] for data in seen))
+
+    def test_the_marketplace_is_re_pointed_between_records(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            stale = self._project(root, "stale")
+            home = self._home(root, [{"scope": "project", "projectPath": str(stale), "version": "0.2.5"}])
+            answers = iter(["points at /src/old-branch", None])
+            with patch.object(updater, "resolve_claude_binary", return_value="/fake/claude"), patch.object(
+                updater, "claude_marketplace_mismatch", side_effect=lambda *a, **k: next(answers)
+            ), patch("subprocess.run", return_value=self._Result()) as run:
+                updater.converge_claude_project_plugins(home, "0.2.8", dry_run=False)
+        self.assertEqual([call[0][0][2:4] for call in run.call_args_list],
+                         [["marketplace", "add"], ["uninstall", "dpf-platform@dpf-platform-local"],
+                          ["install", "dpf-platform@dpf-platform-local"]])
+
     def test_a_failed_reinstall_names_the_step(self) -> None:
         failed = self._Result()
         failed.returncode = 3
@@ -1187,10 +1226,11 @@ class ClaudeProjectScopeConvergenceTest(unittest.TestCase):
             home = self._home(root, [{"scope": "project", "projectPath": str(stale), "version": "0.2.5"}])
             with patch.object(updater, "resolve_claude_binary", return_value="/fake/claude"), patch.object(
                 updater, "claude_marketplace_mismatch", return_value="points at /src/worktree"
-            ), patch("subprocess.run") as run:
+            ), patch("subprocess.run", return_value=self._Result()) as run:
                 result = updater.converge_claude_project_plugins(home, "0.2.8", dry_run=False)
                 lines = updater.converge_claude_project_connectors(home, "0.2.8", dry_run=False)
-        run.assert_not_called()
+        # It tries to re-point the marketplace, and never installs from the wrong one.
+        self.assertEqual({tuple(call[0][0][2:4]) for call in run.call_args_list}, {("marketplace", "add")})
         self.assertEqual(result["failed"], [str(stale)])
         self.assertIn("points at /src/worktree", result["reasons"][str(stale)])
         self.assertTrue(any("points at /src/worktree" in line for line in lines), lines)

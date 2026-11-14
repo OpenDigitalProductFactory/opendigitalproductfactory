@@ -1291,6 +1291,44 @@ def _restore_project_settings(project: Path, snapshot: dict[str, Optional[bytes]
             continue
 
 
+def _withhold_project_marketplace(project: Path) -> None:
+    """Hide a checkout's own `dpf-platform-local` declaration while the CLI runs there.
+
+    A branch cut before BI-13A73D53 still declares the marketplace at `.` in
+    its .claude/settings.json; the CLI applies it when run in that folder,
+    re-points the shared registration and installs the checkout's unstamped
+    pack. The caller restores the file's bytes afterwards.
+    """
+    path = project / ".claude" / "settings.json"
+    try:
+        data = json.loads(path.read_text(encoding="utf-8-sig"))
+        declared = data["extraKnownMarketplaces"]
+    except (OSError, ValueError, KeyError, TypeError):
+        return
+    if not isinstance(declared, dict) or MARKETPLACE_NAME not in declared:
+        return
+    remaining = {name: value for name, value in declared.items() if name != MARKETPLACE_NAME}
+    if remaining:
+        data["extraKnownMarketplaces"] = remaining
+    else:
+        del data["extraKnownMarketplaces"]
+    path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+
+
+def ensure_claude_marketplace_source(home: Path, claude: str) -> Optional[str]:
+    """Point `dpf-platform-local` back at the shared copy if something moved it; None when it is there."""
+    mismatch = claude_marketplace_mismatch(home, claude)
+    if mismatch is None:
+        return None
+    root = home / ".agents" / "plugins"
+    try:
+        subprocess.run([claude, "plugin", "marketplace", "add", str(root), "--scope", "local"],
+                       cwd=str(root), capture_output=True, text=True)
+    except OSError:
+        return mismatch
+    return claude_marketplace_mismatch(home, claude)
+
+
 def reinstall_claude_project_record(claude: str, project: str) -> Optional[str]:
     """Reinstall the project-scope record from inside its own folder; None on success.
 
@@ -1304,6 +1342,7 @@ def reinstall_claude_project_record(claude: str, project: str) -> Optional[str]:
     """
     snapshot = _snapshot_project_settings(Path(project))
     try:
+        _withhold_project_marketplace(Path(project))
         for step, command in (
             ("uninstall", [claude, "plugin", "uninstall", CLAUDE_PLUGIN_ID, "--scope", "project", "--keep-data"]),
             ("install", [claude, "plugin", "install", CLAUDE_PLUGIN_ID, "--scope", "project"]),
@@ -1341,8 +1380,6 @@ def converge_claude_project_plugins(home: Path, version: str, dry_run: bool) -> 
     # `+codex.<stamp>` on the argument is Codex's and is dropped.
     version = installed_version(shared_managed_plugin_path(home)) or version.split("+", 1)[0]
     claude = resolve_claude_binary()
-    mismatch: Optional[str] = None
-    checked = False
     for entry in claude_plugin_records(home):
         project = entry.get("projectPath")
         if entry.get("scope") != "project" or not isinstance(project, str):
@@ -1360,8 +1397,9 @@ def converge_claude_project_plugins(home: Path, version: str, dry_run: bool) -> 
             result["failed"].append(project)
             result["reasons"][project] = "no Claude CLI to update the record with"
             continue
-        if not checked:
-            mismatch, checked = claude_marketplace_mismatch(home, claude), True
+        # Re-checked per record: any Claude session or CLI call in an older
+        # checkout can move it again between records.
+        mismatch = ensure_claude_marketplace_source(home, claude)
         if mismatch:
             result["failed"].append(project)
             result["reasons"][project] = mismatch
