@@ -320,6 +320,13 @@ and a supervisor that writes every event to the room's sequenced log. A live
 session is process-bound: after a restart the next start records
 `cancelled_after_process_loss` and resumes the stored provider thread.
 
+**Provider handoff (`BI-1687CCD2`, 2026-10-28).** A provider thread only
+resumes in its own CLI. Starting the other provider builds a handoff from the
+room's runtime log since the previous session opened (`runtime-handoff.ts`):
+the runtime's own entries rendered oldest first, the newest kept within 64 KB,
+with the count carried and left out recorded on the room as an `action`. It is
+the new session's first turn, ahead of any prompt.
+
 An executor adapter contract with DPF-owned ids and provider ids as references:
 `openSession`, `ensureThread`, `resumeThread`, `startTurn`, `steerTurn`,
 `interruptTurn`, `respondToRuntimeRequest`. First adapters: the Claude Agent
