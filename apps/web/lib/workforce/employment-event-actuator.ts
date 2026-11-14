@@ -114,6 +114,11 @@ export const EVENT_DISPOSITIONS: Readonly<Record<EmploymentEventType, EventDispo
     reason:
       "Nothing was spawned for an unaccepted offer, so there is nothing to open or close. Withdrawal is recorded on the offer itself.",
   },
+  withholding_recorded: {
+    kind: "inert",
+    reason:
+      "A new Form W-4 changes how much tax future payroll withholds, and nothing else. Payroll reads it on the pay date; there is no work to open or close.",
+  },
 };
 
 /** Why an event could not produce an instance. */

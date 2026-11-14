@@ -17,6 +17,7 @@ import { prisma } from "@dpf/db";
 import { newId } from "@/lib/shared/new-id";
 import {
   checkStatutoryProposal,
+  statutoryQualifierKey,
   type StatutoryRuleKind,
 } from "@/lib/finance/statutory-rules";
 import type { ToolDefinition, ToolExecutionContext, ToolResult } from "@/lib/mcp-tool-types";
@@ -248,6 +249,8 @@ export async function proposeStatutoryRateHandler(
       value: proposal.value,
       currency: proposal.currency,
       qualifiers: (args.qualifiers as object) ?? {},
+      // Rows of one bracket table share a tax and start date; the key keeps them distinct.
+      qualifierKey: statutoryQualifierKey(args.qualifiers),
       effectiveFrom: proposal.effectiveFrom,
       effectiveTo: proposal.effectiveTo,
       status: "proposed",
