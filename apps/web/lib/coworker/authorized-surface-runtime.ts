@@ -53,6 +53,12 @@ type RuntimeDependencies = {
     action: SurfaceActionDefinition,
   ) => Promise<boolean>;
   authorityDigest: (context: SurfacePrincipalContext) => Promise<string>;
+  /** Replace only server-owned operation authority; the original surface binding remains pinned. */
+  refreshContext?: (
+    stored: SurfacePrincipalContext,
+    current: SurfacePrincipalContext | undefined,
+    definition: SurfaceDefinition,
+  ) => SurfacePrincipalContext | null | Promise<SurfacePrincipalContext | null>;
   executeDomainAction: (
     action: SurfaceActionDefinition,
     args: Record<string, unknown>,
@@ -84,6 +90,7 @@ type RuntimeSession = {
   history: Map<string, SemanticSurfaceGraph>;
   clientSequence: number;
 };
+type RuntimeOperation = { record: RuntimeSession; context: SurfacePrincipalContext };
 
 type SurfaceOpenSuccess = {
   ok: true;
@@ -109,7 +116,7 @@ export type SurfaceActSuccess = {
 };
 
 function isSurfaceFailure(
-  value: RuntimeSession | SurfaceFailure,
+  value: RuntimeOperation | SurfaceFailure,
 ): value is SurfaceFailure {
   return "ok" in value && value.ok === false;
 }
@@ -169,10 +176,10 @@ export function createAuthorizedSurfaceRuntime(deps: RuntimeDependencies) {
   const createSessionId = deps.createSessionId ?? (() => crypto.randomUUID());
   const ttl = deps.sessionTtlMs ?? 15 * 60 * 1000;
 
-  async function currentActions(record: RuntimeSession): Promise<AvailableSurfaceAction[]> {
+  async function currentActions(record: RuntimeSession, context = record.context): Promise<AvailableSurfaceAction[]> {
     const actions: AvailableSurfaceAction[] = [];
     for (const action of record.definition.actions) {
-      if (await deps.authorizeAction(record.context, action)) actions.push(availableAction(action));
+      if (await deps.authorizeAction(context, action)) actions.push(availableAction(action));
     }
     return actions;
   }
@@ -190,7 +197,8 @@ export function createAuthorizedSurfaceRuntime(deps: RuntimeDependencies) {
   async function getSession(
     sessionId: string,
     caller: Pick<SurfacePrincipalContext, "delegatingUserId" | "actingAgentId">,
-  ): Promise<RuntimeSession | SurfaceFailure> {
+    currentContext?: SurfacePrincipalContext,
+  ): Promise<RuntimeOperation | SurfaceFailure> {
     const record = sessions.get(sessionId);
     if (!record) return failure("surface_not_found", `Surface session '${sessionId}' was not found.`);
     if (
@@ -199,20 +207,39 @@ export function createAuthorizedSurfaceRuntime(deps: RuntimeDependencies) {
     ) {
       return failure("surface_not_authorized", "Surface session belongs to a different human/coworker principal pair.");
     }
+    if (currentContext && (currentContext.delegatingUserId !== caller.delegatingUserId || currentContext.actingAgentId !== caller.actingAgentId)) {
+      return failure("surface_not_authorized", "Current operation authority belongs to a different human/coworker principal pair.");
+    }
     if (new Date(record.session.expiresAt).getTime() <= now().getTime()) {
       sessions.delete(sessionId);
       return failure("surface_session_expired", `Surface session '${sessionId}' expired.`);
     }
-    if (!(await deps.authorizeSurface(record.context, record.definition))) {
+    let context = record.context;
+    if (deps.refreshContext) {
+      let refreshed: SurfacePrincipalContext | null;
+      try { refreshed = await deps.refreshContext(record.context, currentContext, record.definition); }
+      catch { refreshed = null; }
+      const binding = (value: SurfacePrincipalContext) => ({ organizationId: value.organizationId,
+        delegatingUserId: value.delegatingUserId, actingAgentId: value.actingAgentId, mode: value.mode,
+        locale: value.locale, timezone: value.timezone, route: value.route, workContext: value.workContext });
+      if (!refreshed || surfaceContractDigest(binding(refreshed)) !== surfaceContractDigest(binding(record.context))) {
+        sessions.delete(sessionId);
+        return failure("surface_not_authorized", "Current operation authority could not be verified for this surface session.");
+      }
+      context = refreshed;
+    }
+    if (!(await deps.authorizeSurface(context, record.definition))) {
       sessions.delete(sessionId);
       return failure("surface_not_authorized", "The surface is no longer authorized for this principal/context.");
     }
-    const authorityDigest = await deps.authorityDigest(record.context);
+    const authorityDigest = await deps.authorityDigest(context);
     if (authorityDigest !== record.session.authorityDigest) {
       sessions.delete(sessionId);
       return failure("surface_not_authorized", "Surface authority changed; open a new principal-bound session.");
     }
-    return record;
+    // Never install one request's private authority on the shared session: a
+    // concurrent operation must keep its own authenticated dispatch and proof.
+    return { record, context };
   }
 
   function nodes(record: RuntimeSession): SurfaceNode[] {
@@ -247,7 +274,7 @@ export function createAuthorizedSurfaceRuntime(deps: RuntimeDependencies) {
     });
   }
 
-  async function graph(record: RuntimeSession): Promise<SemanticSurfaceGraph> {
+  async function graph(record: RuntimeSession, context = record.context): Promise<SemanticSurfaceGraph> {
     return {
       contractVersion: "1.0",
       surfaceId: record.definition.surfaceId,
@@ -255,7 +282,7 @@ export function createAuthorizedSurfaceRuntime(deps: RuntimeDependencies) {
       generatedAt: now().toISOString(),
       summary: record.view.summary,
       nodes: nodes(record),
-      actions: await currentActions(record),
+      actions: await currentActions(record, context),
       continuations: [],
       provenance: { source: record.definition.loaderId, trust: "trusted-system", sensitivity: "internal" },
     };
@@ -266,10 +293,10 @@ export function createAuthorizedSurfaceRuntime(deps: RuntimeDependencies) {
     while (record.history.size > 8) record.history.delete(record.history.keys().next().value!);
   }
 
-  async function refreshView(record: RuntimeSession): Promise<void> {
+  async function refreshView(record: RuntimeSession, context = record.context): Promise<void> {
     const loader = deps.loaders.get(record.definition.loaderId);
     if (!loader) return;
-    const latest = await loader(record.context);
+    const latest = await loader(context);
     if (latest.revisionSeed === record.view.revisionSeed) return;
     record.view = latest;
     record.sequence += 1;
@@ -371,16 +398,18 @@ export function createAuthorizedSurfaceRuntime(deps: RuntimeDependencies) {
   async function snapshot(input: {
     sessionId: string;
     caller: Pick<SurfacePrincipalContext, "delegatingUserId" | "actingAgentId">;
+    context?: SurfacePrincipalContext;
     sinceRevision?: string;
   }): Promise<SurfaceSnapshotSuccess | SurfaceDeltaSuccess | SurfaceFailure> {
     const started = Date.now();
-    const record = await getSession(input.sessionId, input.caller);
-    if (isSurfaceFailure(record)) {
-      deps.observe?.({ operation: "snapshot", outcome: record.code, durationMs: Date.now() - started });
-      return record;
+    const operation = await getSession(input.sessionId, input.caller, input.context);
+    if (isSurfaceFailure(operation)) {
+      deps.observe?.({ operation: "snapshot", outcome: operation.code, durationMs: Date.now() - started });
+      return operation;
     }
-    await refreshView(record);
-    const current = await graph(record);
+    const { record, context } = operation;
+    await refreshView(record, context);
+    const current = await graph(record, context);
     rememberGraph(record, current);
     if (input.sinceRevision && input.sinceRevision !== current.revision) {
       const previous = record.history.get(input.sinceRevision);
@@ -399,28 +428,30 @@ export function createAuthorizedSurfaceRuntime(deps: RuntimeDependencies) {
         removedNodeIds: previous.nodes.filter((node) => !currentIds.has(node.nodeId)).map((node) => node.nodeId),
         actions: current.actions,
       };
-      deps.observe?.({ operation: "snapshot", outcome: "delta", mode: record.context.mode, surfaceId: record.definition.surfaceId, durationMs: Date.now() - started, nodeCount: changedNodes.length });
+      deps.observe?.({ operation: "snapshot", outcome: "delta", mode: context.mode, surfaceId: record.definition.surfaceId, durationMs: Date.now() - started, nodeCount: changedNodes.length });
       return { ok: true, delta };
     }
-    deps.observe?.({ operation: "snapshot", outcome: "success", mode: record.context.mode, surfaceId: record.definition.surfaceId, durationMs: Date.now() - started, nodeCount: current.nodes.length });
+    deps.observe?.({ operation: "snapshot", outcome: "success", mode: context.mode, surfaceId: record.definition.surfaceId, durationMs: Date.now() - started, nodeCount: current.nodes.length });
     return { ok: true, graph: current };
   }
 
   async function query(input: {
     sessionId: string;
     caller: Pick<SurfacePrincipalContext, "delegatingUserId" | "actingAgentId">;
+    context?: SurfacePrincipalContext;
     text?: string;
     kind?: string;
     limit?: number;
     cursor?: string;
   }): Promise<SurfaceQuerySuccess | SurfaceFailure> {
     const started = Date.now();
-    const record = await getSession(input.sessionId, input.caller);
-    if (isSurfaceFailure(record)) {
-      deps.observe?.({ operation: "query", outcome: record.code, durationMs: Date.now() - started });
-      return record;
+    const operation = await getSession(input.sessionId, input.caller, input.context);
+    if (isSurfaceFailure(operation)) {
+      deps.observe?.({ operation: "query", outcome: operation.code, durationMs: Date.now() - started });
+      return operation;
     }
-    await refreshView(record);
+    const { record, context } = operation;
+    await refreshView(record, context);
     const search = input.text?.trim().toLocaleLowerCase();
     const allNodes = nodes(record);
     const matched = allNodes.filter((node) => {
@@ -450,21 +481,23 @@ export function createAuthorizedSurfaceRuntime(deps: RuntimeDependencies) {
       record.cursors.set(cursor, { revision: record.session.revision, nodeIds, nextOffset });
       continuations.push({ cursor, nodeId: page.at(-1)?.nodeId ?? "surface", remaining: nodeIds.length - nextOffset });
     }
-    const result = { ok: true as const, revision: record.session.revision, nodes: page, actions: await currentActions(record), continuations };
-    deps.observe?.({ operation: "query", outcome: "success", mode: record.context.mode, surfaceId: record.definition.surfaceId, durationMs: Date.now() - started, nodeCount: page.length });
+    const result = { ok: true as const, revision: record.session.revision, nodes: page, actions: await currentActions(record, context), continuations };
+    deps.observe?.({ operation: "query", outcome: "success", mode: context.mode, surfaceId: record.definition.surfaceId, durationMs: Date.now() - started, nodeCount: page.length });
     return result;
   }
 
   async function syncClientState(input: {
     sessionId: string;
     caller: Pick<SurfacePrincipalContext, "delegatingUserId" | "actingAgentId">;
+    context?: SurfacePrincipalContext;
     expectedRevision: string;
     sequence: number;
     changes: Record<string, SurfaceJson>;
   }): Promise<SurfaceActSuccess | SurfaceFailure> {
-    const record = await getSession(input.sessionId, input.caller);
-    if (isSurfaceFailure(record)) return record;
-    if (record.context.mode !== "browser" && record.context.mode !== "mobile") {
+    const operation = await getSession(input.sessionId, input.caller, input.context);
+    if (isSurfaceFailure(operation)) return operation;
+    const { record, context } = operation;
+    if (context.mode !== "browser" && context.mode !== "mobile") {
       return failure("surface_adapter_unavailable", "Co-present client state is only accepted from browser or mobile sessions.");
     }
     if (input.expectedRevision !== record.session.revision || input.sequence !== record.clientSequence + 1) {
@@ -482,7 +515,7 @@ export function createAuthorizedSurfaceRuntime(deps: RuntimeDependencies) {
     record.sequence += 1;
     record.session.revision = computeRevision(record, record.session.authorityDigest);
     record.cursors.clear();
-    const current = await graph(record);
+    const current = await graph(record, context);
     rememberGraph(record, current);
     return { ok: true, revision: record.session.revision, message: "Co-present client state synchronized." };
   }
@@ -490,28 +523,30 @@ export function createAuthorizedSurfaceRuntime(deps: RuntimeDependencies) {
   async function act(input: {
     sessionId: string;
     caller: Pick<SurfacePrincipalContext, "delegatingUserId" | "actingAgentId">;
+    context?: SurfacePrincipalContext;
     actionId: string;
     expectedRevision: string;
     args: Record<string, unknown>;
     idempotencyKey?: string;
   }): Promise<SurfaceActSuccess | SurfaceFailure> {
     const started = Date.now();
-    const record = await getSession(input.sessionId, input.caller);
-    if (isSurfaceFailure(record)) {
-      deps.observe?.({ operation: "act", outcome: record.code, durationMs: Date.now() - started });
-      return record;
+    const operation = await getSession(input.sessionId, input.caller, input.context);
+    if (isSurfaceFailure(operation)) {
+      deps.observe?.({ operation: "act", outcome: operation.code, durationMs: Date.now() - started });
+      return operation;
     }
+    const { record, context } = operation;
     if (input.idempotencyKey) {
       const prior = record.idempotency.get(input.idempotencyKey);
       if (prior) return prior;
     }
     if (input.expectedRevision !== record.session.revision) {
-      deps.observe?.({ operation: "act", outcome: "surface_revision_stale", mode: record.context.mode, surfaceId: record.definition.surfaceId, durationMs: Date.now() - started });
+      deps.observe?.({ operation: "act", outcome: "surface_revision_stale", mode: context.mode, surfaceId: record.definition.surfaceId, durationMs: Date.now() - started });
       return failure("surface_revision_stale", "Surface revision is stale; refresh before acting.", record.session.revision);
     }
     const action = record.definition.actions.find((candidate) => candidate.actionId === input.actionId);
     if (!action) return failure("surface_action_unmapped", `Action '${input.actionId}' is not mapped on this surface.`);
-    if (!(await deps.authorizeAction(record.context, action))) {
+    if (!(await deps.authorizeAction(context, action))) {
       return failure("surface_action_not_authorized", `Action '${input.actionId}' is not authorized.`);
     }
 
@@ -525,7 +560,7 @@ export function createAuthorizedSurfaceRuntime(deps: RuntimeDependencies) {
       record.session.revision = computeRevision(record, record.session.authorityDigest);
       const result: SurfaceActSuccess = { ok: true, revision: record.session.revision, message: `${action.label} applied to virtual surface state.` };
       if (input.idempotencyKey) record.idempotency.set(input.idempotencyKey, result);
-      deps.observe?.({ operation: "act", outcome: "success", mode: record.context.mode, surfaceId: record.definition.surfaceId, durationMs: Date.now() - started });
+      deps.observe?.({ operation: "act", outcome: "success", mode: context.mode, surfaceId: record.definition.surfaceId, durationMs: Date.now() - started });
       return result;
     }
 
@@ -541,7 +576,7 @@ export function createAuthorizedSurfaceRuntime(deps: RuntimeDependencies) {
     for (const [key, value] of Object.entries(input.args)) {
       if (allowedInputNames.has(key)) toolArgs[key] = value;
     }
-    const domainResult = await deps.executeDomainAction(action, toolArgs, record.context, {
+    const domainResult = await deps.executeDomainAction(action, toolArgs, context, {
       surfaceId: record.definition.surfaceId,
       sessionId: record.session.sessionId,
       revision: record.session.revision,
@@ -554,23 +589,25 @@ export function createAuthorizedSurfaceRuntime(deps: RuntimeDependencies) {
     }
     const loader = deps.loaders.get(record.definition.loaderId);
     if (!loader) return failure("surface_projection_incomplete", `Loader '${record.definition.loaderId}' is unavailable.`);
-    record.view = await loader(record.context);
+    record.view = await loader(context);
     record.sequence += 1;
     record.session.revision = computeRevision(record, record.session.authorityDigest);
     record.cursors.clear();
-    rememberGraph(record, await graph(record));
+    rememberGraph(record, await graph(record, context));
     const result: SurfaceActSuccess = { ok: true, revision: record.session.revision, message: domainResult.message, result: domainResult };
     if (input.idempotencyKey) record.idempotency.set(input.idempotencyKey, result);
-    deps.observe?.({ operation: "act", outcome: "success", mode: record.context.mode, surfaceId: record.definition.surfaceId, durationMs: Date.now() - started });
+    deps.observe?.({ operation: "act", outcome: "success", mode: context.mode, surfaceId: record.definition.surfaceId, durationMs: Date.now() - started });
     return result;
   }
 
   async function close(
     sessionId: string,
     caller: Pick<SurfacePrincipalContext, "delegatingUserId" | "actingAgentId">,
+    context?: SurfacePrincipalContext,
   ): Promise<boolean> {
-    const record = await getSession(sessionId, caller);
-    if (isSurfaceFailure(record)) return false;
+    const operation = await getSession(sessionId, caller, context);
+    if (isSurfaceFailure(operation)) return false;
+    const { record } = operation;
     const closed = sessions.delete(sessionId);
     deps.observe?.({ operation: "close", outcome: closed ? "success" : "surface_not_found", mode: record.context.mode, surfaceId: record.definition.surfaceId });
     return closed;

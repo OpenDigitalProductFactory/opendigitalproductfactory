@@ -43,11 +43,16 @@ const definition: SurfaceDefinition = {
   ],
 };
 
-function makeRuntime(options: { allowDomain?: boolean; authorityDigest?: () => string } = {}) {
+type RuntimeDependencies = Parameters<typeof createAuthorizedSurfaceRuntime>[0];
+function makeRuntime(options: { allowDomain?: boolean; authorityDigest?: () => string;
+  refreshContext?: RuntimeDependencies["refreshContext"];
+  authorizeAction?: RuntimeDependencies["authorizeAction"];
+  executeDomainAction?: RuntimeDependencies["executeDomainAction"];
+} = {}) {
   let stateRevision = 1;
-  const executeDomainAction = vi.fn(async () => {
+  const executeDomainAction = vi.fn(async (...args: Parameters<RuntimeDependencies["executeDomainAction"]>) => {
     stateRevision += 1;
-    return { success: true, message: "Saved and tested" };
+    return options.executeDomainAction ? options.executeDomainAction(...args) : { success: true, message: "Saved and tested" };
   });
   const observe = vi.fn();
   const catalog = compileSurfaceDefinitions([definition], {
@@ -67,9 +72,10 @@ function makeRuntime(options: { allowDomain?: boolean; authorityDigest?: () => s
       },
     })]]),
     authorizeSurface: async () => true,
-    authorizeAction: async (_ctx, action) => action.actionClass === "ui-local" || options.allowDomain !== false,
+    authorizeAction: options.authorizeAction ?? (async (_ctx, action) => action.actionClass === "ui-local" || options.allowDomain !== false),
     authorityDigest: async () => options.authorityDigest?.() ?? "authority-1",
     executeDomainAction,
+    refreshContext: options.refreshContext,
     now: () => new Date("2026-08-08T12:00:00.000Z"),
     createSessionId: () => "surface-session-1",
     observe,
@@ -78,6 +84,94 @@ function makeRuntime(options: { allowDomain?: boolean; authorityDigest?: () => s
 }
 
 describe("Authorized Surface runtime", () => {
+  it.each(["snapshot", "query", "act"] as const)("requires current operation context for %s when the surface refresh policy requires it", async operation => {
+    const refreshContext = vi.fn(async (_stored: SurfacePrincipalContext, current?: SurfacePrincipalContext) => current ?? null);
+    const { runtime, executeDomainAction } = makeRuntime({ refreshContext });
+    const opened = await runtime.open({ context, selector: { surfaceId: definition.surfaceId } });
+    if (!opened.ok) throw new Error(opened.message);
+    const request = { sessionId: opened.session.sessionId, caller: context };
+    const result = operation === "snapshot" ? await runtime.snapshot(request)
+      : operation === "query" ? await runtime.query(request)
+      : await runtime.act({ ...request, actionId: "save-and-test", expectedRevision: opened.session.revision, args: {} });
+    expect(result).toMatchObject({ ok: false, code: "surface_not_authorized" });
+    expect(refreshContext).toHaveBeenCalledWith(context, undefined, definition);
+    expect(executeDomainAction).not.toHaveBeenCalled();
+  });
+
+  it.each(["human", "agent"])("does not let the current %s proof replace the session's principal pair", async changed => {
+    const refreshContext = vi.fn(async (_stored: SurfacePrincipalContext, current?: SurfacePrincipalContext) => current ?? null);
+    const { runtime } = makeRuntime({ refreshContext });
+    const opened = await runtime.open({ context, selector: { surfaceId: definition.surfaceId } });
+    if (!opened.ok) throw new Error(opened.message);
+    const current = { ...context, ...(changed === "human" ? { delegatingUserId: "other-user" } : { actingAgentId: "other-agent" }) };
+    expect(await runtime.snapshot({ sessionId: opened.session.sessionId, caller: context, context: current }))
+      .toMatchObject({ ok: false, code: "surface_not_authorized" });
+    expect(refreshContext).not.toHaveBeenCalled();
+  });
+
+  it("uses the current private dispatch while retaining the original surface route and work context", async () => {
+    const dispatch = Symbol("current-operation-dispatch");
+    const originalDispatch = vi.fn(async () => ({ success: true, message: "Old operation" }));
+    const currentDispatch = vi.fn(async () => ({ success: true, message: "Current operation" }));
+    type PrivateContext = SurfacePrincipalContext & { [dispatch]?: typeof currentDispatch };
+    const stored: PrivateContext = { ...context, route: "/platform/tools/discovery", [dispatch]: originalDispatch };
+    const current: PrivateContext = { ...context, route: "/unrelated", workContext: { resourceType: "unrelated" }, [dispatch]: currentDispatch };
+    const { runtime } = makeRuntime({
+      refreshContext: async (saved, fresh) => fresh ? { ...saved, [dispatch]: (fresh as PrivateContext)[dispatch] } : null,
+      executeDomainAction: async (_action, _args, active) => {
+        expect(active.route).toBe(stored.route); expect(active.workContext).toEqual(stored.workContext);
+        return (active as PrivateContext)[dispatch]!();
+      },
+    });
+    const opened = await runtime.open({ context: stored, selector: { surfaceId: definition.surfaceId } });
+    if (!opened.ok) throw new Error(opened.message);
+    const result = await runtime.act({ sessionId: opened.session.sessionId, caller: context, context: current,
+      expectedRevision: opened.session.revision, actionId: "save-and-test", args: {} });
+    expect(result).toMatchObject({ ok: true, message: "Current operation" });
+    expect(currentDispatch).toHaveBeenCalledTimes(1); expect(originalDispatch).not.toHaveBeenCalled();
+  });
+
+  it("rechecks fresh authority before returning a cached action outcome", async () => {
+    let allowed = true;
+    const { runtime, executeDomainAction } = makeRuntime({ refreshContext: async (stored, current) => current && allowed ? stored : null });
+    const opened = await runtime.open({ context, selector: { surfaceId: definition.surfaceId } });
+    if (!opened.ok) throw new Error(opened.message);
+    const request = { sessionId: opened.session.sessionId, caller: context, context,
+      expectedRevision: opened.session.revision, actionId: "save-and-test", args: {}, idempotencyKey: "fresh-authority-cache" };
+    expect(await runtime.act(request)).toMatchObject({ ok: true }); allowed = false;
+    expect(await runtime.act(request)).toMatchObject({ ok: false, code: "surface_not_authorized" });
+    expect(executeDomainAction).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps each overlapping operation bound to its own current dispatch", async () => {
+    const dispatch = Symbol("operation-dispatch");
+    const firstDispatch = vi.fn(async () => ({ success: true, message: "First request" }));
+    const secondDispatch = vi.fn(async () => ({ success: true, message: "Second request" }));
+    type PrivateContext = SurfacePrincipalContext & { [dispatch]?: typeof firstDispatch };
+    let enter!: () => void, release!: () => void;
+    const entered = new Promise<void>(resolve => { enter = resolve; });
+    const released = new Promise<void>(resolve => { release = resolve; });
+    const { runtime } = makeRuntime({
+      refreshContext: async (stored, current) => current ? { ...stored, [dispatch]: (current as PrivateContext)[dispatch] } : null,
+      authorizeAction: async (active, action) => {
+        if (action.actionClass === "domain" && (active as PrivateContext)[dispatch] === firstDispatch) { enter(); await released; }
+        return true;
+      },
+      executeDomainAction: async (_action, _args, active) => (active as PrivateContext)[dispatch]!(),
+    });
+    const opened = await runtime.open({ context, selector: { surfaceId: definition.surfaceId } });
+    if (!opened.ok) throw new Error(opened.message);
+    const request = { sessionId: opened.session.sessionId, caller: context, expectedRevision: opened.session.revision, actionId: "save-and-test", args: {} };
+    const first = runtime.act({ ...request, context: { ...context, [dispatch]: firstDispatch } as PrivateContext });
+    try {
+      await Promise.race([entered, first.then(() => { throw new Error("First operation ended before its authority barrier."); })]);
+      expect(await runtime.act({ ...request, context: { ...context, [dispatch]: secondDispatch } as PrivateContext }))
+        .toMatchObject({ ok: true, message: "Second request" });
+      release(); expect(await first).toMatchObject({ ok: true, message: "First request" });
+      expect(firstDispatch).toHaveBeenCalledTimes(1); expect(secondDispatch).toHaveBeenCalledTimes(1);
+    } finally { release(); await first; }
+  });
+
   it.each(["browser", "headless", "workroom", "scheduled", "background", "external", "mobile"] as const)(
     "projects the same authorized contract in %s mode",
     async (mode) => {

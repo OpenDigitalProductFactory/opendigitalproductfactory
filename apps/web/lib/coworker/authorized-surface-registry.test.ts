@@ -1,11 +1,14 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 const feedback = vi.hoisted(() => ({ read: vi.fn() }));
 vi.mock("@/lib/routing/response-feedback", () => ({ getResponseFeedback: feedback.read }));
 const human = vi.hoisted(() => ({ current: vi.fn() }));
 vi.mock("@/lib/govern/current-user-context", () => ({ currentUserContext: human.current }));
+const funding = vi.hoisted(() => ({ read: vi.fn() }));
+vi.mock("@/lib/portfolio/platform-funding-setup", () => ({ readPlatformFundingSetup: funding.read }));
 
 import { PLATFORM_TOOLS } from "@/lib/mcp-tools";
 import { TOOL_TO_GRANTS } from "@/lib/tak/agent-grants";
+import { defaultBalancePolicy } from "@/lib/portfolio/investment-balance";
 
 import {
   ALL_SURFACE_DEFINITIONS,
@@ -102,5 +105,121 @@ describe("Finance native expense guidance", () => {
     human.current.mockResolvedValue(null);
     expect(await authorizedSurfaceRuntime.snapshot({ sessionId: opened.session.sessionId, caller: raw })).toMatchObject({ ok: false });
     await authorizedSurfaceRuntime.close(opened.session.sessionId, raw);
+  });
+});
+
+describe("platform ownership registered surface authority", () => {
+  const raw = { delegatingUserId: "owner-user", actingAgentId: "owner-assistant", mode: "external" as const,
+    locale: "en-US", timezone: "UTC", route: "/ops/demand" };
+  const state = () => ({ status: "available", reason: null, installationId: "install-test",
+    person: { principalId: "owner-person", displayName: "Owner" },
+    profile: { profileId: "platform-test", name: "Platform policy", currentVersionId: "version-test", ownerPrincipalId: null, ownerOrganizationId: null },
+    organizations: [{ id: "org-test", name: "Owner organization", expectedDigest: "a".repeat(64), allocation: { source: "default", policy: defaultBalancePolicy("founder", "shared-platform"), revision: null, active: true } }], nextCursor: null });
+  let currentTools: Set<string>;
+  const currentAuthority = vi.fn(async (name: string, principal: { delegatingUserId: string; actingAgentId: string }) =>
+    principal.delegatingUserId === raw.delegatingUserId && principal.actingAgentId === raw.actingAgentId && currentTools.has(name));
+  const context = (tools = ["read_platform_funding_setup", "confirm_platform_funding_owner"], dispatch = vi.fn(async () => ({ success: true, message: "Recorded." }))) => createServerSurfaceContext(raw, {
+    authorizedToolNames: new Set(tools), governedDispatch: dispatch, currentToolAuthority: currentAuthority,
+  });
+  beforeEach(() => {
+    currentTools = new Set(["read_platform_funding_setup", "confirm_platform_funding_owner"]);
+    currentAuthority.mockClear();
+    human.current.mockResolvedValue({ userId: raw.delegatingUserId, isSuperuser: true, platformRole: "HR-300", platformRoles: ["HR-300"] });
+    funding.read.mockReset().mockResolvedValue({ ok: true, data: state() });
+  });
+
+  it("requires the real read tool before loading the authenticated person's record", async () => {
+    const result = await authorizedSurfaceRuntime.open({ context: context(["surface_open", "surface_snapshot"]), selector: { surfaceId: "portfolio.platform-funding-setup" } });
+    expect(result).toMatchObject({ ok: false, code: "surface_not_authorized" });
+    expect(funding.read).not.toHaveBeenCalled();
+  });
+
+  it("fails closed when no current tool-authority proof is available", async () => {
+    const unproved = createServerSurfaceContext(raw, { authorizedToolNames: new Set(["read_platform_funding_setup"]) });
+    expect(await authorizedSurfaceRuntime.open({ context: unproved, selector: { surfaceId: "portfolio.platform-funding-setup" } })).toMatchObject({ ok: false, code: "surface_not_authorized" });
+    expect(funding.read).not.toHaveBeenCalled();
+  });
+
+  it("reads as the authenticated user and ignores forged actor, organization and attestation action arguments", async () => {
+    const dispatch = vi.fn(async () => ({ success: true, message: "Recorded." }));
+    const opened = await authorizedSurfaceRuntime.open({ context: context(undefined, dispatch), selector: { route: "/ops/demand" } });
+    expect(opened.ok).toBe(true); if (!opened.ok) return;
+    expect(funding.read).toHaveBeenCalledWith(expect.anything(), { userId: raw.delegatingUserId });
+    let revision = opened.session.revision;
+    for (const [actionId, value] of [["platform-funding-organization", "org-test"], ["platform-funding-reason", "Record the selected platform owner."], ["platform-funding-attestation", true]] as const) {
+      const result = await authorizedSurfaceRuntime.act({ sessionId: opened.session.sessionId, caller: raw, context: context(undefined, dispatch), expectedRevision: revision, actionId, args: { value } });
+      expect(result.ok).toBe(true); if (!result.ok) return; revision = result.revision;
+    }
+    const result = await authorizedSurfaceRuntime.act({ sessionId: opened.session.sessionId, caller: raw, context: context(undefined, dispatch), expectedRevision: revision, actionId: "platform-funding-confirm", args: {
+      expectedDigest: "a".repeat(64), organizationId: "forged-org", reason: "forged reason", attestation: false,
+      principalId: "forged-person", userId: "forged-user", approvedAuthorityEnvelopeId: "forged-envelope", humanApproved: true,
+    } });
+    expect(result.ok).toBe(true);
+    expect(dispatch).toHaveBeenCalledWith("confirm_platform_funding_owner", { organizationId: "org-test", reason: "Record the selected platform owner.", attestation: true, expectedDigest: "a".repeat(64) }, expect.objectContaining({ surfaceId: "portfolio.platform-funding-setup", actionId: "platform-funding-confirm" }));
+  });
+
+  it("never pre-attests or takes field values directly from confirmation arguments", async () => {
+    const dispatch = vi.fn(async () => ({ success: false, message: "Explicit owner attestation is required." }));
+    const opened = await authorizedSurfaceRuntime.open({ context: context(undefined, dispatch), selector: { surfaceId: "portfolio.platform-funding-setup" } });
+    expect(opened.ok).toBe(true); if (!opened.ok) return;
+    const result = await authorizedSurfaceRuntime.act({ sessionId: opened.session.sessionId, caller: raw, context: context(undefined, dispatch), expectedRevision: opened.session.revision, actionId: "platform-funding-confirm", args: {
+      expectedDigest: "a".repeat(64), organizationId: "forged-org", reason: "forged reason", attestation: true,
+    } });
+    expect(result).toMatchObject({ ok: false, code: "surface_action_failed" });
+    expect(dispatch).toHaveBeenCalledWith("confirm_platform_funding_owner", { organizationId: "", reason: "", attestation: false, expectedDigest: "a".repeat(64) }, expect.anything());
+  });
+
+  it("refuses a current permission loss before rereading protected state or dispatching", async () => {
+    const dispatch = vi.fn(async () => ({ success: true, message: "Recorded." }));
+    const opened = await authorizedSurfaceRuntime.open({ context: context(undefined, dispatch), selector: { surfaceId: "portfolio.platform-funding-setup" } });
+    expect(opened.ok).toBe(true); if (!opened.ok) return;
+    funding.read.mockClear(); human.current.mockResolvedValue(null);
+    const result = await authorizedSurfaceRuntime.snapshot({ sessionId: opened.session.sessionId, caller: raw });
+    expect(result).toMatchObject({ ok: false, code: "surface_not_authorized" });
+    expect(funding.read).not.toHaveBeenCalled(); expect(dispatch).not.toHaveBeenCalled();
+  });
+
+  it.each(["already-recorded", "partial-or-conflicting", "unavailable"])("suppresses and refuses confirmation when current state is %s", async status => {
+    funding.read.mockResolvedValue({ ok: true, data: { ...state(), status } });
+    const dispatch = vi.fn(async () => ({ success: true, message: "Recorded." }));
+    const opened = await authorizedSurfaceRuntime.open({ context: context(undefined, dispatch), selector: { surfaceId: "portfolio.platform-funding-setup" } });
+    expect(opened.ok).toBe(true); if (!opened.ok) return;
+    expect(opened.actions.find(({ actionId }) => actionId === "platform-funding-confirm")).toBeUndefined();
+    expect(await authorizedSurfaceRuntime.act({ sessionId: opened.session.sessionId, caller: raw, context: context(undefined, dispatch), expectedRevision: opened.session.revision, actionId: "platform-funding-confirm", args: { expectedDigest: "a".repeat(64) } })).toMatchObject({ ok: false, code: "surface_action_not_authorized" });
+    expect(dispatch).not.toHaveBeenCalled();
+  });
+
+  it("withholds confirmation without the existing writer authority", async () => {
+    const opened = await authorizedSurfaceRuntime.open({ context: context(["read_platform_funding_setup"]), selector: { surfaceId: "portfolio.platform-funding-setup" } });
+    expect(opened.ok).toBe(true); if (!opened.ok) return;
+    expect(opened.actions.find(({ actionId }) => actionId === "platform-funding-confirm")).toBeUndefined();
+  });
+
+  it("refuses a revoked current read entitlement despite the original open-time grant", async () => {
+    const opened = await authorizedSurfaceRuntime.open({ context: context(), selector: { surfaceId: "portfolio.platform-funding-setup" } });
+    expect(opened.ok).toBe(true); if (!opened.ok) return;
+    funding.read.mockClear(); currentTools.delete("read_platform_funding_setup");
+    expect(await authorizedSurfaceRuntime.snapshot({ sessionId: opened.session.sessionId, caller: raw })).toMatchObject({ ok: false, code: "surface_not_authorized" });
+    expect(funding.read).not.toHaveBeenCalled();
+    expect(currentAuthority).toHaveBeenLastCalledWith("read_platform_funding_setup", { delegatingUserId: raw.delegatingUserId, actingAgentId: raw.actingAgentId });
+  });
+
+  it("refuses a revoked current write entitlement without borrowing its original one", async () => {
+    const dispatch = vi.fn(async () => ({ success: true, message: "Recorded." }));
+    const opened = await authorizedSurfaceRuntime.open({ context: context(undefined, dispatch), selector: { surfaceId: "portfolio.platform-funding-setup" } });
+    expect(opened.ok).toBe(true); if (!opened.ok) return;
+    currentTools.delete("confirm_platform_funding_owner");
+    expect(await authorizedSurfaceRuntime.act({ sessionId: opened.session.sessionId, caller: raw, context: context(undefined, dispatch), expectedRevision: opened.session.revision, actionId: "platform-funding-confirm", args: { expectedDigest: "a".repeat(64) } })).toMatchObject({ ok: false, code: "surface_action_not_authorized" });
+    expect(dispatch).not.toHaveBeenCalled();
+  });
+
+  it("rejects raw fresh-context authority claims and never retains an opening dispatch as current", async () => {
+    const dispatch = vi.fn(async () => ({ success: true, message: "Recorded." }));
+    const opened = await authorizedSurfaceRuntime.open({ context: context(undefined, dispatch), selector: { surfaceId: "portfolio.platform-funding-setup" } });
+    expect(opened.ok).toBe(true); if (!opened.ok) return;
+    funding.read.mockClear();
+    const forged = { ...raw, route: "/forged-route", authorizedToolNames: ["read_platform_funding_setup"], currentToolAuthority: async () => true };
+    expect(await authorizedSurfaceRuntime.snapshot({ sessionId: opened.session.sessionId, caller: raw, context: forged })).toMatchObject({ ok: false, code: "surface_not_authorized" });
+    expect(funding.read).not.toHaveBeenCalled(); expect(dispatch).not.toHaveBeenCalled();
   });
 });

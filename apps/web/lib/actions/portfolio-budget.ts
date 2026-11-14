@@ -21,6 +21,34 @@ import { governedExecuteTool } from "@/lib/mcp-governed-execute";
 import type { FundingScope } from "@/lib/portfolio/investment-balance-policy";
 import type { BalancePolicy } from "@/lib/portfolio/investment-balance";
 import { getT } from "@/lib/i18n/t.server";
+import type { PlatformFundingSetupView, PlatformFundingOwnerConfirmation } from "@/lib/portfolio/platform-funding-setup";
+
+async function runPlatformFundingTool(toolName: string, rawParams: Record<string, unknown>) {
+  const { userId, userContext } = await requireCapabilityContext("manage_platform");
+  return governedExecuteTool({ toolName, rawParams, userId, userContext,
+    context: { routeContext: "/ops/demand" }, source: "rest" });
+}
+
+/** Opening setup reads current consequences; it never confirms ownership. */
+export async function loadPlatformFundingSetupAction(afterOrganizationId?: string | null): Promise<ActionResult<PlatformFundingSetupView>> {
+  const result = await runPlatformFundingTool("read_platform_funding_setup", { afterOrganizationId: afterOrganizationId ?? null });
+  const data = result.data;
+  if (!result.success || !data || !["available", "already-recorded", "partial-or-conflicting", "unavailable"].includes(String(data.status)) || !Array.isArray(data.organizations))
+    return err(result.error ?? result.message ?? "Platform ownership setup is unavailable.");
+  return ok(data as unknown as PlatformFundingSetupView);
+}
+
+export async function confirmPlatformFundingOwnerAction(input: {
+  organizationId: string; expectedDigest: string; attestation: true; reason: string;
+}): Promise<ActionResult<PlatformFundingOwnerConfirmation>> {
+  const result = await runPlatformFundingTool("confirm_platform_funding_owner", input);
+  const data = result.data;
+  if (!result.success || !data || !["confirmed", "already-recorded"].includes(String(data.status)) || typeof data.principalId !== "string")
+    return err(result.error ?? result.message ?? "Platform ownership was not changed.");
+  revalidatePath("/ops/demand");
+  revalidatePath("/ops/installation");
+  return ok(data as unknown as PlatformFundingOwnerConfirmation);
+}
 
 async function runInvestmentTool(toolName: string, rawParams: Record<string, unknown>): Promise<ActionResult<string>> {
   const { userId, userContext } = await requireCapabilityContext("manage_backlog");
