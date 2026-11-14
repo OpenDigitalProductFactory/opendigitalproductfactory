@@ -236,7 +236,11 @@ The existing administrator reconciliation tool accepts only the optional
 `imageServices: ["browser-use"]` selection. The executor derives the plan from
 its verified packaged source SHA, host platform and installed release carrier.
 Source mode archives the immutable `services/browser-use` Git tree to Docker
-stdin. Consumer mode resolves the installed immutable release through the existing
+stdin. These read-only Git calls use command-scoped `safe.directory=/host-source`
+for the fixed mount because the runtime-transition branch precedes the updater’s
+ordinary Git setup. No global Git configuration is changed. This follows
+[Git’s protected safe-directory contract](https://git-scm.com/docs/git-config#Documentation/git-config.txt-safedirectory).
+Consumer mode resolves the installed immutable release through the existing
 manifest reader, then pulls only its pinned digest. Actual image ID, platform,
 source revision and source input-tree or published digest evidence must agree.
 

@@ -21,7 +21,7 @@ describe('selected runtime image artifact qualification', () => {
     try {
       const result = await imageEvidence.prepareRuntimeServiceImage({ sourceSha, platform: 'linux/amd64', stateDir,
         source: { kind: 'source', sourceSha },
-        runGit: async args => { gitCalls.push(args); return args[0] === 'rev-parse' ? `${inputTreeOid}\n` : archive; },
+        runGit: async args => { gitCalls.push(args); return args.includes('rev-parse') ? `${inputTreeOid}\n` : archive; },
         runDocker: async (args, options) => {
           calls.push(args);
           if (args[0] === 'build') { assert.deepEqual(options.input, archive); await writeFile(args[args.indexOf('--iidfile') + 1], `${imageId}\n`); return ''; }
@@ -29,7 +29,7 @@ describe('selected runtime image artifact qualification', () => {
           return JSON.stringify(details);
         },
       });
-      assert.deepEqual(gitCalls, [['rev-parse', `${sourceSha}:services/browser-use`], ['archive', '--format=tar', `${sourceSha}:services/browser-use`]]);
+      assert.deepEqual(gitCalls, [['-c', 'safe.directory=/host-source', 'rev-parse', `${sourceSha}:services/browser-use`], ['-c', 'safe.directory=/host-source', 'archive', '--format=tar', `${sourceSha}:services/browser-use`]]);
       assert.equal(calls.filter(args => args[0] === 'build').length, 1);
       assert(calls[0].includes('--platform') && calls[0].includes('linux/amd64'));
       assert.equal(calls[0].at(-1), '-');

@@ -114,9 +114,12 @@ export async function prepareRuntimeServiceImage({ source, sourceSha, platform, 
       // Archive one immutable tree directly to the Docker client's stdin. The
       // moving host checkout and every unrelated service stay outside context.
       const object = `${sourceSha}:services/browser-use`;
-      const inputTreeOid = String(await runGit(['rev-parse', object])).trim();
+      // This native branch starts before promote.sh's Git setup. Trust only
+      // the fixed read-only source mount for this command, never global '*'.
+      const gitScope = ['-c', 'safe.directory=/host-source'];
+      const inputTreeOid = String(await runGit([...gitScope, 'rev-parse', object])).trim();
       if (!/^[a-f0-9]{40}$/.test(inputTreeOid)) serviceImageInvalid();
-      const archive = await runGit(['archive', '--format=tar', object]);
+      const archive = await runGit([...gitScope, 'archive', '--format=tar', object]);
       if (!Buffer.isBuffer(archive) || archive.length === 0 || archive.length > 64 * 1024 * 1024) serviceImageInvalid();
       scratch = await mkdtemp(join(stateDir, '.runtime-image-'));
       const iid = join(scratch, 'image.id');
