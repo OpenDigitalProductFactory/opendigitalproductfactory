@@ -106,8 +106,27 @@ test("version 2 canonicalization is independent of nested object insertion order
   assert.equal(signTransitionPayload(reordered, secret), signTransitionPayload(reconciliation, secret));
 });
 
+test("version 3 binds every selected image and its recovery proof", () => {
+  const value = { ...reconciliation, version: 3, imagePlan: {
+    schemaVersion: 1, sourceSha: "a".repeat(40), operation: "prepare",
+    services: [{ service: "browser-use", source: { kind: "source", sourceSha: "a".repeat(40) } }],
+  }, imageProof: { services: [{ service: "browser-use", priorImageId: `sha256:${"b".repeat(64)}`, intendedImageId: `sha256:${"c".repeat(64)}` }] } };
+  const signature = signTransitionPayload(value, secret);
+  const reordered = Object.fromEntries(Object.entries(value).reverse());
+  assert.equal(signTransitionPayload(reordered, secret), signature);
+  for (const mutate of [
+    v => { v.imagePlan.services[0].source.sourceSha = "d".repeat(40); },
+    v => { v.imagePlan.services[0].service = "postgres"; },
+    v => { v.imageProof.services[0].priorImageId = `sha256:${"e".repeat(64)}`; },
+    v => { v.imageProof.services[0].intendedImageId = `sha256:${"f".repeat(64)}`; },
+  ]) {
+    const changed = structuredClone(value); mutate(changed);
+    assert.throws(() => verifyTransitionSignature(changed, signature, secret), /tampered/);
+  }
+});
+
 test("unknown runtime signing versions refuse rather than falling back to legacy bytes", () => {
-  for (const version of [0, 3, "2", null]) {
+  for (const version of [0, 4, "2", null]) {
     assert.throws(() => signTransitionPayload({ ...reconciliation, version }, secret), /unsupported_runtime_transition_version/);
   }
 });
