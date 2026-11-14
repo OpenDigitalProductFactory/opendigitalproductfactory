@@ -5,7 +5,7 @@ const mocks = vi.hoisted(() => ({
   postComment: vi.fn(), heartbeat: vi.fn(), loadMembers: vi.fn(), workrooms: vi.fn(), workroomByCapsule: vi.fn(), workroomAccess: vi.fn(),
   executeAppointment: vi.fn(), currentUser: vi.fn(), can: vi.fn(),
   broadcastAsk: vi.fn(), broadcastAck: vi.fn(), setDataAccess: vi.fn(), mentionRoster: vi.fn(),
-  gaidMap: vi.fn(), prepareAddressing: vi.fn(), publishPosted: vi.fn(),
+  gaidMap: vi.fn(), prepareAddressing: vi.fn(), publishPosted: vi.fn(), readUnread: vi.fn(),
 }));
 vi.mock("@dpf/db", () => ({ prisma: {
   workItem: { findFirst: mocks.item, findMany: mocks.children, update: mocks.updateItem },
@@ -17,6 +17,7 @@ vi.mock("@dpf/db", () => ({ prisma: {
 } }));
 vi.mock("@/lib/identity/principal-linking", () => ({ ensureAgentPrincipalIdentity: mocks.ensureAgent, syncUserPrincipal: mocks.syncUser, getAgentGaidMap: mocks.gaidMap }));
 vi.mock("@/lib/work-management/room-message-wake.server", () => ({ prepareRoomAddressing: mocks.prepareAddressing, publishRoomMessagePosted: mocks.publishPosted }));
+vi.mock("@/lib/work-management/room-read-cursor.server", () => ({ readUnreadRoomMessages: mocks.readUnread }));
 vi.mock("@/lib/work-management/coworker-room-engagement.server", () => ({ getCoworkerRoomEngagement: mocks.engagement }));
 vi.mock("@/lib/work-management/room-agent-presence.server", () => ({ heartbeatAgentWorkItemPresence: mocks.heartbeat }));
 vi.mock("@/lib/work-management/post-work-item-comment", () => ({ postWorkItemComment: mocks.postComment }));
@@ -426,5 +427,65 @@ describe("invite with a data access raise", () => {
     expect(result).toMatchObject({ success: false, error: "invitee_clearance_below_room" });
     expect(mocks.setDataAccess).not.toHaveBeenCalled();
     expect(mocks.updateItem).not.toHaveBeenCalled();
+  });
+});
+
+describe("unreadForMe (BI-31E0C874)", () => {
+  const at = new Date("2026-11-11T05:00:00.000Z");
+  const row = (n: number) => ({
+    messageId: `MSG-${n}`,
+    senderType: "agent",
+    senderUserId: null,
+    senderAgentId: "AGT-OTHER",
+    messageType: "comment",
+    body: `message ${n}`,
+    createdAt: new Date(at.getTime() + n * 1000),
+    structuredPayload: null,
+  });
+  beforeEach(() => {
+    mocks.children.mockResolvedValue([]);
+  });
+
+  it("reads past the caller's own position, oldest first, and returns the new readCursor (AC-RRC-01)", async () => {
+    mocks.readUnread.mockResolvedValue({ ok: true, data: { messages: [row(1), row(2)], hasMore: false, readCursor: { createdAt: row(2).createdAt, messageId: "MSG-2" } } });
+    const result = await roomMessagingPack.handlers.read_room_messages({ caseKey: "parent", unreadForMe: true }, "alice", { agentId: "agent" });
+    expect(result.success).toBe(true);
+    expect(mocks.readUnread).toHaveBeenCalledWith(expect.objectContaining({
+      roomWorkItemId: "parent",
+      workItemIds: ["parent"],
+      agentId: "agent",
+      principalId: "PRN-agent",
+      limit: 20,
+    }));
+    const data = result.data as { order: string; readCursor: string; messages: Array<{ messageId: string }> };
+    expect(data.order).toBe("oldest-first");
+    expect(data.messages.map((m) => m.messageId)).toEqual(["MSG-1", "MSG-2"]);
+    expect(typeof data.readCursor).toBe("string");
+    expect(mocks.messages).not.toHaveBeenCalled();
+  });
+
+  it("refuses unreadForMe combined with a cursor, before reading anything", async () => {
+    const result = await roomMessagingPack.handlers.read_room_messages({ caseKey: "parent", unreadForMe: true, sinceCursor: "abc" }, "alice", { agentId: "agent" });
+    expect(result).toMatchObject({ success: false, error: "invalid_input" });
+    expect(mocks.readUnread).not.toHaveBeenCalled();
+  });
+
+  it("leaves a plain read exactly as it was, never touching the read position (AC-RRC-03)", async () => {
+    await roomMessagingPack.handlers.read_room_messages({ caseKey: "parent" }, "alice", { agentId: "agent" });
+    expect(mocks.readUnread).not.toHaveBeenCalled();
+    expect(mocks.messages).toHaveBeenCalled();
+  });
+
+  it("refuses an unread read when the caller is not admitted, and moves nothing", async () => {
+    mocks.access.mockResolvedValue({ decision: { level: "none", reason: "not-admitted" }, agentPrincipalId: null });
+    const result = await roomMessagingPack.handlers.read_room_messages({ caseKey: "parent", unreadForMe: true }, "alice", { agentId: "agent" });
+    expect(result).toMatchObject({ success: false, error: "forbidden" });
+    expect(mocks.readUnread).not.toHaveBeenCalled();
+  });
+
+  it("answers conflict when concurrent reads kept moving the position", async () => {
+    mocks.readUnread.mockResolvedValue({ ok: false, error: "conflict" });
+    const result = await roomMessagingPack.handlers.read_room_messages({ caseKey: "parent", unreadForMe: true }, "alice", { agentId: "agent" });
+    expect(result).toMatchObject({ success: false, error: "conflict" });
   });
 });
