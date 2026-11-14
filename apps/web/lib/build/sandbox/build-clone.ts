@@ -150,6 +150,35 @@ export function parseBuildCloneRebaseOutput(output: string): BuildCloneRebaseOut
   return { status: "unknown", output: output.slice(0, 500) };
 }
 
+/**
+ * BI-A9E32D80: after a rebase onto `ontoRef`, regenerate the registered derived
+ * artifacts whose sources this build's change touches and commit what changed.
+ * A doc index or count file generated on the old base is stale on the new one;
+ * left alone it failed the Derived Artifact Registry guard after every refresh
+ * and spent both coding-agent repair rounds on a deterministic command.
+ *
+ * Best-effort by design: a base whose gate script predates the subcommand, or a
+ * generator that fails, leaves the tree as the rebase left it and the guard
+ * names what is stale. Always prints the resulting head.
+ */
+export function buildSandboxRegenerateDerivedArtifactsCommand(path: string, ontoRef: string): string {
+  const P = q(path);
+  const git = `git -C ${P} -c core.hooksPath=/dev/null`;
+  const gate = "scripts/derived-artifacts-gate.mjs";
+  return [
+    `cd ${P}`,
+    `if grep -q 'regenerate-affected' ${gate} 2>/dev/null; then node ${gate} regenerate-affected ${q(ontoRef)} >/dev/null 2>&1 || true; ` +
+      `if ! ${git} diff --cached --quiet --exit-code; then ${git} commit --no-verify --quiet -m 'chore: regenerate derived artifacts after refresh onto upstream' >/dev/null 2>&1 || ${git} reset --quiet >/dev/null 2>&1 || true; fi; fi`,
+    `printf 'head=%s\n' "$(git -C ${P} rev-parse HEAD)"`,
+  ].join(" && ");
+}
+
+/** The head `buildSandboxRegenerateDerivedArtifactsCommand` printed, or null. */
+export function parseRegenerateDerivedArtifactsOutput(output: string): string | null {
+  const match = /^head=([0-9a-f]{40})\s*$/m.exec(output);
+  return match?.[1] ?? null;
+}
+
 const FULL_SHA = /^[0-9a-f]{40}$/;
 
 function requireFullSha(sha: string): string {
