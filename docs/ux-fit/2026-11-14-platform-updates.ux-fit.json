@@ -1,0 +1,25 @@
+{
+  "version": "1",
+  "decidedOption": "calm-arrival-confirm-on-invoke",
+  "decisionInteractionId": "DI-C19144C74B50",
+  "scope": {
+    "files": [
+      "apps/web/app/(shell)/ops/self-upgrade/page.tsx",
+      "apps/web/components/ops/OwnerReleaseCard.tsx",
+      "apps/web/components/ops/SelfUpgradeTriggerControl.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "calm-arrival-confirm-on-invoke",
+      "risk-first-arrival",
+      "second-updater-surface"
+    ]
+  },
+  "decisionProvenance": {
+    "resolvedBy": "agent",
+    "autonomyEligible": true,
+    "limitation": "The recorded platform decision establishes progressive-disclosure fit. Served-runtime browser acceptance remains separate verification evidence."
+  }
+}
