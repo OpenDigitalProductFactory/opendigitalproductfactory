@@ -1,10 +1,13 @@
-// What each AI subscription really costs per unit of work (BI-F98BBE4F).
+// What each AI subscription really costs per unit of work (BI-F98BBE4F), what
+// its usage is worth at pay-per-token prices, and the savings, from the usage
+// of every install that shares the plan (BI-6361A930).
 // Server-renderable: the page loads the estimates and its translator and passes them down.
 
 import type { MessageArgs, MessageKey } from "@dpf/i18n";
 import { Notice, StatusBadge } from "@/components/ui/report-kit";
 import { Surface } from "@/components/ui/Surface";
 import { formatMoney } from "@/lib/org-locale/org-locale";
+import { LOCAL_INSTALL } from "@/lib/finance/subscription-cost-estimator";
 import type { SubscriptionPlanEstimate } from "@/lib/finance/subscription-cost-estimator.server";
 
 export type UnpricedSubscription = { providerId: string; name: string };
@@ -14,6 +17,74 @@ const CONFIDENCE_INTENT = { high: "success", medium: "warning", low: "neutral" }
 
 function usd(value: number): string {
   return formatMoney(value, "USD", null, { maximumFractionDigits: value < 10 ? 2 : 0 });
+}
+
+const TOKENS = new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 1 });
+const AS_OF = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZoneName: "short" });
+
+function installLabel(install: string, t: FinanceT): string {
+  return install === LOCAL_INSTALL ? t("subscriptionCosts.installLocal") : t("subscriptionCosts.installPeer", { id: install });
+}
+
+/** Token-equivalent value, savings, and where the usage ran. */
+function PlanValue({ plan, t }: { plan: SubscriptionPlanEstimate; t: FinanceT }) {
+  const v = plan.value;
+  const unpriced = v.unpricedProviderIds.join(", ");
+  const partial = v.status === "partial";
+  const savings = v.monthlySavingsUsd;
+  const toMonth = v.monthlyValueUsd != null && v.periodValueUsd > 0 ? v.monthlyValueUsd / v.periodValueUsd : null;
+  const showInstalls = plan.installs.length > 1 || (plan.installs.length === 1 && plan.peers.length !== 0);
+  const valueLine = v.status === "none"
+    ? (unpriced ? t("subscriptionCosts.valueNone", { providers: unpriced }) : null)
+    : partial
+      ? t("subscriptionCosts.valuePartial", { value: usd(v.monthlyValueUsd ?? 0), providers: unpriced })
+      : t("subscriptionCosts.value", { value: usd(v.monthlyValueUsd ?? 0) });
+  return (
+    <>
+      {valueLine ? (
+        <p className={`mt-1 text-sm ${v.status === "none" ? "text-[var(--dpf-muted)]" : "text-[var(--dpf-text)]"}`}>{valueLine}</p>
+      ) : null}
+      {savings != null ? (
+        <p className="mt-1 text-sm font-semibold text-[var(--dpf-text)]">
+          {savings >= 0
+            ? t(partial ? "subscriptionCosts.savingsFloor" : "subscriptionCosts.savings", { amount: usd(savings) })
+            : t(partial ? "subscriptionCosts.overspendCeiling" : "subscriptionCosts.overspend", { amount: usd(-savings) })}
+        </p>
+      ) : null}
+      {showInstalls ? (
+        <ul className="mt-2 text-xs text-[var(--dpf-muted)]">
+          {plan.installs.map((i) => (
+            <li key={i.install}>
+              {t("subscriptionCosts.installUsage", {
+                install: installLabel(i.install, t),
+                tokens: TOKENS.format(i.tokens),
+                value: usd(toMonth != null ? i.periodValueUsd * toMonth : i.periodValueUsd),
+              })}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </>
+  );
+}
+
+function PeerUsageNotice({ plan, t }: { plan: SubscriptionPlanEstimate; t: FinanceT }) {
+  const notices = plan.peers.filter((p) => p.state !== "current");
+  if (!notices.length) return null;
+  return (
+    <div className="mt-2">
+      {notices.map((p) => {
+        const reason = t(`subscriptionCosts.peerReason.${p.reason ?? "unreachable"}`);
+        return (
+          <Notice key={p.linkId} variant="warn">
+            {p.state === "missing" || !p.lastSuccessAt
+              ? t("subscriptionCosts.peerMissing", { reason })
+              : t("subscriptionCosts.peerStale", { reason, time: AS_OF.format(new Date(p.lastSuccessAt)) })}
+          </Notice>
+        );
+      })}
+    </div>
+  );
 }
 
 function PlanEstimate({ plan, t }: { plan: SubscriptionPlanEstimate; t: FinanceT }) {
@@ -38,6 +109,7 @@ function PlanEstimate({ plan, t }: { plan: SubscriptionPlanEstimate; t: FinanceT
           ? t("subscriptionCosts.fee", { fee: usd(e.monthlyFeeUsd) })
           : t("subscriptionCosts.feeNotRecorded")}
       </p>
+      <PlanValue plan={plan} t={t} />
       {e.status === "estimated" && band ? (
         <>
           <p className="mt-1 text-sm text-[var(--dpf-text)]">
@@ -50,6 +122,7 @@ function PlanEstimate({ plan, t }: { plan: SubscriptionPlanEstimate; t: FinanceT
               ? t("subscriptionCosts.basisCeiling", { days })
               : t("subscriptionCosts.basis", { days, limited: String(e.limitedWindows), active: String(e.activeWindows), hours: String(e.windowHours) })}
           </p>
+          {plan.value.status !== "none" ? <p className="mt-1 text-xs text-[var(--dpf-muted)]">{t("subscriptionCosts.priceBasis")}</p> : null}
         </>
       ) : (
         <p className="mt-1 text-sm text-[var(--dpf-muted)]">
@@ -58,6 +131,7 @@ function PlanEstimate({ plan, t }: { plan: SubscriptionPlanEstimate; t: FinanceT
           {e.status === "currency-unsupported" && t("subscriptionCosts.currencyUnsupported", { currency: plan.currency })}
         </p>
       )}
+      <PeerUsageNotice plan={plan} t={t} />
     </Surface>
   );
 }

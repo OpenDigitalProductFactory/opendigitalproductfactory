@@ -7,6 +7,15 @@ status: active
 Extends the subscription effective-cost estimator from PR #7019 (BI-F98BBE4F).
 Delivery shape: medium. One deliverable, one PR.
 
+**Backlog item:** `BI-6361A930`
+
+## Backlog coverage
+
+- Decision: atomic
+- Receipt: `cmwha9kz80cx90emqaebtapc0`
+- Rationale: the value figure, the paired-install usage channel and the panel
+  deliver the owner outcome only together. No other backlog item depends on it.
+
 ## Problem
 
 Finance > AI Spend > Subscription costs shows each plan's fee and its effective

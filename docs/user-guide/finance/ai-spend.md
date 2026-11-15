@@ -84,6 +84,36 @@ neither counts nor refuses subscription use (decision DI-223FEAA53080). A plan
 with no recorded fee is still counted at $0, and the section names it so its
 payment can be recorded.
 
+### What a plan's usage is worth
+
+Each plan also shows what its usage would have cost at pay-per-token prices,
+the way T3 Code and ccusage report it:
+
+- **Value:** the plan's input and output tokens over the last 30 days, priced
+  at each provider's recorded list price and scaled to a month. A plan
+  provider recorded at $0 uses its pay-per-token sibling's price: the Claude
+  plan (`anthropic-sub`) uses `anthropic`, and ChatGPT (`chatgpt`) uses
+  `openai`. A provider with no list price on record is named, and the value
+  is then a floor. The model used on each call is not recorded, so the
+  provider's price is used.
+- **Savings:** value minus the monthly fee. A negative figure means the fee
+  costs more than pay-per-token use would.
+
+### Plans shared with the paired install
+
+A plan belongs to a person, not an install. When this install has a trusted
+same-organization peer (for example production and its paired Dev install),
+each plan counts the usage of both. The fee is counted once, from this
+install's contract. Each install's share of the tokens and value is listed
+separately.
+
+The peer's usage comes over the work-sync link every 5 minutes. Nobody copies
+it by hand. If the peer cannot be reached, has not been updated to share
+usage, or refuses the request, the plan says that the paired install's usage
+is missing and why, and the confidence drops to low. The fee is then spread
+over this install's usage only, so the cost per unit is overstated. If the
+last good pull is more than an hour old, the plan says when that pull was.
+
 ## Allowance Evaluation
 
 Daily evaluation reviews active contracts and their included allowance. It can

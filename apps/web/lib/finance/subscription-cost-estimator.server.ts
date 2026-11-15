@@ -1,20 +1,35 @@
-// Loader for the subscription effective-cost estimator (BI-F98BBE4F).
+// Loader for the subscription effective-cost estimator (BI-F98BBE4F) and the
+// plan's token-equivalent value across installs (BI-6361A930).
 //
 // Fee: the active subscription contract that covers the provider, written by
 // the "Record AI subscription payment" form (recordAiProviderSubscriptionPayment).
 // One fee covers every provider the plan lists, so their usage and limit hits
-// are pooled. Usage: TokenUsage. Limit hits: RouteOutcome rate_limit rows.
-// Read-only.
+// are pooled. Usage: TokenUsage on this install, plus the paired
+// same-organization install's usage pulled over the work-sync link
+// (lib/federation/ai-usage-sync.ts). Limit hits: RouteOutcome rate_limit rows.
+// List prices: ModelProvider input/output prices. Read-only.
 
 import { prisma } from "@dpf/db";
 import {
   ESTIMATE_LOOKBACK_DAYS,
-  estimateSubscriptionUnitCost,
-  mergeWindowObservations,
+  estimateSubscriptionPlan,
+  LIST_PRICE_SIBLING,
+  LOCAL_INSTALL,
   monthlyFeeFromContract,
-  resetWindowHoursFor,
+  type InstallUsage,
+  type PeerUsageStatus,
+  type ProviderTokenPrice,
   type SubscriptionCostEstimate,
+  type UsageBucket,
+  type UsageCoverage,
+  type UsageValuation,
 } from "./subscription-cost-estimator";
+import {
+  parsePeerAiUsageRecord,
+  PEER_AI_USAGE_KEY,
+  peerUsageFromRecord,
+  SAME_ORG_PEER_LINK_WHERE,
+} from "@/lib/federation/ai-usage-exchange";
 
 export type SubscriptionPlanEstimate = {
   contractId: string;
@@ -22,6 +37,13 @@ export type SubscriptionPlanEstimate = {
   coveredProviderIds: string[];
   currency: string;
   estimate: SubscriptionCostEstimate;
+  /** Token-equivalent value at list price and savings (BI-6361A930). */
+  value: UsageValuation;
+  /** Usage per install, this install first. */
+  installs: InstallUsage[];
+  /** The paired installs whose usage is (or should be) included. */
+  peers: PeerUsageStatus[];
+  usageCoverage: UsageCoverage;
 };
 
 type ContractRow = {
@@ -63,63 +85,109 @@ export async function subscriptionCoveredProviderIds(database?: ContractReader):
   return [...new Set(contracts.flatMap((c) => providerIdsOf(c.coveredProviderIds)))];
 }
 
-async function windowObservations(providerIds: string[], windowHours: number, since: Date) {
-  const seconds = windowHours * 3600;
-  const [usage, hits, first] = await Promise.all([
-    prisma.$queryRaw<Array<{ window: bigint; tokens: bigint | null }>>`
-      SELECT floor(extract(epoch from "createdAt") / ${seconds})::bigint AS "window",
-             sum("inputTokens" + "outputTokens")::bigint AS "tokens"
+/**
+ * This install's own usage and limit hits per provider and clock hour. Served
+ * to the paired install (GET /api/v1/federation/ai-usage) and used for the
+ * local half of every plan. Without `providerIds`, every provider.
+ */
+export async function loadLocalHourlyAiUsage(input: { since: Date; providerIds?: readonly string[] }): Promise<{
+  usage: Array<{ providerId: string; hour: number; inputTokens: number; outputTokens: number }>;
+  hits: Array<{ providerId: string; hour: number; hits: number }>;
+}> {
+  const ids = input.providerIds ? [...input.providerIds] : null;
+  const [usage, hits] = await Promise.all([
+    prisma.$queryRaw<Array<{ providerId: string; hour: bigint; input: bigint | null; output: bigint | null }>>`
+      SELECT "providerId", floor(extract(epoch from "createdAt") / 3600)::bigint AS "hour",
+             sum("inputTokens")::bigint AS "input", sum("outputTokens")::bigint AS "output"
       FROM "TokenUsage"
-      WHERE "providerId" = ANY(${providerIds}) AND "createdAt" >= ${since}
-      GROUP BY 1`,
-    prisma.$queryRaw<Array<{ window: bigint; hits: bigint }>>`
-      SELECT floor(extract(epoch from "createdAt") / ${seconds})::bigint AS "window", count(*)::bigint AS "hits"
+      WHERE "createdAt" >= ${input.since} AND (${ids}::text[] IS NULL OR "providerId" = ANY(${ids}::text[]))
+      GROUP BY 1, 2`,
+    prisma.$queryRaw<Array<{ providerId: string; hour: bigint; hits: bigint }>>`
+      SELECT "providerId", floor(extract(epoch from "createdAt") / 3600)::bigint AS "hour", count(*)::bigint AS "hits"
       FROM "RouteOutcome"
-      WHERE "providerId" = ANY(${providerIds}) AND "createdAt" >= ${since} AND "providerErrorCode" = 'rate_limit'
-      GROUP BY 1`,
-    prisma.tokenUsage.findFirst({
-      where: { providerId: { in: providerIds }, createdAt: { gte: since } },
-      orderBy: { createdAt: "asc" },
-      select: { createdAt: true },
-    }),
+      WHERE "createdAt" >= ${input.since} AND "providerErrorCode" = 'rate_limit'
+        AND (${ids}::text[] IS NULL OR "providerId" = ANY(${ids}::text[]))
+      GROUP BY 1, 2`,
   ]);
   return {
-    windows: mergeWindowObservations(
-      usage.map((r) => ({ window: Number(r.window), tokens: Number(r.tokens ?? 0) })),
-      hits.map((r) => ({ window: Number(r.window), hits: Number(r.hits) })),
-    ),
-    firstObservedAt: first?.createdAt ?? null,
+    usage: usage.map((r) => ({ providerId: r.providerId, hour: Number(r.hour), inputTokens: Number(r.input ?? 0), outputTokens: Number(r.output ?? 0) })),
+    hits: hits.map((r) => ({ providerId: r.providerId, hour: Number(r.hour), hits: Number(r.hits) })),
   };
 }
 
-async function estimateContract(contract: ContractRow, now: Date): Promise<SubscriptionPlanEstimate> {
-  const coveredProviderIds = providerIdsOf(contract.coveredProviderIds);
-  const windowHours = resetWindowHoursFor(coveredProviderIds);
-  const since = new Date(now.getTime() - ESTIMATE_LOOKBACK_DAYS * 86_400_000);
-  const { windows, firstObservedAt } = coveredProviderIds.length
-    ? await windowObservations(coveredProviderIds, windowHours, since)
-    : { windows: [], firstObservedAt: null };
-  const observedDays = firstObservedAt ? (now.getTime() - firstObservedAt.getTime()) / 86_400_000 : 0;
-  const amount = contract.monthlyCommittedAmount == null ? null : Number(contract.monthlyCommittedAmount);
-  return {
-    contractId: contract.contractId,
-    planName: contract.notes,
-    coveredProviderIds,
-    currency: contract.currency,
-    estimate: estimateSubscriptionUnitCost({
-      monthlyFeeUsd: monthlyFeeFromContract({ monthlyCommittedAmount: amount, billingCadence: contract.billingCadence }),
-      currency: contract.currency,
-      windowHours,
-      observedDays,
-      windows,
-    }),
+function localBuckets(local: Awaited<ReturnType<typeof loadLocalHourlyAiUsage>>): UsageBucket[] {
+  const byKey = new Map<string, UsageBucket>();
+  const at = (providerId: string, hour: number) => {
+    const key = `${providerId}\x00${hour}`;
+    let b = byKey.get(key);
+    if (!b) byKey.set(key, (b = { install: LOCAL_INSTALL, providerId, hour, inputTokens: 0, outputTokens: 0, limitHits: 0 }));
+    return b;
   };
+  for (const u of local.usage) {
+    const b = at(u.providerId, u.hour);
+    b.inputTokens += u.inputTokens;
+    b.outputTokens += u.outputTokens;
+  }
+  for (const h of local.hits) at(h.providerId, h.hour).limitHits += h.hits;
+  return [...byKey.values()];
 }
 
-/** Every active subscription plan with its effective-cost estimate. */
+/** The paired installs' last pulled usage. Never throws: an unreadable record reads as missing usage. */
+async function loadPeerUsage(now: Date): Promise<{ peers: PeerUsageStatus[]; buckets: UsageBucket[] }> {
+  try {
+    const [links, row] = await Promise.all([
+      prisma.federationLink.findMany({ where: SAME_ORG_PEER_LINK_WHERE, select: { linkId: true }, orderBy: { linkId: "asc" } }),
+      prisma.platformConfig.findUnique({ where: { key: PEER_AI_USAGE_KEY }, select: { value: true } }),
+    ]);
+    return peerUsageFromRecord(parsePeerAiUsageRecord(row?.value), links.map((l) => l.linkId), now);
+  } catch (error) {
+    console.warn(`[subscription-cost] could not read the paired install's usage: ${error instanceof Error ? error.message : String(error)}`);
+    return { peers: [], buckets: [] };
+  }
+}
+
+async function loadListPrices(providerIds: readonly string[]): Promise<Map<string, ProviderTokenPrice>> {
+  const ids = [...new Set(providerIds.flatMap((id) => [id, LIST_PRICE_SIBLING[id]].filter((v): v is string => !!v)))];
+  if (!ids.length) return new Map();
+  const rows = await prisma.modelProvider.findMany({
+    where: { providerId: { in: ids } },
+    select: { providerId: true, inputPricePerMToken: true, outputPricePerMToken: true },
+  });
+  return new Map(rows.map((r) => [r.providerId, { inputPerMToken: r.inputPricePerMToken, outputPerMToken: r.outputPricePerMToken }]));
+}
+
+/** Every active subscription plan with its value, savings and effective-cost estimate. */
 export async function loadSubscriptionCostEstimates(now = new Date()): Promise<SubscriptionPlanEstimate[]> {
   const contracts = await activeSubscriptionContracts();
-  return Promise.all(contracts.map((c) => estimateContract(c, now)));
+  if (!contracts.length) return [];
+  const covered = [...new Set(contracts.flatMap((c) => providerIdsOf(c.coveredProviderIds)))];
+  const since = new Date(now.getTime() - ESTIMATE_LOOKBACK_DAYS * 86_400_000);
+  const [local, peer, listPrices] = await Promise.all([
+    covered.length ? loadLocalHourlyAiUsage({ since, providerIds: covered }) : Promise.resolve({ usage: [], hits: [] }),
+    loadPeerUsage(now),
+    loadListPrices(covered),
+  ]);
+  const buckets = [...localBuckets(local), ...peer.buckets];
+  return contracts.map((contract) => {
+    const coveredProviderIds = providerIdsOf(contract.coveredProviderIds);
+    const amount = contract.monthlyCommittedAmount == null ? null : Number(contract.monthlyCommittedAmount);
+    const plan = estimateSubscriptionPlan({
+      monthlyFeeUsd: monthlyFeeFromContract({ monthlyCommittedAmount: amount, billingCadence: contract.billingCadence }),
+      currency: contract.currency,
+      coveredProviderIds,
+      buckets,
+      listPrices,
+      peers: peer.peers,
+      now,
+    });
+    return {
+      contractId: contract.contractId,
+      planName: contract.notes,
+      coveredProviderIds,
+      currency: contract.currency,
+      ...plan,
+    };
+  });
 }
 
 const CACHE_TTL_MS = 15 * 60_000;
