@@ -74,11 +74,19 @@ const definitions: ToolDefinition[] = [
   },
   {
     name: "list_scheduled_agent_tasks",
-    description: "List the recurring agent tasks owned by the calling user (id, title, explicit product scope, typed kind, schedule, active state, next/last run, last status). Optional product scope returns only that exact operating boundary.",
+    description: "List the recurring agent tasks owned by the calling user (id, title, explicit product scope, typed kind, schedule, active state, next/last run, last status). Compact default pages omit prompts/configuration; follow nextCursor until complete. Filters and cursors retain the exact caller and product boundary.",
     inputSchema: {
       type: "object",
       properties: {
         taskId: { type: "string", description: "Optional exact task id; returns only this owned task and its current revision without expanding its prompt." },
+        limit: { type: "integer", minimum: 1, maximum: 50 },
+        cursor: { type: "string", maxLength: 1024 },
+        taskIdPrefix: { type: "string", maxLength: 128 },
+        titlePrefix: { type: "string", maxLength: 128 },
+        taskKind: { type: "string", maxLength: 128 },
+        agentId: { type: "string", maxLength: 128 },
+        lastStatus: { type: "string", maxLength: 128 },
+        isActive: { type: "boolean" },
         reportDiagnostic: { type: "object", description: "Read safe format metadata for one exact historical run of the owned task; requires taskId and its current revision. No raw report, execution proof or replay.",
           properties: { taskRunId: { type: "string" }, expectedRevision: { type: "string" } }, required: ["taskRunId", "expectedRevision"], additionalProperties: false },
         organizationId: { type: "string" },
@@ -287,10 +295,69 @@ async function listScheduledAgentTasksHandler(
     : typeof params.taskId === "string"
       ? await getScheduledAgentTasksFor(userId, undefined, params.taskId)
       : await getScheduledAgentTasksFor(userId);
-  // Bound each prompt so a few long tasks can't blow the local context window
-  // (the MCP-route result cap is the backstop).
-  const compact = tasks.map((t) => ({ ...t, prompt: t.prompt.length > 200 ? `${t.prompt.slice(0, 200)}…` : t.prompt }));
-  return { success: true, message: `${tasks.length} scheduled agent task(s).`, data: { tasks: compact } };
+
+  // Exact-task callers retain the established revision/detail contract.
+  if (params.taskId) {
+    const compact = tasks.map(t => ({ ...t, prompt: t.prompt.length > 200 ? t.prompt.slice(0, 200) + "\u2026" : t.prompt }));
+    return { success: true, message: tasks.length + " scheduled agent task(s).", data: { tasks: compact } };
+  }
+  const limit = params.limit ?? 20;
+  const selectors = ["taskKind", "agentId", "lastStatus", "titlePrefix", "taskIdPrefix"] as const;
+  if (!Number.isInteger(limit) || Number(limit) < 1 || Number(limit) > 50 ||
+      selectors.some(k => params[k] !== undefined && (typeof params[k] !== "string" || String(params[k]).length > 128)) ||
+      (params.isActive !== undefined && typeof params.isActive !== "boolean") ||
+      (params.cursor !== undefined && (typeof params.cursor !== "string" || params.cursor.length > 1024))) {
+    return { success: false, error: "invalid_inventory_selector", message: "Use a page limit of 1 to 50 and bounded inventory selectors." };
+  }
+  const ordered = tasks.filter(t =>
+    (params.taskKind === undefined || t.taskKind === params.taskKind) &&
+    (params.agentId === undefined || t.agentId === params.agentId) &&
+    (params.lastStatus === undefined || t.lastStatus === params.lastStatus) &&
+    (params.isActive === undefined || t.isActive === params.isActive) &&
+    (params.titlePrefix === undefined || t.title.startsWith(String(params.titlePrefix))) &&
+    (params.taskIdPrefix === undefined || t.taskId.startsWith(String(params.taskIdPrefix)))
+  ).sort((a, b) => a.taskId < b.taskId ? -1 : a.taskId > b.taskId ? 1 : 0);
+  const { createHash } = await import("node:crypto");
+  // A cursor observes one owner's unchanged selection, never supplies authority.
+  const fingerprint = createHash("sha256").update(JSON.stringify([
+    userId, scope, selectors.map(k => params[k] ?? null), params.isActive ?? null,
+    ordered.map(t => [t.taskId, t.revision]),
+  ])).digest("hex");
+  let start = 0;
+  if (params.cursor !== undefined) {
+    try {
+      const cursor = JSON.parse(Buffer.from(String(params.cursor), "base64url").toString("utf8"));
+      const index = ordered.findIndex(t => t.taskId === cursor.after);
+      if (cursor.fingerprint !== fingerprint || index < 0) throw new Error("stale");
+      start = index + 1;
+    } catch {
+      return { success: false, error: "inventory_cursor_invalid_or_stale", message: "Restart this owned inventory: its owner, selection or revisions changed, or the cursor is invalid." };
+    }
+  }
+  const bounded = (value: string | null | undefined, max = 128) => value == null ? null : value.slice(0, max);
+  const page: Array<Record<string, unknown>> = [];
+  for (const task of ordered.slice(start, start + Number(limit))) {
+    const row = {
+      taskId: task.taskId, agentId: bounded(task.agentId), title: bounded(task.title, 160),
+      taskKind: bounded(task.taskKind), schedule: bounded(task.schedule), isActive: task.isActive,
+      lastStatus: bounded(task.lastStatus), nextRunAt: task.nextRunAt, lastRunAt: task.lastRunAt,
+      revision: task.revision, organizationId: bounded(task.organizationId),
+      productLineId: bounded(task.productLineId), businessProductId: bounded(task.businessProductId),
+    };
+    if (Buffer.byteLength(JSON.stringify([...page, row])) > 12000) {
+      if (!page.length) return { success: false, error: "inventory_row_too_large", message: "This task cannot fit a bounded census row; inspect it by exact task id." };
+      break;
+    }
+    page.push(row);
+  }
+  const complete = start + page.length >= ordered.length;
+  const nextCursor = complete ? null : Buffer.from(JSON.stringify({
+    fingerprint, after: page[page.length - 1].taskId,
+  })).toString("base64url");
+  return { success: true, message: page.length + " scheduled agent task(s) in this page.",
+    data: { tasks: page, total: ordered.length, complete, truncated: !complete, nextCursor,
+      consistency: "owner-selection-and-revision-bound", projection: "compact; prompts and taskConfig omitted; long labels are previews" } };
+
 }
 
 async function changeScheduledAgentTaskHandler(
