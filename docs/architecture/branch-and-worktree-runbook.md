@@ -90,6 +90,12 @@ The legacy `scripts/seed-worktree-mcp.{ps1,sh}` and `scripts/ensure-dpf-skill-pa
 
 Restart Claude Code in the worktree afterwards so `/mcp` picks up the `dpf` connector. See [`docs/operations/install.md`](../operations/install.md) for the readiness states and what each one means.
 
+On Windows, the landing controller resolves pnpm through the shared host-command
+invocation helper. It executes the package manager entrypoint through Node or its
+native executable, preserving literal arguments without shell interpolation.
+Resolver and spawn errors remain failures, as do nonzero child exits; the same
+controller still runs every delivery gate.
+
 ## Routine client permissions
 
 Bootstrap also converges routine Codex, Claude and Grok permissions for the
