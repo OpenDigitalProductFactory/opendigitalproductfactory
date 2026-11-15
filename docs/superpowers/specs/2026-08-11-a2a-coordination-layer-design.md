@@ -607,9 +607,9 @@ Evidence is attached on PROD to PROD-owned items. It is never written onto a mir
 | MCP Tasks lifecycle over `TaskRun` (read side) | Built | `apps/web/lib/mcp/tasks-lifecycle.ts` |
 | Edge RemoteAction signed dispatch | Built; Go runs only `inventory.collect`, Docker VM restart and organization join | `executor.go:53-71`, `remote-action-dispatch.ts:30` |
 | Peer environment class attested | Missing (F1–F3) | — |
-| Peer task event types, ingress route `/api/v1/federation/a2a`, sender tool | Specified (§7) | The route directory has no `a2a` entry |
-| `TaskRun` peer link and remote task id | Missing | `build-delivery.prisma:1050` |
-| Envelope signatures and HTTP message signatures | Specified (plan slice S2 (device pinning / signed events)) | F11 |
+| Peer task event types, ingress route `/api/v1/federation/a2a`, sender tool | Ingress and `dpf.a2a.task.submitted.v1` built behind `DPF_FEDERATION_A2A_ENABLED` (`BI-B45BBD8A`); the validation sender tool is `BI-B6BC1598` | `apps/web/app/api/v1/federation/a2a/route.ts`, `apps/web/lib/federation/a2a-ingress.ts` |
+| `TaskRun` peer link and remote task id | Built in `TaskRun.a2aMetadata.peer` (no migration); the receiver inbox is `FederatedRecordMirror` `a2a-request` (`BI-B45BBD8A`) | `apps/web/lib/federation/a2a-outbox.ts` |
+| Envelope signatures and HTTP message signatures | Envelope EdDSA JWS verified against the link's peer DID built for A2A requests (`BI-B45BBD8A`); RFC 9421 HTTP message signatures still specified only | F11; `apps/web/lib/federation/a2a-request-signing.ts` |
 | Signed Agent Cards | Specified (plan slice S3 (signed Agent Cards), `BI-40648BBF`) | F10 |
 | Per-installation GAID namespace | Specified (plan slice S1 (GAID namespace)) | F9 |
 | Validation recipes | Specified here | — |
