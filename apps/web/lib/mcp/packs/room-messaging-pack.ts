@@ -38,6 +38,7 @@ import { inviteRoomParticipantConsequence } from "@/lib/work-management/room-cha
 import { decodeRoomMessageCursor, encodeRoomMessageCursor } from "@/lib/work-management/room-message-cursor";
 import { roomMessageAddressingView } from "@/lib/work-management/room-message-addressing";
 import { prepareRoomAddressing, publishRoomMessagePosted } from "@/lib/work-management/room-message-wake.server";
+import { readUnreadForMe } from "@/lib/mcp/room-unread-handler";
 
 type PackContext = { agentId?: string; apiTokenId?: string };
 
@@ -158,8 +159,9 @@ async function readRoomMessagesHandler(
   }
   const sinceRaw = str(params, "sinceCursor");
   const beforeRaw = str(params, "beforeCursor");
-  if (sinceRaw && beforeRaw) {
-    return { success: false, error: "invalid_input", message: "Pass sinceCursor or beforeCursor, not both." };
+  const unreadForMe = params.unreadForMe === true; // BI-31E0C874: reads from the caller's own stored position
+  if ((sinceRaw && beforeRaw) || (unreadForMe && (sinceRaw || beforeRaw))) {
+    return { success: false, error: "invalid_input", message: unreadForMe ? "unreadForMe reads from your own position in the room; do not pass sinceCursor or beforeCursor with it." : "Pass sinceCursor or beforeCursor, not both." };
   }
   const cursorRaw = sinceRaw ?? beforeRaw;
   const cursor = cursorRaw ? decodeRoomMessageCursor(cursorRaw) : null;
@@ -198,6 +200,7 @@ async function readRoomMessagesHandler(
     const childAccess = await resolveAgentRoomAccess({ agentId, userId, requested: "content", workItem: child });
     if (childAccess.decision.level === "content") admittedChildIds.push(child.id);
   }
+  if (unreadForMe) return readUnreadForMe({ caseKey, roomWorkItemId: item.id, workItemIds: [item.id, ...admittedChildIds], agentId, principalId: access.agentPrincipalId, limit, label: await agentLabel(agentId) });
   // since: strictly after the cursor, oldest first. Default and before: newest
   // first, strictly before the cursor when one is given. One extra row says
   // whether more remain in the paging direction.
@@ -627,13 +630,14 @@ const definitions: ToolDefinition[] = [
   {
     name: "read_room_messages",
     description:
-      "Read a Work Room's message feed (human and coworker) by caseKey. With no cursor, returns the newest messages, newest first. Pass oldestCursor back as beforeCursor to page to older messages; pass newestCursor back as sinceCursor to get only messages posted since (oldest first). hasMore says whether more remain in that direction. Requires content-level admission to the room; admission is outcome-scoped per room.",
+      "Read a Work Room's message feed (human and coworker) by caseKey. With no cursor, returns the newest messages, newest first. Pass oldestCursor back as beforeCursor to page to older messages; pass newestCursor back as sinceCursor to get only messages posted since (oldest first). hasMore says whether more remain in that direction. Requires content-level admission to the room; admission is outcome-scoped per room. Pass unreadForMe: true to get only what you have not yet been handed: messages addressed to you or to the room since your own position, oldest first. That read moves your position forward, so asking again never repeats a message.",
     inputSchema: {
       type: "object",
       properties: {
         caseKey: { type: "string", description: "The room's case key, e.g. backlog-item:BI-123 (sourceType:sourceId)." },
         sinceCursor: { type: "string", description: "A newestCursor from an earlier read. Returns only later messages, oldest first. Do not combine with beforeCursor." },
         beforeCursor: { type: "string", description: "An oldestCursor from an earlier read. Returns only earlier messages, newest first. Do not combine with sinceCursor." },
+        unreadForMe: { type: "boolean", description: "Return only messages addressed to you or to the room that you have not yet been handed, oldest first, and move your read position past them. Do not combine with sinceCursor or beforeCursor." },
         limit: { type: "integer", minimum: 1, maximum: ROOM_MESSAGE_PAGE_MAX, description: `Messages per page (default ${ROOM_MESSAGE_PAGE_DEFAULT}, max ${ROOM_MESSAGE_PAGE_MAX}).` },
       },
       required: ["caseKey"],
