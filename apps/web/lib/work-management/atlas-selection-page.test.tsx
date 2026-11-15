@@ -9,7 +9,15 @@ vi.mock("@/lib/work-management/atlas-projection.server", () => ({ loadAtlasPictu
 vi.mock("@/lib/work-management/atlas-inspector.server", () => ({ loadAtlasInspector: async () => ({ flow: null, live: null }) }));
 vi.mock("@/lib/work-management/held-workrooms", () => ({ loadHeldWorkrooms: async () => [] }));
 vi.mock("@/lib/work-management/standing-run-history.server", () => ({ loadStandingRhythms: async () => [] }));
-vi.mock("@/lib/work-management/atlas-page.server", () => ({ atlasHolds: () => ({}), atlasShapeMeta: () => ({}), atlasFlowHref: () => null }));
+vi.mock("@/lib/work-management/atlas-page.server", async () => {
+  const { atlasLayoutFor } = await import("@/lib/work-management/atlas-layout");
+  return {
+    atlasHolds: () => ({}), atlasShapeMeta: () => ({}), atlasFlowHref: () => null,
+    // A6a: no archetype on this fixture install, so it keeps the portfolio map.
+    loadAtlasLayout: async () => ({ ...atlasLayoutFor("TENANTS"), workItems: "rooms" }),
+    loadAtlasJustNow: async () => [],
+  };
+});
 vi.mock("@/lib/i18n/locale-context.server", () => ({ getLocaleContext: async () => ({ language: "en-US" }) }));
 vi.mock("@/lib/i18n/t.server", () => ({ getT: async () => (key: string, args?: Record<string, unknown>) => translate("en-US", "workrooms", key as never, args as never) }));
 vi.mock("@/components/ops/OpsTabNav", () => ({ OpsTabNav: () => null }));

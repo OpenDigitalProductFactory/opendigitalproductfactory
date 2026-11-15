@@ -635,6 +635,18 @@
         "blocked": "Current step, held",
         "ahead": "Still to do"
       }
+    },
+    "layout": {
+      "heading": "Workrooms by {$lanes} and {$slots}",
+      "cellGroup": "{$lane}, {$slot}",
+      "anyTime": "Any time",
+      "noLanes": "No room records a {$lanes} yet.",
+      "unplaced": "Not yet placed: {$count} rooms",
+      "unplacedWhy": "These rooms do not record which {$lanes} they belong to. They appear in a lane once the {$items} they serve record it."
+    },
+    "justNow": {
+      "heading": "Just now",
+      "summary": ": {$summary}"
     }
   },
   "savedProof": {
