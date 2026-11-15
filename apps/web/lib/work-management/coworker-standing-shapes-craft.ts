@@ -42,6 +42,7 @@ export const COWORKER_STANDING_SHAPES_CRAFT: Record<string, WorkShapeDefinition>
       {
         key: "observe",
         title: "Observe the rendered surface",
+        effort: "low",
         accountablePrincipalRef: "agent:ux-design-critic",
         advance: {
           kind: "status-change",
@@ -55,6 +56,7 @@ export const COWORKER_STANDING_SHAPES_CRAFT: Record<string, WorkShapeDefinition>
       {
         key: "ground",
         title: "Ground each finding in the critique corpus",
+        effort: "medium",
         accountablePrincipalRef: "agent:ux-design-critic",
         advance: {
           kind: "status-change",
@@ -211,6 +213,7 @@ export const COWORKER_STANDING_SHAPES_CRAFT: Record<string, WorkShapeDefinition>
       {
         key: "inventory",
         title: "Inventory what is actually exposed",
+        effort: "low",
         accountablePrincipalRef: "agent:integration-engineer",
         advance: {
           kind: "status-change",
@@ -224,6 +227,7 @@ export const COWORKER_STANDING_SHAPES_CRAFT: Record<string, WorkShapeDefinition>
       {
         key: "assess",
         title: "Assess reachability and contract drift",
+        effort: "medium",
         accountablePrincipalRef: "agent:integration-engineer",
         advance: {
           kind: "status-change",

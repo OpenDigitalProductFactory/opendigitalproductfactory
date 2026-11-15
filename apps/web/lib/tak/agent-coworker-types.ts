@@ -37,6 +37,8 @@ export type AgentMessageRow = {
   createdAt: string; // ISO string via .toISOString()
   /** Display hint only; the feedback action rechecks exact binding and current authority. */
   responseFeedbackEligible?: boolean;
+  /** Read-only same-request publication proof; never execution or business acceptance. */
+  settledCapacityWait?: boolean;
   attachments?: AttachmentInfo[];
   provider?: AgentMessageProvider;
   proposal?: {

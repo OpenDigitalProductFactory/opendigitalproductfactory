@@ -7,7 +7,7 @@ import { withForegroundWork } from "./foreground-work-context";
 import { createResourceWaitProjection, parseResourceWaitProjection, resourceWaitDue, RESOURCE_WAIT_MAX_ATTEMPTS } from "@/lib/mcp-task-capacity-contract";
 
 import { foregroundRequestDigest } from "./foreground-request-digest";
-import { FOREGROUND_WORK_EVENT, FOREGROUND_BUILD_HANDOFF_BLOCKED } from "./foreground-work-contract";
+import { FOREGROUND_WORK_EVENT, FOREGROUND_BUILD_HANDOFF_BLOCKED, FOREGROUND_CAPACITY_WAIT } from "./foreground-work-contract";
 import { hasExecutionUncertainty } from "@/lib/shared/execution-uncertainty";
 import { captureTaskExecutionFence } from "@/lib/shared/task-execution-fence";
 import { readForegroundPublication } from "./foreground-work-publication";
@@ -124,7 +124,7 @@ export async function executeForegroundWork(taskRunId: string) {
     const awaitingApproval = result.pendingApproval === true;
     const completed = !pending && !awaitingApproval && result.agentMessage.role === "assistant";
     const summary = pending
-      ? "Your request is retained. DPF will retry when provider capacity permits, within its original recovery window. You do not need to resend."
+      ? FOREGROUND_CAPACITY_WAIT
       : awaitingApproval ? "The proposed action is waiting for your approval in this conversation."
       : completed ? "Coworker response saved. Business-result acceptance is separate." : "Your request is retained but needs attention before it can continue.";
     const saved = await settle(completed ? "completed" : pending ? "submitted" : "input-required", {

@@ -4,6 +4,76 @@ status: active
 
 # Retained foreground coworker requests
 
+## Completed capacity notices — BI-EED738D9, 15 November 2026
+
+**OBJ-EED-1:** After a qualified same-request assistant response is saved,
+show an earlier capacity notice as history rather than a current promise to
+retry. This independently shippable correction implements AC-CHAT-OBSERVE of
+BI-B7E2DD4B; BI-D0D2FF0D retains recovery-engine ownership. It does not settle
+unrelated UNKNOWN requests or prove a delegated business result.
+
+Research is bound to base `71c070aea21b27501c71c80d02cfacaf26079246`:
+`AgentMessageBubble.tsx` renders all system notices as live status; snapshot
+loaders omit saved task context. Protected CI43657427046 passed all fifteen
+Finance recovery cases, while DOC-0330365B shows the old future-tense notice
+above the saved answer. Research receipt
+`initiative-f1f76919-a018-49ca-99b9-0abec247c72f` records this gap.
+DI-C4CB2638CD72 is advisory with low confidence, not autonomous approval;
+the agent selected this bounded repair under the owner's explicit standing
+all-repairs instruction. No new provider, funding, access or execution follows.
+
+### Ordered atomic fix
+
+1. Claim the existing publication, message-loader/type, bubble, regression,
+   guarded recovery script and user-guide paths. Consume their impact contract.
+   Add permanent failing cases before the product correction: accepted completed
+   assistant versus active wait, unknown/input-required/canceled/expired work,
+   mismatched fence/result/thread/owner, missing publication and system-only
+   result. Keep the actual original content unchanged.
+2. **CONTRACT-EED-PUBLICATION:** Extract and reuse the canonical publication
+   validation, retaining its generation/digest, accepted-before-deadline,
+   current-human, owned-thread, status and bound-message checks. Batch existing
+   TaskRun and message reads for the owned conversation. Completion must be a
+   responded publication whose saved result is an assistant of that same task;
+   arbitrary later text or task status alone is insufficient. No per-message
+   query loop, new table, lifecycle or dispatch path.
+3. **FLOW-EED-RELOAD:** Reuse existing initial history and snapshot-on-done/reload
+   paths. Carry only an optional display hint for an exact canonical capacity
+   notice on that same completed task. Render “Earlier capacity wait. Coworker
+   response saved.” as a historical note, preserving the job reference.
+   Active, unqualified, unrelated and approval notices retain their existing
+   text and live semantics. Preserve proposal, provider, attachment and approval
+   serialization. Do not mutate history or claim business acceptance.
+4. **VERIFY-EED-SETTLED:** Run focused publication/data/bubble and action controls,
+   both web typechecks, impact guards and the canonical exact-tree gate. Extend
+   the existing guarded Finance `result-reload` case to require the historical
+   note and absence of a live same-request wait. Preserve all fifteen case IDs,
+   fixture isolation, authority, duplicate, cleanup and zero-expense checks.
+   Native review, protected PR delivery and containing served-owner reload are
+   required before claiming delivered owner acceptance.
+
+All steps deliver one visible invariant and are internal sequencing under
+BI-EED738D9, not independently shippable phases. Requirements OBJ-EED-1,
+contract CONTRACT-EED-PUBLICATION, flow FLOW-EED-RELOAD and verification
+VERIFY-EED-SETTLED form the four-way trace. Immutable plan coverage will bind
+this ordered design before implementation admission. No new design baseline
+or broader B7 acceptance is implied.
+
+### Backlog coverage
+
+Initial atomic receipt `cmwh4sf2a0leq0er17tpbjp5n` binds the ordered design at
+`b291050e3a23893a91a1428c19bfd0bb39a491c5` to BI-EED738D9. The one deliverable
+maps OBJ-EED-1 / CONTRACT-EED-PUBLICATION / FLOW-EED-RELOAD /
+VERIFY-EED-SETTLED to that same BI, without independent children or external
+dependencies. Refresh coverage for the final immutable design before publication;
+DPF stores the current receipt without changing the original one.
+
+Rollback reverts only this presentation/read projection through a protected PR;
+stored requests, results, original notices and recovery state stay untouched.
+Malformed or unavailable proof preserves the original pending wording instead
+of guessing success. Scope risks are false settlement, ownership leakage,
+read amplification and lost message cards; the controls above address each.
+
 ## Accepted-response evidence correction — 13 November 2026
 
 The owned Finance attempt `TR-CHAT-e0a0901901bab3aab6d5e867896d785c`

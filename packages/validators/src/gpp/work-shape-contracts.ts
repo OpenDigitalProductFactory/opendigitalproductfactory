@@ -61,6 +61,14 @@ export type WorkShapeBinding =
   | (WorkShapeBindingCommon & { enforcement: "absent" | "shadow" | "enforced"; egress?: readonly string[] })
   | (WorkShapeBindingCommon & { enforcement: "environment"; egress: readonly string[] });
 
+/**
+ * The effort tier a stage declares (BI-B3BBF9AD, Phase G). The same four-level
+ * vocabulary as a reasoning-effort request and as the app's EffortLevel, which
+ * a parity test keeps equal. A capability floor, not a cost target.
+ */
+export const WORK_SHAPE_STAGE_EFFORTS = ["minimal", "low", "medium", "high"] as const;
+export type WorkShapeStageEffort = (typeof WORK_SHAPE_STAGE_EFFORTS)[number];
+
 export type WorkShapeStage = {
   key: string;
   title: string;
@@ -118,6 +126,14 @@ export type WorkShapeStage = {
    * proposal. Only for non-governed stages; resolved by room-stage-mandate.ts.
    */
   mandatedTools?: readonly string[];
+  /**
+   * The effort tier this stage runs at (BI-B3BBF9AD, Phase G). ADDITIVE AND
+   * OPTIONAL: absent keeps today's guessed warrant. A governed-decision stage
+   * always resolves `high` at run time, and the registry guard refuses a shape
+   * that declares one lower (D-11 follows, DI-3DDF29984D1D). Routing metadata, not reach, so it is not a
+   * binding row and declaring it bumps no shape version.
+   */
+  effort?: WorkShapeStageEffort;
 };
 
 /** A stage deadline: raises a notice after `afterDays`, never moves the token. */

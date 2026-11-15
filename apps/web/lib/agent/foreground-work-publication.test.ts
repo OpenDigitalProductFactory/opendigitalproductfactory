@@ -1,15 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const f = vi.hoisted(() => ({ load: vi.fn(), update: vi.fn(), lock: vi.fn(), transaction: vi.fn(),
-  human: vi.fn(), thread: vi.fn(), original: vi.fn(), readMessage: vi.fn(), createMessage: vi.fn(), updateMessage: vi.fn() }));
+  human: vi.fn(), thread: vi.fn(), original: vi.fn(), readMessage: vi.fn(), createMessage: vi.fn(), updateMessage: vi.fn(), runs: vi.fn(), messages: vi.fn() }));
 vi.mock("server-only", () => ({}));
 vi.mock("@dpf/db", () => ({ prisma: { $queryRaw: f.lock, $transaction: f.transaction,
-  taskRun: { findUnique: f.load, updateMany: f.update }, user: { findUnique: f.human },
+  taskRun: { findUnique: f.load, updateMany: f.update, findMany: f.runs }, user: { findUnique: f.human },
   agentThread: { findUnique: f.thread },
-  agentMessage: { findFirst: f.original, findUnique: f.readMessage, create: f.createMessage, updateMany: f.updateMessage },
+  agentMessage: { findFirst: f.original, findUnique: f.readMessage, findMany: f.messages, create: f.createMessage, updateMany: f.updateMessage },
 } }));
 import { prisma } from "@dpf/db";
 import { foregroundExecutionFence, withForegroundWork } from "./foreground-work-context";
-import { publishForegroundMessage, readForegroundPublication } from "./foreground-work-publication";
+import { publishForegroundMessage, readForegroundPublication, readSettledForegroundNotices } from "./foreground-work-publication";
 
 describe("foreground publication transaction", () => {
   let row: any;
@@ -58,6 +58,63 @@ describe("foreground publication transaction", () => {
   const write = () => publishForegroundMessage(db => db.agentMessage.create({ data: {
     threadId: "thread", taskRunId: "TR-one", role: "assistant", content: "Accepted response",
   } }), { kind: "responded" });
+
+  const waitNotice = { id: "wait", threadId: "thread", taskRunId: "TR-one", role: "system",
+    content: "Your request is retained. DPF will retry when provider capacity permits, within its original recovery window. You do not need to resend.\n\nJob: TR-one" };
+  async function settledNotices() {
+    f.runs.mockImplementation(async () => [structuredClone(row)]);
+    f.messages.mockImplementation(async () => [...messages.values()]);
+    return readSettledForegroundNotices("thread", [waitNotice, ...messages.values()]);
+  }
+  it("projects a same-request earlier wait as history using batched saved completion proof without writes", async () => {
+    await withForegroundWork("TR-one", write);
+    f.update.mockClear(); f.createMessage.mockClear(); f.updateMessage.mockClear();
+    expect(await settledNotices()).toEqual(new Set(["wait"]));
+    expect(f.runs).toHaveBeenCalledTimes(1);
+    expect(f.messages).toHaveBeenCalledTimes(1);
+    expect(f.update).not.toHaveBeenCalled(); expect(f.createMessage).not.toHaveBeenCalled(); expect(f.updateMessage).not.toHaveBeenCalled();
+    expect(waitNotice.content).toContain("DPF will retry");
+  });
+  it.each(["submitted", "working", "input-required", "canceled", "failed"])("does not settle %s work from a later answer", async status => {
+    await withForegroundWork("TR-one", write); row.status = status;
+    expect(await settledNotices()).toEqual(new Set());
+  });
+  it.each(["publication", "fence", "digest", "deadline", "result", "result-role", "result-thread", "result-task", "owner", "human", "archived"])("preserves pending wording when %s completion proof is missing or mismatched", async change => {
+    await withForegroundWork("TR-one", write);
+    if (change === "publication") delete row.progressPayload.foregroundPublication;
+    if (change === "fence") row.progressPayload.dispatch.claimedAt = "replacement";
+    if (change === "digest") row.a2aMetadata.requestDigest = "b".repeat(64);
+    if (change === "deadline") row.a2aMetadata.foregroundRequest.deadlineAt = "2000-01-01T00:00:00Z";
+    if (change === "result") row.progressPayload.resultMessageId = "other";
+    if (change === "result-role") messages.get("answer").role = "system";
+    if (change === "result-thread") messages.get("answer").threadId = "other";
+    if (change === "result-task") messages.get("answer").taskRunId = "TR-other";
+    if (change === "owner") row.userId = "other";
+    if (change === "human") f.human.mockResolvedValue({ isActive: false, groups: [], isSuperuser: false });
+    if (change === "archived") row.archivedAt = new Date();
+    expect(await settledNotices()).toEqual(new Set());
+  });
+  it("does not relabel approval text, unbound notices or another unresolved request", async () => {
+    await withForegroundWork("TR-one", write);
+    f.runs.mockResolvedValue([row]); f.messages.mockResolvedValue([...messages.values()]);
+    const notices = [waitNotice, { ...waitNotice, id: "approval", content: "Waiting for your approval." },
+      { ...waitNotice, id: "unbound", taskRunId: null }, { ...waitNotice, id: "old", taskRunId: "TR-unknown" }];
+    expect(await readSettledForegroundNotices("thread", [...notices, ...messages.values()])).toEqual(new Set(["wait"]));
+  });
+  it("uses the canonical result binding when loading an earlier history page, without claiming its position", async () => {
+    await withForegroundWork("TR-one", write);
+    f.runs.mockResolvedValue([row]); f.messages.mockResolvedValue([...messages.values()]);
+    expect(await readSettledForegroundNotices("thread", [waitNotice])).toEqual(new Set(["wait"]));
+  });
+  it("batches repeated wait history without per-notice task or message reads", async () => {
+    await withForegroundWork("TR-one", write);
+    f.runs.mockResolvedValue([row]); f.messages.mockResolvedValue([...messages.values()]);
+    const waits = Array.from({ length: 50 }, (_, i) => ({ ...waitNotice, id: `wait-${i}` }));
+    const result = await readSettledForegroundNotices("thread", waits);
+    expect(result.size).toBe(50); expect(f.runs).toHaveBeenCalledTimes(1); expect(f.messages).toHaveBeenCalledTimes(1);
+    expect(f.runs).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({
+      threadId: "thread", userId: "owner", taskRunId: { in: ["TR-one"] } }) }));
+  });
 
   it("accepts one message with its canonical result linkage and retained execution identity", async () => {
     await withForegroundWork("TR-one", async () => {

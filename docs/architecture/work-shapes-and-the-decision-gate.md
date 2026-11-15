@@ -1231,6 +1231,29 @@ A stage that declares nothing is dispatched exactly as before.
 Pinning only prompt-named tools was a C-6 *Reach reconciliation* gap in the
 reverse direction: the shape admitted a tool the run never reached.
 
+### Stage effort tier (Phase G, BI-B3BBF9AD)
+
+A stage can also declare how much reasoning it needs: `WorkShapeStage.effort`,
+one of `minimal`, `low`, `medium` or `high`. It is part of the portable GPP
+stage contract, so a shape document carries it and the compiler round-trips it.
+Read it only through `resolveStageEffort`: a governed-decision stage always
+resolves `high`, whatever it declares, and a stage that declares nothing
+resolves to no tier and runs exactly as before.
+
+The drive writes the resolved tier into the same `taskConfig.workroomStage`
+record as the stage's tools. The scheduler's warrant keeps the unattended run
+envelope as its floor (a `high` stage raises it), and carries the tier for
+routing: a `low` or `minimal` stage routes cost-first above the coworker's own
+capability floor, a `high` stage at frontier minimums, and spend-aware routing
+never demotes a `high` turn. The tier is a capability floor, not a cost target.
+
+Effort is routing metadata, not reach, so it is not a binding row and
+declaring it bumps no shape version. `work-shape-stage-effort.test.ts` requires
+a tier on every agent-run, non-governed stage of every standing shape and
+refuses a governed stage declared below `high`. A compile-time design rule
+(D-11) follows in the next `dpf-workroom` release (DI-3DDF29984D1D,
+BI-5CDF49C4). Design: `docs/superpowers/specs/2026-10-01-stage-effort-tier-design.md`.
+
 Where no existing tool reads what a stage needs, nothing is invented. The stage
 goes on `KNOWN_STAGE_TOOL_GAPS` (`stage-tool-gaps.ts`) with the reason. One gap
 closed as part of this work: `customer-advisor` gained `storefront_read`, so the
