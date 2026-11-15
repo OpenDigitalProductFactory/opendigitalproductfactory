@@ -2947,6 +2947,19 @@
       "file": "apps/web/app/api/v1/edge/metrics/route.ts"
     },
     {
+      "routePath": "/api/v1/federation/a2a",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "federation",
+        "a2a"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/v1/federation/a2a/route.ts",
+      "exposure": "private-mesh"
+    },
+    {
       "routePath": "/api/v1/federation/approval-relay",
       "kind": "route",
       "segments": [
