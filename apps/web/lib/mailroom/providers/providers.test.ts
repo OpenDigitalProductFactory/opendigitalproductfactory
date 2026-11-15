@@ -48,10 +48,15 @@ class FakeImap implements ImapClientPort {
   async getMailboxLock() {
     return { release: () => void (this.released += 1) };
   }
-  async search(query: { uid: string } | { since: Date }) {
-    if ("since" in query) {
-      this.sinceQueries.push(query.since);
-      return this.uids.filter((u) => (this.arrived[u] ?? new Date()) >= query.since);
+  async search(query: { uid?: string; since?: Date }) {
+    const since = query.since;
+    if (since) this.sinceQueries.push(since);
+    const recentEnough = (u: number) => !since || (this.arrived[u] ?? new Date()) >= since;
+    if (!query.uid) return this.uids.filter(recentEnough);
+    if (query.uid === "*") return this.uids.length ? [this.uids[this.uids.length - 1]] : [];
+    if (since) {
+      const from = Number(query.uid.split(":")[0]);
+      return this.uids.filter((u) => u >= from && recentEnough(u));
     }
     const [start] = query.uid.split(":");
     const from = Number(start);
@@ -71,7 +76,7 @@ describe("IMAP adapter", () => {
     const adapter = createImapAdapter({ createClient: () => client, parse: async (src) => parsed({ subject: src.toString() }) });
     const result = await adapter.fetchNew({ host: "h", port: 993, secure: true, user: "u" }, { password: "p" }, null);
     expect(result.messages.map((m) => m.providerMessageId)).toEqual(["3", "4", "5"]);
-    expect(result.cursor).toEqual({ uidValidity: "7", lastUid: 5 });
+    expect(result.cursor).toMatchObject({ uidValidity: "7", lastUid: 5 });
     expect(client.released).toBe(1);
     expect(client.connected).toBe(false);
   });
@@ -89,10 +94,38 @@ describe("IMAP adapter", () => {
     const adapter = createImapAdapter({ createClient: () => client, parse: async () => parsed() });
     const result = await adapter.fetchNew({ host: "h", port: 993, secure: true, user: "u" }, { password: "p" }, null);
     expect(result.messages.map((m) => m.providerMessageId)).toEqual(["118", "119", "120"]);
-    expect(result.cursor).toEqual({ uidValidity: "7", lastUid: 120 });
+    expect(result.cursor).toMatchObject({ uidValidity: "7", lastUid: 120 });
+    expect(result.cursor?.since).toBe(client.sinceQueries[0]?.toISOString());
     const since = client.sinceQueries[0];
     expect(since).toBeDefined();
     expect(Math.round((now - since!.getTime()) / 86_400_000)).toBe(MAILROOM_FIRST_READ_LOOKBACK_DAYS);
+  });
+
+  // Review finding 1 (TR-GATE-FAAD270E): a server that omits UIDNEXT must not seed the cursor at 0.
+  it("first fetch with nothing recent and no UIDNEXT looks up the newest UID instead of seeding at 0", async () => {
+    const old = new Date(Date.now() - 400 * 86_400_000);
+    const client = new FakeImap(7, [10, 11, 12], {}, { 10: old, 11: old, 12: old });
+    Object.defineProperty(client, "mailbox", { get: () => ({ uidValidity: 7, exists: 3 }) });
+    const adapter = createImapAdapter({ createClient: () => client, parse: async () => parsed() });
+    const result = await adapter.fetchNew({ host: "h", port: 993, secure: true, user: "u" }, { password: "p" }, null);
+    expect(result.messages).toEqual([]);
+    expect(result.cursor).toMatchObject({ uidValidity: "7", lastUid: 12 });
+  });
+
+  // Review finding 2 (TR-GATE-FAAD270E): UIDs are not ordered by date, so a truncated first
+  // read must not let a later poll reach old mail between the processed UIDs.
+  it("after a truncated first read, later polls keep the window floor and never route old mail", async () => {
+    const now = Date.now();
+    const old = new Date(now - 400 * 86_400_000);
+    const recent = new Date(now - 2 * 86_400_000);
+    // 3 and 4 are recent-dated with low UIDs (copied in); 5 and 6 are old; 7..9 are recent.
+    const arrived: Record<number, Date> = { 1: old, 2: old, 3: recent, 4: recent, 5: old, 6: old, 7: recent, 8: recent, 9: recent };
+    const client = new FakeImap(7, [1, 2, 3, 4, 5, 6, 7, 8, 9], {}, arrived);
+    const adapter = createImapAdapter({ createClient: () => client, parse: async () => parsed() });
+    const first = await adapter.fetchNew({ host: "h", port: 993, secure: true, user: "u" }, { password: "p" }, null, { limit: 2 });
+    expect(first.messages.map((m) => m.providerMessageId)).toEqual(["3", "4"]);
+    const second = await adapter.fetchNew({ host: "h", port: 993, secure: true, user: "u" }, { password: "p" }, first.cursor);
+    expect(second.messages.map((m) => m.providerMessageId)).toEqual(["7", "8", "9"]);
   });
 
   it("first fetch with nothing recent starts the cursor at the newest message, so old mail is never read", async () => {
@@ -101,7 +134,7 @@ describe("IMAP adapter", () => {
     const adapter = createImapAdapter({ createClient: () => client, parse: async () => parsed() });
     const result = await adapter.fetchNew({ host: "h", port: 993, secure: true, user: "u" }, { password: "p" }, null);
     expect(result.messages).toEqual([]);
-    expect(result.cursor).toEqual({ uidValidity: "7", lastUid: 3 });
+    expect(result.cursor).toMatchObject({ uidValidity: "7", lastUid: 3 });
   });
 
   it("second fetch returns nothing new and keeps the cursor", async () => {
@@ -117,7 +150,7 @@ describe("IMAP adapter", () => {
     const adapter = createImapAdapter({ createClient: () => client, parse: async () => parsed() });
     const result = await adapter.fetchNew({ host: "h", port: 993, secure: true, user: "u" }, { password: "p" }, { uidValidity: "7", lastUid: 5 });
     expect(result.messages.map((m) => m.providerMessageId)).toEqual(["1", "2"]);
-    expect(result.cursor).toEqual({ uidValidity: "9", lastUid: 2 });
+    expect(result.cursor).toMatchObject({ uidValidity: "9", lastUid: 2 });
   });
 
   it("probe reports a safe error on bad credentials", async () => {
