@@ -9,11 +9,9 @@
     "requiredReadTools": [
       "list_open_decision_reviews"
     ],
-    "requiredActTools": [],
-    "exemption": {
-      "rationale": "Resolution remains a human HITL action after reviewing the Decision Canvas; coworker agency is read and recommend, not unilateral resolution.",
-      "owner": "Founder Review"
-    }
+    "requiredActTools": [
+      "record_owner_ruling"
+    ]
   },
   {
     "surfaceId": "platform.estate-discovery",
