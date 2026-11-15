@@ -79,6 +79,21 @@ A standing room declares its activity shape by passing `workShape` to `create_wo
 `standing-operations-shapes.ts`. Like the collaboration shape, it persists as a `scopeClaims`
 entry with no migration, and is read back by `readWorkShapeClaim` / `resolveWorkShapeClaim`.
 
+Registry order is part of this read contract, not formatting. Existing definitions retain their
+family order because list, migration-proof and signature consumers observe `listWorkShapes()` in
+that order. A newly ratified standing shape may be declared with its family, but it is appended
+after the pre-existing registry unless a separately governed migration intentionally changes the
+order. `backlog-steward-watch@1.0.0` follows that rule: `work-shapes.ts` separates it from the
+pre-existing standing set and appends that same definition after the existing source-inquiry
+shapes. This makes the addition observable without silently reordering established definitions.
+
+That backlog-steward shape is deliberately advisory. Its `observe` and `reconcile` stages attach
+only backlog, epic and duplicate-analysis reads; they record coverage and proposed dispositions,
+but hold no backlog writer. The accountable `role:backlog-owner` decides proposals under the
+existing `backlog-admission` decision scope. Accepted corrections then use the existing governed
+backlog action lane. A cadence grant therefore cannot turn similarity, placement or peer-system
+evidence into an unattended mutation.
+
 The same registry carries the five **delivery shapes** (`delivery-shapes.ts`, BI-B90F7CBB,
 design `2026-09-02-work-shape-taxonomy-and-proportional-gates-design.md` §3.0):
 `delivery-break-fix@1.0.0`, `delivery-small@1.0.0`, `delivery-medium@1.0.0`,
@@ -1215,6 +1230,29 @@ A stage that declares nothing is dispatched exactly as before.
 
 Pinning only prompt-named tools was a C-6 *Reach reconciliation* gap in the
 reverse direction: the shape admitted a tool the run never reached.
+
+### Stage effort tier (Phase G, BI-B3BBF9AD)
+
+A stage can also declare how much reasoning it needs: `WorkShapeStage.effort`,
+one of `minimal`, `low`, `medium` or `high`. It is part of the portable GPP
+stage contract, so a shape document carries it and the compiler round-trips it.
+Read it only through `resolveStageEffort`: a governed-decision stage always
+resolves `high`, whatever it declares, and a stage that declares nothing
+resolves to no tier and runs exactly as before.
+
+The drive writes the resolved tier into the same `taskConfig.workroomStage`
+record as the stage's tools. The scheduler's warrant keeps the unattended run
+envelope as its floor (a `high` stage raises it), and carries the tier for
+routing: a `low` or `minimal` stage routes cost-first above the coworker's own
+capability floor, a `high` stage at frontier minimums, and spend-aware routing
+never demotes a `high` turn. The tier is a capability floor, not a cost target.
+
+Effort is routing metadata, not reach, so it is not a binding row and
+declaring it bumps no shape version. `work-shape-stage-effort.test.ts` requires
+a tier on every agent-run, non-governed stage of every standing shape and
+refuses a governed stage declared below `high`. A compile-time design rule
+(D-11) follows in the next `dpf-workroom` release (DI-3DDF29984D1D,
+BI-5CDF49C4). Design: `docs/superpowers/specs/2026-10-01-stage-effort-tier-design.md`.
 
 Where no existing tool reads what a stage needs, nothing is invented. The stage
 goes on `KNOWN_STAGE_TOOL_GAPS` (`stage-tool-gaps.ts`) with the reason. One gap

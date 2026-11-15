@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import sys
 import tempfile
 import unittest
@@ -38,10 +39,27 @@ def _Declared(manifest: Any = None) -> convergence.Declarations:
 
 class DeclarationTest(unittest.TestCase):
     def test_header_carrier_leaves_the_templated_url_alone(self) -> None:
-        server = _Declared().declare_server({"type": "http", "url": TEMPLATE, "oauth": {"scopes": "x"}}, "claude-code")
+        server = _Declared().declare_server({"type": "http", "url": TEMPLATE, "oauth": {"scopes": "x"}}, "antigravity")
         self.assertEqual(server["url"], TEMPLATE)
-        self.assertEqual(server["headers"], {"X-DPF-Toolchain": "pack=0.3.0;digest=0123456789abcdef;client=claude-code"})
+        self.assertEqual(server["headers"], {"X-DPF-Toolchain": "pack=0.3.0;digest=0123456789abcdef;client=antigravity"})
         self.assertEqual(server["oauth"], {"scopes": "x"})
+
+    def test_claude_uses_the_helper_carrier_and_drops_an_older_header(self) -> None:
+        declared = _Declared()
+        stale = {"X-DPF-Toolchain": "pack=0.2.9;digest=ffffffffffffffff;client=claude-code", "X-Org": "keep"}
+        server = declared.declare_server({"type": "http", "url": TEMPLATE, "headers": stale}, "claude-code")
+        self.assertEqual(declared.carrier("claude-code"), "helper")
+        self.assertEqual(server["url"], TEMPLATE)
+        self.assertEqual(server["headers"], {"X-Org": "keep"})
+        self.assertEqual(server["headersHelper"], convergence.CLAUDE_HEADERS_HELPER)
+        self.assertEqual(declared.sidecar("claude-code"),
+                         {"client": "claude-code",
+                          "headers": {"X-DPF-Toolchain": "pack=0.3.0;digest=0123456789abcdef;client=claude-code"}})
+        self.assertIsNone(declared.sidecar("antigravity"))
+
+    def test_only_claude_code_may_take_the_helper_carrier(self) -> None:
+        declared = _Declared({"clients": {"codex": {"declarationCarrier": "helper"}}})
+        self.assertEqual(declared.carrier("codex"), "header")
 
     def test_bearer_header_is_kept_beside_the_declaration(self) -> None:
         bearer = {"Authorization": "Bearer ${DPF_MCP_BEARER_TOKEN:-}"}
@@ -69,17 +87,101 @@ class DeclarationTest(unittest.TestCase):
         self.assertEqual(declared.digest, delivered_digest(PACK))
         self.assertEqual(declared.pack, json.loads((PACK / "toolchain-version.json").read_text())["packVersion"])
 
-    def test_claude_descriptor_generator_carries_the_declaration_only_when_given(self) -> None:
+    def test_claude_descriptor_generator_writes_the_sidecar_only_when_given(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             pack = Path(tmp)
+            sidecar = pack / convergence.DECLARATION_SIDECAR
             updater.ensure_claude_repo_mcp_config(pack, updater.DEFAULT_MCP_URL, dry_run=False)
-            plain = json.loads((pack / "claude.mcp.json").read_text())["mcpServers"]["dpf"]
+            plain = (pack / "claude.mcp.json").read_bytes()
+            self.assertFalse(sidecar.exists())
             updater.ensure_claude_repo_mcp_config(pack, updater.DEFAULT_MCP_URL, dry_run=False, declarations=_Declared())
-            declared = json.loads((pack / "claude.mcp.json").read_text())["mcpServers"]["dpf"]
-        self.assertNotIn("headers", plain)
-        self.assertEqual(declared["url"], plain["url"])
-        self.assertEqual(declared["oauth"], plain["oauth"])
-        self.assertEqual(list(declared["headers"]), ["X-DPF-Toolchain"])
+            declared = (pack / "claude.mcp.json").read_bytes()
+            self.assertEqual(json.loads(sidecar.read_text())["headers"],
+                             {"X-DPF-Toolchain": "pack=0.3.0;digest=0123456789abcdef;client=claude-code"})
+            # An undeclared run never leaves an older declaration to relay.
+            updater.ensure_claude_repo_mcp_config(pack, updater.DEFAULT_MCP_URL, dry_run=False)
+            self.assertFalse(sidecar.exists())
+        self.assertEqual(plain, declared)
+        server = json.loads(declared)["mcpServers"]["dpf"]
+        self.assertNotIn("headers", server)
+        self.assertEqual(server["headersHelper"], convergence.CLAUDE_HEADERS_HELPER)
+
+    def test_checked_in_claude_descriptor_is_the_generator_output(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            updater.ensure_claude_repo_mcp_config(Path(tmp), updater.DEFAULT_MCP_URL, dry_run=False)
+            self.assertEqual((Path(tmp) / "claude.mcp.json").read_bytes(), (PACK / "claude.mcp.json").read_bytes())
+
+    def test_the_sidecar_is_outside_the_delivered_digest(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            pack = Path(tmp) / "pack"
+            shutil.copytree(PACK, pack, ignore=shutil.ignore_patterns("__pycache__", "*.pyc", ".DS_Store"))
+            before = delivered_digest(pack)
+            (pack / convergence.DECLARATION_SIDECAR).write_text('{"headers": {}}')
+            self.assertEqual(delivered_digest(pack), before)
+
+    @unittest.skipUnless(shutil.which("node"), "node is not installed")
+    def test_the_helper_relays_what_convergence_wrote(self) -> None:
+        import subprocess
+
+        with tempfile.TemporaryDirectory() as tmp:
+            pack = Path(tmp)
+            (pack / "scripts").mkdir()
+            shutil.copy2(PACK / "scripts" / "toolchain-declaration-header.mjs", pack / "scripts")
+            declared = _Declared()
+            declared.converge = "ok"
+            updater.ensure_claude_repo_mcp_config(pack, updater.DEFAULT_MCP_URL, dry_run=False, declarations=declared)
+            helper = json.loads((pack / "claude.mcp.json").read_text())["mcpServers"]["dpf"]["headersHelper"]
+            script = helper.split('"')[1].replace("${CLAUDE_PLUGIN_ROOT}", str(pack))
+            printed = subprocess.run(["node", script], capture_output=True, text=True, check=True).stdout
+        self.assertEqual(json.loads(printed), {"X-DPF-Toolchain": declared.header_value("claude-code")})
+
+
+def _claude_credential_key(server: dict[str, Any]) -> str:
+    """Claude Code's stored-sign-in key for a server (BI-BDC94789).
+
+    Mirrors Claude Code 2.1.323's `cf(name, config)`: the server name plus the
+    first 16 hex of sha256(JSON.stringify({type, url, headers || {}})). Any
+    change to those three fields files the sign-in under a new key, so the
+    owner has to sign in again; `headersHelper` is not part of it.
+    """
+    import hashlib
+
+    body = json.dumps({"type": server.get("type"), "url": server.get("url"), "headers": server.get("headers") or {}},
+                      separators=(",", ":"))
+    return "dpf|" + hashlib.sha256(body.encode("utf-8")).hexdigest()[:16]
+
+
+class ClaudeDescriptorStabilityTest(unittest.TestCase):
+    """BI-BDC94789: a toolchain update must not cost the owner their Claude sign-in."""
+
+    STATES = (
+        ("0.2.20", "1111111111111111" + "0" * 48, "ok"),
+        ("0.2.21", "2222222222222222" + "0" * 48, "failed:unproven.claude-code.2.1.322@1793936769"),
+    )
+
+    def _converge(self, pack: Path, version: str, digest: str, converge: str | None) -> bytes:
+        declared = convergence.Declarations.of(version, digest)
+        declared.converge = converge
+        updater.ensure_claude_repo_mcp_config(pack, updater.DEFAULT_MCP_URL, dry_run=False, declarations=declared)
+        return (pack / "claude.mcp.json").read_bytes()
+
+    def test_converged_descriptor_is_identical_across_pack_digest_and_converge_states(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            pack = Path(tmp)
+            first = self._converge(pack, *self.STATES[0])
+            second = self._converge(pack, *self.STATES[1])
+            undeclared = self._converge(pack, "0.2.21", "2" * 64, None)
+        self.assertEqual(first, second)
+        self.assertEqual(first, undeclared)
+        server = json.loads(first)["mcpServers"]["dpf"]
+        self.assertNotIn("X-DPF-Toolchain", server.get("headers") or {})
+
+    def test_claude_credential_key_survives_an_update(self) -> None:
+        keys = set()
+        with tempfile.TemporaryDirectory() as tmp:
+            for state in self.STATES:
+                keys.add(_claude_credential_key(json.loads(self._converge(Path(tmp), *state))["mcpServers"]["dpf"]))
+        self.assertEqual(len(keys), 1)
 
 
 class CodexDeclarationTest(unittest.TestCase):
@@ -384,8 +486,9 @@ class ReportJsonTest(unittest.TestCase):
 
             managed = updater.shared_managed_plugin_path(home)
             header = f"pack={report['packVersion']};digest={digest[:16]};client=claude-code"
-            self.assertEqual(json.loads((managed / "claude.mcp.json").read_text())["mcpServers"]["dpf"]["headers"],
-                             {"X-DPF-Toolchain": header})
+            self.assertNotIn("headers", json.loads((managed / "claude.mcp.json").read_text())["mcpServers"]["dpf"])
+            self.assertEqual(json.loads((managed / convergence.DECLARATION_SIDECAR).read_text())["headers"]["X-DPF-Toolchain"]
+                             .split(";converge=")[0], header)
             grok_url = json.loads((managed / "grok.mcp.json").read_text())["mcp_servers"]["dpf"]["url"]
             self.assertIn(f"dpf_digest={digest[:16]}", grok_url)
             self.assertIn("dpf_client=grok", grok_url)

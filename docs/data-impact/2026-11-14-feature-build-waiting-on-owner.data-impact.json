@@ -1,0 +1,35 @@
+{
+  "version": "1",
+  "accountableOwner": "platform-architecture",
+  "summary": "BI-B6894001 slice 1 (WWMD DI-2D43DB669013). Migration 20261114160000_feature_build_waiting_on_owner adds nullable FeatureBuild.waitingOnOwnerSince. A needs-human escalation now sets it instead of abandoning the build, so the build keeps its phase, design and review, leaves WIP, and every autonomous sweep skips it until the column is cleared.",
+  "affectedCopies": [
+    "FeatureBuild: one new nullable timestamp column, no default and no backfill. Every existing row reads as not parked, so existing behaviour is unchanged until an escalation writes it."
+  ],
+  "privacyAssessment": {
+    "personalData": false,
+    "sensitivity": "internal: a timestamp on a build record, readable through the same build queries as the rest of the row.",
+    "dataSubjectRights": "No personal data. The value lives and dies with its FeatureBuild row.",
+    "reviewDisposition": "Operational state on an existing internal record."
+  },
+  "migration": {
+    "name": "20261114160000_feature_build_waiting_on_owner",
+    "backfill": "None. NULL means not parked, which is the correct reading for every existing build.",
+    "rollback": "Forward-only and additive. Clearing the column on parked rows resumes them; dropping the column restores the previous schema, after which escalation would need the prior abandoning code."
+  },
+  "tests": [
+    "apps/web/lib/build/escalate-build-to-human.test.ts",
+    "apps/web/lib/build/wip-cap.test.ts",
+    "apps/web/lib/build/inert-build-reaper.test.ts"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:feature-build",
+      "prismaModel": "FeatureBuild",
+      "lifecycleDisposition": "Unchanged lifecycle: a parked build is still a live build in its real phase. Abandonment, completion and failure work as before.",
+      "fields": [
+        { "fieldId": "data:feature-build#waitingOnOwnerSince", "resolution": "governed", "reason": "New column. Written only by escalateBuildToHuman when it parks a build on its owner; read through ACTIVE_BUILD_WHERE and WAITING_ON_OWNER_WHERE in apps/web/lib/build/wip-cap.ts.", "provenance": "packages/db/prisma/migrations/20261114160000_feature_build_waiting_on_owner/migration.sql", "flags": [] }
+      ]
+    }
+  ]
+}

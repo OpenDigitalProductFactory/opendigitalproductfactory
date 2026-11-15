@@ -15,7 +15,8 @@
         "condition": "Every waiting inquiry has a draft reply whose every claim cites recorded evidence."
       },
       "evidence": ["draft-artifact"],
-      "tools": ["list_storefront_activity", "list_customer_accounts"]
+      "tools": ["list_storefront_activity", "list_customer_accounts"],
+      "effort": "medium"
     },
     {
       "key": "send",

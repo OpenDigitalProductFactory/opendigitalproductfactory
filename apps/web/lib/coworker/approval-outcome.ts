@@ -2,6 +2,7 @@ import { SOURCE_CATALOG, type MessageKey } from "@dpf/i18n";
 import { isRecord } from "@/lib/shared/coerce";
 import { envelopeInboxRoute, envelopeResultRoute } from "./envelope-routes";
 import { readOnBehalfDecision, type OnBehalfDecision } from "./on-behalf-decision";
+import type { RuntimeApprovalActionEvidence, ServiceReportApprovalEvidence } from "./approval-action-evidence";
 
 /** A read model, not an authority or execution state machine. */
 export type ApprovalOutcomeState = "waiting" | "executed" | "failed" | "not-run" | "expired" | "declined" | "cancelled" | "unknown";
@@ -16,6 +17,12 @@ export type ApprovalOutcome = {
   failureEvidence?: ApprovalFailureEvidence;
   failureExplanation?: string;
   failureExplanationKey?: MessageKey<"approvals">;
+  runtimeEvidence?: RuntimeApprovalActionEvidence | UnavailableApprovalEvidence;
+  runtimeExplanation?: string;
+  runtimeExplanationKey?: MessageKey<"approvals">;
+  serviceReportEvidence?: ServiceReportApprovalEvidence | UnavailableApprovalEvidence;
+  serviceReportExplanation?: string;
+  serviceReportExplanationKey?: MessageKey<"approvals">;
   /** BI-7BCC87BB: an admin decided this request on the owner's behalf. */
   decidedOnBehalf?: OnBehalfDecision;
 };
@@ -38,6 +45,38 @@ export function withApprovalFailureEvidence(outcome: ApprovalOutcome, evidence: 
   const copy = SOURCE_CATALOG.approvals.failure[key];
   return { ...outcome, failureEvidence: evidence, failureExplanation: copy.reason,
     failureExplanationKey: `failure.${key}.reason`, nextAction: copy.next, nextActionKey: `failure.${key}.next` };
+}
+
+/** A saved diagnostic is historical observation, never current health or recovery authority. */
+export function withApprovalServiceReportEvidence(outcome: ApprovalOutcome, evidence: ServiceReportApprovalEvidence | UnavailableApprovalEvidence): ApprovalOutcome {
+  if (outcome.state !== "executed" && outcome.state !== "failed") return outcome;
+  const copy = SOURCE_CATALOG.approvals.serviceReport;
+  return { ...outcome, serviceReportEvidence: evidence,
+    serviceReportExplanation: evidence.state === "available" ? copy.available : copy.unproven,
+    serviceReportExplanationKey: evidence.state === "available" ? "serviceReport.available" : "serviceReport.unproven",
+    nextAction: copy.inspect, nextActionKey: "serviceReport.inspect" };
+}
+
+/** Approval settlement, recorded operation and verified host proof are separate. */
+export function withApprovalRuntimeEvidence(outcome: ApprovalOutcome, evidence: RuntimeApprovalActionEvidence | UnavailableApprovalEvidence): ApprovalOutcome {
+  const copy = SOURCE_CATALOG.approvals.runtime;
+  let explanation: keyof typeof copy = "unproven";
+  let next: "inspect" | "inspectRecovery" | "continue" = "inspect";
+  if (evidence.state === "available") {
+    const host = evidence.hostEvidence;
+    if (host.state === "recorded" && (host.recoveryRequired === "recorded" || host.status === "rollback_failed" || host.status === "compensating")) {
+      explanation = "recovery"; next = "inspectRecovery";
+    } else if (host.state === "recorded" && host.receiptVerification === "verified" && host.receiptStatus === "applied") {
+      if (host.status === "succeeded" && evidence.outcome === "succeeded") {
+        explanation = "verified"; next = "continue";
+      } else explanation = "appliedPending";
+    } else if (evidence.failureCode === "runtime_transition_database_stale" || evidence.failureCode === "runtime_transition_database_baseline_changed") {
+      explanation = "settingsChanged";
+    } else if (evidence.outcome === "incomplete") explanation = "incomplete";
+    else if (evidence.outcome === "succeeded") explanation = "reportedCompletion";
+  }
+  return { ...outcome, runtimeEvidence: evidence, runtimeExplanation: copy[explanation], runtimeExplanationKey: `runtime.${explanation}`,
+    nextAction: copy[next], nextActionKey: `runtime.${next}` };
 }
 
 export type ApprovalOutcomeRow = {

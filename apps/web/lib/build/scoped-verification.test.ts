@@ -6,6 +6,7 @@ import {
   scopeVerificationOutputForGate,
   typecheckPassedForChangedScope,
 } from "./scoped-verification";
+import { checkRequirement } from "../explore/build-process-matrix";
 import { normalizeVerificationOutput } from "./verification-output";
 
 describe("extractFilePathsFromText", () => {
@@ -52,6 +53,18 @@ describe("buildScopedVerificationFromParts", () => {
 });
 
 describe("scopeVerificationOutputForGate", () => {
+  it.each([false, true])("cannot turn an unknown current typecheck into a pass using retained unrelated failures (invalidated=%s)", (invalidated) => {
+    const gate = scopeVerificationOutputForGate({
+      verification: normalizeVerificationOutput({ typecheckPassed: null, testsPassed: 4, testsFailed: 1,
+        testsQualified: false, fullOutput: "Retained historical failure: apps/web/lib/other.test.ts",
+        ...(invalidated ? { verificationSource: { workdir: "/isolated", baseRef: "main", digest: "old",
+          checkedAt: "2026-11-11T00:00:00Z", unchanged: false } } : {}),
+      }), changedFiles: ["apps/web/lib/current.ts"],
+    });
+    expect(gate.typecheckPassed).toBeNull();
+    expect(checkRequirement("verification-typecheck-passed", { verificationOut: gate }).allowed).toBe(false);
+  });
+
   it("neutralizes an out-of-scope failure so the gate advances", () => {
     const gate = scopeVerificationOutputForGate({
       verification: normalizeVerificationOutput({

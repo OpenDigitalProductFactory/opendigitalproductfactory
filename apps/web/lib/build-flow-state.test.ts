@@ -21,6 +21,18 @@ vi.mock("@/lib/self-upgrade/completion", () => ({
 }));
 const terminalTransition = vi.hoisted(() => ({ completeFeatureBuildTransition: vi.fn() }));
 vi.mock("@/lib/backlog/initiative-readiness/build-terminal-transition", () => terminalTransition);
+// These are separate completion effects. Keep this unit suite independent of
+// the host sandbox and test their invocation without executing cleanup.
+const completionEffects = vi.hoisted(() => ({
+  recordReadyDependentsAfterCompletion: vi.fn().mockResolvedValue([]),
+  releaseSandboxForTerminalBuild: vi.fn().mockResolvedValue(undefined),
+}));
+vi.mock("@/lib/build/feature-build-dependencies", () => ({
+  recordReadyDependentsAfterCompletion: completionEffects.recordReadyDependentsAfterCompletion,
+}));
+vi.mock("@/lib/build/sandbox/sandbox-build-gc", () => ({
+  releaseSandboxForTerminalBuild: completionEffects.releaseSandboxForTerminalBuild,
+}));
 
 import { prisma } from "@dpf/db";
 import { isFeatureBuildDeployed } from "@/lib/self-upgrade/completion";
@@ -441,6 +453,13 @@ describe("reconcileBuildCompletion", () => {
       expectedPhase: "ship",
       deliveryProven: true,
     });
+    expect(completionEffects.recordReadyDependentsAfterCompletion).toHaveBeenCalledWith({
+      db: prisma,
+      buildId: "FB-TEST-001",
+    });
+    expect(completionEffects.releaseSandboxForTerminalBuild).toHaveBeenCalledWith(
+      "FB-TEST-001", { deleteBranch: false },
+    );
   });
 
   it("is idempotent when called on an already-complete build", async () => {

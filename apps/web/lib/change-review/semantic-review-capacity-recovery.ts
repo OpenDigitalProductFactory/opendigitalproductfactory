@@ -76,6 +76,56 @@ export function hasProvenCapacityCheckpointSet(input: CheckpointInput): boolean 
   return deferred;
 }
 
+/** One branch checkpoint carries the typed pre-dispatch refusal bound to its own request and generation. */
+function provenDeferral(node: Checkpoint, requestDigest: string): boolean {
+  const output = record(node.outputSnapshot);
+  const result = record(output.result);
+  const proof = record(output.capacityDeferral);
+  const contract = record(node.requestContract);
+  return (output.providerOutcome === "not-dispatched" || (node.status === "superseded" && output.providerOutcome === "inconclusive"))
+    && result.decision === "inconclusive" && result.inconclusiveReason === "review-capacity-deferred"
+    && Array.isArray(result.issues) && result.issues.length === 0
+    && proof.schemaVersion === 1 && proof.requestDigest === requestDigest
+    && typeof proof.generation === "string" && proof.generation.length > 0 && proof.generation === contract.generation
+    && isSemanticReviewCapacityReason(proof.reason);
+}
+
+/**
+ * BI-49AA6BE8. Every checkpoint this review ever wrote is either a typed
+ * pre-dispatch capacity refusal or a completed passing verdict, so no provider
+ * work is outstanding and nothing needs settling. Any running, failed or
+ * unknown branch, a failing verdict, or a binding mismatch refuses: this is the
+ * only evidence class that may start a successor without a recorded health
+ * verification.
+ */
+export function hasProvenNoDispatchLineage(input: { nodes: readonly Checkpoint[]; requestDigest: string }): boolean {
+  const { nodes, requestDigest } = input;
+  if (!digestPattern.test(requestDigest) || !nodes.length || nodes.length > 100) return false;
+  let deferred = false;
+  for (const node of nodes) {
+    const output = record(node.outputSnapshot);
+    const contract = record(node.requestContract);
+    if (output.requestDigest !== requestDigest || contract.requestDigest !== requestDigest || typeof contract.agentId !== "string") return false;
+    if (node.status !== "completed" && node.status !== "superseded") return false;
+    if (record(output.result).decision === "fail") return false;
+    if (provenDeferral(node, requestDigest)) { deferred = true; continue; }
+    if (node.status !== "completed" || restoreSemanticReviewCheckpoint(output.result, contract.agentId).decision !== "pass") return false;
+  }
+  return deferred;
+}
+
+/**
+ * Time this generation spent before its capacity refusals, e.g. queued for the
+ * single local runner. Credited only when every branch the generation ran was
+ * refused before dispatch; the shortest wait bounds the credit.
+ */
+export function generationCapacityWaitMs(nodes: readonly Checkpoint[], requestDigest: string, generation: string): number {
+  const ran = nodes.filter(node => record(node.requestContract).generation === generation);
+  if (!ran.length || !ran.every(node => node.status === "completed" && provenDeferral(node, requestDigest))) return 0;
+  const waits = ran.map(node => record(node.outputSnapshot).waitedBeforeRefusalMs);
+  return waits.every(counter) ? Math.min(...waits as number[]) : 0;
+}
+
 /**
  * Local observation budget, never an attempt allowance. waitStartedAt opens a
  * bounded deadline credit (semanticReviewCapacityWaitMs); a recheck carries

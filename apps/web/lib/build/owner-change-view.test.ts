@@ -106,6 +106,7 @@ describe("projectOwnerChangeView", () => {
         },
         verificationOut: {
           testsPassed: 12,
+          testsExecuted: true, testsApplicable: true, testCommandPassed: true, testSummariesComplete: true,
           testsFailed: 0,
           typecheckPassed: true,
           fullOutput: "ok",
@@ -160,6 +161,7 @@ describe("projectOwnerChangeView", () => {
       build: build({
         verificationOut: {
           testsPassed: 12,
+          testsExecuted: true, testsApplicable: true, testCommandPassed: true, testSummariesComplete: true,
           testsFailed: 0,
           typecheckPassed: true,
           fullOutput: "ok",
@@ -205,6 +207,7 @@ describe("projectOwnerChangeView", () => {
       build: build({
         verificationOut: {
           testsPassed: 12,
+          testsExecuted: true, testsApplicable: true, testCommandPassed: true, testSummariesComplete: true,
           testsFailed: 0,
           typecheckPassed: true,
           fullOutput: "ok",
@@ -323,5 +326,32 @@ describe("projectOwnerChangeView", () => {
     });
 
     expect(view.ownerState).toBe("working");
+  });
+});
+
+describe("owner saved verification proof", () => {
+  it("retains the owner lifecycle while marking unrun evidence unverified", () => {
+    const view = projectOwnerChangeView({ build: build({ verificationOut: { typecheckPassed: true,
+      testsPassed: 1, testsFailed: 0, testsExecuted: false, testsApplicable: null,
+      timestamp: "2026-07-30T12:00:00Z" } as never }) });
+    expect(view.proof.checks.find(c => c.key === "automated")).toMatchObject({ state: "not-recorded" });
+    expect(view.ownerState).toBe(projectOwnerChangeView({ build: build() }).ownerState);
+  });
+});
+
+describe("owner legacy and exempt verification", () => {
+  it("does not promote a bare historical counter into current executed proof", () => {
+    const view = projectOwnerChangeView({ build: build({ verificationOut: { typecheckPassed: true,
+      testsPassed: 1, testsFailed: 0, timestamp: "2026-07-30T12:00:00Z" } as never }) });
+    expect(view.proof.checks.find(c => c.key === "automated")?.state).toBe("not-recorded");
+  });
+  it("explains a confirmed exemption instead of saying zero tests passed", () => {
+    const view = projectOwnerChangeView({ build: build({ verificationOut: { typecheckPassed: true,
+      testsPassed: 0, testsFailed: 0, testsExecuted: false, testsApplicable: false,
+      timestamp: "2026-07-30T12:00:00Z" } as never }) });
+    const check = view.proof.checks.find(c => c.key === "automated");
+    expect(check?.state).toBe("passed");
+    expect(check?.summary).toContain("no tests ran");
+    expect(check?.summary).not.toContain("0 automated tests passed");
   });
 });

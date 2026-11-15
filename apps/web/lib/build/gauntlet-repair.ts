@@ -26,14 +26,18 @@ export type ReviewFinding = { severity: string; description: string; location?: 
  * named a risk the change does not mitigate (BI-83E1ADF8); its findings are the
  * risks. `source` "tests" is a confirmed scoped-test or typecheck failure
  * (BI-33B54E4B); its findings name the failing tests and `recordId` points at
- * the scoped-test record holding the output. All hand-backs share one bound.
+ * the scoped-test record holding the output. `source` "conflict" is a review
+ * refresh onto upstream main that conflicted (BI-2CCD5C0E); its findings name
+ * the conflicted files and `ontoRef` is the ref the build tree rebases onto.
+ * All hand-backs share one bound.
  */
 export type GauntletFailure = {
   treeSha: string | null;
   recordId: string | null;
   failedGuards: string[];
-  source?: "guards" | "review" | "risk" | "tests";
+  source?: "guards" | "review" | "risk" | "tests" | "conflict";
   findings?: ReviewFinding[];
+  ontoRef?: string;
 };
 
 export type GauntletRepairState = GauntletFailure & { attempts: number; escalated?: boolean };
@@ -163,8 +167,40 @@ export function buildTestRepairTask(input: { findings: ReviewFinding[]; output: 
   };
 }
 
+/** Where a build tree rebases when the conflict state does not name a ref. */
+const DEFAULT_CONFLICT_ONTO_REF = "origin/main";
+
+export function buildConflictRepairTask(input: { findings: ReviewFinding[]; ontoRef?: string }): GauntletRepairTask {
+  const onto = input.ontoRef || DEFAULT_CONFLICT_ONTO_REF;
+  return {
+    title: `Resolve conflicts with upstream main (${input.findings.length})`,
+    implement: [
+      `This build's branch is far behind upstream main, so the guard gauntlet cannot run, and rebasing it onto ${onto} conflicts. Rebase it and resolve the conflicts.`,
+      "",
+      "Conflicts:",
+      ...input.findings.map((f) => `- ${f.description}`),
+      "",
+      "Steps, in the build tree:",
+      `1. Commit any uncommitted work, then run: git rebase ${onto}`,
+      "2. For each conflicted file, keep upstream main's changes and re-apply this build's intent on top of them. Remove every conflict marker.",
+      "3. For a generated artifact (*.generated.*), take upstream's version and regenerate it with the command its guard or header names instead of merging it by hand.",
+      "4. git add the resolved files and run git rebase --continue; repeat until the rebase finishes.",
+      "",
+      "Rules:",
+      "- Never use git rebase --skip, and never drop or revert this build's commits to make the rebase apply.",
+      "- Never discard upstream main's changes to a file to keep this build's older copy.",
+      "- If a conflict cannot be resolved without changing what this build is for, run git rebase --abort and stop; the owner is told once the repair bound is spent.",
+      "- Keep the work to the rebase; do not rework unrelated code.",
+    ].join("\n"),
+    verify: `git status shows no rebase in progress and no unmerged paths, and git merge-base --is-ancestor ${onto} HEAD succeeds.`,
+  };
+}
+
 /** The repair brief for a hand-back, chosen by what failed. */
 export function repairTaskFor(state: GauntletRepairState, guardOutput: string): GauntletRepairTask {
+  if (state.source === "conflict") {
+    return buildConflictRepairTask({ findings: state.findings ?? [], ontoRef: state.ontoRef });
+  }
   if (state.source === "tests") {
     return buildTestRepairTask({ findings: state.findings ?? [], output: guardOutput });
   }
@@ -174,7 +210,10 @@ export function repairTaskFor(state: GauntletRepairState, guardOutput: string): 
   if (state.source === "review" && state.findings && state.findings.length > 0) {
     return buildReviewRepairTask({ findings: state.findings });
   }
-  return buildGauntletRepairTask({ failedGuards: state.failedGuards, output: guardOutput });
+  // A ship-side guard refusal has no gauntlet record; its findings carry the
+  // guard output the PR attempt recorded (BI-34A05E78).
+  const output = guardOutput || (state.findings ?? []).map((f) => f.description).join("\n");
+  return buildGauntletRepairTask({ failedGuards: state.failedGuards, output });
 }
 
 /** The owner-facing issues an escalation carries, by what is still failing. */
@@ -183,9 +222,11 @@ export function escalationIssuesFor(failure: GauntletFailure, attempts: number):
   if (failure.source && failure.source !== "guards" && failure.findings?.length) {
     return failure.findings.map((f) => ({
       severity: f.severity,
-      description: failure.source === "tests"
-        ? `${label} still failing after ${attempts} repair attempt(s): ${f.description}`
-        : `${label} still open after ${attempts} repair attempt(s): ${f.description}`,
+      description: failure.source === "conflict"
+        ? `Refresh onto upstream main still conflicts after ${attempts} repair attempt(s): ${f.description}`
+        : failure.source === "tests"
+          ? `${label} still failing after ${attempts} repair attempt(s): ${f.description}`
+          : `${label} still open after ${attempts} repair attempt(s): ${f.description}`,
     }));
   }
   return failure.failedGuards.map((guard) => ({ severity: "important", description: `Guard still failing after ${attempts} repair attempt(s): ${guard}` }));
@@ -203,8 +244,9 @@ export function readGauntletRepairState(verificationOut: unknown): GauntletRepai
     failedGuards: s.failedGuards,
     attempts: s.attempts,
     escalated: s.escalated === true,
-    source: s.source === "review" || s.source === "risk" || s.source === "tests" ? s.source : "guards",
+    source: s.source === "review" || s.source === "risk" || s.source === "tests" || s.source === "conflict" ? s.source : "guards",
     findings: Array.isArray(s.findings) ? s.findings : undefined,
+    ...(typeof s.ontoRef === "string" && s.ontoRef ? { ontoRef: s.ontoRef } : {}),
   };
 }
 
@@ -256,10 +298,17 @@ export async function routeGauntletFailureToRepair(buildId: string, failure: Gau
   }
 
   if (!canTransitionPhase("review", "build")) return "not-in-review";
+  const { reconcileReviewBuildWorkroomShape } = await import("./heal-build-workroom-shape");
+  const shape = await reconcileReviewBuildWorkroomShape({ buildId });
+  if (shape.kind === "held") {
+    await log(`Repair remains in review: ${shape.detail}`);
+    return "not-ready";
+  }
   // Re-entering build is gated like every entry into build: the initiative must
   // still be ready for implementation.
   const readiness = await enforceBuildInitiativeReadiness({
     buildId, target: "implementation", targetPhase: "build", expectedPhase: "review",
+    expectedWorkroom: shape.room,
   });
   if (!readiness.allowed) {
     await log(`Guards failed on this build's change (${failure.failedGuards.join(", ")}), but it was not handed back: ${readiness.message}`);
@@ -282,7 +331,9 @@ export async function routeGauntletFailureToRepair(buildId: string, failure: Gau
     },
   });
   if (moved.count === 0) return "not-in-review";
-  const what = failure.source === "review"
+  const what = failure.source === "conflict"
+    ? `Refreshing this build onto upstream main conflicts (${(failure.findings ?? []).slice(0, 3).map((f) => f.description).join("; ")})`
+    : failure.source === "review"
     ? `The code review found ${failure.findings?.length ?? 0} blocking problem(s) in this build's change`
     : failure.source === "risk"
       ? `The failure analysis named ${failure.findings?.length ?? 0} risk(s) this build's change does not mitigate`

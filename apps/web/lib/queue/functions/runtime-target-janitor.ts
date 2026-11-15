@@ -1,7 +1,7 @@
 // BI-AD949172 — RuntimeTarget heartbeat sweep + NonProductionEnvironmentLease expiry.
 //
-// Runs hourly. Two fast sweeps, no quiescence gate (reads + writes to coordination
-// records, not portal state):
+// Runs hourly. Two coordination sweeps, followed by runtime fencing behind the
+// normal quiescence gate. The five-minute nonprod wait owner also fences.
 //
 // 1. RuntimeTarget heartbeat sweep:
 //    - status=running  + lastHeartbeatAt  older than STALE_RUNNING_HOURS  → expired
@@ -17,6 +17,8 @@ import { cron } from "@/lib/jobs/triggers";
 import { jobs } from "@/lib/jobs";
 import { prisma } from "@dpf/db";
 import { reapExpiredNonprodEnvironmentLeases } from "@/lib/nonprod/environment-lease";
+import { fenceEndedPreviewRuntimes } from "@/lib/nonprod/preview-runtime-fence";
+import { gateAtEntry } from "../quiescence-gates";
 
 const STALE_RUNNING_HOURS = 2;   // running/starting targets with no heartbeat
 const STALE_PLANNED_DAYS  = 7;   // planned targets with no consumer ever started
@@ -33,7 +35,11 @@ export const runtimeTargetJanitor = jobs.createFunction(
   async ({ step }) => {
     const rtResult = await step.run("sweep-runtime-targets", sweepRuntimeTargets);
     const leaseResult = await step.run("expire-stale-leases", expireStaleLeases);
-    return { rtResult, leaseResult };
+    const gate = await gateAtEntry(step, "ops/runtime-target-janitor");
+    const previewFence = gate.proceed
+      ? await step.run("fence-ended-preview-runtimes", () => fenceEndedPreviewRuntimes())
+      : { skipped: true, reason: gate.reason };
+    return { rtResult, leaseResult, previewFence };
   },
 );
 

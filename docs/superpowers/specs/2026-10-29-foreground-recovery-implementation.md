@@ -4,6 +4,146 @@ status: active
 
 # Retained foreground coworker requests
 
+## Completed capacity notices — BI-EED738D9, 15 November 2026
+
+**OBJ-EED-1:** After a qualified same-request assistant response is saved,
+show an earlier capacity notice as history rather than a current promise to
+retry. This independently shippable correction implements AC-CHAT-OBSERVE of
+BI-B7E2DD4B; BI-D0D2FF0D retains recovery-engine ownership. It does not settle
+unrelated UNKNOWN requests or prove a delegated business result.
+
+Research is bound to base `71c070aea21b27501c71c80d02cfacaf26079246`:
+`AgentMessageBubble.tsx` renders all system notices as live status; snapshot
+loaders omit saved task context. Protected CI43657427046 passed all fifteen
+Finance recovery cases, while DOC-0330365B shows the old future-tense notice
+above the saved answer. Research receipt
+`initiative-f1f76919-a018-49ca-99b9-0abec247c72f` records this gap.
+DI-C4CB2638CD72 is advisory with low confidence, not autonomous approval;
+the agent selected this bounded repair under the owner's explicit standing
+all-repairs instruction. No new provider, funding, access or execution follows.
+
+### Ordered atomic fix
+
+1. Claim the existing publication, message-loader/type, bubble, regression,
+   guarded recovery script and user-guide paths. Consume their impact contract.
+   Add permanent failing cases before the product correction: accepted completed
+   assistant versus active wait, unknown/input-required/canceled/expired work,
+   mismatched fence/result/thread/owner, missing publication and system-only
+   result. Keep the actual original content unchanged.
+2. **CONTRACT-EED-PUBLICATION:** Extract and reuse the canonical publication
+   validation, retaining its generation/digest, accepted-before-deadline,
+   current-human, owned-thread, status and bound-message checks. Batch existing
+   TaskRun and message reads for the owned conversation. Completion must be a
+   responded publication whose saved result is an assistant of that same task;
+   arbitrary later text or task status alone is insufficient. No per-message
+   query loop, new table, lifecycle or dispatch path.
+3. **FLOW-EED-RELOAD:** Reuse existing initial history and snapshot-on-done/reload
+   paths. Carry only an optional display hint for an exact canonical capacity
+   notice on that same completed task. Render “Earlier capacity wait. Coworker
+   response saved.” as a historical note, preserving the job reference.
+   Active, unqualified, unrelated and approval notices retain their existing
+   text and live semantics. Preserve proposal, provider, attachment and approval
+   serialization. Do not mutate history or claim business acceptance.
+4. **VERIFY-EED-SETTLED:** Run focused publication/data/bubble and action controls,
+   both web typechecks, impact guards and the canonical exact-tree gate. Extend
+   the existing guarded Finance `result-reload` case to require the historical
+   note and absence of a live same-request wait. Preserve all fifteen case IDs,
+   fixture isolation, authority, duplicate, cleanup and zero-expense checks.
+   Native review, protected PR delivery and containing served-owner reload are
+   required before claiming delivered owner acceptance.
+
+All steps deliver one visible invariant and are internal sequencing under
+BI-EED738D9, not independently shippable phases. Requirements OBJ-EED-1,
+contract CONTRACT-EED-PUBLICATION, flow FLOW-EED-RELOAD and verification
+VERIFY-EED-SETTLED form the four-way trace. Immutable plan coverage will bind
+this ordered design before implementation admission. No new design baseline
+or broader B7 acceptance is implied.
+
+### Backlog coverage
+
+Initial atomic receipt `cmwh4sf2a0leq0er17tpbjp5n` binds the ordered design at
+`b291050e3a23893a91a1428c19bfd0bb39a491c5` to BI-EED738D9. The one deliverable
+maps OBJ-EED-1 / CONTRACT-EED-PUBLICATION / FLOW-EED-RELOAD /
+VERIFY-EED-SETTLED to that same BI, without independent children or external
+dependencies. Refresh coverage for the final immutable design before publication;
+DPF stores the current receipt without changing the original one.
+
+Rollback reverts only this presentation/read projection through a protected PR;
+stored requests, results, original notices and recovery state stay untouched.
+Malformed or unavailable proof preserves the original pending wording instead
+of guessing success. Scope risks are false settlement, ownership leakage,
+read amplification and lost message cards; the controls above address each.
+
+## Accepted-response evidence correction — 13 November 2026
+
+The owned Finance attempt `TR-CHAT-e0a0901901bab3aab6d5e867896d785c`
+published a blocked SYSTEM notice and no assistant response. Its separate
+`ta_53e9bba5-2a04-44f6-aeac-68af74866764` artifact nevertheless recorded
+`deliveryState: responded`. Text length had been the artifact's only success
+guard. That could also emit misleading Workroom and backlog response evidence.
+This is distinct from provider settlement, acceptance-sweep closure and the
+separate Finance authorized-guidance repair; none is resolved by this change.
+
+Keep the existing message publication and retained-task recovery boundaries.
+The planned correction is to bind response evidence to the actual accepted
+message and publication disposition, reject blocked/capacity/system results
+before all three evidence writes, and preserve genuine assistant responses.
+Do not resend either original Finance question or rewrite its historical rows.
+
+Normal current implementation admission and exact-path overlap claims succeeded.
+The initial regressions failed6/passed13: blocked/capacity/system text still
+created success artifacts, accepted-message linkage was absent, and the actual
+blocked foreground call chain emitted response evidence. The correction now
+requires a responded disposition plus an accepted assistant message from the
+expected agent. Artifact, Workroom and backlog evidence carry its message ID;
+response content comes from that accepted message, not a separate draft.
+
+The expanded five-suite run passes47 tests. It also exposed an old positive
+fixture that always mocked an assistant row while the actual anchored turn was
+blocked. That fixture now preserves the requested persisted role/content and
+asserts no successful response evidence. The existing genuine conversational
+foreground case separately verifies responded evidence linked to its accepted
+message. Direct controls retain genuine artifact, Workroom and backlog writes.
+The bounded independent CLIENT source review found no blocker in the correction;
+it is not native review or served acceptance. Both TypeScript programs passed
+after regenerating the stale generated client from the current schema.
+
+Canonical exact-tree verification, native review, protected publication,
+deployment and a new permitted served acceptance remain pending. This source
+correction does not prove an assistant answer useful or a delegated task done.
+
+## Served safety-limit failure correction — 11 November 2026
+
+Native task TR-CHAT-1a0d271ca9c95d28c42adf96a466a114 on served3aa5 retained
+its identity and prompt through reload, but completed with zero tool executions,
+no requested checkpoint and a local fallback's safety-limit message. The caveat
+asked the owner to send the message again. Canonical failed acceptance evidence
+is cmwc59o7z01xi0emf93ymlu2a; a completed turn was not a completed delegation.
+
+Keep the existing privacy screen, provider/capability policy, deadline, attempt
+limits and publication fence. This correction adds no provider, grant, retry
+engine or schema. Ordered work under the existing BI-D0D2FF0D medium fix:
+
+1. First fail regressions for synthetic safety exhaustion being returned without
+   a failure, and the caveat's futile resend instruction. Preserve a real earlier
+   draft and ordinary conversational responses as non-failures.
+2. Mark only synthetic safety-limit output as an existing unknown dead-end,
+   so the existing foreground system-failure/publication path retains blocked
+   work instead of recording a successful response. Partial effects still need
+   reconciliation; do not create automatic retry authority. Remove the caveat's
+   resend instruction without claiming recovery or live evidence.
+3. Run affected loop, evidence, proposal, local continuation, foreground and
+   caveat controls; both package typechecks; current guards and the canonical
+   exact-tree gate. Independent review and served acceptance remain required.
+   Verify an actual requested stored artifact separately. Until then, useful
+   delegation and the full permitted real-email chain remain unproven.
+
+Observed routing receipt screen_14555bbb68060e50 required local-only handling;
+the selected local model is recorded tool-capable, while no tools executed.
+That does not establish the attached tool count or why it failed. Do not clear
+history or reroute confidential data to avoid the failure. Roll back this source
+delta if valid answer preservation or approval/uncertainty fences regress.
+
 ## Verified progress wording and measured disclosure
 
 A governed preview of source7aa retained one fresh read-only Finance Spend

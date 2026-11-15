@@ -20,7 +20,7 @@ import {
 type Row = { buildId: string; tool: string; createdAt: Date };
 
 /** A BuildActivity + FeatureBuild fake that answers the queries the module makes. */
-function fakeDb(rows: Row[], builds: Array<{ buildId: string; phase: string; abandonedAt?: Date | null; createdById?: string }>) {
+function fakeDb(rows: Row[], builds: Array<{ buildId: string; phase: string; abandonedAt?: Date | null; waitingOnOwnerSince?: Date | null; createdById?: string }>) {
   const created: Array<{ buildId: string; tool: string; summary: string }> = [];
   const db = {
     buildActivity: {
@@ -125,6 +125,17 @@ describe("findBuildsHeldByUpgradePause", () => {
     );
     const held = await findBuildsHeldByUpgradePause({ db: db as never });
     expect(held).toEqual([{ buildId: "FB-HELD", phase: "plan", userId: "user-1" }]);
+  });
+});
+
+describe("a build parked on an owner answer is not resumed by the upgrade pause (BI-B6894001)", () => {
+  it("is not listed as held, and its resume is refused", async () => {
+    const { db } = fakeDb(
+      [{ buildId: "FB-PARKED", tool: UPGRADE_WAIT_ACTIVITY_TOOL, createdAt: minutesAgo(3) }],
+      [{ buildId: "FB-PARKED", phase: "plan", waitingOnOwnerSince: new Date("2026-11-14T00:00:00Z") }],
+    );
+    expect(await findBuildsHeldByUpgradePause({ db: db as never })).toEqual([]);
+    expect(await resumeBuildHeldByUpgradePause({ buildId: "FB-PARKED", db: db as never })).toBe("not-held");
   });
 });
 

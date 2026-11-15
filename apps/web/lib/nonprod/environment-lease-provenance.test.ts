@@ -17,10 +17,11 @@ async function claim(mockDb: ReturnType<typeof db>, overrides = {}) {
 }
 
 describe("authenticated immediate nonproduction admission", () => {
-  it("binds fresh immediate versioned admission to its authenticated user inside the lease transaction", async () => {
+  // BI-1986D3C1: null is a contributor preview, which claims without a slot manifest.
+  it.each([1, null] as const)("binds fresh immediate admission (slot manifest %s) to its authenticated user inside the lease transaction", async (manifest) => {
     const mockDb = db();
     const taskRun = { upsert: vi.fn().mockImplementation(async ({ create }) => create) };
-    const queued = lease({ slotManifestVersion: 1, worktreePath: "D:/worktrees/fix-x", branchName: "fix/x" });
+    const queued = lease({ slotManifestVersion: manifest, worktreePath: "D:/worktrees/fix-x", branchName: "fix/x" });
     const active = admitted({ ...queued, status: "active", slotKey: "slot-0", activeKey: "local-integration-ci:slot-0",
       expiresAt: new Date(NOW.getTime() + 120_000) });
     mockDb.nonProductionEnvironmentLease.findUnique.mockResolvedValueOnce(null).mockResolvedValueOnce(active);
@@ -28,7 +29,7 @@ describe("authenticated immediate nonproduction admission", () => {
     mockDb.nonProductionEnvironmentLease.findMany.mockResolvedValueOnce([queued]);
     mockDb.nonProductionEnvironmentLease.updateMany.mockResolvedValue({ count: 1 });
     Object.assign(mockDb, { taskRun });
-    const result = await claim(mockDb, { authenticatedUserId: "user-1", slotManifestVersion: 1 });
+    const result = await claim(mockDb, { authenticatedUserId: "user-1", ...(manifest ? { slotManifestVersion: manifest } : {}) });
     expect(taskRun.upsert).toHaveBeenCalledWith(expect.objectContaining({
       create: expect.objectContaining({ userId: "user-1", status: "completed",
         progressPayload: expect.objectContaining({ nonprodLeaseWait: expect.objectContaining({
@@ -53,10 +54,12 @@ describe("authenticated immediate nonproduction admission", () => {
       .toMatchObject({ consequence: "authority" });
   });
 
-  it.each(["legacy", "unauthenticated", "existing-task", "replay"])("does not establish new provenance for %s admission", async (kind) => {
+  // BI-1986D3C1: a contributor preview (no slot manifest) now records its owner
+  // too, so that owner can free it without a person; see the legacy test below.
+  it.each(["unauthenticated", "existing-task", "replay"])("does not establish new provenance for %s admission", async (kind) => {
     const mockDb = db();
     const taskRun = { upsert: vi.fn() };
-    const queued = lease({ slotManifestVersion: kind === "legacy" ? null : 1,
+    const queued = lease({ slotManifestVersion: 1,
       taskRunId: kind === "existing-task" ? "TR-CALLER-OWNED" : null });
     const active = admitted({ ...queued, status: "active", slotKey: "slot-0", activeKey: "local-integration-ci:slot-0" });
     Object.assign(mockDb, { taskRun });

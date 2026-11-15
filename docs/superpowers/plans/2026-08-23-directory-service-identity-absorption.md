@@ -261,7 +261,7 @@ deliverable maps to a live backlog item — none is stored as a checkbox.
 | 5 | Supersede the 2026-04-22 plan across 10 documents | yes | `BI-5167932D` | 0 |
 | 6 | Serve the listener: runtime entrypoint, config, operator surface, org-PKI wiring | yes | `BI-A91004A7` | 3 |
 
-**Governed coverage receipt: blocked by `BI-72F368BC`.**
+**Governed coverage receipt: not yet recorded.** (Header corrected 2026-11-11: `BI-72F368BC` is open but rescoped and is no longer the blocker described below — see the status note at the end of this section.)
 
 `record_plan_backlog_coverage` (v2) was submitted for this plan from workroom
 WC-D43197FD on branch `feat/directory-service-absorption-identity-model-desi`
@@ -281,13 +281,23 @@ facts that made it unsatisfiable have both moved:
 
 | Claim when this was written | Measured 2026-09-01 |
 |---|---|
-| zero `initiative_scope_baseline` activities install-wide | **7**, minted 2026-08-31 and 2026-09-01 |
+| zero `initiative_scope_baseline` activities install-wide | **683** (7 when this row was written on 2026-09-01) |
 | one human principal, so no reviewer can be independent | **3 active human principals** |
 
 So the baseline *can* now be written on this install, and has been — for other
-items. None of the seven belongs to this epic, which is why every `EP-24741BBF`
-item still reads unbaselined. The remaining work is to route this plan's gates to
-an eligible independent reviewer, not to wait on a platform fix.
+items. None belongs to this epic, which is why every `EP-24741BBF` item still
+reads unbaselined. The remaining work is to route this plan's gates to an
+eligible independent reviewer, not to wait on a platform fix.
+
+**Re-verified 2026-11-11.** Still true, and the scale has moved: **683**
+baselines and **50** schema-v2 `plan_backlog_coverage` receipts now exist, the
+most recent recorded today, while `BI-C7362CA5` still has none. Two causes from
+the table above have since closed — `BI-F83CF689` (null `repositoryFullName` on
+`create_workroom` / `plan_workroom_worktree`, failure 1) and `BI-ECFE0AC2`
+(reviewers completing with zero tool executions). `BI-72F368BC` remains open but
+rescoped to "reachable only from an in-portal coworker — no external surface can
+produce one", so an external CLI session still cannot mint this baseline itself;
+an in-portal reviewer can.
 
 Do not re-derive the old conclusion from this section: it is retained because the
 sequencing lessons below are still true, not because the blocker still stands.

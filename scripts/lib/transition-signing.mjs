@@ -1,15 +1,15 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { computeCapabilityStateVersion } from "./capability-state-hash.mjs";
 
-/** Version 1 bytes remain readable; version 2 binds every nested member. */
+/** Version 1 bytes remain readable; versions 2 and 3 bind every nested member. */
 export function canonicalTransitionPayload(value) {
-  if (value?.version === 2) {
+  if (value?.version === 2 || value?.version === 3) {
     if (value.kind !== "runtime-capability-transition") throw new Error("unsupported_runtime_transition_kind");
     return recursiveCanonicalJson(value);
   }
   if (value?.kind === "install-state-migration") return recursiveCanonicalJson(value);
   if (value?.kind === "runtime-capability-transition") {
-    if (value.version !== 1 && value.version !== 2) throw new Error("unsupported_runtime_transition_version");
+    if (value.version !== 1) throw new Error("unsupported_runtime_transition_version");
   }
   return JSON.stringify(value, Object.keys(value).sort());
 }
@@ -30,6 +30,88 @@ export function verifyTransitionSignature(value, signature, secret) {
   const expected = signTransitionPayload(value, secret);
   if (!/^[a-f0-9]{64}$/.test(signature) || !timingSafeEqual(Buffer.from(signature), Buffer.from(expected))) {
     throw new Error("runtime_transition_payload_tampered");
+  }
+}
+
+const immutableImageId = value => typeof value === "string" && /^sha256:[a-f0-9]{64}$/.test(value);
+const objectRecord = value => value && typeof value === "object" && !Array.isArray(value);
+const exactKeys = (value, keys) => objectRecord(value) && Object.keys(value).length === keys.length && keys.every(key => Object.hasOwn(value, key));
+const sameCanonical = (left, right) => recursiveCanonicalJson(left) === recursiveCanonicalJson(right);
+
+/** Image-only reconciliation cannot carry an activation or saved-state change.
+ * This validator is shared with the already packaged actuator/signer closure. */
+export function validateRuntimeServiceImagePlan(envelope) {
+  const invalid = () => { throw new Error("runtime_image_plan_invalid"); };
+  const plan = envelope?.imagePlan, intent = envelope?.reconciliation;
+  if (envelope?.version !== 3 || envelope.kind !== "runtime-capability-transition" || envelope.mode !== "reconciliation"
+    || !exactKeys(plan, ["schemaVersion", "sourceSha", "platform", "operation", "services"])
+    || plan.schemaVersion !== 1 || !/^[a-f0-9]{40}$/.test(plan.sourceSha ?? "")
+    || plan.sourceSha !== envelope.protocolIdentity?.sourceSha || !["prepare", "restore"].includes(plan.operation)
+    || !/^[a-f0-9]{64}$/.test(envelope.protocolIdentity?.imageQualifierSha256 ?? "")
+    || !["linux/amd64", "linux/arm64"].includes(plan.platform)
+    || !intent || !Array.isArray(intent.touchedKeys) || intent.touchedKeys.length !== 0
+    || !objectRecord(intent.observedDatabaseStates) || Object.keys(intent.observedDatabaseStates).length === 0
+    || !objectRecord(intent.desiredDatabaseStates)
+    || !Array.isArray(intent.observedHost?.enabledRuntimeCapabilities)
+    || !sameCanonical(intent.observedHost.enabledRuntimeCapabilities, envelope.previousKeys)
+    || !sameCanonical(intent.observedDatabaseStates, intent.desiredDatabaseStates)
+    || !sameCanonical(intent.observedHost?.enabledRuntimeCapabilities, intent.desiredHostEnabledKeys)
+    || !["Keys", "Profiles", "Services"].every(member => Array.isArray(envelope[`previous${member}`])
+      && sameCanonical(envelope[`previous${member}`], envelope[`desired${member}`]))
+    || envelope.previousStateHash !== envelope.desiredStateHash
+    || !Array.isArray(plan.services) || plan.services.length !== 1) invalid();
+  const arch = intent.observedHost?.arch;
+  if (plan.platform !== `linux/${arch === "x86_64" ? "amd64" : arch}`) invalid();
+  for (const entry of plan.services) {
+    // First bounded image recipe: the existing browser service. Other service
+    // classes and contexts remain unsupported rather than becoming build input.
+    if (!exactKeys(entry, ["service", "source"]) || entry.service !== "browser-use"
+      || !envelope.previousServices.includes(entry.service)) invalid();
+    const source = entry.source;
+    if (plan.operation === "restore") {
+      if (!exactKeys(source, ["kind", "imageId", "expectedImageId"]) || source.kind !== "restore"
+        || !immutableImageId(source.imageId) || !immutableImageId(source.expectedImageId)) invalid();
+    } else if (source?.kind === "source") {
+      if (!exactKeys(source, ["kind", "sourceSha"]) || source.sourceSha !== plan.sourceSha) invalid();
+    } else if (source?.kind === "published") {
+      if (!exactKeys(source, ["kind", "sourceSha", "reference"]) || source.sourceSha !== plan.sourceSha
+        || !/^ghcr\.io\/[A-Za-z0-9][A-Za-z0-9_.-]*\/dpf-browser-use@sha256:[a-f0-9]{64}$/.test(source.reference ?? "")) invalid();
+    } else invalid();
+  }
+  return structuredClone(plan);
+}
+
+/** A signed green health result is not evidence of the selected image bytes. */
+export function validateRuntimeServiceImageProof(receipt, envelope) {
+  const plan = validateRuntimeServiceImagePlan(envelope);
+  const invalid = () => { throw new Error("runtime_image_proof_invalid"); };
+  const proof = receipt.imageProof;
+  // A failure retains unknown observations rather than manufacturing proof.
+  if (["failed", "rollback_failed"].includes(receipt.status) && proof === undefined) return;
+  if (!exactKeys(proof, ["schemaVersion", "sourceSha", "services", "untouchedBefore", "untouchedAfter"])
+    || proof.schemaVersion !== 1 || proof.sourceSha !== plan.sourceSha
+    || !Array.isArray(proof.services) || proof.services.length !== plan.services.length) invalid();
+  const untouched = envelope.previousServices.filter(service => !plan.services.some(entry => entry.service === service));
+  if (!exactKeys(proof.untouchedBefore, untouched) || !exactKeys(proof.untouchedAfter, untouched)
+    || untouched.some(service => !/^[a-f0-9]{64}$/.test(proof.untouchedBefore[service] ?? "")
+      || proof.untouchedBefore[service] !== proof.untouchedAfter[service])) invalid();
+  for (const [index, intended] of plan.services.entries()) {
+    const actual = proof.services[index];
+    if (!exactKeys(actual, ["service", "priorImageId", "intendedImageId", "observedImageId", "priorContainerId", "observedContainerId", "resourcesBeforeHash", "resourcesAfterHash", "source"])
+      || actual.service !== intended.service
+      || ![actual.priorImageId, actual.intendedImageId, actual.observedImageId].every(immutableImageId)
+      || ![actual.priorContainerId, actual.observedContainerId, actual.resourcesBeforeHash, actual.resourcesAfterHash].every(value => /^[a-f0-9]{64}$/.test(value ?? ""))
+      || actual.resourcesBeforeHash !== actual.resourcesAfterHash) invalid();
+    if (intended.source.kind === "source") {
+      if (!exactKeys(actual.source, ["kind", "sourceSha", "inputTreeOid"])
+        || actual.source.kind !== "source" || actual.source.sourceSha !== plan.sourceSha
+        || !/^[a-f0-9]{40}$/.test(actual.source.inputTreeOid ?? "")) invalid();
+    } else if (!sameCanonical(actual.source, intended.source)) invalid();
+    if (intended.source.kind === "restore"
+      && (actual.priorImageId !== intended.source.expectedImageId || actual.intendedImageId !== intended.source.imageId)) invalid();
+    const expected = receipt.status === "rolled_back" ? actual.priorImageId : actual.intendedImageId;
+    if (["applied", "rolled_back"].includes(receipt.status)
+      && (actual.observedImageId !== expected || receipt.observedHealth?.[actual.service] !== "healthy")) invalid();
   }
 }
 

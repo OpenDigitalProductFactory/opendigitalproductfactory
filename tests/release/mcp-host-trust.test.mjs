@@ -72,7 +72,8 @@ test("public CA endpoints need no managed CA; explicit HTTP is preserved", () =>
 
 test("packaged shared HTTPS resolver has its declared Linux shell dependency", () => {
   const runner = readFileSync(join(root, "Dockerfile"), "utf8").split("FROM base AS runner")[1];
-  assert.match(runner, /RUN apk add --no-cache[^\r\n]*\bbash\b/);
+  // The install sits inside a retry loop (BI-7FFF5CB0), so match the apk line itself.
+  assert.match(runner, /\bapk add --no-cache[^\r\n]*\bbash\b/);
 });
 
 test("only pre-main trust failures are marked as unrun host prerequisites", async () => {

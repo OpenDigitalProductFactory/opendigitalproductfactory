@@ -38,7 +38,7 @@ vi.mock("@/lib/self-upgrade/quiescence", () => ({ getQuiescenceLevel: () => mock
 vi.mock("@/lib/routing/cli-pool-status", () => ({ getAllCliPoolStatuses: () => mocks.pools() }));
 vi.mock("@/lib/routing/cli-concurrency", () => ({ cliConcurrencyStats: () => mocks.cliStats() }));
 
-import { agentTaskDispatch } from "./agent-task-dispatch";
+import { agentTaskDispatch, agentTaskRunNow } from "./agent-task-dispatch";
 
 type Handler = (ctx: { step: { run: (id: string, fn: () => unknown) => Promise<unknown> } }) => Promise<unknown>;
 const handler = (agentTaskDispatch as unknown as { handler: Handler }).handler;
@@ -154,5 +154,32 @@ describe("agent task dispatch", () => {
 
     expect(mocks.execute.mock.calls.map((c) => c[0])).toEqual(["a"]);
     expect(result).toMatchObject({ dispatched: 1, notStarted: 2, quiesced: "draining" });
+  });
+});
+
+// BI-31C1FDEC: a room wake asks for one task to run now instead of at the next tick.
+describe("agent/task-run-now", () => {
+  type RunNowHandler = (ctx: { event: { data: Record<string, unknown> }; step: typeof step }) => Promise<unknown>;
+  const runNow = agentTaskRunNow as unknown as { config: Record<string, unknown>; handler: RunNowHandler };
+
+  beforeEach(() => {
+    mocks.execute.mockReset();
+    mocks.level.mockReset();
+  });
+
+  it("runs the named task at once, one run per task", async () => {
+    mocks.level.mockResolvedValue("normal");
+    mocks.execute.mockResolvedValue(undefined);
+    expect(runNow.config).toMatchObject({ concurrency: [{ limit: 1, key: "event.data.taskId" }], triggers: [{ event: "agent/task.run-now" }] });
+    const outcome = await runNow.handler({ event: { data: { taskId: "room-reply-wi-1-AGT-B" } }, step });
+    expect(outcome).toEqual({ status: "ran", taskId: "room-reply-wi-1-AGT-B" });
+    expect(mocks.execute).toHaveBeenCalledWith("room-reply-wi-1-AGT-B");
+  });
+
+  it("leaves the task due during a drain", async () => {
+    mocks.level.mockResolvedValue("draining");
+    const outcome = await runNow.handler({ event: { data: { taskId: "room-reply-wi-1-AGT-B" } }, step });
+    expect(outcome).toEqual({ status: "quiesced", taskId: "room-reply-wi-1-AGT-B", level: "draining" });
+    expect(mocks.execute).not.toHaveBeenCalled();
   });
 });

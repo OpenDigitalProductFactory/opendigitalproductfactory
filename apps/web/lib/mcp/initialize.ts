@@ -5,6 +5,11 @@ import {
   FALLBACK_PROTOCOL_VERSION,
   SUPPORTED_PROTOCOL_VERSIONS,
 } from "@/lib/mcp/protocol-versions";
+import {
+  MCP_SERVER_ICONS,
+  MCP_SERVER_WEBSITE_URL,
+  advertisesServerBrand,
+} from "@/lib/mcp/server-brand";
 import { shouldAdvertiseTasksCapability } from "@/lib/mcp/tasks-lifecycle";
 
 type InitializeAuthority = {
@@ -115,6 +120,8 @@ ${args.toolchainNotice}`;
     protocolVersion: negotiated,
     capabilities: {
       tools: { listChanged: true },
+      // BI-ED52AB82: Work Rooms are subscribable resources (spec 2026-10-27 §6.7).
+      resources: { subscribe: true },
       ...(shouldAdvertiseTasksCapability(negotiated)
         ? { tasks: { list: {}, cancel: {} } }
         : {}),
@@ -128,6 +135,11 @@ ${args.toolchainNotice}`;
       version: "1.0.0",
       description:
         "Digital Product Factory MCP transport — governed backlog, planning, coworker, and build tools for external coding agents.",
+      // The DPF mark and website, for a client that draws a tile per
+      // connector; only on a revision whose schema has the fields (BI-20397491).
+      ...(advertisesServerBrand(negotiated)
+        ? { websiteUrl: MCP_SERVER_WEBSITE_URL, icons: MCP_SERVER_ICONS }
+        : {}),
     },
     instructions,
   };

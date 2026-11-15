@@ -365,11 +365,27 @@ Acceptance:
 - Infra failover never produces "the underlying work was not recorded" unless the actual failure is an unrecorded work/action claim.
 - Build Studio still blocks false "I shipped it" claims when no authoritative tool or evidence was produced.
 
+### 4.6 Non-acting-answer in-turn failover (pre-DPF2 bridge)
+
+**Status:** bridge — remove at the DPF2 cutover, when native acting-contract enforcement lands.
+
+A separate failure mode sits beside infrastructure failover: a `tool-action` turn is handed real tools, invokes none, and closes with a fluent guidance-only / "that capability is unavailable" reply. The turn never did the work, but no infrastructure error fired — the endpoint simply answered without acting. Returning that prose is indistinguishable, to the operator, from a completed action.
+
+The bridge adds one bounded in-turn re-dispatch:
+
+1. **Detection** (`apps/web/lib/tak/non-acting-answer-detector.ts`). Only `tool-action` task types that were handed tools (not stripped-tool turns) and invoked zero tools, and whose reply matches the non-acting shape, pass the detector.
+2. **Failover** (`apps/web/lib/tak/agentic-loop.ts`, helpers in `apps/web/lib/tak/non-acting-failover.ts`). The just-used provider is denied (mirroring `rotateTerminalWriterProvider`) and, when `NON_ACTING_BRIDGE_CONFIG.requireDifferentAdapterOnRetry` is set, the pinned model preference is dropped so the single re-dispatch lands on a different-adapter candidate. The budget is `NON_ACTING_BRIDGE_CONFIG.maxFailoverRetries`; when it is spent and the retry also did not act, the loop returns the better (longer substantive) of the two non-acting answers — no third dispatch.
+3. **Accounting** (`apps/web/lib/routing/record-non-acting-failure.ts`). The failure is counted against the exact route as a failed `RouteOutcome` (`toolSuccess=false` carrying `NON_ACTING_BRIDGE_CONFIG.nonActingProviderErrorCode`) — no new table; `RouteOutcome` is the single source of truth. The time-decayed, endpoint-scoped penalty in cost-ranking's `estimateSuccessProbability` derives from those non-acting `RouteOutcome` rows and steers future routing away from the endpoint that answered without acting, recovering automatically as the failure ages past the half-life. The write is fire-and-forget: telemetry never breaks a live turn. The replacement dispatch is annotated on its `RouteDecisionLog.fallbacksUsed`.
+
+**Soft pins.** A hard model pin (`AgentModelConfig.pinnedProviderId` + `pinnedModelId`) that points at a retired or soft-retired `ModelProfile` keeps the router aimed at an endpoint that no longer serves traffic. Migration `20261113010000_clear_retired_agent_pins` clears both pin columns for those rows so routing falls back to capability-based selection (`minimumTier` / `minimumCapabilities`) — making the pin soft in the face of retirement rather than a dead end. It is data-only, idempotent, and mirrors `20260416010000_clear_onboarding_agent_pin`.
+
 ## 5. Migration and Refactoring Inventory
 
 ### No new table in v1
 
 Do not add a provider-health table in this slice. Existing telemetry can support the first provider-health projection.
+
+The pre-DPF2 non-acting failover bridge (§4.6) also adds no table. A non-acting turn is recorded as a failed `RouteOutcome` row (`toolSuccess=false`, the bridge's non-acting `providerErrorCode`), and the time-decayed cost-ranking penalty is derived from those rows. Its only persistent change is the data-only migration `20261113010000_clear_retired_agent_pins`; its data-governance contract is `changes/non-acting-failover-tally.data-impact.json`.
 
 ### Possible nullable columns
 

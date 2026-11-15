@@ -1,3 +1,4 @@
+vi.mock("@/lib/inference/codex-cli-catalog-auth", () => ({ discoverCodexCliModels: vi.fn(async () => [{ modelId: "account-default", rawMetadata: { isDefault: true } }]) }));
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
@@ -438,7 +439,7 @@ describe("testProviderAuth", () => {
     );
     const request = vi.mocked(fetch).mock.calls[0]![1]!;
     expect(JSON.parse(request.body as string)).toMatchObject({
-      model: "discovered-current-model", stream: true, instructions: "Reply with OK only.", store: false,
+      model: "account-default", stream: true, instructions: "Reply with OK only.", store: false,
     });
     expect(mockClearCapacity).toHaveBeenCalledWith({ providerId: "chatgpt", source: "oauth" });
   });

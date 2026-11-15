@@ -39,8 +39,7 @@ export const PERSON_FACING_WRITE_PRIMITIVES: readonly PersonFacingWritePrimitive
     rationale: "Captures a kernel decision for a person to rule on; humanCaptureOutcome refuses a record the rule table did not route to a person.",
     enforcedBy: "lib/decision-perspective/human-escalation.ts#export function humanCaptureOutcome",
     callers: {
-      "lib/actions/decision-perspective.ts": "platform decision capture",
-      "lib/actions/org-decision-capture.ts": "organization decision capture",
+      "lib/decision/owner-ruling-capture.ts": "platform and organization decision capture (portal Answer controls and record_owner_ruling, BI-0C0B0836)",
     },
   },
   {
@@ -59,15 +58,14 @@ export const PERSON_FACING_WRITE_PRIMITIVES: readonly PersonFacingWritePrimitive
     rationale: "Files an issue report about something that happened (a stall, a failure, a regression, a user report); it offers no options to choose between.",
     callers: {
       "app/api/quality/report/route.ts": "user-submitted issue report",
+      "lib/build/plan-gate-stall-invariant.ts": "passed Build Studio plan still refused on PLAN_REQUIRED (BI-9FA1F9CF)",
       "lib/actions/feedback-support.ts": "support feedback report",
       "lib/actions/quality.ts": "quality issue report",
-      "lib/assurance/remediation-merge-live.ts": "remediation did not land",
-      "lib/build/escalate-build-to-human.ts": "build stalled at a review gate",
+      "lib/govern/authority/route-to-human.ts": "the routeToHuman seam: build stalls, PR delivery, PR follow-through and the assurance merge gate file here after the escalation gate decides the route",
       "lib/mcp/packs/feedback-pack.ts": "report_quality_issue / submit_feedback",
       "lib/operate/coworker-regression-detector.ts": "coworker regression detected",
       "lib/operate/scheduled-jobs/staleness-escalation.ts": "scheduled job stale",
       "lib/quality/platform-issue-reports.ts": "the definition",
-      "lib/queue/functions/build-pr-delivery-reconcile.ts": "PR delivery mismatch",
       "lib/queue/functions/index-integrity-sweep.ts": "index integrity finding",
       "lib/queue/functions/log-signature-scanner.ts": "log signature finding",
     },

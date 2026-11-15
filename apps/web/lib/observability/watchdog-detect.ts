@@ -75,17 +75,24 @@ export function decideStall(
   candidate: WatchdogCandidate,
   threshold: ResolvedThreshold,
   now: Date,
+  /**
+   * BI-4FDE4050: ms this process was suspended (host asleep) after a given
+   * instant. Liveness silence is measured in running time; the total budget
+   * stays on the wall clock. Defaults to none, keeping the function pure.
+   */
+  suspendedMsSince: (since: Date) => number = () => 0,
 ): StallDecision | null {
+  const runningNow = (since: Date) => new Date(now.getTime() - suspendedMsSince(since));
   if (isStale(now, candidate.startedAt, threshold.totalPhaseTimeoutSeconds * 1000)) {
     return { candidate, threshold, reason: "total_timeout" };
   }
   if (candidate.lastHeartbeatAt === null) {
-    if (isStale(now, candidate.startedAt, threshold.heartbeatTimeoutSeconds * 1000)) {
+    if (isStale(runningNow(candidate.startedAt), candidate.startedAt, threshold.heartbeatTimeoutSeconds * 1000)) {
       return { candidate, threshold, reason: "never_started" };
     }
     return null;
   }
-  if (isStale(now, candidate.lastHeartbeatAt, threshold.heartbeatTimeoutSeconds * 1000)) {
+  if (isStale(runningNow(candidate.lastHeartbeatAt), candidate.lastHeartbeatAt, threshold.heartbeatTimeoutSeconds * 1000)) {
     return { candidate, threshold, reason: "heartbeat_timeout" };
   }
   return null;

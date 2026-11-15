@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { parseVerifiedPullRequestObservation } from "@/lib/contributor-change-lanes/pull-request-observation";
+import { parseVerifiedPullRequestObservation, type PullRequestObservation } from "@/lib/contributor-change-lanes/pull-request-observation";
 import { isDocPullRequest } from "@/lib/backlog/pr-submit-awaiting-acceptance";
 import type { InitiativeReadinessDecision } from "./types";
 
@@ -54,6 +54,25 @@ export async function resolveDeploymentClosureProof(args: {
     targetSha: run.targetSha, servedSha, completedAt: run.completedAt.toISOString() };
 }
 
+/**
+ * The verified merged-PR observation for a room: the inventory's snapshot when
+ * it has one, else the observation the room recorded when its merge was settled
+ * after the room closed (BI-8129F585). Both are verified and fingerprinted.
+ */
+export function selectDeliveryObservation(
+  snapshotPayloads: unknown[],
+  room: { repositoryFullName: string | null; workspaceState?: unknown },
+): PullRequestObservation | null {
+  const fromInventory = snapshotPayloads.map(parseVerifiedPullRequestObservation)
+    .find(pr => pr?.repositoryFullName === room.repositoryFullName);
+  if (fromInventory) return fromInventory;
+  const recorded = parseVerifiedPullRequestObservation(
+    (room.workspaceState && typeof room.workspaceState === "object" && !Array.isArray(room.workspaceState)
+      ? room.workspaceState as Record<string, unknown> : {}).mergedPullRequestObservation,
+  );
+  return recorded?.repositoryFullName === room.repositoryFullName ? recorded : null;
+}
+
 type ClosureDb = Pick<typeof import("@dpf/db").prisma, "workroom" | "selfUpgradeRun" | "contributorInventorySnapshot">;
 
 /** Server-owned reads; a caller cannot submit a deployment assertion as proof. */
@@ -92,7 +111,7 @@ async function resolveRoomDeploymentClosure(args: {
     // Newest attempt wins: an old merged PR cannot close newly reopened work.
     const room = await prisma.workroom.findFirst({ where: args.roomWhere as never,
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-      select: { repositoryFullName: true, headSha: true, pullRequestNumber: true } });
+      select: { repositoryFullName: true, headSha: true, pullRequestNumber: true, workspaceState: true } });
     const servedSha = await getDeployedSha();
     if (!room?.pullRequestNumber || !servedSha || !sha.test(servedSha)) {
       return { kind: "unavailable", reason: "Current delivery attempt or served identity is unavailable." };
@@ -105,8 +124,7 @@ async function resolveRoomDeploymentClosure(args: {
       where: { source: "github-pr", sourceKey: String(room.pullRequestNumber) },
       orderBy: { fetchedAt: "desc" }, take: 20, select: { payload: true },
     });
-    const observation = snapshots.map(row => parseVerifiedPullRequestObservation(row.payload))
-      .find(pr => pr?.repositoryFullName === room.repositoryFullName);
+    const observation = selectDeliveryObservation(snapshots.map(row => row.payload), room);
     return await resolveDeploymentClosureProof({ workType: args.workType, room, run, servedSha, observation,
       contains: async (repository, ancestor, target) => {
         for (const root of args.roots) {

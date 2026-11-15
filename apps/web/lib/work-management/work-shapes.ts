@@ -32,12 +32,12 @@ import { improveActivityFor, type ImproveLayer, type WorkShapeImproveActivity } 
 import { ORCHESTRATION_SHAPES } from "./orchestration-shapes";
 import { PLATFORM_REVIEW_SHAPES } from "./platform-review-shape";
 import { SOURCE_INQUIRY_SHAPES } from "./source-inquiry-shape";
-import { STANDING_SHAPES } from "./standing-operations-shapes";
+import { BACKLOG_STEWARD_WATCH_SHAPE_KEY, STANDING_SHAPES } from "./standing-operations-shapes";
 import { WORK_SHAPE_PRIOR_VERSIONS } from "./work-shape-prior-versions";
 
 // Structural contracts and vocabularies have one portable owner. This module
 // retains the application registry and its existing validation/read adapters.
-import type { WorkShapeDefinition, WorkShapeDefinitionContract } from "@dpf/validators/gpp/work-shape-contracts";
+import type { WorkShapeDefinition, WorkShapeDefinitionContract, WorkShapeStage, WorkShapeStageEffort } from "@dpf/validators/gpp/work-shape-contracts";
 import { WORK_SHAPE_TRIGGER_CLASSES, type WorkShapeTriggerClass } from "@dpf/validators/gpp/work-vocabulary";
 export { WORK_SHAPE_TRIGGER_CLASSES, type WorkShapeTriggerClass } from "@dpf/validators/gpp/work-vocabulary";
 export type {
@@ -46,6 +46,7 @@ export type {
   WorkShapeBinding,
   WorkShapeStage,
   WorkShapeStageDeadline,
+  WorkShapeStageEffort,
   WorkShapeFlow,
   WorkShapeStopCondition,
   WorkShapeGrant,
@@ -54,6 +55,21 @@ export type {
   WorkShapeDefinition,
   WorkShapeDefinitionContract,
 } from "@dpf/validators/gpp/work-shape-contracts";
+
+/**
+ * The effort tier a stage runs at, or null when it declares none (the caller
+ * then behaves exactly as before Phase G, BI-B3BBF9AD). A governed decision is
+ * ALWAYS high: demoting one trades a real decision for a cheap one, and that
+ * saving is not the operator's to take (proactivity design §6.1). Read a
+ * stage's tier only through here. Pure.
+ */
+export function resolveStageEffort(
+  stage: Pick<WorkShapeStage, "advance" | "effort"> | null | undefined,
+): WorkShapeStageEffort | null {
+  if (!stage) return null;
+  if (stage.advance.kind === "governed-decision") return "high";
+  return stage.effort ?? null;
+}
 
 export function readWorkShapeDefinitionContract(
   shape: WorkShapeDefinition,
@@ -100,6 +116,7 @@ const SHAPES: Record<string, WorkShapeDefinition> = {
       {
         key: "sweep",
         title: "Sweep the deadline horizon",
+        effort: "low",
         accountablePrincipalRef: "agent:compliance-officer",
         advance: {
           kind: "status-change",
@@ -110,6 +127,7 @@ const SHAPES: Record<string, WorkShapeDefinition> = {
       {
         key: "raise",
         title: "Raise findings onto the assurance ledger",
+        effort: "low",
         accountablePrincipalRef: "agent:compliance-officer",
         advance: {
           kind: "status-change",
@@ -161,9 +179,14 @@ const SHAPES: Record<string, WorkShapeDefinition> = {
  * activities. Each family names the improve layer its shapes inherit
  * (BI-CE564FBB).
  */
+const {
+  [BACKLOG_STEWARD_WATCH_SHAPE_KEY]: BACKLOG_STEWARD_WATCH_SHAPE,
+  ...PRE_EXISTING_STANDING_SHAPES
+} = STANDING_SHAPES;
+
 const SHAPE_FAMILIES: readonly (readonly [ImproveLayer, Record<string, WorkShapeDefinition>])[] = [
   ["assurance", SHAPES],
-  ["platform-operations", STANDING_SHAPES],
+  ["platform-operations", PRE_EXISTING_STANDING_SHAPES],
   ["business-operations", COWORKER_STANDING_SHAPES],
   ["business-operations", COWORKER_STANDING_SHAPES_OPERATE],
   ["craft", COWORKER_STANDING_SHAPES_CRAFT],
@@ -172,6 +195,8 @@ const SHAPE_FAMILIES: readonly (readonly [ImproveLayer, Record<string, WorkShape
   ["assurance", ACCEPTANCE_VERIFICATION_SHAPES],
   ["assurance", PLATFORM_REVIEW_SHAPES],
   ["ring-0", SOURCE_INQUIRY_SHAPES],
+  // Registered last so listWorkShapes() keeps every pre-existing shape in its prior order.
+  ["platform-operations", { [BACKLOG_STEWARD_WATCH_SHAPE_KEY]: BACKLOG_STEWARD_WATCH_SHAPE }],
 ];
 
 const ALL_SHAPES: Record<string, WorkShapeDefinition> = Object.assign({}, ...SHAPE_FAMILIES.map(([, family]) => family));

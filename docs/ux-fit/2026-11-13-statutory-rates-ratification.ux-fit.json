@@ -1,0 +1,31 @@
+{
+  "version": "1",
+  "decidedOption": "lead-band-with-collapsed-manual-entry",
+  "scope": {
+    "files": [
+      "apps/web/app/(shell)/finance/settings/statutory-rates/page.tsx",
+      "apps/web/app/(shell)/finance/settings/statutory-rates/StatutoryRatesPanel.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "sweep-measurement",
+    "baselineComparison": "new-route",
+    "measured": {
+      "/finance/settings/statutory-rates": {
+        "defaultVisibleWords": 169,
+        "leadBandWords": 9,
+        "primaryActions": 1,
+        "visibleFields": 0,
+        "maxChoicesPerControl": 0,
+        "subLegibleControls": 0,
+        "buriedPrimaryAction": 0,
+        "axeViolations": 2
+      }
+    },
+    "sourceSha": "a81137c6a9be677c7bf5a2602870e1909736b876",
+    "workflowRun": 43460626579,
+    "artifactId": 14056083739,
+    "artifactSha256": "3d1eaa72003403e28fa95cf56ab4c1143da0f0466b76780ec5ac2019dd26f196",
+    "rationale": "Measured by this PR's cloud UX route sweep on the page as shipped: every blocking budget passes. The manual-entry form is collapsed by default, so no field is visible on arrival. The two axe findings equal the sibling /finance/settings/tax route's count on the same run and come from the shared Finance shell, not this page. The SectionNav text-xs change in this PR took both this route and /finance/settings/tax from 8 sub-legible controls to 0."
+  }
+}

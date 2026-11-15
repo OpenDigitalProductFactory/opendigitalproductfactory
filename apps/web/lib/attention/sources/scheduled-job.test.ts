@@ -64,6 +64,50 @@ describe("scheduledJobToAttentionItem", () => {
     }, now)).toBeNull();
   });
 
+  it("asks once, and leads to the switch, when the submission sweep is halted for want of consent", () => {
+    // BI-6ED89EC6: the sweep used to halt daily with only a console line.
+    const item = scheduledJobToAttentionItem({
+      ...failing,
+      jobId: "ecosystem-issue-submission-sweep",
+      name: "Ecosystem: issue submission sweep",
+      schedule: "41 5 * * *",
+      lastStatus: "not-configured",
+      lastError: null,
+      lastRunSummary: "Upstream feedback is off, so 3 problems triaged here are not reaching the ecosystem.",
+      metadata: { haltReason: "awaiting-consent" },
+    }, now);
+    expect(item).toMatchObject({
+      // One standing item per job, never one per report.
+      id: "scheduled-job:ecosystem-issue-submission-sweep",
+      title: "Problems found here are not reaching the ecosystem",
+      deepLink: "/admin/issue-reports/upstream#upstream-feedback",
+      actions: [{ kind: "open-in-context", label: "Turn on upstream feedback", href: "/admin/issue-reports/upstream#upstream-feedback" }],
+      triage: { residueReason: "input-required", decideEffort: "judgment" },
+    });
+    expect(item!.context).toContain("3 problems triaged here");
+    expect(item!.context).toContain("nothing is sent until you do");
+  });
+
+  it("does not nag about a sweep the operator deliberately stopped", () => {
+    for (const haltReason of ["paused", "fork-only", "not-applicable"]) {
+      expect(scheduledJobToAttentionItem({
+        ...failing,
+        jobId: "ecosystem-issue-submission-sweep",
+        lastStatus: "not-configured",
+        lastRunSummary: "Contributions are paused, so nothing was sent.",
+        metadata: { haltReason },
+      }, now)).toBeNull();
+    }
+  });
+
+  it("keys on the typed halt reason, so rewording the summary cannot silence the ask", () => {
+    const base = { ...failing, jobId: "ecosystem-issue-submission-sweep", lastStatus: "not-configured" };
+    expect(scheduledJobToAttentionItem({ ...base, lastRunSummary: "Reworded entirely.",
+      metadata: { haltReason: "awaiting-consent" } }, now)).not.toBeNull();
+    expect(scheduledJobToAttentionItem({ ...base, lastRunSummary: "awaiting consent: old prose",
+      metadata: null }, now)).toBeNull();
+  });
+
   it("does not leak the raw error text into the owner-facing context", () => {
     expect(scheduledJobToAttentionItem(failing, now)!.context).not.toContain("401");
   });

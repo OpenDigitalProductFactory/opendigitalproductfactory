@@ -17,6 +17,7 @@ import {
   executableOnPath,
   resolveLocalCiPnpmInvocation,
   resetOwnedSlotDatabase,
+  SlotDatabaseResetError,
   clearStaleStageReceipts,
   resolveChildExit,
 } from "./local-ci-runner.mjs";
@@ -196,6 +197,54 @@ test("slot database reset rejects non-manifest identities before invoking Docker
     /refusing non-slot Postgres reset/,
   );
   assert.equal(called, false);
+});
+
+// BI-AE87D2BE: two resets of one slot interleave into a createdb duplicate-key
+// error, which failed gates before any test ran.
+test("slot database reset retries a lost race from the drop and then succeeds", () => {
+  const calls = [];
+  let createFailures = 1;
+  resetOwnedSlotDatabase({
+    container: "dpf-local-ci-postgres-0",
+    database: "dpf_local_ci_0",
+    pause: () => {},
+    run: (_cmd, args) => {
+      calls.push(args[2]);
+      if (args[2] === "createdb" && createFailures-- > 0) {
+        return { status: 1, stdout: "", stderr: 'createdb: error: database creation failed: ERROR:  duplicate key value violates unique constraint "pg_database_datname_index"' };
+      }
+      return { status: 0 };
+    },
+  });
+  assert.deepEqual(calls, ["dropdb", "createdb", "dropdb", "createdb"]);
+});
+
+test("a race that persists fails as a slot reset error", () => {
+  assert.throws(
+    () => resetOwnedSlotDatabase({
+      container: "dpf-local-ci-postgres-0",
+      database: "dpf_local_ci_0",
+      pause: () => {},
+      run: (_cmd, args) => (args[2] === "createdb"
+        ? { status: 1, stdout: "", stderr: 'database "dpf_local_ci_0" already exists' }
+        : { status: 0 }),
+    }),
+    (error) => error instanceof SlotDatabaseResetError && /already exists/.test(error.message),
+  );
+});
+
+test("a non-race reset error is not retried", () => {
+  let calls = 0;
+  assert.throws(
+    () => resetOwnedSlotDatabase({
+      container: "dpf-local-ci-postgres-0",
+      database: "dpf_local_ci_0",
+      pause: () => {},
+      run: () => { calls += 1; return { status: 1, stdout: "", stderr: "permission denied" }; },
+    }),
+    SlotDatabaseResetError,
+  );
+  assert.equal(calls, 1);
 });
 
 test("slot database reset fails closed when drop or create fails", () => {

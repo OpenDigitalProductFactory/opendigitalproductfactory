@@ -35,7 +35,7 @@ const definitions: ToolDefinition[] = [
   {
     name: "publish_wiki_overlay_pages",
     description:
-      "Flip status on a batch of org-overlay wiki pages (default target: 'published'). Each flipped page gets a manual revision row attributed to the calling user. Kernel pages, cross-org pages, missing pages, and pages already at the target status are filtered out and reported in rejected[]. Use after walking the user through pending drafts via list_wiki_overlay_drafts — pass the ids the user said to keep.",
+      "Flip status on a batch of org-overlay wiki pages (default target: 'published'). Each flipped page gets a manual revision row attributed to the calling user. Kernel pages, cross-org pages, missing pages, and pages already at the target status are filtered out and reported in rejected[]. Use after walking the user through pending drafts via list_wiki_overlay_drafts — pass the ids the user said to keep. Moving a page out of 'published' (for example targetStatus 'archived') also revokes the decision material sourced from it, so a retracted stance stops deciding; republishing restores it. To retract a stance, archive it here with a changeSummary that says why.",
     inputSchema: {
       type: "object",
       properties: {

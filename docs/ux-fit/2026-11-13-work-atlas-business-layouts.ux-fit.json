@@ -1,0 +1,18 @@
+{
+  "version": "1",
+  "decidedOption": "data-driven-lane-board",
+  "decisionInteractionId": "DI-595A4EB6EC4E",
+  "scope": {
+    "files": [
+      "apps/web/components/ops/workrooms/atlas/AtlasLaneBoard.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "data-driven-lane-board",
+      "bespoke-component-per-layout",
+      "hide-unplaced-rooms"
+    ]
+  }
+}

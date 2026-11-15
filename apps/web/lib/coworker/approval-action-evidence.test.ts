@@ -3,6 +3,7 @@ vi.mock("server-only", () => ({}));
 vi.mock("@dpf/db", () => ({ prisma: {} }));
 import { fingerprintCoworkerInput } from "@/lib/govern/authority/coworker-authority-decision";
 import { readApprovalActionEvidence } from "./approval-action-evidence";
+import { MCP_ROUTE_TOOL_RESULT_CHAR_CAP } from "@/lib/tak/tool-result-budget";
 
 const now = new Date("2026-10-21T00:00:00Z");
 const createdAt = new Date("2026-10-16T00:00:00Z");
@@ -21,6 +22,33 @@ function fixture() {
   return { envelope, run, db, findMany, read: () => readApprovalActionEvidence(envelope, db as never, now) };
 }
 describe("bounded original approval action evidence", () => {
+  function diagnosticFixture() {
+    const f = fixture(); const input = { command: "docker compose exec -T portal cat /dpf-state/service-converge-outcome.json" };
+    const report = { mode: "shadow", targetSha: "a".repeat(40), at: "2026-10-15T00:00:00.000Z", outcome: "current",
+      wouldRecreate: [], unchanged: ["postgres"], skippedStopped: [], dataOwnerChanged: [], unclassified: [], failed: [], bindDrift: [] };
+    f.envelope.manifestActionId = "admin_run_command"; f.envelope.argsJson.approvalBinding.toolName = "admin_run_command";
+    f.envelope.inputFingerprint = fingerprintCoworkerInput(input); f.envelope.argsJson.approvalBinding.inputFingerprint = f.envelope.inputFingerprint;
+    Object.assign(f.run, { toolName: "admin_run_command", parameters: input,
+      result: { success: true, data: { command: input.command, output: JSON.stringify(report), exitCode: 0 } } });
+    return { ...f, input, readReport: () => readApprovalActionEvidence(f.envelope, f.db as never, now, undefined, true) };
+  }
+  it("projects only the exact already-executed report, never its command or raw output", async () => {
+    const f = diagnosticFixture(); const result = await f.readReport();
+    expect(result).toMatchObject({ state: "available", toolName: "admin_run_command", operation: "service-convergence-shadow",
+      executionId: "run1", threadBinding: "matched", report: { mode: "shadow", classifications: { unchanged: ["postgres"] } } });
+    expect(JSON.stringify(result)).not.toMatch(/docker compose|output|exitCode|parameters/);
+  });
+  it.each(["command", "output", "exit", "failed", "foreign", "ambiguous"])("keeps %s diagnostic evidence unproven or unsupported", async change => {
+    const f = diagnosticFixture();
+    if (change === "command") Object.assign(f.run.result.data, { command: "docker compose ps" });
+    if (change === "output") Object.assign(f.run.result.data, { output: "SECRET" });
+    if (change === "exit") Object.assign(f.run.result.data, { exitCode: 1 });
+    if (change === "failed") Object.assign(f.run, { success: false, result: { success: false, data: { command: f.input.command, output: "SECRET", exitCode: 1 } } });
+    if (change === "foreign") f.run.userId = "other";
+    if (change === "ambiguous") f.findMany.mockResolvedValue([f.run, { ...f.run, id: "duplicate" }]);
+    expect(await f.readReport()).not.toHaveProperty("report");
+    expect(JSON.stringify(await f.readReport())).not.toContain("SECRET");
+  });
   it("reads only persisted operation fields and never exposes messages or raw parameters", async () => {
     const f = fixture(); const result = await f.read();
     expect(result).toEqual({ state: "available", executionId: "run1", executedAtIso: createdAt.toISOString(),
@@ -115,4 +143,66 @@ it("preserves unsupported-operation classification even when its result is malfo
   f.envelope.argsJson.approvalBinding.inputFingerprint = changed;
   f.run.result.success = false;
   expect(await f.read()).toEqual({ state: "unsupported", reason: "operation-unsupported" });
+});
+
+function runtimeFixture() {
+  const f = fixture();
+  const parameters = { transitionId: "RCT-original-fixture", imageServices: ["browser-use"], reconciliation: {
+    observedHost: { schemaVersion: 1, installerVersion: "fixture", platform: "darwin", arch: "arm64",
+      capabilityCatalogHash: "a".repeat(64), capabilityStateVersion: "b".repeat(64), enabledRuntimeCapabilities: [] },
+    observedDatabaseStates: {}, desiredHostEnabledKeys: [], desiredDatabaseStates: {}, touchedKeys: [],
+  } };
+  Object.assign(f.envelope, { manifestActionId: "reconcile_runtime_capabilities" });
+  Object.assign(f.run, { toolName: "reconcile_runtime_capabilities", parameters, success: false,
+    result: { success: false, error: "runtime_transition_database_stale", message: "SECRET private handler message" } });
+  const digest = fingerprintCoworkerInput(parameters);
+  f.envelope.inputFingerprint = digest;
+  Object.assign(f.envelope.argsJson.approvalBinding, { toolName: "reconcile_runtime_capabilities", inputFingerprint: digest });
+  return f;
+}
+
+describe("the original runtime reconciliation result (BI-08B1B79B)", () => {
+  it("shows the bound recorded refusal without replaying it or exposing private payload", async () => {
+    const f = runtimeFixture();
+    const result = await f.read();
+    expect(result).toMatchObject({ state: "available", toolName: "reconcile_runtime_capabilities",
+      operation: "reconciliation", transitionId: "RCT-original-fixture", outcome: "failed",
+      failureCode: "runtime_transition_database_stale" });
+    expect(JSON.stringify(result)).not.toContain("SECRET");
+    expect(f.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { envelopeId: "e1", toolName: "reconcile_runtime_capabilities" }, take: 11,
+    }));
+    expect(Object.keys(f.db)).toEqual(["toolExecution"]);
+  });
+  it("keeps an incomplete host observation distinct from a failed approval", async () => {
+    const f = runtimeFixture();
+    Object.assign(f.run, { result: { success: false, data: { status: "host_applied_pending_verification" } } });
+    expect(await f.read()).toMatchObject({ state: "available", outcome: "incomplete",
+      operationStatus: "host_applied_pending_verification" });
+  });
+  it("does not expose an arbitrary handler error as a verified cause", async () => {
+    const f = runtimeFixture();
+    Object.assign(f.run, { result: { success: false, error: "SECRET private runtime detail" } });
+    const result = await f.read();
+    expect(result).toMatchObject({ state: "available", outcome: "failed", failureCode: null });
+    expect(JSON.stringify(result)).not.toContain("SECRET");
+  });
+  it("refuses contradictory successful audit and failed operation result", async () => {
+    const f = runtimeFixture();
+    Object.assign(f.run, { success: true, result: { success: true, data: { status: "failed" } } });
+    expect(await f.read()).toEqual({ state: "missing", reason: "result-unproven" });
+  });
+  it.each(["userId", "agentId", "threadId", "envelopeId", "toolName"])("rejects a foreign runtime execution %s", async key => {
+    const f = runtimeFixture(); Object.assign(f.run, { [key]: "foreign" });
+    expect(await f.read()).toMatchObject({ state: "conflicting", reason: "execution-binding-mismatch" });
+  });
+  it("rejects oversized saved runtime payloads without projecting their contents", async () => {
+    const f = runtimeFixture();
+    Object.assign(f.run, { result: { success: false, error: "runtime_transition_database_stale", message: "x".repeat(MCP_ROUTE_TOOL_RESULT_CHAR_CAP + 1) } });
+    expect(await f.read()).toEqual({ state: "missing", reason: "result-unproven" });
+  });
+  it("keeps ambiguous runtime executions unproven rather than choosing a newer result", async () => {
+    const f = runtimeFixture(); f.findMany.mockResolvedValue([f.run, { ...f.run, id: "second-runtime-execution" }]);
+    expect(await f.read()).toMatchObject({ state: "conflicting", reason: "execution-ambiguous" });
+  });
 });

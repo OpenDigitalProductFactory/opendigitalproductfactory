@@ -38,6 +38,8 @@ docker-compose.override.yml
 .selected-model
 .tmp-codex-config.toml*
 /data/uploads/
+# Host posture snapshot the sign-in start script writes for the portal (BI-3E2F87FA).
+/data/host/
 
 # Test artifacts
 e2e-report/

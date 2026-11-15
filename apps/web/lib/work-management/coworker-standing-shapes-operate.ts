@@ -54,6 +54,7 @@ export const COWORKER_STANDING_SHAPES_OPERATE: Record<string, WorkShapeDefinitio
       {
         key: "gather",
         title: "Gather the period's statements and receipts",
+        effort: "low",
         accountablePrincipalRef: "agent:bookkeeper",
         advance: {
           kind: "status-change",
@@ -67,6 +68,7 @@ export const COWORKER_STANDING_SHAPES_OPERATE: Record<string, WorkShapeDefinitio
       {
         key: "import",
         title: "Import with provenance",
+        effort: "low",
         accountablePrincipalRef: "agent:bookkeeper",
         advance: {
           kind: "status-change",
@@ -79,6 +81,7 @@ export const COWORKER_STANDING_SHAPES_OPERATE: Record<string, WorkShapeDefinitio
       {
         key: "categorize",
         title: "Categorize and match, or raise an exception",
+        effort: "low",
         accountablePrincipalRef: "agent:bookkeeper",
         advance: {
           kind: "status-change",
@@ -92,6 +95,7 @@ export const COWORKER_STANDING_SHAPES_OPERATE: Record<string, WorkShapeDefinitio
       {
         key: "reconcile",
         title: "Reconcile the balance",
+        effort: "medium",
         accountablePrincipalRef: "agent:bookkeeper",
         advance: {
           kind: "status-change",
@@ -171,6 +175,7 @@ export const COWORKER_STANDING_SHAPES_OPERATE: Record<string, WorkShapeDefinitio
       {
         key: "detect-drift",
         title: "Find where the written policy and the applied practice disagree",
+        effort: "medium",
         accountablePrincipalRef: "agent:time-off-advisor",
         advance: {
           kind: "status-change",
@@ -183,6 +188,7 @@ export const COWORKER_STANDING_SHAPES_OPERATE: Record<string, WorkShapeDefinitio
       {
         key: "draft-revision",
         title: "Draft the revision into Policy",
+        effort: "medium",
         accountablePrincipalRef: "agent:time-off-advisor",
         advance: {
           kind: "status-change",
@@ -354,6 +360,7 @@ export const COWORKER_STANDING_SHAPES_OPERATE: Record<string, WorkShapeDefinitio
       {
         key: "observe",
         title: "Read the season and the conditions",
+        effort: "low",
         accountablePrincipalRef: "agent:farm-ranch-steward",
         advance: {
           kind: "status-change",
@@ -367,6 +374,7 @@ export const COWORKER_STANDING_SHAPES_OPERATE: Record<string, WorkShapeDefinitio
       {
         key: "file",
         title: "File what needs attention",
+        effort: "low",
         accountablePrincipalRef: "agent:farm-ranch-steward",
         advance: {
           kind: "status-change",

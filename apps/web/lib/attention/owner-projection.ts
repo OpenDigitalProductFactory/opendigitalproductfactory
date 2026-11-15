@@ -9,7 +9,7 @@ import {
   type OwnerAttentionLaneDecision,
 } from "./owner-routing";
 import { orderOutsideIn } from "./outside-in";
-import type { AttentionItem } from "./types";
+import { isAiCapacityItem, type AttentionItem } from "./types";
 
 export type OwnerAttentionEntry = {
   item: AttentionItem;
@@ -88,4 +88,10 @@ export function pinOwnerAttentionEntry(
     custodian: projection.custodian.filter((entry) => entry.item.id !== itemId),
     count: needsYouNow.length,
   };
+}
+
+/** Headlines of handled items the reader should still see by name: an AI
+ *  provider's usage limit and when it resets (BI-ACE041FE). Pure. */
+export function namedCustodianHeadlines(projection: OwnerAttentionProjection): string[] {
+  return projection.custodian.filter((entry) => isAiCapacityItem(entry.item)).map((entry) => entry.card.headline);
 }

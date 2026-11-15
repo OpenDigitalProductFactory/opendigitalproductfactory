@@ -547,9 +547,14 @@ if ($EdgeActionConfigured) { New-DpfEdgeActionMaterial }
 
 [IO.File]::WriteAllText($FingerprintFile, "$Fingerprint`n", (New-Object Text.UTF8Encoding($false)))
 $hosts = ((@($Hostname) + $San) | ForEach-Object { "$_`:443" }) -join ", "
+# default_sni: a client that connects by IP literal (https://127.0.0.1) sends no
+# server name, and Caddy then finds no certificate for the container-side address
+# the connection arrived on. Such a connection gets the primary host's
+# certificate, which also carries the address SANs (BI-4528CBDF).
 $caddy = @"
 {
     auto_https off
+    default_sni $Hostname
 }
 
 $hosts {

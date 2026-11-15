@@ -318,7 +318,19 @@ export async function performPlanToBuildTransition(params: {
   // readiness judges it — no Build Studio writer could ever record it, so a
   // large build stayed refused on PLAN_REQUIRED forever. Never throws; an
   // untraceable plan stays uncovered and the readiness refusal below stands.
+  //
+  // BI-9FA1F9CF: bind the delivery shape first, as the resume loop does
+  // (BI-C60EB507). A decomposition child reached here straight from its plan
+  // review with no Workroom, so its first attempt was judged on the unshaped
+  // table and refused on receipts its shape does not owe (FB-837ACE25,
+  // 2026-11-13 21:44, healed only by the 22:07 resume tick). Idempotent.
   if ((build.planReview as { decision?: string } | null)?.decision === "pass" && !tracker?.escalatedAt) {
+    try {
+      const { healBuildWorkroomShape } = await import("@/lib/build/heal-build-workroom-shape");
+      await healBuildWorkroomShape({ buildId, userId });
+    } catch (err) {
+      console.warn("[plan-to-build] workroom shape heal failed:", { buildId }, err);
+    }
     const { ensureBuildPlanCoverage } = await import("@/lib/build/record-build-plan-coverage");
     await ensureBuildPlanCoverage(buildId);
   }

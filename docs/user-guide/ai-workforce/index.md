@@ -1,5 +1,5 @@
 ---
-title: "AI Workforce"
+title: "AI Coworkers"
 area: ai-workforce
 order: 1
 ---
@@ -11,7 +11,7 @@ and aliases share one authority owner. When legacy rows disagree, use
 [permission reconciliation](../coworker-permission-reconciliation.md) to preview
 each difference and explicitly approve the desired state.
 
-AI Workforce is the directory and management home for the people-like AI roles that work in DPF. Start here to find who can help, what work they offer, whether that work is available for the current business type, and how much approval or review it requires.
+**AI Coworkers** (`/workforce`) is the single directory and activity home for the people-like AI roles that work in DPF. Start with **Coworkers** to find who can help. Open **Activity** to see what coworkers and external executors are doing, the Workrooms that retain their context, and whether today&rsquo;s model use belongs to a coworker, a Workroom, or remains unattributed. Advanced provider, routing, skill, governance, and runtime controls remain under **Platform → AI Operations**.
 
 Coworkers are grouped from customer-facing work inward:
 
@@ -38,7 +38,7 @@ outcome is reviewed. The pages in this area own the detail for each of those ste
 
 ## Find and Work With a Coworker
 
-1. Open `/platform/ai/overview`.
+1. Open `/workforce`.
 2. Search by coworker name or the work you need done.
 3. Filter by business area, interaction, availability, or attention state. Additional profession and lifecycle filters are under **More filters**.
 4. Read the three compact signals on each coworker: who they interact with, whether their declared work supports this business type, and their approval/autonomy posture.
@@ -46,6 +46,12 @@ outcome is reviewed. The pages in this area own the detail for each of those ste
 6. Choose the named action, such as **Ask Marketing**, when the coworker is **Available for your business type**. This opens the selected coworker in the existing panel without sending a message for you.
 
 The roster keeps filter state in the URL. Returning from a coworker record restores the same directory view.
+
+### See What Coworkers Are Doing Now
+
+Open **AI Workforce > Right Now** (`/platform/ai/right-now`) to see active coworkers and the work each one is doing. When the current task belongs to a Workroom, select the task title to open that room's canonical case. The room carries the scope, progress, evidence, decisions, exceptions and next action, so Right Now stays a quick operating view instead of becoming another dashboard.
+
+A task title without a Workroom remains plain text. DPF does not invent an inspection destination or imply that room evidence exists. Use the Workroom to judge what was checked or changed; a running status in Right Now is not proof that the outcome is complete.
 
 An availability label is not a runtime guess. It is projected from the current storefront business type, explicit coworker service declarations, enabled skill assignments, registered tools, effective grants, lifecycle certification, governed blockers, and the same routing requirements used for a representative task from that service. Those routing requirements include task type, tool use, sensitivity clearance, capability and context floors, Golden Triangle priority, model assignment, policy, capacity, and local-only settings. Provider and model assignments are preferences: an eligible fallback may keep work available, while a provider known to need reauthentication or billing repair is not advertised as ready. **Available** means at least one applicable advertised service has verified backing and an eligible task route. The searchable work, area, job description, interaction labels, availability, and named Ask action all describe that same service. A ready service does not make unresolved sibling work ready; each sibling and its evidence remain visible under **Availability evidence**.
 
@@ -124,8 +130,12 @@ The drift detail, along with route-level skills, observability, and the curator 
 
 ## Related Routes
 
+- `/workforce` — canonical AI Coworkers directory
+- `/workforce?view=activity` — current and recent coworker, Workroom, and platform activity
+- `/ops/workrooms` — Workroom inventory and retained execution context
+- `/platform/ai/operations-map` — live and historical operations evidence
 - `/platform/ai/skills` — the global skills catalog and observatory
-- `/platform/ai/overview` — customer-first coworker directory
+- `/platform/ai/overview` — advanced fleet administration
 - `/platform/ai/agent/[agentId]` — selected coworker record and work entry
 - `/platform/ai/providers/[providerId]` — provider setup and the Finance Bridge panel
 - `/platform/ai/agent/AGT-ORCH-000` — standing COO record, including its optional organization-visible conversational name

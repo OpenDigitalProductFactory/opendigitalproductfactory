@@ -45,9 +45,10 @@ function fixture(providerId = "local") {
   let generation = 0;
   const send = vi.fn(async () => undefined);
   const probe = vi.fn(async () => true);
+  const reconcileLocalRuntime = vi.fn(async () => undefined);
   const now = new Date("2026-10-12T02:00:00Z");
-  const deps = { db: db as unknown as PauseDatabase, now, send, probe, newId: () => `pause-${++generation}` };
-  return { get state() { return state; }, db, tx, deps, probe, send };
+  const deps = { db: db as unknown as PauseDatabase, now, send, probe, reconcileLocalRuntime, newId: () => `pause-${++generation}` };
+  return { get state() { return state; }, db, tx, deps, probe, send, reconcileLocalRuntime };
 }
 
 describe("durable operator provider pause", () => {
@@ -126,6 +127,37 @@ describe("durable operator provider pause", () => {
     expect(result.deliveryPending).toBe(true);
     expect(f.state.connection.status).toBe("paused");
     expect(f.state.job?.nextRunAt).toEqual(new Date("2026-10-12T03:00:00Z"));
+  });
+  it("re-applies the local runner config once after a committed resume, before returning", async () => {
+    const f = fixture();
+    await pauseLocalProvider({ providerId: "local", actorId: "operator" }, f.deps);
+    f.reconcileLocalRuntime.mockImplementationOnce(async () => { expect(f.state.connection.status).toBe("active"); });
+    expect(await resumeLocalProvider({ providerId: "local" }, f.deps)).toMatchObject({ outcome: "resumed" });
+    expect(f.reconcileLocalRuntime).toHaveBeenCalledTimes(1);
+  });
+  it("re-applies the runner config when the pause timer expires", async () => {
+    const f = fixture();
+    await pauseLocalProvider({ providerId: "local", actorId: "operator", duration: { value: 1, unit: "hours" } }, f.deps);
+    expect(await reconcileOverdueProviderPauses({ ...f.deps, now: new Date("2026-10-12T04:00:00Z") })).toBe(1);
+    expect(f.reconcileLocalRuntime).toHaveBeenCalledTimes(1);
+  });
+  it("keeps a resume whose runner reconcile fails", async () => {
+    const f = fixture();
+    await pauseLocalProvider({ providerId: "local", actorId: "operator" }, f.deps);
+    f.reconcileLocalRuntime.mockRejectedValueOnce(new Error("runner unreachable"));
+    expect(await resumeLocalProvider({ providerId: "local" }, f.deps)).toMatchObject({ outcome: "resumed", status: "active" });
+    expect(f.state.connection.status).toBe("active");
+  });
+  it("does not touch the runner for a not-due, superseded or non-local resume", async () => {
+    const f = fixture();
+    const timed = await pauseLocalProvider({ providerId: "local", actorId: "operator", duration: { value: 1, unit: "hours" } }, f.deps);
+    expect(await resumeLocalProvider({ providerId: "local", automatic: true, operationId: timed.operationId }, f.deps)).toMatchObject({ outcome: "not-due" });
+    expect(await resumeLocalProvider({ providerId: "local", operationId: "stale" }, f.deps)).toMatchObject({ outcome: "superseded" });
+    const remote = fixture("openai");
+    await pauseLocalProvider({ providerId: "openai", actorId: "operator" }, remote.deps);
+    expect(await resumeLocalProvider({ providerId: "openai" }, remote.deps)).toMatchObject({ outcome: "resumed" });
+    expect(f.reconcileLocalRuntime).not.toHaveBeenCalled();
+    expect(remote.reconcileLocalRuntime).not.toHaveBeenCalled();
   });
   it("cannot expire a newer or indefinite pause with an old timer", async () => {
     const f = fixture();

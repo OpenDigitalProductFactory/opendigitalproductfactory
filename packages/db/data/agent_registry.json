@@ -2845,12 +2845,6 @@
         "5.3 Integrate Value Stream",
         "5.3.3"
       ],
-      "job_definition_waivers": {
-        "cadence": {
-          "reason": "Event-triggered by construction, not standing. Its capability_domain is \"user-facing build coworker for the /build route\" guiding a human through five phases; it accompanies a build in flight. With no build in flight there is nothing for it to advance, and standing work would mean driving a build nobody asked for. Re-decide if it acquires a duty that outlives one build, such as sweeping stalled builds.",
-          "reviewBy": "2027-04-02"
-        }
-      },
       "status": "active",
       "config_profile": {
         "model_binding": {

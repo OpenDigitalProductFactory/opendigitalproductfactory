@@ -92,6 +92,9 @@ export const FINANCE_FAMILIES: FinanceFamily[] = [
       { label: "Currency", href: "/finance/settings/currency" },
       { label: "Dunning", href: "/finance/settings/dunning" },
       { label: "Tax Remittance", href: "/finance/settings/tax" },
+      // BI-8E1FD1BD: the only place a person can confirm a statutory figure. A
+      // capability with no entry point here is a capability nobody can reach.
+      { label: "Statutory Rates", href: "/finance/settings/statutory-rates" },
       { label: "Banking", href: "/finance/banking" },
     ],
   },

@@ -6,6 +6,8 @@ import { describe, expect, it } from "vitest";
 import { ALL_ARCHETYPES } from "./archetypes/index";
 import {
   COMMON_MAILROOM_PROFILE,
+  isPrivilegedMailroomReason,
+  MAILROOM_LEGAL_REASON_KEY,
   MAILROOM_NOISE_REASON_KEY,
   mailroomAcknowledgeBy,
   mergeMailroomProfile,
@@ -26,6 +28,32 @@ describe("mailroom profile registry", () => {
       const errors = validateMailroomProfile(resolveMailroomProfile(archetype));
       expect(errors, archetype.archetypeId).toEqual([]);
     }
+  });
+
+  // BI-757C961E: counsel mail has its own lane, owned by the business owner, and is privileged.
+  it("every profile routes legal correspondence to a privileged Legal queue owned by the business owner", () => {
+    for (const archetype of [null, ...ALL_ARCHETYPES]) {
+      const profile = resolveMailroomProfile(archetype);
+      const reason = profile.reasons.find((r) => r.key === MAILROOM_LEGAL_REASON_KEY);
+      expect(reason, archetype?.archetypeId ?? "common").toBeDefined();
+      expect(reason!.privileged).toBe(true);
+      expect(reason!.urgency).toBe("days");
+      expect(reason!.hints).toEqual(expect.arrayContaining(["privileged", "engagement letter", "legal advice"]));
+      const queue = profile.queues.find((q) => q.key === reason!.queueKey);
+      expect(queue?.responsibleRole).toBe("Business owner");
+      expect(queue?.key).not.toBe("owner-desk");
+      expect(isPrivilegedMailroomReason(profile, MAILROOM_LEGAL_REASON_KEY)).toBe(true);
+      expect(isPrivilegedMailroomReason(profile, "customer-enquiry")).toBe(false);
+      expect(isPrivilegedMailroomReason(profile, null)).toBe(false);
+    }
+  });
+
+  it("a privileged reason may not also be noise", () => {
+    const broken = {
+      ...COMMON_MAILROOM_PROFILE,
+      reasons: COMMON_MAILROOM_PROFILE.reasons.map((r) => (r.key === MAILROOM_NOISE_REASON_KEY ? { ...r, privileged: true } : r)),
+    };
+    expect(validateMailroomProfile(broken)).toContain(`reason ${MAILROOM_NOISE_REASON_KEY} cannot be both noise and privileged`);
   });
 
   it("an unknown archetype gets the common profile", () => {

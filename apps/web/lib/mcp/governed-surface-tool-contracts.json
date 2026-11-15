@@ -9,11 +9,9 @@
     "requiredReadTools": [
       "list_open_decision_reviews"
     ],
-    "requiredActTools": [],
-    "exemption": {
-      "rationale": "Resolution remains a human HITL action after reviewing the Decision Canvas; coworker agency is read and recommend, not unilateral resolution.",
-      "owner": "Founder Review"
-    }
+    "requiredActTools": [
+      "record_owner_ruling"
+    ]
   },
   {
     "surfaceId": "platform.estate-discovery",
@@ -69,6 +67,38 @@
     "requiredActTools": [
       "surface_act",
       "record_response_feedback"
+    ]
+  },
+  {
+    "surfaceId": "portfolio.platform-funding-setup",
+    "routes": [
+      "/ops/demand"
+    ],
+    "readModel": "apps/web/lib/portfolio/platform-funding-setup.ts",
+    "uiFiles": [
+      "apps/web/components/ops/PlatformFundingSetup.tsx"
+    ],
+    "requiredNodeIds": [
+      "platform-funding-setup",
+      "platform-funding-setup-toggle",
+      "platform-funding-setup-reload",
+      "platform-funding-organization",
+      "platform-funding-reason",
+      "platform-funding-attestation",
+      "platform-funding-confirm",
+      "platform-funding-record-toggle",
+      "platform-funding-more-organizations"
+    ],
+    "requiredReadTools": [
+      "surface_list",
+      "surface_open",
+      "surface_snapshot",
+      "surface_query",
+      "read_platform_funding_setup"
+    ],
+    "requiredActTools": [
+      "surface_act",
+      "confirm_platform_funding_owner"
     ]
   }
 ]

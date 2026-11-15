@@ -12,6 +12,7 @@ import type {
   InferencePayloadMatch,
   InferencePayloadSensitivity,
 } from "./types";
+import { isPublicSourceOnlyEvidence, isPublicSourceProvenance, sourceCodeExemptFromConfidential } from "./source-code-provenance";
 
 type TextProbe = {
   path: string;
@@ -321,6 +322,7 @@ const AMBIGUOUS_REASONS: ReadonlySet<string> = new Set(
   CLASS_RULES.filter((rule) => rule.ambiguousVocabulary).map((rule) => rule.reason),
 );
 
+// `source-code` only while its repository is unproven or private (BI-FC94F754).
 const CONFIDENTIAL_CLASSES = new Set<InferenceDataClass>([
   "customer-records",
   "source-code",
@@ -390,6 +392,7 @@ export function classifyInferencePayload(
   );
   const overallSensitivity = inferOverallSensitivity(
     dataMatches, input.governedData, restrictedCorroborated,
+    isPublicSourceProvenance(input.sourceCodeProvenance),
   );
   const continuations = input.messages.map(message => localNativeContinuationFingerprint(message) ?? null);
   const inputHash = hashCanonical({
@@ -400,6 +403,8 @@ export function classifyInferencePayload(
     tools: input.tools ?? [],
     taskType: input.taskType ?? null,
     governedData: input.governedData ?? [],
+    // Provenance changes the verdict, so it is part of what was screened.
+    ...(input.sourceCodeProvenance ? { sourceCodeProvenance: input.sourceCodeProvenance } : {}),
   });
 
   return {
@@ -751,6 +756,7 @@ function inferOverallSensitivity(
   dataMatches: readonly InferencePayloadMatch[],
   governedData: readonly GovernedPayloadHint[] | undefined,
   restrictedCorroborated: boolean,
+  publicSource: boolean,
 ): InferencePayloadSensitivity {
   // The same data-only evidence and corroboration result drive both this
   // sensitivity and the PDP class set. Do not re-derive either downstream.
@@ -760,14 +766,16 @@ function inferOverallSensitivity(
   }
 
   const dataClasses = dataMatches.map((match) => match.dataClass);
+  // Public-repository code no longer raises the payload (BI-FC94F754).
   if (
     restrictedMatches.length > 0 ||
     governedData?.some((hint) => hint.sensitivity === "confidential") ||
-    dataClasses.some((dataClass) => CONFIDENTIAL_CLASSES.has(dataClass))
+    dataClasses.some((dataClass) =>
+      CONFIDENTIAL_CLASSES.has(dataClass) && !sourceCodeExemptFromConfidential(dataClass, publicSource))
   ) {
     return "confidential";
   }
-  return "internal";
+  return isPublicSourceOnlyEvidence({ publicSource, dataClasses, governedData }) ? "public" : "internal";
 }
 
 function hashCanonical(value: unknown): string {

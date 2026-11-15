@@ -25,8 +25,8 @@ export type ReadEvidencePolicy = {
 export function readEvidenceExit(check: {complete: boolean; message: string}) {
   if (check.complete) return {kind:"complete" as const};
   // The generic native execution-proof producer owns closure/effect attestation.
-  // Without qualified proof even a normal native reply cannot authorize replay.
-  return {kind:"blocked" as const, message:`Specialist contribution unavailable: ${check.message}. Native execution proof is unavailable; this task is held without replay. Obtain the existing recovery owner's supported finite disposition.`};
+  // A contribution check cannot determine whether execution proof exists.
+  return {kind:"blocked" as const, message:`Specialist contribution unavailable: ${check.message}. The task is held without replay. Obtain the existing recovery owner's supported finite disposition.`};
 }
 
 // Bind the policy to the server-owned execution lifetime, like inference authority.

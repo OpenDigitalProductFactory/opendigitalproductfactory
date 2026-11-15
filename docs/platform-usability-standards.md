@@ -25,6 +25,8 @@ Every UI component uses CSS custom properties for all color roles. These propert
 | `--dpf-font-body` | Body font family | `font-family: var(--dpf-font-body)` |
 | `--dpf-font-heading` | Heading font family | `font-family: var(--dpf-font-heading)` |
 
+Status colours come from one registry. A surface maps its states to an intent namespace in `apps/web/lib/ui-model/statusColors.ts` and resolves colour with `resolveIntent` and `intentStyle`, rather than declaring its own colour map. A state that must be told apart from a neighbour also carries a non-colour cue. For example, the `standingRhythm` namespace draws a missed day as an outlined cross, so it never depends on red against amber.
+
 ## Design Token Scales (L0)
 
 Color is only one axis. Spacing, type, elevation, radius and motion are tokens too, and they

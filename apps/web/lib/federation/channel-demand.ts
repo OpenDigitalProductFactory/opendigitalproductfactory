@@ -104,23 +104,7 @@ export function isOutboundDemandSharingRole(
     && OUTBOUND_DEMAND_SHARING_ROLES.has(role as OutboundDemandSharingRole);
 }
 
-export async function bindPeerInstallationIdentity(
-  db: { federationLink: { updateMany(args: unknown): Promise<{ count: number }> } },
-  linkId: string,
-  peerInstallationId: string,
-): Promise<{ peerInstallationId: string }> {
-  const updated = await db.federationLink.updateMany({
-    where: {
-      linkId,
-      OR: [{ peerInstallationId: null }, { peerInstallationId }],
-    },
-    data: { peerInstallationId },
-  });
-  if (updated.count !== 1) {
-    throw new Error("Peer installation identity does not match this connection.");
-  }
-  return { peerInstallationId };
-}
+export { bindPeerInstallationIdentity } from "./peer-installation-identity";
 
 function assertTrustedPartnerLink(link: ChannelLink | null): asserts link is ChannelLink & { role: FederationRole } {
   if (!link) throw new Error("Federation link was not found.");

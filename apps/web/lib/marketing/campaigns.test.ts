@@ -15,6 +15,19 @@ describe("summarizeCampaignExecution", () => {
     expect(r.nextStep).toMatch(/break the brief into asset tasks/i);
   });
 
+  // BI-3F641F91: a retired task is no longer work. Live, a campaign whose five
+  // tasks were all archived still told the coworker to "Draft 5 assets".
+  it("does not count archived briefs or tasks as work to do", () => {
+    const r = summarizeCampaignExecution({
+      briefs: [{ status: "archived" }],
+      tasks: [{ taskId: "t1", status: "archived" }, { taskId: "t2", status: "archived" }],
+    });
+    expect(r.briefCount).toBe(0);
+    expect(r.taskCount).toBe(0);
+    expect(r.undraftedCount).toBe(0);
+    expect(r.nextStep).toMatch(/create a campaign brief/i);
+  });
+
   it("counts undrafted tasks and prompts drafting", () => {
     const r = summarizeCampaignExecution({
       briefs: [{ status: "active" }],

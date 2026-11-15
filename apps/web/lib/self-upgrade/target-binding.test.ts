@@ -128,7 +128,7 @@ describe("self-upgrade target binding — dedicated signing key (BI-231A4BC7)", 
     vi.stubEnv("DPF_SELF_UPGRADE_TARGET_BINDING_SECRET", DEDICATED);
 
     expect(verifySelfUpgradeTargetBinding(inFlight, { now: NOW })).toEqual({ ok: true, data: TARGET });
-    expect(matchesSignedSelfUpgradeTargetBinding(inFlight, TARGET)).toBe(true);
+    expect(matchesSignedSelfUpgradeTargetBinding(inFlight, TARGET, { now: NOW })).toBe(true);
   });
 
   it("refuses an AUTH_SECRET-signed binding after the cutoff, or one claiming more than the binding TTL", () => {

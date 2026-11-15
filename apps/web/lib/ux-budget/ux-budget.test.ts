@@ -555,7 +555,14 @@ describe("generated route-shell registry", () => {
     // reads install-state, the capability row and observed services, each failing
     // soft; on the sweep fixture (no install-state, no Docker) it renders a stable
     // read-only state, and it carries an explicit page-purpose contract.
-    expect(registry.routes.filter((route) => route.sweepEligible)).toHaveLength(216);
+    // 216 -> 217: /admin/issue-reports/upstream (BI-6ED89EC6) — the upstream-feedback
+    // switch reads one PlatformDevConfig row; with no row it renders the stable "off"
+    // state, so it is measurable, and it carries an explicit page-purpose contract.
+    // 217 -> 218: /finance/settings/statutory-rates (BI-8E1FD1BD) — reads PayrollTaxRule
+    // and TaxJurisdictionReference; with no rules it renders the stable "N federal
+    // figures missing" state, so it is measurable, and it carries an explicit
+    // page-purpose contract.
+    expect(registry.routes.filter((route) => route.sweepEligible)).toHaveLength(218);
     // 110 -> 113: the three exclusions above. Product Direction then adds seven
     // explicitly classified dynamic routes, bringing the combined total to 120.
     // 120 -> 121: /platform/ai/operations-map.

@@ -17,6 +17,75 @@ _dpf_native_edge_env_value() {
   sed -n "s/^${key}=//p" "$file" | tail -1
 }
 
+# Validate the hex-only IPv6 literals admitted by the origin expression below.
+# Keep this sourceable before Node, Python or any runtime has been installed.
+_dpf_native_edge_valid_ipv6() {
+  local literal="$1" groups_text compressed=0 group count=0
+  local -a groups=()
+  case "$literal" in *:::*) return 1 ;; esac
+  if [[ "$literal" == *::* ]]; then
+    local left="${literal%%::*}" right="${literal#*::}"
+    [[ "$right" != *::* ]] || return 1
+    case "$left" in :*|*:) return 1 ;; esac
+    case "$right" in :*|*:) return 1 ;; esac
+    compressed=1
+    groups_text="${left}${left:+:}${right}"
+  else
+    case "$literal" in :*|*:) return 1 ;; esac
+    groups_text="$literal"
+  fi
+  if [ -n "$groups_text" ]; then
+    IFS=: read -r -a groups <<< "$groups_text" || true
+  fi
+  local group_pattern='^[0-9A-Fa-f]{1,4}$'
+  if [ -n "$groups_text" ]; then
+    for group in "${groups[@]}"; do
+      [[ "$group" =~ $group_pattern ]] || return 1
+      count=$((count + 1))
+    done
+  fi
+  if [ "$compressed" = 1 ]; then [ "$count" -lt 8 ]; else [ "$count" = 8 ]; fi
+}
+
+# Co-located upkeep calls this installation; it does not advertise a LAN
+# endpoint. An explicit DPF_LAN_AUTHORITY_URL still wins at the caller.
+_dpf_native_edge_local_authority() {
+  local repo_root="$1" candidate port
+  candidate="${DPF_CANONICAL_PUBLIC_URL:-${PUBLIC_URL:-}}"
+  if [ -z "$candidate" ]; then
+    candidate="$(_dpf_native_edge_env_value "$repo_root/.env" PUBLIC_URL)"
+    candidate="$(printf '%s' "$candidate" | tr -d '\r')"
+    case "$candidate" in
+      \"*\") candidate="${candidate#\"}"; candidate="${candidate%\"}" ;;
+      \'*\') candidate="${candidate#\'}"; candidate="${candidate%\'}" ;;
+    esac
+  fi
+  if [ -z "$candidate" ]; then
+    printf '%s' 'http://127.0.0.1:3000'
+    return 0
+  fi
+  candidate="${candidate%/}"
+  local origin_pattern='^[Hh][Tt][Tt][Pp][Ss]?://([A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?|\[[0-9A-Fa-f:]+\])(:([0-9]+))?$'
+  if ! [[ "$candidate" =~ $origin_pattern ]]; then
+    echo 'Canonical host-upkeep origin is invalid; no service was changed.' >&2
+    return 64
+  fi
+  port="${BASH_REMATCH[4]:-}"
+  local authority="${candidate#*://}" literal
+  if [[ "$authority" == \[* ]]; then
+    literal="${authority#\[}"; literal="${literal%%\]*}"
+    if ! _dpf_native_edge_valid_ipv6 "$literal"; then
+      echo 'Canonical host-upkeep origin has an invalid IPv6 literal; no service was changed.' >&2
+      return 64
+    fi
+  fi
+  if [ -n "$port" ] && { [ "${#port}" -gt 5 ] || [ "$((10#$port))" -lt 1 ] || [ "$((10#$port))" -gt 65535 ]; }; then
+    echo 'Canonical host-upkeep origin has an invalid port; no service was changed.' >&2
+    return 64
+  fi
+  printf '%s' "$candidate"
+}
+
 _dpf_native_edge_release_url() {
   local version="$1" asset="$2"
   if [ -n "$version" ] && [ "$version" != "latest" ]; then
@@ -146,6 +215,9 @@ dpf_native_edge_install() {
   [ -n "$organization_role" ] || organization_role="member"
   [ -n "$organization_pki_dir" ] || organization_pki_dir="${DPF_PKI_DIR:-$HOME/.dpf/pki}"
 
+  if [ -z "$authority_url" ] && [ "$edge_role" = "host-upkeep" ]; then
+    authority_url="$(_dpf_native_edge_local_authority "$repo_root")" || return $?
+  fi
   if [ -z "$authority_url" ]; then
     local lan_ip
     lan_ip="$(ipconfig getifaddr en0 2>/dev/null || ipconfig getifaddr en1 2>/dev/null || true)"
@@ -312,8 +384,12 @@ dpf_native_edge_install_linux() {
   local unit_dir="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
   local unit="$unit_dir/dpf-edge-node.service"
   local version="${DPF_NATIVE_EDGE_VERSION:-$(git -C "$repo_root" describe --tags --abbrev=0 2>/dev/null || echo latest)}"
-  local authority_url="${DPF_LAN_AUTHORITY_URL:-http://127.0.0.1:3000}"
+  local authority_url="${DPF_LAN_AUTHORITY_URL:-}"
   local platform_env="$repo_root/.env"
+  if [ -z "$authority_url" ] && [ "$edge_role" = "host-upkeep" ]; then
+    authority_url="$(_dpf_native_edge_local_authority "$repo_root")" || return $?
+  fi
+  [ -n "$authority_url" ] || authority_url="http://127.0.0.1:3000"
   local edge_action_url edge_action_ca edge_action_cert edge_action_key edge_action_public
   edge_action_url="$(_dpf_native_edge_env_value "$platform_env" DPF_EDGE_ACTION_URL)"
   edge_action_ca="$(_dpf_native_edge_env_value "$platform_env" DPF_EDGE_ACTION_CA_FILE)"

@@ -89,3 +89,64 @@ describe("Build Studio plan coverage (BI-6F2872FC)", () => {
     expect(decision.verdict).not.toBe("allowed");
   });
 });
+
+// BI-9FA1F9CF: a bug sized medium or large derives no delivery shape, so its
+// build is judged on the unshaped table, whose fix profile owes PLAN_REQUIRED
+// and no spec approval. Its item never holds a scope baseline; the plan is
+// traced to the reviewed build design instead.
+describe("Build Studio plan coverage traced to the reviewed build design (BI-9FA1F9CF)", () => {
+  const fixItem = { ...item, workType: "bug", activeBuildKind: "fix" };
+  const designScope = { baselineId: "build-design:FB-1", artifactDigest: `sha256:${"a".repeat(64)}` };
+
+  function designCoverage(scope = designScope) {
+    const trace = traceBuildPlanToAcceptance({ tasks: [{ title: "t", satisfies: ["AC-1"] }] }, ["AC-1"]);
+    if (!trace.complete) throw new Error("fixture");
+    return {
+      id: "coverage-design",
+      kind: "plan_backlog_coverage",
+      gateKey: null,
+      recordedAt: new Date("2026-08-23T00:00:00.000Z"),
+      payload: buildPlanCoveragePayload({
+        itemId: fixItem.itemId, buildId: "FB-1", revisionId: "rev-plan", planDigest: PLAN_DIGEST,
+        baseline: scope, acceptanceIds: ["AC-1"], trace, recordedAt: "2026-08-23T00:00:00.000Z",
+      }),
+    };
+  }
+
+  function fixImplementation(activities: Activities, buildDesign: Parameters<typeof projectBacklogItemReadiness>[0]["buildDesign"]) {
+    return projectBacklogItemReadiness({
+      item: fixItem,
+      activities,
+      target: "implementation",
+      transitionObject: { kind: "feature-build", id: "FB-1", expectedVersion: "plan", targetState: "build" },
+      authorization: "pass",
+      capsuleIdentity: "pass",
+      evaluatedAt: "2026-08-24T00:00:00.000Z",
+      buildPlanDigest: PLAN_DIGEST,
+      buildDesign,
+    }).decision;
+  }
+
+  const research = receipt("r-research", "research");
+
+  it("passes PLAN_REQUIRED from coverage bound to the reviewed design the gate is shown", () => {
+    const decision = fixImplementation([research, designCoverage()], { reviewPassed: true, acceptanceCriteriaCount: 1, scope: designScope });
+    expect(stateOf(decision, "PLAN_REQUIRED")).toBe("pass");
+  });
+
+  it("reads the coverage as stale once the design it traced changed", () => {
+    const changed = { ...designScope, artifactDigest: `sha256:${"b".repeat(64)}` };
+    const decision = fixImplementation([research, designCoverage()], { reviewPassed: true, acceptanceCriteriaCount: 1, scope: changed });
+    expect(stateOf(decision, "PLAN_REQUIRED")).toBe("stale");
+  });
+
+  it("confers nothing when the design review did not pass", () => {
+    const decision = fixImplementation([research, designCoverage()], { reviewPassed: false, acceptanceCriteriaCount: 1, scope: designScope });
+    expect(stateOf(decision, "PLAN_REQUIRED")).not.toBe("pass");
+  });
+
+  it("judges an item with its own baseline on that baseline, not the design", () => {
+    const decision = implementation([...withoutRepositoryPlan(), designCoverage()], PLAN_DIGEST);
+    expect(stateOf(decision, "PLAN_REQUIRED")).toBe("stale");
+  });
+});

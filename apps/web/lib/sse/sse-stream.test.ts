@@ -64,6 +64,24 @@ describe("createSseResponse", () => {
     ac.abort();
   });
 
+  it("sends id/retry frames a client can resume from, including an empty priming event (BI-ED52AB82)", async () => {
+    const ac = new AbortController();
+    const res = createSseResponse({
+      signal: ac.signal,
+      heartbeatMs: 0,
+      start: (sse) => {
+        sse.sendEvent({ id: "stream1.10", retry: 3000 });
+        sse.sendEvent({ id: "stream1.\n11", data: { jsonrpc: "2.0", method: "x" } });
+      },
+    });
+    const reader = res.body!.getReader();
+    const dec = new TextDecoder();
+    await readFrame(reader, dec); // : connected
+    expect(await readFrame(reader, dec)).toBe("id: stream1.10\nretry: 3000\ndata: \n\n");
+    expect(await readFrame(reader, dec)).toBe('id: stream1.11\ndata: {"jsonrpc":"2.0","method":"x"}\n\n');
+    ac.abort();
+  });
+
   it("runs the start cleanup exactly once when the client disconnects", () => {
     const ac = new AbortController();
     const cleanup = vi.fn();

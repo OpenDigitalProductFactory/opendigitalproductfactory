@@ -21,8 +21,11 @@
 /** One week, aligned to the capacity reset the drain already uses. */
 export const DEFAULT_CYCLE_CREDITS = 16;
 
-/** Beyond this, one item would consume a whole default budget on its own. */
-export const MAX_VOTE_WEIGHT = 4;
+import { DEMAND_RESPONSE_MAX_WEIGHT } from "@dpf/db/federated-demand-contract";
+
+/** Beyond this, one item would consume a whole default budget on its own. The
+ *  wire contract owns the number, so the budget and the validator cannot disagree. */
+export const MAX_VOTE_WEIGHT = DEMAND_RESPONSE_MAX_WEIGHT;
 
 export interface EcosystemVote {
   ref: string;
@@ -153,11 +156,84 @@ export interface VoteDerivedScoreInputs {
 export function toScoreInputs(tally: VoteTally): VoteDerivedScoreInputs {
   return {
     reach: tally.distinctInstallations,
-    // Mean weight, so a broadly-but-mildly wanted item does not out-score a
-    // narrowly-but-urgently needed one purely by having more voters; breadth is
-    // already carried by reach, and double-counting it here would hide intensity.
     impact: tally.distinctInstallations === 0
       ? 0
-      : tally.totalWeight / tally.distinctInstallations,
+      : impactOnLadder(tally.totalWeight / tally.distinctInstallations),
+  };
+}
+
+/**
+ * Mean vote weight onto the RICE impact ladder the platform already scores on
+ * (score-proposal.ts RICE_IMPACT_LADDER: 0.25, 0.5, 1, 2, 3).
+ *
+ * The MEAN, not the sum: breadth is already carried by reach, and summing would
+ * double-count it, so a broadly-but-mildly wanted item would bury a
+ * narrowly-but-urgently needed one. A single plain interest is medium impact; a
+ * vote of three or four is massive. The two lowest rungs are never produced by
+ * votes — nobody votes to say something matters little.
+ */
+export function impactOnLadder(meanWeight: number): number {
+  if (meanWeight < 1.5) return 1;
+  if (meanWeight < 2.5) return 2;
+  return 3;
+}
+
+/** One outbound interest this installation has already spent credits on. */
+export interface OutboundVoteRow {
+  /** Stable per voted-on item: the response mirror's localRecordRef. */
+  ref: string;
+  weight: number;
+  createdAt: Date;
+}
+
+/** Start of the ISO-8601 week containing `date` (Monday 00:00 UTC). */
+export function isoWeekStart(date: Date): Date {
+  const day = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+  const weekday = day.getUTCDay() || 7;
+  day.setUTCDate(day.getUTCDate() - (weekday - 1));
+  return day;
+}
+
+/**
+ * The budget ledger for this week, DERIVED from this installation's own
+ * outbound responses — the votes are already recorded once, as the responses
+ * that carry them, so the ledger is never stored a second time.
+ */
+export function ledgerFromOutboundVotes(
+  installationId: string,
+  rows: OutboundVoteRow[],
+  now: Date,
+  creditsBudget: number = DEFAULT_CYCLE_CREDITS,
+): VoteLedger {
+  const start = isoWeekStart(now).getTime();
+  const votes = rows
+    .filter((row) => row.createdAt.getTime() >= start && row.createdAt.getTime() <= now.getTime())
+    .map((row) => ({ ref: row.ref, weight: row.weight }));
+  return { installationId, cycle: isoWeekStart(now).toISOString().slice(0, 10), creditsBudget, votes };
+}
+
+export interface VoteScoreItem {
+  occurrenceCount: number;
+  reach: number | null;
+  demandInputSource: string | null;
+}
+
+/**
+ * The reach and impact a tally implies for an item, or null when votes must not
+ * touch it.
+ *
+ * Never over a person's judgement: an item whose inputs a human entered or
+ * confirmed (human | agreed) is left alone, exactly as the scoring steward
+ * leaves it. Reach counts every organization affected — the voters plus the
+ * installation that raised it — and never falls below what the item already
+ * carried, because a vote adds breadth; it cannot take it away.
+ */
+export function voteScoreUpdate(item: VoteScoreItem, tally: VoteTally): VoteDerivedScoreInputs | null {
+  if (item.demandInputSource === "human" || item.demandInputSource === "agreed") return null;
+  if (tally.distinctInstallations === 0) return null;
+  const derived = toScoreInputs(tally);
+  return {
+    reach: Math.max(item.reach ?? 0, item.occurrenceCount, tally.distinctInstallations + 1),
+    impact: derived.impact,
   };
 }

@@ -37,6 +37,21 @@ class RoutinePermissionsTest(unittest.TestCase):
         return permissions.plan_permissions(self.root, self.home, PACK)
 
     @NEEDS_ANY_TOML
+    def test_cross_client_plan_preserves_foreign_plugin_schema_and_is_idempotent(self):
+        path = self.home / '.grok/config.toml'
+        path.parent.mkdir(parents=True)
+        original = 'plugins = ["dpf-platform"]\n[custom]\n"space key" = "preserve"\n'
+        path.write_text(original, encoding='utf-8')
+        plan = self.plan()
+        permissions.apply_permissions(plan, dry_run=True)
+        self.assertEqual(path.read_text(encoding='utf-8'), original)
+        permissions.apply_permissions(plan, dry_run=False)
+        parsed = permissions.read_toml(path)
+        self.assertEqual(parsed['plugins'], ['dpf-platform'])
+        self.assertEqual(parsed['custom'], {'space key': 'preserve'})
+        self.assertFalse(any(file.changed for file in self.plan().files))
+
+    @NEEDS_ANY_TOML
     def test_serializer_keeps_notify_bare_and_special_keys_quoted(self):
         data = {'notify': ['custom-callback', '--arg', '[brackets]'],
                 'key.with.dot': {'space key': 'preserve'}, '0123': True}

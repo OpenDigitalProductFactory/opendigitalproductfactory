@@ -189,6 +189,7 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   set_portfolio_budget: ["backlog_write"],
   set_portfolio_owner: ["backlog_write"],
   get_investment_balance: ["backlog_read"], set_investment_balance: ["backlog_write"], bind_investment_funding: ["backlog_write"],
+  read_platform_funding_setup: ["admin_read"], confirm_platform_funding_owner: ["admin_write"],
   query_backlog: ["backlog_read"],
   report_quality_issue: ["backlog_write"],
   escalate_feedback_upstream: ["backlog_write"],
@@ -247,6 +248,7 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   record_workroom_evidence: ["workroom_evidence_write"],
   record_agent_activity: ["work_capsule_write"],
   heartbeat_workroom: ["work_capsule_write"],
+  queue_workroom_pull_request: ["work_capsule_write"],
   update_workroom_status: ["work_capsule_write"],
   rebind_workroom_shape: ["work_capsule_write"],
   resume_workroom_queue: ["work_capsule_write"],
@@ -325,6 +327,10 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   // BI-F302B80E: appends what the caller did with a kernel recommendation.
   // Same grant as propose_improvement — it records, it never re-decides.
   record_decision_outcome: ["decision_record_create"],
+  // BI-0C0B0836: carries the owner's own ruling on an escalated review. Same
+  // grant as record_decision_outcome; it is a proposal, so the owner approves
+  // every call.
+  record_owner_ruling: ["decision_record_create"],
 
   // Two more doors sealed the same way as evaluate_profession_decision, found
   // by the registry-wide sweep the BI-88B77204 fix added. Both packs already

@@ -13,6 +13,10 @@
 
 import type { WorkShapeDefinition } from "./work-shapes";
 import { INQUIRY_RESPONSE_WATCH_1_0_0 } from "./generated/inquiry-response-watch.shape.generated";
+import { MONTHLY_REVIEW } from "./standing-shape-review";
+import { BACKLOG_STEWARD_WATCH_SHAPE_KEY, COWORKER_FITNESS_WATCH_SHAPE_KEY, STANDING_STEWARDSHIP_SHAPES } from "./standing-stewardship-shapes";
+
+export { BACKLOG_STEWARD_WATCH_SHAPE_KEY, COWORKER_FITNESS_WATCH_SHAPE_KEY } from "./standing-stewardship-shapes";
 
 // ── standing business-operations shapes (BI-7E7B93DF) ────────────────────────
 //
@@ -38,7 +42,6 @@ export const ADOPTER_HEALTH_WATCH_SHAPE_KEY = "adopter-health-watch";
 export const PAYABLES_WATCH_SHAPE_KEY = "payables-watch";
 export const VENDOR_RENEWAL_WATCH_SHAPE_KEY = "vendor-renewal-watch";
 export const CONTRIBUTOR_INTAKE_WATCH_SHAPE_KEY = "contributor-intake-watch";
-export const COWORKER_FITNESS_WATCH_SHAPE_KEY = "coworker-fitness-watch";
 
 /** Every standing shape declared below, in portfolio order. */
 export const STANDING_OPERATIONS_SHAPE_KEYS = [
@@ -47,6 +50,7 @@ export const STANDING_OPERATIONS_SHAPE_KEYS = [
   CREDENTIAL_HYGIENE_WATCH_SHAPE_KEY,
   PULL_REQUEST_FLOW_WATCH_SHAPE_KEY,
   ISSUE_TRIAGE_WATCH_SHAPE_KEY,
+  BACKLOG_STEWARD_WATCH_SHAPE_KEY,
   RELEASE_READINESS_WATCH_SHAPE_KEY,
   INQUIRY_RESPONSE_WATCH_SHAPE_KEY,
   ADOPTER_HEALTH_WATCH_SHAPE_KEY,
@@ -56,12 +60,6 @@ export const STANDING_OPERATIONS_SHAPE_KEYS = [
   COWORKER_FITNESS_WATCH_SHAPE_KEY,
 ] as const;
 
-const MONTHLY_REVIEW = {
-  everyDays: 30,
-  description:
-    "Reviewed monthly whether or not it moved: an activity that has reported nothing for a "
-    + "month is as likely to be broken as to be reassuring.",
-} as const;
 
 /** The standing operations registry, merged into the full registry by work-shapes.ts. */
 export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
@@ -79,6 +77,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
       {
         key: "sweep",
         title: "Sweep advisories against the manifest",
+        effort: "low",
         accountablePrincipalRef: "agent:security-engineer",
         advance: {
           kind: "status-change",
@@ -90,6 +89,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
       {
         key: "raise",
         title: "Raise reachable findings",
+        effort: "low",
         accountablePrincipalRef: "agent:security-engineer",
         advance: {
           kind: "status-change",
@@ -138,6 +138,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
       {
         key: "read",
         title: "Read the enforced policy",
+        effort: "low",
         accountablePrincipalRef: "agent:platform-engineer",
         advance: {
           kind: "status-change",
@@ -148,6 +149,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
       {
         key: "diff",
         title: "Diff enforced against declared policy",
+        effort: "low",
         accountablePrincipalRef: "agent:platform-engineer",
         advance: {
           kind: "status-change",
@@ -195,6 +197,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
       {
         key: "scan",
         title: "Report credential age and exposure signals",
+        effort: "low",
         accountablePrincipalRef: "agent:security-engineer",
         advance: {
           kind: "status-change",
@@ -243,6 +246,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
       {
         key: "read",
         title: "Read mechanical pull-request health",
+        effort: "low",
         accountablePrincipalRef: "agent:change-reviewer",
         advance: {
           kind: "status-change",
@@ -254,6 +258,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
       {
         key: "classify",
         title: "Classify and summarize what needs a person",
+        effort: "low",
         accountablePrincipalRef: "agent:change-reviewer",
         advance: {
           kind: "status-change",
@@ -309,6 +314,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
       {
         key: "classify",
         title: "Classify inbound issues",
+        effort: "low",
         accountablePrincipalRef: "agent:portfolio-advisor",
         advance: {
           kind: "status-change",
@@ -320,6 +326,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
       {
         key: "dedupe",
         title: "Check against the existing backlog and propose",
+        effort: "medium",
         accountablePrincipalRef: "agent:portfolio-advisor",
         advance: {
           kind: "status-change",
@@ -368,6 +375,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
       {
         key: "assemble",
         title: "Assemble the gate evidence",
+        effort: "medium",
         accountablePrincipalRef: "agent:build-specialist",
         advance: {
           kind: "status-change",
@@ -379,6 +387,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
       {
         key: "report",
         title: "Name what is missing",
+        effort: "low",
         accountablePrincipalRef: "agent:build-specialist",
         advance: {
           kind: "status-change",
@@ -433,6 +442,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
       {
         key: "read",
         title: "Read recorded adopter signals",
+        effort: "low",
         accountablePrincipalRef: "agent:customer-advisor",
         advance: {
           kind: "status-change",
@@ -444,6 +454,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
       {
         key: "report",
         title: "Report relationships needing attention",
+        effort: "medium",
         accountablePrincipalRef: "agent:customer-advisor",
         advance: {
           kind: "status-change",
@@ -493,6 +504,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
       {
         key: "read",
         title: "Read recorded bills and recurring commitments",
+        effort: "low",
         accountablePrincipalRef: "agent:finance-controller",
         advance: {
           kind: "status-change",
@@ -504,6 +516,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
       {
         key: "report",
         title: "Report what falls due and what is unrecorded",
+        effort: "low",
         accountablePrincipalRef: "agent:finance-controller",
         advance: {
           kind: "status-change",
@@ -552,6 +565,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
       {
         key: "read",
         title: "Read supplier agreements and spend",
+        effort: "low",
         accountablePrincipalRef: "agent:finance-controller",
         advance: {
           kind: "status-change",
@@ -563,6 +577,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
       {
         key: "report",
         title: "Report renewals and spend against commitment",
+        effort: "low",
         accountablePrincipalRef: "agent:finance-controller",
         advance: {
           kind: "status-change",
@@ -612,6 +627,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
       {
         key: "sync",
         title: "Sync the contributor inventory",
+        effort: "low",
         accountablePrincipalRef: "agent:platform-engineer",
         advance: {
           kind: "status-change",
@@ -623,6 +639,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
       {
         key: "flag",
         title: "Flag missing sign-off or licence facts",
+        effort: "low",
         accountablePrincipalRef: "agent:platform-engineer",
         advance: {
           kind: "status-change",
@@ -657,65 +674,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
     reviewPoint: MONTHLY_REVIEW,
     collaborationShape: "approval-sign-off",
   },
-
-  [COWORKER_FITNESS_WATCH_SHAPE_KEY]: {
-    key: COWORKER_FITNESS_WATCH_SHAPE_KEY,
-    version: "1.0.0",
-    title: "Coworker fitness watch",
-    description:
-      "The platform engineer reports which AI coworkers have unresolved capability gaps or "
-      + "stale qualifications. Granting or revoking authority is a human stage — a watch that "
-      + "could widen a grant could widen its own.",
-    triggers: ["cadence", "evidence-decay"],
-    stages: [
-      {
-        key: "measure",
-        title: "Measure coworker capability and qualification freshness",
-        accountablePrincipalRef: "agent:platform-engineer",
-        advance: {
-          kind: "status-change",
-          condition: "Every registered coworker has a measured capability and qualification state.",
-        },
-        evidence: ["assurance-run"],
-        tools: ["get_capability_completeness"],
-      },
-      {
-        key: "report",
-        title: "Report gaps and stale qualifications",
-        accountablePrincipalRef: "agent:platform-engineer",
-        advance: {
-          kind: "status-change",
-          condition: "Each unresolved gap or stale qualification is reported with what would close it.",
-        },
-        evidence: ["assurance-finding"],
-        tools: ["get_capability_completeness", "list_all_capability_needs"],
-      },
-      {
-        key: "grant",
-        title: "Grant or revoke",
-        // Authority change. Never an agent.
-        accountablePrincipalRef: "role:workforce-owner",
-        advance: {
-          kind: "governed-decision",
-          condition: "The accountable owner grants, revokes, or accepts the gap with a reason.",
-          decisionScope: "coworker-authority-change",
-        },
-        evidence: ["decision-record"],
-      },
-    ],
-    stopConditions: [
-      { kind: "success", condition: "Every registered coworker has a current capability and qualification report.", disposition: "proceed" },
-      { kind: "failure", condition: "The coworker registry cannot be read — the run stops and reports, and never reports an unread coworker as fit.", disposition: "inconclusive" },
-      { kind: "budget", condition: "More than 100 coworkers assessed in one run — the run stops and escalates.", disposition: "awaiting-person" },
-    ],
-    grants: ["tool:read", "tool:workroom_evidence_write"],
-    measures: [
-      { key: "coworkers-measured", description: "Coworkers whose capability state was measured." },
-      { key: "open-gaps", description: "Unresolved capability gaps reported." },
-    ],
-    budgets: [{ kind: "findings-per-run", limit: 100, unit: "coworkers" }],
-    reviewPoint: MONTHLY_REVIEW,
-    collaborationShape: "approval-sign-off",
-  },
+  // Stewardship shapes live in standing-stewardship-shapes.ts (module-size split).
+  ...STANDING_STEWARDSHIP_SHAPES,
 };
 

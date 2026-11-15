@@ -1,4 +1,5 @@
 import type { VerificationDepth } from "@/lib/golden-triangle";
+import { testsAreQualified } from "@/lib/build/verification-output";
 
 type RequirementResult =
   | { allowed: true; evaluable: boolean }
@@ -50,6 +51,9 @@ export function checkVerificationDepthSatisfied(
       reason: `${depth} verification requires zero failed tests.`,
       evaluable: true,
     };
+  }
+  if (!testsAreQualified(verification)) {
+    return { allowed: false, reason: `${depth} verification requires observed tests or an established exemption, without unresolved conflicts.`, evaluable: true };
   }
   if (depth === "shallow") return { allowed: true, evaluable: true };
 

@@ -1,13 +1,21 @@
 import "server-only";
 import { prisma } from "@dpf/db";
-import { projectApprovalOutcome, withApprovalFailureEvidence, type ApprovalOutcome, type ApprovalOutcomeRow } from "./approval-outcome";
+import { projectApprovalOutcome, withApprovalFailureEvidence, withApprovalRuntimeEvidence, withApprovalServiceReportEvidence, type ApprovalOutcome, type ApprovalOutcomeRow } from "./approval-outcome";
 import { labelOnBehalfDecision } from "./on-behalf-decision";
 import type { ApprovedRequestRun } from "./approved-request-run-types";
 import { parseInitiativeReviewBinding, type InitiativeReviewBinding } from "@/lib/mcp-task-review-contract";
 import { isRecord } from "@/lib/shared/coerce";
-import { readApprovalActionEvidence, readApprovalFailureEvidence, type ApprovalActionEvidence } from "./approval-action-evidence";
+import { readApprovalActionEvidence, readApprovalFailureEvidence, type ApprovalActionEvidence, type RuntimeEvidenceRequest, type RuntimeTransitionObservation } from "./approval-action-evidence";
 import { encodeWorkCaseKey } from "@/lib/work-management/case-key";
 import { canonicalWorkCaseHref } from "@/lib/work-management/canonical-case-key";
+import { currentUserContext } from "@/lib/govern/current-user-context";
+import { can } from "@/lib/govern/permissions";
+import { readFile } from "node:fs/promises";
+import { MCP_ROUTE_TOOL_RESULT_CHAR_CAP } from "@/lib/tak/tool-result-budget";
+import { canonicalTransitionPayload, prepareRuntimeReconciliationIntent, signTransitionPayload,
+  validateRuntimeServiceImagePlan, verifyHistoricalTransitionReceipt,
+  type RuntimeTransitionEnvelope, type RuntimeTransitionReceipt } from "@/lib/platform-runtime/transition-protocol";
+import { computeCapabilityStateVersion } from "../../../../scripts/lib/capability-state-hash.mjs";
 
 type Db = typeof prisma;
 
@@ -51,7 +59,9 @@ export async function readApprovalOutcome(
     where: { id: envelopeId, delegatingUserId: userId, coworkerAgentId: agentId },
     select,
   });
-  return row ? { ...await projectOwnedApprovalOutcome(row, db, now, agentId), actionEvidence: await readApprovalActionEvidence(row, db, now) } : null;
+  if (!row) return null;
+  const projected = await projectOwnedApprovalOutcome(row, db, now, agentId);
+  return { ...projected, actionEvidence: projected.runtimeEvidence ?? projected.serviceReportEvidence ?? await readApprovalActionEvidence(row, db, now) };
 }
 
 /** Recent history is separate from the actionable Inbox and never inflates its count.
@@ -81,6 +91,21 @@ async function projectOwnedApprovalOutcome(
   db: Db, now: Date, agentId?: string,
 ): Promise<ApprovalOutcome> {
   const outcome = projectApprovalOutcome(row, now);
+  if (row.manifestActionId === "admin_run_command") {
+    if (row.status !== "executed" && row.status !== "failed") return outcome;
+    const user = await currentUserContext(row.delegatingUserId, db).catch(() => null);
+    if (!user || !can(user, "manage_platform")) return outcome;
+    const evidence = await readApprovalActionEvidence(row, db, now, undefined, true);
+    if (evidence.state === "unsupported") return outcome;
+    return withApprovalServiceReportEvidence(outcome, evidence.state !== "available" || evidence.toolName === "admin_run_command"
+      ? evidence : { state: "missing", reason: "result-unproven" });
+  }
+  if (row.manifestActionId === "reconcile_runtime_capabilities") {
+    if (row.status !== "executed" && row.status !== "failed") return outcome;
+    const evidence = await readApprovalActionEvidence(row, db, now, request => readOwnedRuntimeTransition(request, db, now));
+    return withApprovalRuntimeEvidence(outcome, evidence.state !== "available" || evidence.toolName === "reconcile_runtime_capabilities"
+      ? evidence : { state: "missing", reason: "result-unproven" });
+  }
   if (outcome.state !== "failed") return outcome;
   const evidence = await readApprovalFailureEvidence(row, db, now, async capsuleId => {
     const room = await db.workroom.findUnique({ where: { capsuleId }, select: { id: true, capsuleId: true } });
@@ -93,6 +118,65 @@ async function projectOwnedApprovalOutcome(
     return canonicalWorkCaseHref(encodeWorkCaseKey({ sourceType: "work-capsule", sourceId: room.capsuleId }), {});
   });
   return withApprovalFailureEvidence(outcome, evidence);
+}
+
+/** Only the already qualified original operation reaches this exact read.
+ * Never run the executor/reconciler or substitute current host/latest history. */
+async function readOwnedRuntimeTransition(request: RuntimeEvidenceRequest, db: Db, now: Date): Promise<RuntimeTransitionObservation> {
+  const unproven = { receiptVerification: "unproven" as const };
+  const user = await currentUserContext(request.requestedById, db);
+  if (!user || !can(user, "manage_platform")) return { state: "unavailable", ...unproven };
+  const row = await db.runtimeCapabilityTransition.findUnique({
+    where: { transitionId: request.transitionId, requestedById: request.requestedById },
+    select: { transitionId: true, requestedById: true, status: true, createdAt: true, completedAt: true,
+      previousStates: true, desiredStates: true, catalogHash: true, previousStateHash: true, desiredStateHash: true,
+      envelope: true, envelopeSignature: true, hostReceipt: true, failure: true },
+  });
+  if (!row) return { state: "not-recorded", ...unproven };
+  const states = ["pending", "applying", "host_applied", "succeeded", "failed", "compensating", "rolled_back", "rollback_failed"] as const;
+  let envelope: RuntimeTransitionEnvelope;
+  try {
+    if (JSON.stringify(row).length > MCP_ROUTE_TOOL_RESULT_CHAR_CAP) return { state: "unavailable", ...unproven };
+    if (row.transitionId !== request.transitionId || row.requestedById !== request.requestedById
+      || !Number.isFinite(row.createdAt.getTime()) || row.createdAt < request.executedAt || row.createdAt > now
+      || !states.includes(row.status as typeof states[number]) || !isRecord(row.envelope)
+      || !isRecord(row.previousStates) || !isRecord(row.desiredStates)) throw new Error();
+    envelope = row.envelope as unknown as RuntimeTransitionEnvelope;
+    if ((envelope.version !== 2 && envelope.version !== 3) || envelope.mode !== "reconciliation"
+      || envelope.transitionId !== request.transitionId || envelope.catalogHash !== row.catalogHash
+      || envelope.previousStateHash !== row.previousStateHash || envelope.desiredStateHash !== row.desiredStateHash) throw new Error();
+    const prepared = prepareRuntimeReconciliationIntent(request.reconciliation as never,
+      { catalogHash: row.catalogHash, capabilityIds: Object.keys(row.previousStates) });
+    const same = (a: unknown, b: unknown) => canonicalTransitionPayload(a) === canonicalTransitionPayload(b);
+    if (!same(prepared, envelope.reconciliation) || !same(prepared.observedDatabaseStates, row.previousStates)
+      || !same(prepared.desiredDatabaseStates, row.desiredStates)
+      || !same([...prepared.observedHost.enabledRuntimeCapabilities].sort(), envelope.previousKeys)
+      || !same([...prepared.desiredHostEnabledKeys].sort(), envelope.desiredKeys)
+      || envelope.previousStateHash !== prepared.observedHost.capabilityStateVersion
+      || envelope.desiredStateHash !== computeCapabilityStateVersion(row.catalogHash, prepared.desiredHostEnabledKeys, Object.keys(row.previousStates))) throw new Error();
+    if (request.imageServices === undefined) { if (envelope.version !== 2) throw new Error(); }
+    else {
+      if (envelope.version !== 3 || !Array.isArray(request.imageServices)
+        || request.imageServices.length !== 1 || request.imageServices[0] !== "browser-use") throw new Error();
+      validateRuntimeServiceImagePlan(envelope);
+      if (envelope.imagePlan.operation !== "prepare" || !same(request.imageServices, envelope.imagePlan.services.map(item => item.service))) throw new Error();
+    }
+  } catch { return { state: "conflicting", ...unproven }; }
+  let receiptStatus: RuntimeTransitionReceipt["status"] | null = null;
+  if (row.hostReceipt) {
+    try {
+      const secret = (await readFile("/dpf-state/runtime-transition.secret", "utf8")).trim();
+      if (typeof row.envelopeSignature !== "string" || row.envelopeSignature !== signTransitionPayload(envelope, secret)) throw new Error();
+      const receipt = row.hostReceipt as unknown as RuntimeTransitionReceipt;
+      const verified = verifyHistoricalTransitionReceipt(receipt, secret, envelope);
+      if (!Number.isFinite(Date.parse(receipt.completedAt)) || Date.parse(receipt.completedAt) > now.getTime()
+        || (row.status === "succeeded" && verified !== "applied")) throw new Error();
+      receiptStatus = verified;
+    } catch { /* Recorded state survives; missing or contradictory host proof does not. */ }
+  }
+  return { state: "recorded", status: row.status as typeof states[number],
+    receiptVerification: receiptStatus ? "verified" : "unproven", receiptStatus,
+    recoveryRequired: isRecord(row.failure) && row.failure.recoveryRequired === true ? "recorded" : "unproven" };
 }
 
 /** BI-7BCC87BB: name the admin and the owner of an on-behalf decision by email. */

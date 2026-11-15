@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { COMMON_MAILROOM_PROFILE } from "@dpf/storefront-templates";
 
-import { draftMailroomReply, replySubject, sendApprovedMailroomReply, type MailroomItemForReply, type ReplyDb, type SendMailPort } from "./reply";
+import { draftMailroomReply, MailroomReplyRefusedError, replySubject, sendApprovedMailroomReply, type MailroomItemForReply, type ReplyDb, type SendMailPort } from "./reply";
 
 const item: MailroomItemForReply = {
   inboundId: "in-1",
@@ -77,6 +77,17 @@ describe("draftMailroomReply", () => {
     const g = fakeDb();
     const fell = await draftMailroomReply({ db: g.db, profile: COMMON_MAILROOM_PROFILE, item, businessName: "B", agentId: "a", compose: async () => { throw new Error("model down"); } });
     expect(fell.body).toContain("Thank you for writing to B");
+  });
+
+  // BI-757C961E AC-4: the Mailroom never drafts a reply to counsel.
+  it("refuses to draft a reply to a privileged item and writes nothing", async () => {
+    const f = fakeDb();
+    const compose = vi.fn(async () => "draft text");
+    await expect(
+      draftMailroomReply({ db: f.db, profile: COMMON_MAILROOM_PROFILE, item: { ...item, reasonKey: "legal-correspondence" }, businessName: "B", agentId: "a", compose }),
+    ).rejects.toBeInstanceOf(MailroomReplyRefusedError);
+    expect(compose).not.toHaveBeenCalled();
+    expect(f.drafts).toHaveLength(0);
   });
 
   it("replySubject prefixes once", () => {

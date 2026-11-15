@@ -18,6 +18,19 @@ function inventoryRow(i: number) {
 }
 
 describe("loadAtlasPicture", () => {
+  it("carries qualified inventory actions for one selection without another inventory read", async () => {
+    const selected = { ...inventoryRow(0), executorKind: "codex-desktop", drive: { action: "attention", reason: "decision", attentionRecorded: true, stageKey: "implement" }, decisions: [{ title: "Recorded question", condition: "Choose the recorded option" }], recovery: { command: "PRIVATE-COMMAND" } };
+    loadCapsuleLivenessInventory.mockClear();
+    loadCapsuleLivenessInventory.mockResolvedValueOnce({ capsulesAll: [selected, inventoryRow(1)], livenessSummary: {} });
+    loadRoomAccountabilityBatch.mockResolvedValueOnce(new Map([["row-0", owner]]));
+    const picture = await loadAtlasPicture({} as never, { selectedCapsuleId: "WC-0" });
+    expect(picture.rooms[0]).toMatchObject({ action: { actor: "inventory.actor.decisionOwner", instruction: "inventory.action.decision", detail: "Recorded question: Choose the recorded option", decisionRecorded: true }, nextAction: "inventory.nextAction.decision" });
+    expect(picture.rooms[1]).not.toHaveProperty("action");
+    expect(loadCapsuleLivenessInventory).toHaveBeenCalledTimes(1);
+    expect(loadCapsuleLivenessInventory).toHaveBeenCalledWith({}, { where: { archivedAt: null }, take: 2001, portalSummary: true });
+    expect(JSON.stringify(picture)).not.toContain("PRIVATE-COMMAND");
+  });
+
   it("reads every open room past the old 200-room cap, through the shared inventory", async () => {
     loadCapsuleLivenessInventory.mockResolvedValueOnce({ capsulesAll: Array.from({ length: 250 }, (_, i) => inventoryRow(i)), livenessSummary: {} });
     loadRoomAccountabilityBatch.mockResolvedValueOnce(new Map([["row-0", owner]]));
@@ -38,5 +51,16 @@ describe("loadAtlasPicture", () => {
       where: { archivedAt: null, portfolioRole: "foundational" }, take: 4,
     }));
     expect(picture).toMatchObject({ total: 3, truncated: true });
+  });
+
+  it("reads each room's declared shape in one bounded query (BI-3791FDD8)", async () => {
+    loadCapsuleLivenessInventory.mockResolvedValueOnce({ capsulesAll: [inventoryRow(0), inventoryRow(1)], livenessSummary: {} });
+    loadRoomAccountabilityBatch.mockResolvedValueOnce(new Map());
+    const findMany = vi.fn(async () => [{ capsuleId: "WC-0", scopeClaims: [{ workShape: "delivery-small@1.0.0" }] }]);
+    const picture = await loadAtlasPicture({ workroom: { findMany } } as never);
+    expect(findMany).toHaveBeenCalledTimes(1);
+    expect(findMany).toHaveBeenCalledWith({ where: { capsuleId: { in: ["WC-0", "WC-1"] } }, select: { capsuleId: true, scopeClaims: true, outcomeAnchor: true } });
+    expect(picture.rooms[0]).toMatchObject({ capsuleId: "WC-0", shape: "delivery-small" });
+    expect(picture.rooms[1]).not.toHaveProperty("shape");
   });
 });

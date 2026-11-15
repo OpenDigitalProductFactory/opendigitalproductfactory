@@ -419,7 +419,11 @@ export async function claimBacklogItemWorkspace(args: {
   });
 
   const claimed = admission.overrideConflicts.length === 0;
-  if (claimed) {
+  // The item's claim fields are written only when this Workroom's claim is
+  // the local one. A mirror's claim lives at its home (claimAtHome), and a
+  // claim held here for a paired installation is the Workroom itself, so it
+  // lapses and releases with that Workroom's lease (BI-30EDDB7F).
+  if (claimed && !args.input.claimAtHome && args.input.executorKind !== "federated-peer") {
     await args.db.backlogItem.update({
       where: { id: item.id },
       data: {
@@ -599,6 +603,7 @@ export async function updateWorkCapsuleStatus(args: {
   capsuleId: string;
   status: WorkCapsuleStatus;
   reason: string;
+  routing?: { disposition: string; decisionInteractionId: string | null };
   actor: WorkCapsuleActor;
   now?: Date;
 }) {
@@ -630,14 +635,13 @@ export async function updateWorkCapsuleStatus(args: {
     return completed;
   }
 
-  const currentWorkspaceState =
-    capsule.workspaceState && typeof capsule.workspaceState === "object" && !Array.isArray(capsule.workspaceState)
-      ? capsule.workspaceState as Record<string, unknown>
-      : {};
+  const currentWorkspaceState = capsule.workspaceState && typeof capsule.workspaceState === "object" && !Array.isArray(capsule.workspaceState)
+    ? capsule.workspaceState as Record<string, unknown> : {};
   const now = args.now ?? new Date();
   const statusOverride = {
     reason: args.reason,
     until: new Date(now.getTime() + STATUS_OVERRIDE_TTL_MS).toISOString(),
+    ...(args.routing ? { routingDisposition: args.routing.disposition, ...(args.routing.decisionInteractionId ? { decisionInteractionId: args.routing.decisionInteractionId } : {}) } : {}),
   };
 
   const updated = await inTransaction(args.db, async (tx) => {

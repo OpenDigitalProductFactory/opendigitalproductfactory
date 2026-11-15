@@ -44,6 +44,13 @@ describe("planSubmissionSweep", () => {
       .toMatchObject({ halted: true, reason: "fork-only" });
   });
 
+  it("respects private mode, the current name for fork-only", () => {
+    // The escalation core refuses "private"; halting only on the legacy name
+    // let a private installation sweep every report into a refusal, daily.
+    expect(planSubmissionSweep({ reports: [report()], config: config({ contributionMode: "private" }) }))
+      .toMatchObject({ halted: true, reason: "fork-only" });
+  });
+
   it("does not sweep on a platform-development install, which would loop back to itself", () => {
     expect(planSubmissionSweep({ reports: [report()], config: config({ primaryPurpose: "evolve-dpf" }) }))
       .toMatchObject({ halted: true, reason: "not-applicable" });

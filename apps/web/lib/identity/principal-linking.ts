@@ -580,6 +580,31 @@ export async function getAgentGaidMap(
   );
 }
 
+/** The reverse of getAgentGaidMap: local agent ids for GAIDs this installation issued. */
+export async function getAgentIdsForGaids(
+  gaids: string[],
+  db: PrincipalAliasDb = prisma,
+): Promise<Map<string, string>> {
+  const unique = [...new Set(gaids.map((gaid) => gaid.trim()).filter(Boolean))];
+  if (unique.length === 0) return new Map();
+  const gaidAliases = await db.principalAlias.findMany({
+    where: { aliasType: "gaid", aliasValue: { in: unique }, issuer: INTERNAL_ISSUER },
+    select: { principalId: true, aliasValue: true },
+  });
+  if (gaidAliases.length === 0) return new Map();
+  const agentAliases = await db.principalAlias.findMany({
+    where: { aliasType: "agent", principalId: { in: gaidAliases.map((a) => a.principalId) }, issuer: INTERNAL_ISSUER },
+    select: { principalId: true, aliasValue: true },
+  });
+  const agentByPrincipalId = new Map(agentAliases.map((a) => [a.principalId, a.aliasValue]));
+  return new Map(
+    gaidAliases.flatMap((alias) => {
+      const agentId = agentByPrincipalId.get(alias.principalId);
+      return agentId ? [[alias.aliasValue, agentId] as const] : [];
+    }),
+  );
+}
+
 export async function resolvePrincipalIdForUser(
   userId: string,
   db: PrincipalDb = prisma,

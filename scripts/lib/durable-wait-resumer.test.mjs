@@ -826,3 +826,32 @@ for (const [jitter, expectedDelay] of [[0, 30_000], [1, 60_000]]) {
     assert.equal(result.outcome.evidence, "unrun");
   });
 }
+
+test("a failed parent spawn with absent stdio stays an unrun queued attempt", async () => {
+  const { EventEmitter } = await import('node:events');
+  let clock = 0;
+  const outcome = await resumeUntilAdmitted({
+    gateArgv: ['fixture'], intervalMs: 1, deadlineMs: 2, now: () => clock,
+    sleepFn: async () => { clock = 2; },
+    spawnFn: () => {
+      const child = new EventEmitter(); child.stdout = null; child.stderr = null;
+      process.nextTick(() => child.emit('error', Object.assign(new Error('private launch details'), { code: 'ENFILE' })));
+      return child;
+    },
+  });
+  assert.equal(outcome.code, EXIT_QUEUED);
+  assert.equal(outcome.attempts, 1);
+});
+
+test("the parent does not replay an admitted preview's terminal failure", async () => {
+  let launches = 0;
+  const outcome = await resumeUntilAdmitted({
+    gateArgv: ['fixture'], intervalMs: 1, deadlineMs: 60_000, now: () => 0,
+    sleepFn: async () => assert.fail('a terminal preview is not queued'),
+    spawnFn: () => {
+      launches += 1;
+      return { once(event, fn) { if (event === 'exit') queueMicrotask(() => fn(1)); } };
+    },
+  });
+  assert.equal(outcome.code, 1); assert.equal(launches, 1);
+});

@@ -20,6 +20,7 @@ vi.mock("@dpf/validators/workroom-policy/delegated-posture", () => ({ resolveDel
 vi.mock("@/lib/product-management/product-management-playbook-run", () => ({ prepareProductManagementPlaybookRun: vi.fn(), completeProductManagementPlaybookRun: vi.fn() }));
 vi.mock("@/lib/work-capsules/workroom-queue-hold", () => ({ holdWorkroomQueueAfterFailure: vi.fn() }));
 
+import { inspectReadEvidenceContribution } from "@/lib/tak/read-evidence-policy";
 import { executeScheduledAgentTask } from "./agent-task-scheduler";
 
 let task: Record<string, unknown>;
@@ -91,4 +92,12 @@ describe("history reporting at the real scheduler boundary", () => {
     expect(m.db.taskRun.update).not.toHaveBeenCalled();
     expect(m.db.scheduledJob.update).not.toHaveBeenCalled();
   });
+});
+
+it("carries actual rejected report classification through the scheduler without retaining private bytes",async()=>{
+ m.loop.mockImplementation(async()=>{await inspectReadEvidenceContribution("Bearer fixture-private-report");return {content:"Held",executedTools:[]};});
+ m.settle.mockRejectedValue(new Error("Scheduled report must be one JSON object."));
+ await executeScheduledAgentTask(String(task.taskId));
+ expect(m.fail).toHaveBeenCalledWith(expect.objectContaining({diagnostic:{version:1,code:"report-invalid-json",original:{sha256:expect.stringMatching(/^[a-f0-9]{64}$/),bytes:29,truncated:false,redacted:true}}}),expect.any(String));
+ expect(JSON.stringify(m.fail.mock.calls)).not.toContain("fixture-private-report");
 });

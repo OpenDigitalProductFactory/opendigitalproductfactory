@@ -167,6 +167,8 @@ flowchart LR
 
 ### 3.2 LLM routing — *which model the agent runs on*
 
+Subscription connection verification uses the selected account's current Codex app-server `model/list` catalog and prefers its advertised `isDefault` model. Shared saved profiles describe inventory; they do not establish account access. An explicit model capacity observation remains bound to that model. Catalog discovery failure sends no inference probe. This contract also applies when carrying provider integration into DPF2. Reference: T3 Code's `requestAllCodexModels` and `parseCodexModelListResponse` in `apps/server/src/provider/CodexProvider.ts`; DPF implementation: `apps/web/lib/inference/provider-auth-verification.ts` (BI-01A8260F).
+
 An agent does **not** hardcode one model; it declares a *policy* and the router resolves a concrete model per call.
 
 - **`AgentModelConfig`** (schema ~line 8804) — the routing *policy*:
@@ -391,3 +393,12 @@ preflight, execution, approval return and task settlement recheck the same reque
 reservation, dispatch claim and authority digest. Held or displaced executions
 cannot run tools or settle the task. The owner can still read its existing
 `tasks/get` and `tasks/result` evidence without authorizing more execution.
+
+For native task-bound terminal writers, the loop also carries the originally
+admitted token grants independently of the final provider tool list. The session
+signs those grants as authority and a versioned tool surface as presentation.
+Direct listing and calls obey that surface; nested dispatch keeps the original
+grant checks and current human, coworker, task and captured fence checks. The
+restricted audience makes incompatible receivers refuse the session, and an
+issuance failure cannot downgrade it to unconstrained text tools. See the
+[native session authorization contract](mcp-tool-authorization-runbook.md#canonical-review-writer-execution-identity).

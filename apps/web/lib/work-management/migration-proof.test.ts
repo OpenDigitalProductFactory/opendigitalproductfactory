@@ -60,12 +60,22 @@ const REGISTERED_AFTER_MIGRATION: readonly string[] = [
   "platform-design-review",
   "platform-architecture-review",
   "source-inquiry",
+  "backlog-steward-watch",
 ];
 
 function migrated(): WorkShapeDefinition {
   const definition = getWorkShape(INQUIRY_RESPONSE_WATCH_SHAPE_KEY);
   if (!definition) throw new Error("inquiry-response-watch is not registered");
   return definition;
+}
+
+/**
+ * Phase G (BI-B3BBF9AD) later declared a stage effort tier in the shape document.
+ * It is routing metadata, not part of this migration, so the proof compares
+ * without it; "0. Phase G" below pins that it is the only later addition.
+ */
+function withoutStageEffort(definition: WorkShapeDefinition): WorkShapeDefinition {
+  return { ...definition, stages: definition.stages.map(({ effort: _effort, ...stage }) => stage) };
 }
 
 /** Every own-key path at which the two values differ, as `path {left keys} vs {right keys}`. */
@@ -91,6 +101,13 @@ function ownKeyDifferences(left: unknown, right: unknown, path = "$"): string[] 
 }
 
 describe("AC-NODISRUPT: inquiry-response-watch@1.0.0 compiled from its shape document", () => {
+  it("0. Phase G: the only stage field added after the migration is the draft stage's effort tier", () => {
+    expect(ownKeyDifferences(migrated().stages, withoutStageEffort(migrated()).stages)).toEqual([
+      "$[0] {accountablePrincipalRef,advance,effort,evidence,key,title,tools} vs {accountablePrincipalRef,advance,evidence,key,title,tools}",
+    ]);
+    expect(migrated().stages[0]?.effort).toBe("medium");
+  });
+
   it("the registry serves the generated definition, by reference, for the key and the exact version", () => {
     expect(getWorkShape(INQUIRY_RESPONSE_WATCH_SHAPE_KEY)).toBe(INQUIRY_RESPONSE_WATCH_1_0_0);
     expect(getWorkShapeVersion(INQUIRY_RESPONSE_WATCH_SHAPE_KEY, "1.0.0")).toBe(INQUIRY_RESPONSE_WATCH_1_0_0);
@@ -99,7 +116,7 @@ describe("AC-NODISRUPT: inquiry-response-watch@1.0.0 compiled from its shape doc
   it("1. equals the pre-migration definition under the legacy projection, with equal own-key sets", () => {
     for (const definition of [migrated(), getWorkShapeVersion(INQUIRY_RESPONSE_WATCH_SHAPE_KEY, "1.0.0")]) {
       if (!definition) throw new Error("getWorkShapeVersion returned null");
-      const projected = legacyProjection(definition);
+      const projected = legacyProjection(withoutStageEffort(definition));
       expect(canonicalJson(projected)).toBe(canonicalJson(PRE_MIGRATION));
       expect(ownKeyDifferences(projected, PRE_MIGRATION)).toEqual([]);
     }
@@ -107,7 +124,7 @@ describe("AC-NODISRUPT: inquiry-response-watch@1.0.0 compiled from its shape doc
 
   it("2. the only added key is stages[1].advance.gate: the ratified entry and the report's dropped row", () => {
     const definition = migrated();
-    expect(ownKeyDifferences(definition, PRE_MIGRATION)).toEqual([
+    expect(ownKeyDifferences(withoutStageEffort(definition), PRE_MIGRATION)).toEqual([
       "$.stages[1].advance {condition,decisionScope,gate,kind} vs {condition,decisionScope,kind}",
     ]);
     const send = definition.stages[1];
@@ -136,9 +153,9 @@ describe("AC-NODISRUPT: inquiry-response-watch@1.0.0 compiled from its shape doc
   });
 
   it("5. the definition contract runtime consumers read equals the pre-migration one apart from the gate", () => {
-    const contract = readWorkShapeDefinitionContract(migrated());
+    const contract = readWorkShapeDefinitionContract(withoutStageEffort(migrated()));
     const before = readWorkShapeDefinitionContract(PRE_MIGRATION);
-    expect(canonicalJson({ ...contract, stages: legacyProjection(migrated()).stages })).toBe(canonicalJson(before));
+    expect(canonicalJson({ ...contract, stages: legacyProjection(withoutStageEffort(migrated())).stages })).toBe(canonicalJson(before));
     expect(ownKeyDifferences(contract, before)).toEqual([
       "$.stages[1].advance {condition,decisionScope,gate,kind} vs {condition,decisionScope,kind}",
     ]);

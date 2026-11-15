@@ -16,6 +16,9 @@
  */
 
 import { gitText } from "./git.mjs";
+import { realpathSync } from "node:fs";
+import { isAbsolute, join } from "node:path";
+import { acquireLocalConvergenceLock, releaseLocalConvergenceLock } from "./local-convergence-lock.mjs";
 
 import { isEntryModule } from "./entry-module.mjs";
 
@@ -33,6 +36,51 @@ export function isShallowRepository(git) {
 
 export const SHALLOW_DEEPEN_STEP = 50;
 export const SHALLOW_DEEPEN_MAX_STEPS = 10;
+
+/** BI-PIR-08c116e7: linked worktrees share refs, so lock their common Git dir.
+ * Never reclaim foreign owners: host/container PID namespaces may differ.
+ * Callbacks are synchronous, like the Git runners used by these helpers.
+ */
+export function withSharedGitFetchLock(git, operation, opts = {}) {
+  const timeoutMs = opts.lockTimeoutMs ?? 60_000;
+  const pollMs = opts.lockPollMs ?? 50;
+  if (!Number.isFinite(timeoutMs) || timeoutMs < 0 || timeoutMs > 60_000
+    || !Number.isFinite(pollMs) || pollMs <= 0 || pollMs > 1000) {
+    throw new Error("invalid shared Git fetch lock wait bounds");
+  }
+  const common = String(git(["rev-parse", "--path-format=absolute", "--git-common-dir"])).trim();
+  if (!isAbsolute(common)) throw new Error("shared Git fetch requires an absolute common directory");
+  const path = join(realpathSync(common), "dpf-git-fetch.lock");
+  const deadline = performance.now() + timeoutMs;
+  let lock;
+  for (;;) {
+    lock = acquireLocalConvergenceLock({ path, reconcileStale: false });
+    if (lock.status === "acquired") break;
+    const remaining = deadline - performance.now();
+    if (remaining <= 0) {
+      const error = new Error("timed out waiting for shared Git fetch owner; retained existing lock");
+      error.code = "GIT_FETCH_LOCK_TIMEOUT";
+      throw error;
+    }
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, Math.min(pollMs, remaining));
+  }
+  let operationFailed = false;
+  try {
+    return operation();
+  } catch (error) {
+    operationFailed = true;
+    throw error;
+  } finally {
+    // Cleanup uncertainty cannot convert a failed fetch into success, or hide
+    // its original error. Only this invocation's token can release the lock.
+    try {
+      const released = releaseLocalConvergenceLock({ path, token: lock.owner.token });
+      if (released.status !== "released") throw new Error("shared Git fetch ownership changed before release");
+    } catch (error) {
+      if (!operationFailed) throw error;
+    }
+  }
+}
 
 /**
  * @param {(args: string[]) => string} git
@@ -53,6 +101,10 @@ export function hasMergeBaseWithOriginMain(git) {
  * @param {{ allowDepthIfAlreadyShallow?: boolean }} [opts]
  */
 export function fetchOriginMainSharedSafe(git, opts = {}) {
+  return withSharedGitFetchLock(git, () => fetchOriginMainLocked(git, opts), opts);
+}
+
+function fetchOriginMainLocked(git, opts) {
   const allowDepthIfAlreadyShallow = opts.allowDepthIfAlreadyShallow !== false;
   const shallow = isShallowRepository(git);
   if (shallow && allowDepthIfAlreadyShallow) {
@@ -122,9 +174,11 @@ export function assertRepoNotShallow(git, opts = {}) {
  * @param {{ remote?: string }} [opts]
  */
 export function unshallowRootSharedSafe(git, opts = {}) {
-  if (!isShallowRepository(git)) return { mode: "already-full" };
-  git(["fetch", "--unshallow", opts.remote ?? "origin"]);
-  return { mode: "unshallowed" };
+  return withSharedGitFetchLock(git, () => {
+    if (!isShallowRepository(git)) return { mode: "already-full" };
+    git(["fetch", "--unshallow", opts.remote ?? "origin"]);
+    return { mode: "unshallowed" };
+  }, opts);
 }
 
 /** Default git runner for CLI use. */

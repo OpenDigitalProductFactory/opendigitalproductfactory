@@ -29,6 +29,10 @@ export const MAILROOM_ACKNOWLEDGE_WINDOW_MINUTES: Readonly<Record<MailroomUrgenc
 /** Reason key every profile carries for mail that is stored and never routed. */
 export const MAILROOM_NOISE_REASON_KEY = "noise";
 
+/** Reason key for correspondence from the business's counsel or about a legal
+ *  matter (BI-757C961E). Every profile inherits it, and it is privileged. */
+export const MAILROOM_LEGAL_REASON_KEY = "legal-correspondence";
+
 /** The universal profile. Purposes, reasons and queues every business has. */
 export const COMMON_MAILROOM_PROFILE: MailroomProfile = {
   expectedMailboxes: [
@@ -74,6 +78,25 @@ export const COMMON_MAILROOM_PROFILE: MailroomProfile = {
       hints: ["not working", "problem with", "issue with", "help with my", "broken", "complaint"],
     },
     {
+      // Every business has counsel; their letters are privileged and belong in
+      // their own room, not on the general owner's desk (BI-757C961E).
+      key: MAILROOM_LEGAL_REASON_KEY,
+      label: "Correspondence from counsel or about a legal matter",
+      urgency: "days",
+      queueKey: "legal",
+      hints: [
+        "privileged",
+        "attorney-client",
+        "attorney client",
+        "engagement letter",
+        "legal advice",
+        "cease and desist",
+        "subpoena",
+        "litigation",
+      ],
+      privileged: true,
+    },
+    {
       key: "job-application",
       label: "Job or volunteer application",
       urgency: "weeks",
@@ -108,6 +131,12 @@ export const COMMON_MAILROOM_PROFILE: MailroomProfile = {
       responsibleRole: "Support lead",
       roomTitle: "Customer support correspondence",
     },
+    {
+      key: "legal",
+      label: "Legal",
+      responsibleRole: "Business owner",
+      roomTitle: "Legal correspondence",
+    },
   ],
   subjectKinds: [],
   defaultReasonKey: "customer-enquiry",
@@ -141,6 +170,12 @@ export function resolveMailroomProfile(
   return mergeMailroomProfile(COMMON_MAILROOM_PROFILE, archetype?.mailroomProfile);
 }
 
+/** True when the reason keyed `reasonKey` is privileged in this profile. */
+export function isPrivilegedMailroomReason(profile: MailroomProfile, reasonKey: string | null | undefined): boolean {
+  if (!reasonKey) return false;
+  return profile.reasons.some((r) => r.key === reasonKey && r.privileged === true);
+}
+
 /** Structural validation — the seed test's control gate. Returns [] when sound. */
 export function validateMailroomProfile(profile: MailroomProfile): string[] {
   const errors: string[] = [];
@@ -156,6 +191,7 @@ export function validateMailroomProfile(profile: MailroomProfile): string[] {
   for (const reason of profile.reasons) {
     if (!queueKeys.has(reason.queueKey)) errors.push(`reason ${reason.key} names unknown queue ${reason.queueKey}`);
     if (!MAILROOM_URGENCIES.includes(reason.urgency)) errors.push(`reason ${reason.key} has unknown urgency ${reason.urgency}`);
+    if (reason.noise && reason.privileged) errors.push(`reason ${reason.key} cannot be both noise and privileged`);
     if (reason.subjectKind && !subjectKinds.has(reason.subjectKind)) {
       errors.push(`reason ${reason.key} names unknown subject kind ${reason.subjectKind}`);
     }

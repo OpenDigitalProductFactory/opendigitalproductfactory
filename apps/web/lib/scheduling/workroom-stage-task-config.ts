@@ -24,7 +24,11 @@ import {
  * read as it. A task without the key behaves exactly as before.
  */
 
+import { WORK_SHAPE_STAGE_EFFORTS } from "@dpf/validators/gpp/work-shape-contracts";
+import type { EffortLevel } from "@/lib/tak/effort-warrant";
+
 export const WORKROOM_STAGE_TASK_CONFIG_KEY = "workroomStage";
+
 
 export interface WorkroomStageTaskConfig {
   shapeKey: string;
@@ -34,6 +38,8 @@ export interface WorkroomStageTaskConfig {
   tools: string[];
   /** Server-issued qualification stages may only narrow the stage tool set. */
   qualificationExperiment?: QualificationExperimentBinding;
+  /** Phase G: the stage's resolved effort tier (resolveStageEffort). Absent when it declares none. */
+  effort?: EffortLevel;
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -60,14 +66,16 @@ export function readWorkroomStageTaskConfig(taskConfig: unknown): WorkroomStageT
   const tools = Array.isArray(raw.tools)
     ? [...new Set(raw.tools.map(nonEmptyString).filter((name): name is string => name !== null))]
     : [];
+  const effort = typeof raw.effort === "string" && (WORK_SHAPE_STAGE_EFFORTS as readonly string[]).includes(raw.effort)
+    ? raw.effort as EffortLevel : undefined;
   const qualificationRaw = raw.qualificationExperiment;
   if (qualificationRaw !== undefined) {
     const qualification = parseQualificationExperimentBinding(qualificationRaw);
     if (!qualification.ok) return null;
     return { shapeKey, shapeVersion: nonEmptyString(raw.shapeVersion) ?? "", stageKey, tools,
-      qualificationExperiment: qualification.data };
+      qualificationExperiment: qualification.data, ...(effort ? { effort } : {}) };
   }
-  return { shapeKey, shapeVersion: nonEmptyString(raw.shapeVersion) ?? "", stageKey, tools };
+  return { shapeKey, shapeVersion: nonEmptyString(raw.shapeVersion) ?? "", stageKey, tools, ...(effort ? { effort } : {}) };
 }
 
 /** The stage's declared tools from a task's config, or []. */
@@ -102,6 +110,7 @@ export function withWorkroomStageTaskConfig(
           testBlobIds: [...stage.qualificationExperiment.candidate.testBlobIds],
         } } : {}),
       } } : {}),
+      ...(stage.effort ? { effort: stage.effort } : {}),
     },
   };
 }

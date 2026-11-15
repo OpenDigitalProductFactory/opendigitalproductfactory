@@ -8,6 +8,13 @@ const db = vi.hoisted(() => ({
   featureBuildUpdate: vi.fn(),
   buildActivityCreate: vi.fn(),
 }));
+const nativeVerification = vi.hoisted(() => ({ verify: vi.fn(), legacy: vi.fn(), save: vi.fn(), repair: vi.fn() }));
+vi.mock("@/lib/build/deterministic-build-verification", () => ({ runDeterministicBuildVerificationFor: nativeVerification.verify }));
+vi.mock("@/lib/coding-agent", () => ({ runSandboxTests: nativeVerification.legacy, diagnoseTestFailures: () => ({ failingTests: [], summary: "fixture" }) }));
+vi.mock("@/lib/build/sandbox/build-branch", () => ({ isSandboxAvailable: async () => true, resolveBuildWorkdir: (id: string) => `/workspace/.builds/${id}` }));
+vi.mock("@/lib/build/sandbox-state", () => ({ getSandboxStateForBuild: async () => ({ sourceDiffstat: [{ path: "stale-projection.ts" }] }) }));
+vi.mock("@/lib/build/build-artifact-provenance", () => ({ saveBuildArtifactRevision: nativeVerification.save }));
+vi.mock("@/lib/sandbox", () => ({ execInSandbox: vi.fn() }));
 vi.mock("@dpf/db", () => ({
   prisma: {
     featureBuild: {
@@ -28,8 +35,9 @@ vi.mock("@/lib/shared/lazy-node", () => ({
   lazyPath: () => ({}),
 }));
 
-import { sandboxPack } from "./sandbox-pack";
+import { sandboxPack, withSandboxRepairDispatch } from "./sandbox-pack";
 import { isToolAllowedByGrants } from "@/lib/tak/agent-grants";
+import { verificationFromSandboxResult } from "@/lib/build/verification-output";
 
 // iterate_sandbox is a removed-tool guard: it carries a handler but no
 // advertised definition (there is nothing to expose on tools/list).
@@ -127,5 +135,136 @@ describe("sandbox pack — handler behavior (delegation preserved)", () => {
     const res = await sandboxPack.handlers.check_sandbox({}, "u1");
     expect(res.success).toBe(true);
     expect(res.data).toMatchObject({ status: "not_found" });
+  });
+});
+
+describe("native verification writer", () => {
+  let prior: unknown;
+  const result = (failed = 0, passed = 0, applicable = false) => ({ passed: failed === 0, typeCheckPassed: true,
+    testsPassed: passed, testsFailed: failed, testsExecuted: passed + failed > 0, testsApplicable: applicable,
+    scope: applicable ? "scoped" as const : "none" as const, testCommandPassed: applicable ? failed === 0 : null,
+    testSummariesComplete: true, testCommands: applicable ? ['cd /isolated/apps/web && pnpm exec vitest run "lib/fixture.test.ts"'] : [],
+    testOutput: applicable ? `Tests ${passed} passed | ${failed} failed` : "No tests ran.", typeCheckOutput: "" });
+  const observed = (raw = result()) => ({ result: raw, changedFiles: ["docs/current-source.md"], output: raw.testOutput,
+    verification: { ...verificationFromSandboxResult(raw), verificationSource: {
+      workdir: "/workspace/.builds/FB-FIXTURE", baseRef: "fixture-base", digest: "a".repeat(64), unchanged: true, checkedAt: "2026-11-11T00:00:00Z" } } });
+  beforeEach(() => {
+    prior = null;
+    db.featureBuildFindUnique.mockImplementation(async () => ({ buildId: "FB-FIXTURE", createdById: "u1", verificationOut: prior }));
+    db.featureBuildUpdate.mockResolvedValue({});
+    db.buildActivityCreate.mockResolvedValue({});
+    nativeVerification.verify.mockReset().mockResolvedValue(observed());
+    nativeVerification.legacy.mockReset().mockResolvedValue(result());
+    nativeVerification.save.mockReset().mockResolvedValue({ status: "accepted" });
+    nativeVerification.repair.mockReset().mockResolvedValue(true);
+  });
+  it("binds native repair at composition without changing definitions, grants or other handlers", async () => {
+    const composed = withSandboxRepairDispatch(nativeVerification.repair);
+    expect(composed.definitions).toBe(sandboxPack.definitions);
+    expect(composed.grants).toBe(sandboxPack.grants);
+    expect(composed.handlers.read_sandbox_file).toBe(sandboxPack.handlers.read_sandbox_file);
+    nativeVerification.verify.mockResolvedValueOnce(observed(result(1, 3, true))).mockResolvedValueOnce(observed(result(0, 4, true)));
+    const out = await composed.handlers.run_sandbox_tests({ buildId: "FB-FIXTURE", auto_fix: true }, "u1");
+    expect(nativeVerification.repair).toHaveBeenCalledWith(expect.objectContaining({ buildId: "FB-FIXTURE", userId: "u1" }));
+    expect(out.data).toMatchObject({ testsPassed: 4, testsQualified: true });
+  });
+  it("does not invent a dispatcher when called outside normal composition", async () => {
+    nativeVerification.verify.mockResolvedValue(observed(result(1, 3, true)));
+    const out = await sandboxPack.handlers.run_sandbox_tests({ buildId: "FB-FIXTURE", auto_fix: true }, "u1");
+    expect(nativeVerification.repair).not.toHaveBeenCalled();
+    expect(out.data).toMatchObject({ typecheckPassed: null, testsQualified: false });
+    expect(out.message).toContain("no qualified recovery claimed");
+  });
+  it("advertises the existing explicit build target", () => {
+    const definition = sandboxPack.definitions.find((entry) => entry.name === "run_sandbox_tests");
+    expect(definition?.inputSchema).toMatchObject({ properties: { buildId: { type: "string" } } });
+  });
+  it("records no-test counts through native artifact provenance without a fabricated pass", async () => {
+    const out = await withSandboxRepairDispatch(nativeVerification.repair).handlers.run_sandbox_tests({ buildId: "FB-FIXTURE" }, "u1");
+    expect(out.data).toMatchObject({ testsPassed: 0, testsFailed: 0, testsExecuted: false, testsApplicable: false });
+    expect(nativeVerification.verify).toHaveBeenCalledWith("FB-FIXTURE", [], expect.any(String));
+    expect(nativeVerification.save).toHaveBeenCalledWith(expect.objectContaining({ buildId: "FB-FIXTURE", savedByUserId: "u1", field: "verificationOut" }));
+    expect(db.featureBuildUpdate).not.toHaveBeenCalled();
+  });
+  it("retains prior QA conflict when the native command observes passing cases", async () => {
+    prior = { testEvidenceConflict: true, reportedQa: { testsPassed: 99, testsFailed: 3, content: "Incomplete prior failure scope" } };
+    nativeVerification.verify.mockResolvedValue(observed(result(0, 4, true)));
+    const out = await withSandboxRepairDispatch(nativeVerification.repair).handlers.run_sandbox_tests({ buildId: "FB-FIXTURE" }, "u1");
+    expect(out.data).toMatchObject({ testsPassed: 4, testsQualified: false, testEvidenceConflict: true,
+      reportedQa: { testsFailed: 3, content: "Incomplete prior failure scope" } });
+  });
+  it("persists invalidation before a partial repair, even if the final save fails", async () => {
+    nativeVerification.verify.mockResolvedValue(observed(result(1, 3, true)));
+    let saved: unknown;
+    nativeVerification.save.mockImplementationOnce(async (args) => { saved = JSON.parse(JSON.stringify(args.value)); return { status: "accepted" }; })
+      .mockRejectedValueOnce(new Error("final writer unavailable"));
+    nativeVerification.repair.mockImplementation(async () => {
+      expect(saved).toMatchObject({ typecheckPassed: null, testsQualified: false,
+        verificationSource: { unchanged: false }, testsPassed: 3, testsFailed: 1 });
+      throw new Error("partial mutation interrupted");
+    });
+    await expect(withSandboxRepairDispatch(nativeVerification.repair).handlers.run_sandbox_tests({ buildId: "FB-FIXTURE", auto_fix: true }, "u1"))
+      .rejects.toThrow("final writer unavailable");
+    expect(nativeVerification.repair).toHaveBeenCalledOnce();
+    expect(saved).toMatchObject({ typecheckPassed: null, testsQualified: false });
+  });
+  it("does not mutate source if the pre-dispatch artifact write fails", async () => {
+    nativeVerification.verify.mockResolvedValue(observed(result(1, 3, true)));
+    nativeVerification.save.mockRejectedValue(new Error("invalidation writer refused"));
+    await expect(withSandboxRepairDispatch(nativeVerification.repair).handlers.run_sandbox_tests({ buildId: "FB-FIXTURE", auto_fix: true }, "u1"))
+      .rejects.toThrow("invalidation writer refused");
+    expect(nativeVerification.repair).not.toHaveBeenCalled();
+  });
+  it("uses central bounded repair and rediscovers the same build for each retry", async () => {
+    nativeVerification.verify.mockResolvedValueOnce(observed(result(1, 3, true))).mockResolvedValueOnce(observed(result(0, 4, true)));
+    nativeVerification.legacy.mockResolvedValue(result(1, 3, true));
+    const out = await withSandboxRepairDispatch(nativeVerification.repair).handlers.run_sandbox_tests({ buildId: "FB-FIXTURE", auto_fix: true }, "u1");
+    expect(nativeVerification.repair).toHaveBeenCalledOnce();
+    expect(nativeVerification.repair).toHaveBeenCalledWith(expect.objectContaining({ buildId: "FB-FIXTURE", userId: "u1" }));
+    expect(nativeVerification.verify).toHaveBeenCalledTimes(2);
+    expect(nativeVerification.legacy).not.toHaveBeenCalled();
+    expect(out.data).toMatchObject({ testsPassed: 4, testsFailed: 0, autoFixAttempts: 1, testsQualified: true });
+  });
+  it("does not repair or typecheck unrelated source when scope discovery fails", async () => {
+    nativeVerification.verify.mockRejectedValue(new Error("fixture source unavailable"));
+    const out = await withSandboxRepairDispatch(nativeVerification.repair).handlers.run_sandbox_tests({ buildId: "FB-FIXTURE", auto_fix: true }, "u1");
+    expect(out.data).toMatchObject({ typecheckPassed: null, testsPassed: 0, testsFailed: 0, testsQualified: false, autoFixAttempts: 0 });
+    expect(nativeVerification.repair).not.toHaveBeenCalled();
+    expect(nativeVerification.legacy).not.toHaveBeenCalled();
+  });
+  it("retains observed failures but invalidates current typecheck after a refused repair", async () => {
+    nativeVerification.verify.mockResolvedValue(observed(result(1, 3, true)));
+    nativeVerification.repair.mockResolvedValue(false);
+    const out = await withSandboxRepairDispatch(nativeVerification.repair).handlers.run_sandbox_tests({ buildId: "FB-FIXTURE", auto_fix: true }, "u1");
+    expect(out.data).toMatchObject({ testsPassed: 3, testsFailed: 1, typecheckPassed: null, testsQualified: false, autoFixAttempts: 1 });
+    expect(nativeVerification.verify).toHaveBeenCalledOnce();
+    expect(out.message).toContain("no qualified recovery claimed");
+  });
+  it("also invalidates a later refused repair after an earlier retry was verified", async () => {
+    nativeVerification.verify.mockResolvedValueOnce(observed(result(1, 3, true))).mockResolvedValueOnce(observed(result(1, 4, true)));
+    nativeVerification.repair.mockResolvedValueOnce(true).mockResolvedValueOnce(false);
+    const out = await withSandboxRepairDispatch(nativeVerification.repair).handlers.run_sandbox_tests({ buildId: "FB-FIXTURE", auto_fix: true }, "u1");
+    expect(out.data).toMatchObject({ typecheckPassed: null, testsPassed: 4, testsFailed: 1,
+      testsQualified: false, autoFixAttempts: 2, verificationSource: { unchanged: false } });
+    expect(nativeVerification.verify).toHaveBeenCalledTimes(2);
+  });
+  it("records an unknown retry without resurrecting the pre-repair verdict", async () => {
+    nativeVerification.verify.mockResolvedValueOnce(observed(result(1, 3, true))).mockRejectedValueOnce(new Error("fixture retry unavailable"));
+    const out = await withSandboxRepairDispatch(nativeVerification.repair).handlers.run_sandbox_tests({ buildId: "FB-FIXTURE", auto_fix: true }, "u1");
+    expect(out.data).toMatchObject({ testsPassed: 0, testsFailed: 0, typecheckPassed: null, testsQualified: false, autoFixAttempts: 1 });
+    expect(nativeVerification.repair).toHaveBeenCalledOnce();
+    expect(out.message).toContain("no qualified recovery claimed");
+  });
+  it("does not report successful persistence if the native artifact writer refuses", async () => {
+    nativeVerification.save.mockRejectedValue(new Error("fixture artifact refused"));
+    await expect(withSandboxRepairDispatch(nativeVerification.repair).handlers.run_sandbox_tests({ buildId: "FB-FIXTURE" }, "u1")).rejects.toThrow("fixture artifact refused");
+    expect(db.featureBuildUpdate).not.toHaveBeenCalled();
+  });
+  it("refuses a foreign explicit build without fallback or execution", async () => {
+    db.featureBuildFindUnique.mockResolvedValue({ buildId: "FB-FIXTURE", createdById: "another-owner" });
+    const out = await withSandboxRepairDispatch(nativeVerification.repair).handlers.run_sandbox_tests({ buildId: "FB-FIXTURE" }, "u1");
+    expect(out.success).toBe(false);
+    expect(nativeVerification.verify).not.toHaveBeenCalled();
+    expect(nativeVerification.save).not.toHaveBeenCalled();
   });
 });

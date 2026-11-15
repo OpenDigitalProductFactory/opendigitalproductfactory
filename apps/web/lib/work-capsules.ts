@@ -137,6 +137,9 @@ export const WORK_CAPSULE_EXECUTOR_KINDS = [
   "human",
   "git-webhook",
   "dpf-native",
+  // A claim this installation holds for a paired installation that asked for
+  // it (BI-30EDDB7F): the work runs there, the claim lives here.
+  "federated-peer",
 ] as const;
 
 export type WorkCapsuleExecutorKind = (typeof WORK_CAPSULE_EXECUTOR_KINDS)[number];
@@ -187,6 +190,9 @@ export const WORK_CAPSULE_ACTIVITY_KINDS = [
   // BI-B8DAEB71: the probe's verdict on one of those candidates (ADOPT,
   // KEEP_BASE or KERNEL_GAP) with its outcome, load and gate-burden deltas.
   "harness-evolution-verdict",
+  // BI-C64EDA33: process-bound runtime effects retired, not replayed, when the
+  // provider process they were decided for is gone (restart or session end).
+  "effect-retired",
 ] as const;
 
 export type WorkCapsuleActivityKind = (typeof WORK_CAPSULE_ACTIVITY_KINDS)[number];
@@ -292,6 +298,13 @@ export const WORK_CAPSULE_EVIDENCE_KINDS = [
 export type WorkCapsuleEvidenceKind = (typeof WORK_CAPSULE_EVIDENCE_KINDS)[number];
 
 export const LEASE_TTL_MS = 30 * 60 * 1000;
+
+/** Default resume grace for a lease-expired external session: a token-limited
+ *  client (Claude/Codex/Grok) may be down for a usage-window duration and will
+ *  return. Conservative — err toward NOT reaping a session that may resume. A
+ *  DELIVERED (merged) room bypasses the grace: it need not resume. Lives in this
+ *  leaf so liveness and executor capacity share it without an import cycle. */
+export const WORK_CAPSULE_PAUSE_GRACE_MS = 24 * 60 * 60 * 1000;
 export const STALE_CACHE_MS = 30 * 60 * 1000;
 export const STATUS_OVERRIDE_TTL_MS = 24 * 60 * 60 * 1000;
 

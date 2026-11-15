@@ -16,6 +16,7 @@
 // `xPack,` line in the array. Nothing in mcp-tools.ts changes.
 
 import { composeToolPacks } from "./tool-registry";
+import { withSandboxRepairDispatch } from "./packs/sandbox-pack";
 import { withEngagementFulfillment } from "./packs/coworker-service-catalog-pack";
 import { fulfillCoworkerEngagement } from "./external-coworker-task-adapter";
 import { deliberationSiemPack } from "./packs/deliberation-siem-pack";
@@ -103,6 +104,7 @@ import { buildEvidenceExtraPack } from "./packs/build-evidence-extra-pack";
 import { changeReviewPack } from "./packs/change-review-pack";
 import { principleDecidePack } from "./packs/principle-decide-pack";
 import { decisionOutcomePack } from "./packs/decision-outcome-pack";
+import { ownerRulingPack } from "./packs/owner-ruling-pack";
 import { decisionReverifyPack } from "./packs/decision-reverify-pack";
 import { productOutcomesPack } from "./packs/product-outcomes-pack";
 import { initiativeReadinessPack } from "./packs/initiative-readiness-pack";
@@ -209,8 +211,13 @@ export const TOOL_PACK_REGISTRY = composeToolPacks([
   changeReviewPack,
   principleDecidePack,
   decisionOutcomePack,
+  ownerRulingPack,
   decisionReverifyPack,
   productOutcomesPack,
   initiativeReadinessPack,
   surfaceReadinessPack,
-].map(pack => pack === coworkerServiceCatalogPack ? withEngagementFulfillment((engagementId, locator, userId, context, rawParams) => fulfillCoworkerEngagement(engagementId, locator, userId, context, undefined, rawParams)) : pack));
+].map(pack => pack === coworkerServiceCatalogPack ? withEngagementFulfillment((engagementId, locator, userId, context, rawParams) => fulfillCoworkerEngagement(engagementId, locator, userId, context, undefined, rawParams))
+  : pack === sandboxPack ? withSandboxRepairDispatch(async (input) => {
+    const { runGauntletRepairTask } = await import("@/lib/build/build-orchestrator");
+    return runGauntletRepairTask(input);
+  }) : pack));

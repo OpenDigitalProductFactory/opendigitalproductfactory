@@ -214,3 +214,28 @@ export async function reassignWorkCapsuleExecutor(args: {
     return updated;
   });
 }
+
+/**
+ * BI-53BED66C: record that the room's executor hit its plan limit without
+ * renewing the lease (a renewal would make the room read live, hiding the wait)
+ * and without replacing the rest of the latest checkpoint (the next executor
+ * needs its next action and open risks). Never changes who holds the lease.
+ */
+export async function recordExecutorCapacityNote(args: {
+  db: CapsuleDb;
+  capsuleId: string;
+  capacity: { provider: string; resetAt: string };
+  now?: Date;
+}) {
+  const now = args.now ?? new Date();
+  return inTransaction(args.db, async (tx) => {
+    await lockLease(tx, args.capsuleId);
+    const row = (await tx.workroom.findUnique({ where: { capsuleId: args.capsuleId }, select: { workspaceState: true } })) as { workspaceState?: unknown } | null;
+    const state = row?.workspaceState && typeof row.workspaceState === "object" && !Array.isArray(row.workspaceState)
+      ? row.workspaceState as Record<string, unknown> : {};
+    const prior = state.executorCheckpoint && typeof state.executorCheckpoint === "object" && !Array.isArray(state.executorCheckpoint)
+      ? state.executorCheckpoint as Record<string, unknown> : {};
+    const executorCheckpoint = { ...prior, capacity: { ...args.capacity, recordedAt: now.toISOString() } };
+    return tx.workroom.update({ where: { capsuleId: args.capsuleId }, data: { workspaceState: { ...state, executorCheckpoint } } });
+  });
+}

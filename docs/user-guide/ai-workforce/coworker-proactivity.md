@@ -167,6 +167,13 @@ completed report. A provider that cannot enforce the limited access leaves the
 run unverified. Ask a coworker to configure the paused watch, then resume the
 same watch through its existing controls.
 
+For a failed history report, ask a coworker to inspect the exact run. The
+owner-bound diagnostic distinguishes an oversized report, invalid JSON and an
+invalid report contract. It retains only a fixed category, content digest, byte
+count and redaction/truncation flags; private report text and rejected values
+are excluded. Older runs without this record say it was not retained. A format
+check does not prove that observations succeeded or authorize another execution.
+
 Changing the watch's action boundary is a governed configuration choice. Its
 reports then go to history under that choice; existing data and action
 permissions still apply. Pausing stops future runs and keeps the history.
@@ -195,3 +202,9 @@ Broader actions need their own current authorization.
 ---
 
 *Part of the [cognitive-load redesign](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/docs/superpowers/specs/2026-07-17-needs-you-cognitive-load-redesign-design.md). The per-coworker control also appears on each coworker's profile; this page is the one-place confirm/adjust view.*
+
+## Listing scheduled work
+
+The agent inventory returns compact pages of up to 20 tasks by default. It omits prompts and task configurations. Agents can filter by task kind, agent, active state, last status, title prefix or task identifier prefix within the existing product scope. A page reports its total, whether more rows remain, and the next cursor. Continue until `complete` is true before reporting a complete census.
+
+Cursors belong to the same caller, filters and task revisions. If the inventory changes, restart the census. An exact task lookup retains its existing revision and detail contract. Inventory pagination never grants permission to pause, cancel or otherwise change a task.
