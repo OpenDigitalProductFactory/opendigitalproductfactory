@@ -1,5 +1,8 @@
 import { isRecord } from "@/lib/shared/coerce";
-import { PROVIDER_COMPLIANCE_SOURCE_REGISTRY } from "@dpf/db/provider-compliance-source-registry";
+import {
+  PROVIDER_COMPLIANCE_SOURCE_REGISTRY,
+  type ProviderComplianceSourceEntry,
+} from "@dpf/db/provider-compliance-source-registry";
 import type { ProviderReviewPacket } from "./provider-review-packet";
 
 export const PROVIDER_COMPLIANCE_ADVISORY_VERSION = "provider-compliance-advisory.v1" as const;
@@ -114,6 +117,7 @@ export function validateProviderComplianceAdvisoryGrounding(
   advisory: ProviderComplianceAdvisory,
   packet: ProviderReviewPacket,
   now = new Date(),
+  sources: Record<string, ProviderComplianceSourceEntry> = PROVIDER_COMPLIANCE_SOURCE_REGISTRY,
 ): { success: boolean; errors: string[] } {
   const errors: string[] = [];
   const jurisdictions = [
@@ -127,7 +131,7 @@ export function validateProviderComplianceAdvisoryGrounding(
   const conflictPositions = new Map<string, Set<string>>();
 
   for (const citation of advisory.citations) {
-    const source = PROVIDER_COMPLIANCE_SOURCE_REGISTRY[citation.reference as keyof typeof PROVIDER_COMPLIANCE_SOURCE_REGISTRY];
+    const source = sources[citation.reference];
     if (!source || !citation.sourceClaimId) {
       errors.push(`ungoverned-citation:${citation.reference}`);
       continue;

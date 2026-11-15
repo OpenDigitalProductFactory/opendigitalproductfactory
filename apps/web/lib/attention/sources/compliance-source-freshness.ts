@@ -26,6 +26,9 @@ import {
   type ComplianceSourceFreshness,
 } from "@/lib/routing/provider-suitability/source-freshness";
 import type { AttentionItem } from "../types";
+import { loadEffectiveProviderComplianceSources } from "@/lib/routing/provider-suitability/effective-compliance-sources";
+
+type ComplianceSourceDb = Parameters<typeof loadEffectiveProviderComplianceSources>[0];
 
 /** Renewal is a compliance review, not a scrape: someone opens the vendor's
  *  current policy page and confirms the specific claims DPF cites still hold.
@@ -82,10 +85,15 @@ export function complianceSourceToAttentionItem(
     },
     createdAtIso: now.toISOString(),
     actions: [
-      { kind: "open-in-context", label: "Review AI provider compliance", href: "/platform/ai/providers" },
+      { kind: "open-in-context", label: "Open cited source", href: source.url },
     ],
-    deepLink: "/platform/ai/providers",
+    deepLink: source.url,
     audience: { operator: true },
+    complianceEvidence: {
+      sourceKey: source.sourceKey,
+      url: source.url,
+      claims: source.claims,
+    },
   };
 }
 
@@ -97,11 +105,14 @@ export function complianceSourceToAttentionItem(
  *  code-defined registry, so a frozen word-count baseline moved with the date.
  *  The production caller passes `measurementNow()`, which is the real clock
  *  outside measurement runtime. */
-export function loadComplianceSourceFreshnessItems(
-  options: { now?: Date } = {},
-): AttentionItem[] {
+export async function loadComplianceSourceFreshnessItems(
+  options: { now?: Date; db?: ComplianceSourceDb } = {},
+): Promise<AttentionItem[]> {
   const now = options.now ?? new Date();
-  const summary = summarizeComplianceSourceFreshness({ now });
+  const sources = options.db
+    ? await loadEffectiveProviderComplianceSources(options.db)
+    : undefined;
+  const summary = summarizeComplianceSourceFreshness({ now, sources });
   return [...summary.stale, ...summary.expiringSoon].map((source) =>
     complianceSourceToAttentionItem(source, now),
   );
