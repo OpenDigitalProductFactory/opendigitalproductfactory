@@ -13,7 +13,7 @@
   },
   "builder": {
     "path": "scripts/build-judgment-guard-runtime.mjs",
-    "sha256": "1e3942b1927c17d474399afc19acc5319e6dc558219a20ee47f1c7cfdabd9eb6",
+    "sha256": "c4fb6c22344a4b98d4a1ad3515186aad240401e4221514d5b674911c280aa31a",
     "parser": "typescript@6.0.3",
     "mode": "verified-emitted-file-copy"
   },

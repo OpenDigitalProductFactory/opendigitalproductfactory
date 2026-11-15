@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 //
-// BI-CE244260: after a successful admission the "Upgrade now" button came back
+// BI-CE244260: after a successful admission the "Install now" button came back
 // and the only thing standing between the operator and a second trigger was
 // the sentence "do not click again". A warning is not a control. The button
 // now stays out of reach from admission until the admitted run is visible and
@@ -12,6 +12,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ refresh: vi.fn() }),
+}));
+
+vi.mock("@/components/ui/Dialog", () => ({
+  confirmDialog: vi.fn().mockResolvedValue(true),
 }));
 
 vi.mock("@/lib/actions/promotions", () => ({
@@ -52,14 +56,14 @@ const props = {
 describe("SelfUpgradeTriggerControl — an admitted upgrade cannot be triggered twice (BI-CE244260)", () => {
   beforeEach(() => triggerMock.mockReset());
 
-  it("removes Upgrade now once admitted, before the run is visible, with no do-not-click prose", async () => {
+  it("removes Install now once admitted, before the run is visible, with no do-not-click prose", async () => {
     triggerMock.mockResolvedValue({ queued: true, admitted: true, runId: "SUR-57A296FA" });
     render(<SelfUpgradeTriggerControl {...props} />);
 
-    fireEvent.click(screen.getByRole("button", { name: /upgrade now/i }));
+    fireEvent.click(screen.getByRole("button", { name: /install now/i }));
 
     await waitFor(() => expect(screen.getByText(/SUR-57A296FA/)).toBeInTheDocument());
-    expect(screen.queryByRole("button", { name: /upgrade now/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /install now/i })).not.toBeInTheDocument();
     expect(screen.queryByText(/do not click again/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/keep this page open/i)).not.toBeInTheDocument();
   });
@@ -67,31 +71,31 @@ describe("SelfUpgradeTriggerControl — an admitted upgrade cannot be triggered 
   it("stays locked while the admitted run is queued or running", async () => {
     triggerMock.mockResolvedValue({ queued: true, admitted: true, runId: "SUR-57A296FA" });
     const { rerender } = render(<SelfUpgradeTriggerControl {...props} />);
-    fireEvent.click(screen.getByRole("button", { name: /upgrade now/i }));
+    fireEvent.click(screen.getByRole("button", { name: /install now/i }));
     await waitFor(() => expect(screen.getByText(/SUR-57A296FA/)).toBeInTheDocument());
 
     rerender(<SelfUpgradeTriggerControl {...props} latestRun={run("SUR-57A296FA", "running")} />);
-    expect(screen.queryByRole("button", { name: /upgrade now/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /install now/i })).not.toBeInTheDocument();
   });
 
   it("gives the button back once the admitted run settles, so a skipped run can be retried", async () => {
     triggerMock.mockResolvedValue({ queued: true, admitted: true, runId: "SUR-57A296FA" });
     const { rerender } = render(<SelfUpgradeTriggerControl {...props} />);
-    fireEvent.click(screen.getByRole("button", { name: /upgrade now/i }));
+    fireEvent.click(screen.getByRole("button", { name: /install now/i }));
     await waitFor(() => expect(screen.getByText(/SUR-57A296FA/)).toBeInTheDocument());
 
     rerender(<SelfUpgradeTriggerControl {...props} latestRun={run("SUR-57A296FA", "skipped")} />);
-    await waitFor(() => expect(screen.getByRole("button", { name: /upgrade now/i })).toBeEnabled());
+    await waitFor(() => expect(screen.getByRole("button", { name: /install now/i })).toBeEnabled());
   });
 
   it("a refused admission leaves the button available with the reason", async () => {
     triggerMock.mockResolvedValue({ queued: false, reason: "already-running", runId: "SUR-OTHER" });
     render(<SelfUpgradeTriggerControl {...props} />);
-    fireEvent.click(screen.getByRole("button", { name: /upgrade now/i }));
+    fireEvent.click(screen.getByRole("button", { name: /install now/i }));
     await waitFor(() => expect(screen.getByText(/Not admitted: already-running/)).toBeInTheDocument());
     // The refusal text is set inside the transition, while isPending (and
     // therefore the button) can still be true for one more paint.
-    await waitFor(() => expect(screen.getByRole("button", { name: /upgrade now/i })).toBeEnabled());
+    await waitFor(() => expect(screen.getByRole("button", { name: /install now/i })).toBeEnabled());
   });
 
   it("BI-2128872C: a request deferred to the maintenance window says when it will run, not that it failed", async () => {
@@ -102,7 +106,7 @@ describe("SelfUpgradeTriggerControl — an admitted upgrade cannot be triggered 
       message: "Agent-requested upgrades run only in the maintenance window. The request is queued for the next window and the scheduled upgrade will pick it up at 2026-10-07T22:00:00.000Z.",
     });
     render(<SelfUpgradeTriggerControl {...props} />);
-    fireEvent.click(screen.getByRole("button", { name: /upgrade now/i }));
+    fireEvent.click(screen.getByRole("button", { name: /install now/i }));
     await waitFor(() => expect(screen.getByText(/Queued for the maintenance window:/)).toBeInTheDocument());
     expect(screen.getByText(/2026-10-07T22:00:00.000Z/)).toBeInTheDocument();
     expect(screen.queryByText(/Not admitted:/)).not.toBeInTheDocument();

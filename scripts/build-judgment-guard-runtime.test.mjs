@@ -30,6 +30,58 @@ function tarFile({name = "package/value.js", contents = "safe", type = "0", size
 function parseTar(tar) { const archive = gzipSync(tar); return readPackageFiles(archive, hash(archive)); }
 const terminated = (...entries) => Buffer.concat([...entries, Buffer.alloc(1024)]);
 
+for (const mode of ["replacement-race", "oversized-file"]) {
+  test(`archive checkout reader refuses ${mode} without consuming unchecked pathname bytes`, () => {
+    const temporary = mkdtempSync(join(tmpdir(), "dpf-judgment-archive-custody-"));
+    try {
+      const identity = JSON.parse(source(IDENTITY_PATH));
+      for (const path of ["scripts/build-judgment-guard-runtime.mjs", IDENTITY_PATH, identity.componentArtifact.path]) {
+        const target = join(temporary, path);
+        mkdirSync(dirname(target), { recursive: true });
+        writeFileSync(target, readFileSync(join(root, path)));
+      }
+      // Keep the real, verified parser; isolate only the archive and builder.
+      const loader = "import { loadPinnedGuardTypeScript as load } from "
+        + JSON.stringify(pathToFileURL(join(root, "scripts/lib/load-pinned-guard-typescript.mjs")).href)
+        + "; export const loadPinnedGuardTypeScript = () => load({ repoRoot: " + JSON.stringify(root) + " });\n";
+      mkdirSync(join(temporary, "scripts/lib"), { recursive: true });
+      writeFileSync(join(temporary, "scripts/lib/load-pinned-guard-typescript.mjs"), loader);
+      const program = [
+        'import assert from "node:assert/strict";',
+        'import fs from "node:fs";',
+        'import { syncBuiltinESMExports } from "node:module";',
+        'import { join } from "node:path";',
+        'import { pathToFileURL } from "node:url";',
+        'const root = fs.realpathSync(process.argv[1]), mode = process.argv[2];',
+        'const identity = JSON.parse(fs.readFileSync(join(root, "packages/validators/vendor/JUDGMENT-ADOPTION.json"), "utf8"));',
+        'const archive = join(root, identity.componentArtifact.path);',
+        'const { buildArtifacts } = await import(pathToFileURL(join(root, "scripts/build-judgment-guard-runtime.mjs")).href);',
+        'if (mode === "oversized-file") fs.writeFileSync(archive, Buffer.alloc(4 * 1024 * 1024 + 1));',
+        'const lstat = fs.lstatSync, read = fs.readFileSync;',
+        'let swapped = false, uncheckedReads = 0;',
+        'fs.lstatSync = (path, ...args) => {',
+        '  const stat = lstat(path, ...args);',
+        '  if (path === archive && mode === "replacement-race" && !swapped) {',
+        '    fs.renameSync(archive, archive + ".original");',
+        '    fs.writeFileSync(archive, "synthetic unchecked replacement bytes");',
+        '    swapped = true;',
+        '  }',
+        '  return stat;',
+        '};',
+        'fs.readFileSync = (path, ...args) => { if (path === archive) uncheckedReads++; return read(path, ...args); };',
+        'syncBuiltinESMExports();',
+        'assert.throws(() => buildArtifacts(), /archive|bounded/i);',
+        'assert.equal(uncheckedReads, 0, "Unchecked replacement or oversized bytes were consumed before refusal");',
+        'if (mode === "replacement-race") assert.equal(swapped, true);',
+        'console.log(JSON.stringify({ mode, uncheckedReads, swapped }));',
+      ].join("\n");
+      const result = spawnSync(process.execPath, ["--input-type=module", "--eval", program, temporary, mode], { cwd: root, encoding: "utf8" });
+      assert.equal(result.status, 0, result.stderr);
+      assert.equal(JSON.parse(result.stdout).uncheckedReads, 0);
+    } finally { rmSync(temporary, { recursive: true, force: true }); }
+  });
+}
+
 test("hash-bound regular TAR bytes are returned without extraction", () => {
   assert.equal(parseTar(terminated(tarFile())).get("package/value.js").toString(), "safe");
 });

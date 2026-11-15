@@ -4,7 +4,7 @@
 import assert from "node:assert/strict";
 import { loadPinnedGuardTypeScript } from "./lib/load-pinned-guard-typescript.mjs";
 import { createHash } from "node:crypto";
-import { readFileSync, writeFileSync, mkdirSync, lstatSync, realpathSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync, lstatSync, realpathSync, openSync, fstatSync, readSync, closeSync, constants } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { gunzipSync } from "node:zlib";
@@ -16,6 +16,7 @@ export const SOURCE_PATHS = ["packages/validators/src/judgment/option-scoring.ts
 export const PACKAGE_FILES = ["dist/judgment/option-scoring.js", "dist/judgment/mcda-quality-gates.js"];
 export const ARTIFACT_DIRECTORY = "scripts/generated/judgment";
 const hash = (text) => createHash("sha256").update(text).digest("hex");
+const MAX_ARCHIVE_BYTES = 4 * 1024 * 1024;
 const readIdentity = () => JSON.parse(readFileSync(join(ROOT, IDENTITY_PATH), "utf8"));
 function readArchive(identity) {
   const artifact = identity.componentArtifact;
@@ -23,13 +24,31 @@ function readArchive(identity) {
   assert(/^0\.1\.0-candidate\.\d+$/.test(artifact.version), "Explicit immutable candidate required");
   assert.equal(artifact.path, `packages/validators/vendor/opendigitalproductfactory-dpf-scoped-judgment-${artifact.version}.tgz`);
   const path = join(ROOT, artifact.path);
-  assert(lstatSync(path).isFile() && realpathSync(path) === path, "Archive must be a regular checkout file");
-  return readFileSync(path);
+  const fd = openSync(path, constants.O_RDONLY | (constants.O_NONBLOCK ?? 0) | (constants.O_NOFOLLOW ?? 0));
+  try {
+    const before = fstatSync(fd, { bigint: true });
+    const sameFile = stat => stat.isFile() && ["dev", "ino", "size", "mtimeNs", "ctimeNs", "mtimeMs", "ctimeMs"]
+      .every(key => stat[key] === before[key]);
+    assert(before.isFile() && before.size <= BigInt(MAX_ARCHIVE_BYTES), "Bounded regular archive required");
+    assert(sameFile(lstatSync(path, { bigint: true })) && realpathSync(path) === path, "Archive checkout identity changed");
+    // Validate and read the same descriptor; never reopen the checked path.
+    const bytes = Buffer.alloc(Number(before.size));
+    let offset = 0;
+    while (offset < bytes.length) {
+      const count = readSync(fd, bytes, offset, bytes.length - offset, null);
+      assert(count > 0, "Archive truncated during read");
+      offset += count;
+    }
+    assert(readSync(fd, Buffer.alloc(1), 0, 1, null) === 0, "Archive grew during read");
+    assert(sameFile(fstatSync(fd, { bigint: true })) && sameFile(lstatSync(path, { bigint: true }))
+      && realpathSync(path) === path, "Archive checkout identity changed during read");
+    return bytes;
+  } finally { closeSync(fd); }
 }
 
 // Read bytes only: never extract paths to disk or execute package lifecycle code.
 export function readPackageFiles(archive, expectedSha256) {
-  assert(Buffer.isBuffer(archive) && archive.length <= 4 * 1024 * 1024, "Bounded package archive required");
+  assert(Buffer.isBuffer(archive) && archive.length <= MAX_ARCHIVE_BYTES, "Bounded package archive required");
   assert.equal(hash(archive), expectedSha256, "Approved archive integrity changed");
   const tar = gunzipSync(archive, { maxOutputLength: 16 * 1024 * 1024 });
   const files = new Map();
