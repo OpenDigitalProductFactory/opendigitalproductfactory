@@ -67,7 +67,10 @@ export function mailroomFirstReadSince(now: Date = new Date()): Date {
 
 /** Where the last poll stopped. Provider-specific; opaque to the intake. */
 export type MailboxCursorByProvider = {
-  imap: { uidValidity: string; lastUid: number } | null;
+  /** `since` is the first read's window floor (ISO date). Every later read keeps it, because
+   *  UIDs are not ordered by date: without it, a resumed `UID n:*` could reach old mail that
+   *  sits between in-window UIDs (BI-D1D4FE9B review finding 2). Absent on older cursors. */
+  imap: { uidValidity: string; lastUid: number; since?: string } | null;
   microsoft365: { deltaLink: string } | null;
   "postmark-inbound": null;
 };
