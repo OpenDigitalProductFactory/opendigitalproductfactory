@@ -9,15 +9,18 @@ import type {
   DemandDispositionNoticeV1,
 } from "@dpf/db/federated-demand-contract";
 import { computeDemandPayloadDigest } from "@dpf/db/federated-demand-contract";
+import { A2A_REQUEST_RECORD_TYPE } from "@dpf/db/federated-a2a-contract";
 import type { ProjectionContractSpec } from "@dpf/db/projection-serialization";
 
 import {
   sendDemandToPeer,
   sendDeploymentDeclarationToPeer,
   sendGuidanceSnapshotToPeer,
+  sendA2aRequestToPeer,
   sendOperationalPostureToPeer,
   type PeerPostResult,
 } from "./client";
+import { deliverA2aRequestRow } from "./a2a-outbox";
 import { decodeDeploymentDeclarationOutboxPayload } from "./deployment-declaration-exchange";
 import { decodeGuidanceSnapshotOutboxPayload } from "./guidance-snapshot-exchange";
 import { buildDemandEnvelope, type ProjectableDemandSource } from "./demand-projection";
@@ -339,7 +342,7 @@ type SendPosture = typeof sendOperationalPostureToPeer;
 /** Every local-canonical record type that rides the shared federation outbox. */
 export const FEDERATION_OUTBOX_RECORD_TYPES = [
   "demand-envelope", "demand-response", "demand-disposition", "operational-posture", "deployment-declaration",
-  "guidance-snapshot",
+  "guidance-snapshot", "a2a-request",
 ] as const;
 
 /**
@@ -390,6 +393,7 @@ export async function dispatchDueDemand(db: DemandDeliveryDb, options: {
   sendPosture?: SendPosture;
   sendDeclaration?: typeof sendDeploymentDeclarationToPeer;
   sendGuidance?: typeof sendGuidanceSnapshotToPeer;
+  sendA2a?: typeof sendA2aRequestToPeer;
   /** Apply the home's answer to a claim request (BI-30EDDB7F). */
   applyWorkClaim?: (capsuleId: string, decision: WorkClaimDecision) => Promise<void>;
 } = {}): Promise<{
@@ -532,7 +536,20 @@ export async function dispatchDueDemand(db: DemandDeliveryDb, options: {
     let result: PeerPostResult;
     let payload: DemandOutboxPayload | null = null;
     let acknowledged = false;
-    if (row.recordType === "guidance-snapshot") {
+    if (row.recordType === A2A_REQUEST_RECORD_TYPE) {
+      // BI-B45BBD8A: a signed A2A request; its receipt is the acknowledgement.
+      if (!token) result = { ok: false, status: 0, error: "missing peer token" };
+      else {
+        const sent = await deliverA2aRequestRow(db as never, row, { ...target, linkToken: token }, { now, send: options.sendA2a });
+        if (sent.kind === "expired") {
+          withdrawn++;
+          await finishFederationDeliveryJob(db, { itemId: job.itemId, attemptCount: job.attemptCount, outcome: "withdrawn", error: "notAfter passed", now });
+          continue;
+        }
+        result = sent.result;
+        acknowledged = sent.acknowledged;
+      }
+    } else if (row.recordType === "guidance-snapshot") {
       // BI-1B165D02: the authority's guidance snapshot for its companion rides
       // the same inbox; the companion acknowledges with the version it holds.
       const guidance = decodeGuidanceSnapshotOutboxPayload(row.payload);
