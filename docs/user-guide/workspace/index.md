@@ -56,6 +56,15 @@ is approved and paid. **Open in Mailroom** shows the email. Mailroom doesn't cop
 amounts out of the email, so check the figures against the invoice when you
 record it. Acknowledge the email once the bill is recorded.
 
+### Mail from your lawyers
+
+Mail from your counsel, or about a legal matter, goes to its own **Legal** room,
+which the business owner answers. Mailroom treats it as privileged. The
+notification and the room name the sender and the reason, not what the letter
+says. Open the item to read it. Mailroom does not draft replies to legal
+correspondence, so **Draft a reply** says so instead of writing one. Answer
+your lawyer directly.
+
 ## Checking an approval result
 
 After you approve or decline a coworker's request, the Inbox keeps its result.

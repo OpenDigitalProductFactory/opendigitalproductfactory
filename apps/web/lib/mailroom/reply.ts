@@ -9,7 +9,7 @@
 // explicit go).
 
 import type { MailroomProfile } from "@dpf/storefront-templates";
-import { mailroomReasonByKey } from "@dpf/storefront-templates";
+import { isPrivilegedMailroomReason, mailroomReasonByKey } from "@dpf/storefront-templates";
 
 export const MAILROOM_REPLY_SOURCE_TYPE = "inbound-channel-message";
 export const MAILROOM_OUTBOUND_DOMAIN = "mailroom";
@@ -91,6 +91,15 @@ export function escapeHtml(text: string): string {
 }
 
 /** Create the pending-review draft for an item. Idempotent per item; never sends. */
+/** Raised when the Mailroom must not draft a reply (BI-757C961E). The message
+ *  is shown to the operator as the reason. */
+export class MailroomReplyRefusedError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "MailroomReplyRefusedError";
+  }
+}
+
 export async function draftMailroomReply(input: {
   db: ReplyDb;
   profile: MailroomProfile;
@@ -101,6 +110,13 @@ export async function draftMailroomReply(input: {
   agentId: string;
 }): Promise<{ draftId: string; created: boolean; body: string }> {
   const { db, item } = input;
+  // Counsel correspondence is privileged: the owner answers it directly, and no
+  // model is asked to compose a reply from its content.
+  if (isPrivilegedMailroomReason(input.profile, item.reasonKey)) {
+    throw new MailroomReplyRefusedError(
+      "This is privileged correspondence from counsel. The Mailroom does not draft replies to it; answer it directly.",
+    );
+  }
   const existing = await db.outboundDraft.findFirst({
     where: { sourceType: MAILROOM_REPLY_SOURCE_TYPE, sourceId: item.inboundId, status: { in: ["draft", "pending-review"] } },
     select: { draftId: true, status: true, body: true, metadata: true },

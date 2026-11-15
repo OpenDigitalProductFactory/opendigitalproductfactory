@@ -108,6 +108,92 @@ Selecting any cell, dot or row opens a side panel in the shape of Claude Code's 
 
 This is the existing PWA-03 inspector restyled, not a new inspector.
 
+#### 3.6.1 Restore the recorded action in the inspector (BI-47FA92E3)
+
+This corrective successor to A3 (BI-94C9AFC1) implements the existing
+AC-DISCLOSE requirement. It does not amend the umbrella's approved scope or
+replace its other deliveries. The implementation owner is BI-47FA92E3,
+Workroom WC-77367047; the body acceptance criteria below own this bounded fix.
+
+**OBJ-ATLAS-ACTION:** An owner selecting a room can distinguish its recorded
+action actor and next step from the person accountable for the work, with
+explicit missing information and unchanged progress and recovery signals.
+
+Research at `20beaf53760234911f300c8eee84b3ac477f6bc5` confirmed that
+`AtlasInspector.tsx` renders the accountable person and generic status as the
+action. Its blob `291f53f175b28c9cbf1f834c7280238585d52c6d` is unchanged from
+the original reproduction at `868bc8be10f39355cbe13e240e467f95da724051`.
+The existing `projectWorkroomOperatorSummary` already supplies safe
+`WorkroomNextAction` actor, instruction, qualified decision detail and count.
+Six controlled source cases fail on the actual renderer and pass on a temporary
+renderer candidate that consumes this model. The experiment preserves held
+recovery and owner-setup priority and omits raw recovery fields. This research
+proof is not a committed product regression or served acceptance. Native research
+receipt: `initiative-380b7269-788f-45d3-8981-3ffa6ba2f99e`;
+experiment evidence: `cmwgy2tvk0jxt0el7jv95csyz`.
+
+The synthetic interactive prototype is managed document DOC-0F617FA8, version
+`cmwgxu58f0i450el7pdxc9pss`. Its six source interaction checks passed; visual
+verification is unrun. Native advisory UX engagement CE-CD8B2C7D is requested,
+not completed. Advisory DI-D54729AAB03A ranked selected detail over adding data
+to every row but returned low confidence and declined both options; it is not
+an approval. The existing compactness invariant independently rules out adding
+action data to every overview tuple.
+
+**CT-ATLAS-SELECTED-ACTION:** The existing page passes its already-validated
+selected room ID to the existing Atlas read. Only that room's tuple may include
+the safe shared action and next-action key. The server forwards existing
+inventory executor, recovery and qualified-decision inputs to the shared
+projector; raw recovery packets never enter the returned tuple. Unselected
+tuples keep their current shape and the existing 1,000-room size assertion.
+No additional per-room query, numeric limit, health classifier, control,
+permission, tool, table or role is introduced. The default native Atlas read
+keeps its compact response; native room detail retains its existing model.
+
+**FLOW-ATLAS-SELECTED-ACTION:** Select an existing room on `/ops/workrooms`;
+read actor, instruction and any recorded question in its existing inspector;
+use its existing room or flow link. Reload preserves selection through the URL.
+Accountability, the stage checklist, recorded activity and hold/recovery remain
+separate facts. When owner setup takes priority, its shared instruction takes
+precedence over a secondary action. Missing action data stays explicitly unknown.
+
+Ordered fix sequence (one atomic repair and one clean revert):
+
+1. Add permanent failing tests for selected projection, server mapping and
+   inspector rendering. Include qualified and missing decisions, multiple
+   decisions, coworker writeback, review/source recovery, capacity waits,
+   owner-setup priority and absent action data. Resolve related-test advice;
+   missing links expand the test set rather than exempting the page.
+2. Pass the existing selection through the existing server/pure projection;
+   expose only the selected room's canonical action and instruction. Keep
+   counts, health, truncation, all numeric limits and unselected payloads intact.
+3. Replace the inspector's owner/status callout with this safe model. Render
+   actor and instruction together, qualified detail and an accurate extra
+   decision count when present. Keep accountability and recorded recovery.
+4. Update the operations guide, then run permanent red/green regressions,
+   both web typechecks, affected guards, measured UX review and the canonical
+   integration gate. Complete independent review and protected publication.
+5. On a containing served target, verify representative actual owner rooms and
+   reload, including missing details and recovery. Label synthetic coverage
+   separately. An unavailable browser or runtime remains unrun, never passed.
+
+No phase is independently useful: selected data without the renderer still
+shows the wrong callout; the renderer without qualified data invents nothing
+but cannot restore the recorded action. Reverting this repair changes only
+the read/display path; business records, grants and recovery execution remain
+untouched. Verification reference **VERIFY-ATLAS-SELECTED-ACTION** comprises
+the permanent projection/server/inspector tests, existing health/map/native
+parity and compactness tests, canonical checks and the owner served workflow.
+
+| Acceptance ID | Objective IDs | Statement |
+|---|---|---|
+| AC-ATLAS-ACTION-1 | OBJ-ATLAS-ACTION | A recorded pending decision displays “Decision owner”, “Decide the recorded question in the room.” and its existing qualified title/condition. A second decision is counted truthfully. No fabricated actor or question. |
+| AC-ATLAS-ACTION-2 | OBJ-ATLAS-ACTION | Attention without qualified decision detail displays “Actor not recorded” and “Decision details are unavailable.” The accountable person remains separately labelled, never substituted for a confirmed action actor. |
+| AC-ATLAS-ACTION-3 | OBJ-ATLAS-ACTION | Existing executor-writeback case displays the shared assigned actor and “Record the missing result.”; delivery evidence/source cases retain their shared delivery/requesting-coworker instruction. |
+| AC-ATLAS-ACTION-4 | OBJ-ATLAS-ACTION | Existing capacity wait displays its shared assigned actor and “Waiting for capacity; progress is not confirmed.” Unknowns remain unknown. |
+| AC-ATLAS-ACTION-5 | OBJ-ATLAS-ACTION | Preserve canonical health/counts/recovery grouping, current owner-setup instruction priority, stage/detail parity, existing links and truthful history. Only the existing inspector/action projection changes; no new control/tool/table/grant/command/numeric policy. |
+| AC-ATLAS-ACTION-6 | OBJ-ATLAS-ACTION | Red/green source tests for decision, unknown, coworker/recovery/capacity and owner-setup priority; normal checks/review/protected delivery; owner portal selects representative actual rooms and reloads. Synthetic fixtures are separately labelled. |
+
 ### 3.7 Just now
 
 A short feed lists the last six state changes across the estate. A cell that changes during a refresh pulses once. The pulse respects `prefers-reduced-motion`, and a Pause control is offered (WCAG 2.2.2). Updates reuse `/api/agent/system-stream` (SSE) or fall back to a 30 s refetch of the atlas projection.
