@@ -99,4 +99,25 @@ fee comes only from the local contract, so it is counted once.
 
 ## Acceptance
 
-See the Acceptance section of BI-6361A930 (AC-1 to AC-4).
+The acceptance criteria of BI-6361A930, quoted:
+
+- AC-1: "Per plan, the Subscription costs panel shows the token-equivalent value of actual usage at per-token list prices, the fee, savings (value minus fee), and effective cost per unit with confidence."
+- AC-2: "Usage from the paired same-organization install is pulled over the federation link on the work-sync cadence, combined with local usage, attributed to the install it ran on, and the fee is counted once."
+- AC-3: "When the peer's usage cannot be pulled, the panel says the peer's usage is missing (or stale since a time) and the confidence is lowered."
+- AC-4: "Tests cover list-price valuation, a plan shared by two installs, and a plan used only on the peer."
+
+## Traceability
+
+One atomic deliverable, D1, on BI-6361A930.
+
+- Requirements: AC-1, AC-2, AC-3, AC-4.
+- Contracts: `GET /api/v1/federation/ai-usage` (spec `dpf.ai-usage.v1`);
+  PlatformConfig key `federation.ai-usage.peer.v1`.
+- Flows: the `sync-peer-ai-usage` step of demand reconciliation; the
+  Finance > AI Spend > Subscription costs panel.
+- Verification:
+  - `apps/web/lib/finance/subscription-cost-estimator.test.ts` (AC-1, AC-3, AC-4)
+  - `apps/web/lib/federation/ai-usage-exchange.test.ts` (AC-2, AC-3)
+  - `apps/web/lib/federation/ai-usage-sync.test.ts` (AC-2, AC-3)
+  - `apps/web/app/api/v1/federation/ai-usage/route.test.ts` (AC-2)
+  - `apps/web/components/finance/SubscriptionCostEstimatesPanel.test.tsx` (AC-1, AC-3)
