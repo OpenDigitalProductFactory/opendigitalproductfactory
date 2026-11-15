@@ -7,6 +7,7 @@ import { coworkerSelfTaskMandatedTools } from "@/lib/operate/scheduled-jobs/cowo
 const SCHEDULED_RUN_PREFIX = "TR-SCHED-";
 
 import { prisma } from "@dpf/db";
+import { resolveSingleInstallOrganizationId, type SingleOrganizationClient } from "@/lib/install/single-organization";
 import { coerceDataSensitivity } from "@dpf/db/principal-sensitivity";
 
 import { findApprovedAuthorityEnvelope } from "@/lib/coworker/authority-approval-envelope";
@@ -34,6 +35,8 @@ import {
 import type { CoworkerAuthorityInputResolver } from "./coworker-tool-authority-gate";
 
 type AuthorityDb = {
+  /** Read only for the single-organization seam (BI-3895E6F5); Prisma always has it. */
+  organization?: SingleOrganizationClient["organization"];
   backlogItem: {
     findUnique(args: unknown): Promise<{
       itemId: string;
@@ -101,7 +104,7 @@ export function deriveCoworkerAuthoritySubject(
   return { kind: "platform", id: "dpf" };
 }
 
-type InitiativeAuthorityDb = Pick<AuthorityDb, "backlogItem">;
+type InitiativeAuthorityDb = Pick<AuthorityDb, "backlogItem" | "organization">;
 
 type InitiativeReviewTask = {
   taskRunId: string;
@@ -231,8 +234,6 @@ export async function resolveInitiativeAuthorityContext(input: {
   toolName?: string;
   trustedBoundItemId?: string | null;
   authenticatedOrganizationId?: string | null;
-  /** Install-organization seam used only when no caller supplies an organization. */
-  resolveInstallOrganizationId?: () => Promise<string | null>;
   db: InitiativeAuthorityDb;
 }): Promise<{
   subject: CoworkerAuthoritySubject;
@@ -262,7 +263,9 @@ export async function resolveInitiativeAuthorityContext(input: {
     // a membership, fall back to the fail-closed single-organization seam: it
     // answers only when the install holds exactly one organization. This only
     // names the scope; grants, capabilities and HITL policy still decide.
-    const installOrganizationId = await input.resolveInstallOrganizationId?.() ?? null;
+    const installOrganizationId = input.db.organization
+      ? await resolveSingleInstallOrganizationId({ organization: input.db.organization })
+      : null;
     if (installOrganizationId !== item.organizationId) {
       throw new Error("Backlog-item authority requires an authenticated organization context.");
     }
@@ -506,8 +509,6 @@ export const resolveCoworkerToolAuthorityInput =
         toolName: execution.toolName,
         trustedBoundItemId,
         authenticatedOrganizationId: execution.context?.organizationId,
-        resolveInstallOrganizationId: async () => (await import("@/lib/wiki/reader-organization"))
-          .resolveReaderOrganizationId(prisma),
         db,
       }),
     ]);
