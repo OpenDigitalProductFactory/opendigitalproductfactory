@@ -20,6 +20,19 @@ Proposed decomposition: four independently shippable deliverables below, followe
 | D4 proportional admission and publication | OBJ-E2-3, OBJ-E2-4, AC-E2-5, AC-E2-6 | CT-E2-ROLLOUT, CT-E2-CLASSIFICATION | FLOW-E2-REVIEW, FLOW-E2-RELEASE | VERIFY-E2-REVIEW, VERIFY-E2-LIVE | D1–D3 qualified together |
 | Parent served acceptance | OBJ-E2-1, OBJ-E2-2, OBJ-E2-3, OBJ-E2-4, AC-E2-8 | CT-E2-ROLLOUT | FLOW-E2-RELEASE | VERIFY-E2-LIVE | All four delivered; independent outcome reconciliation |
 
+## Existing-work reconciliation
+
+Live backlog inspection on 2026-11-15 identified the following boundaries. These are candidate mappings and dependencies, not a coverage receipt or transfer of ownership.
+
+- **D2:** reuse BI-F976CBFE for reconciliation. Its triaging record describes the same incompatibility: exempt changes produce no `local_integration_ci` record, while semantic review requires one. It also includes terminal-session attribution, which must remain tracked if the cloud-import portion becomes a mapped deliverable. It had no active workroom at inspection.
+- **D4:** BI-D47C5CAC already owns proportional Failure Readiness enforcement. Its recorded condition is explicit: keep the check advisory until a server-side publisher, real-volume capacity and an emergency path exist. This plan does not authorize restoring blocking ahead of those conditions.
+- **D1:** BI-AC48D79F is Done for a narrow docs-plus-derived-artifact exemption. That is prior substrate, not proof that all consumers share one classifier. No live covering mapping has yet been established for the complete D1 contract.
+- **Policy prerequisite:** BI-31C988D5 is Done with archived WC-560CB06E and establishes cloud-primary verification for non-runtime changes. It does not establish authenticated cloud evidence import into semantic review.
+- **Separate work:** BI-D217484A owns attestation-trailer demotion, and BI-8FE563CD owns gate capacity and throughput measurement. Preserve their scope rather than silently absorbing them into E2.
+- **Historical evidence:** BI-EF8B6485 is retired. The inspected activity did not establish its retirement rationale; neither resurrection nor supersession follows from its status alone.
+
+Reconcile D2's complete acceptance scope and D4's conditions through the normal coverage writer before treating either as a child mapping. D3 remains within the combined-review objective but still needs its independently shippable mapping. The semantic search was candidate discovery, not proof that no other overlapping work exists.
+
 ## Preconditions before code
 
 1. Obtain live BI mappings for D1–D4 through existing backlog discovery, then immutable plan coverage and independent plan review. Each child owns one branch/PR and inherits only the current approved scope through the existing coverage contract.
