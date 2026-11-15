@@ -2,6 +2,84 @@
 status: draft
 ---
 # Recorded approval failure recovery
+
+## Saved shadow-report readback — BI-B0BB2D60, 15 November 2026
+
+This successor extends CT-APR-BOUND-EXEC/READ/PRESENT and the existing typed
+projection selected by DI-D71AABE80783. It does not reopen runtime reconciliation,
+execute an approval or expose generic command output. The current exact read
+`cmwh1tvte00sc0er1fmi634lm` is already executed, but native readback returns
+`operation-unsupported`; the earlier `cmwgvolsf00np0el7d6e23tm9` has the same
+gap. Neither command may be replayed to recover its saved result.
+
+**OBJ-SR-1:** The owner and their admitted assistant can inspect the original
+saved service-convergence diagnostic through the existing result card/API/MCP.
+**OBJ-SR-2:** A saved shadow classification remains separate from current host
+state, recovery permission, D4 completion and original D6 settlement.
+
+Research receipt `initiative-5b705b80-c997-4d51-8b48-439a14acf8ae` binds named
+source `23e2d5e4720d717f0220f216da40336342c0c900` in WC-01969A53. The prior
+unscoped research write was refused CANONICAL_DESIGN_AMBIGUOUS and was not
+retried unchanged. The room now binds the actual item/source; no report bytes
+have been retrieved or claimed verified during this inquiry.
+
+### Ordered atomic fix
+
+1. Claim the existing approval evidence/outcome/store/card, localized copy,
+   focused tests, user guide and a small pure report parser. Resolve impact
+   tests before Red. Fail regressions for this exact owned saved operation,
+   missing/mismatched binding, revoked current platform access, ambiguous
+   execution, wrong command, nonzero failure, malformed/oversized/truncated
+   report, unsafe fields and owner reload. Preserve provider/runtime/handoff
+   controls and assert that no executor, shell or host-file reader runs.
+2. **CT-SR-SAVED:** Reuse the unique original execution selector. Admit only
+   `admin_run_command` with the exact literal command
+   `docker compose exec -T portal cat /dpf-state/service-converge-outcome.json`.
+   Current `manage_platform` authority is required in addition to existing
+   owner/assistant admission. Verify the stored result agrees with the actual
+   execution, exact command and successful zero exit; no current/latest file
+   may substitute for it. Keep other admin commands unsupported.
+3. Parse only bounded strict JSON below the producer's 15,000-character cap:
+   mode `shadow`, full target SHA, valid nonfuture report time, closed outcome,
+   and the seven existing classification arrays. Validate bounded service
+   identifiers, change hashes and bind entries; reject contradictory groups.
+   Project only target/time/outcome and classified service names. Raw command,
+   stdout/stderr, arguments, hashes, addresses and errors stay server-side.
+   `current` does not mean healthy: the producer tracks bind drift and
+   unclassified services separately. Do not infer current-install equivalence.
+4. **FLOW-SR-OWNED:** Share the additive typed observation through the existing
+   owned result store, exact API, caller-scoped MCP and existing Inbox card.
+   Show the shadow-only limitation and recorded target/time, with groups in
+   the existing details disclosure. No new route, control, approval, retry,
+   grant, persistence model or runtime action. Missing or conflicting evidence
+   remains unproven; an unsupported command retains existing presentation.
+5. **VERIFY-SR-READBACK:** Run meaningful parser/binding/access/store/card tests,
+   both web typechecks and impact guards, then the canonical verification and
+   independent review required by current delivery policy. Land through the
+   protected PR queue. On the containing served portal, inspect the exact
+   already-executed envelope as the owner, expand its saved details and reload;
+   read the same native projection through MCP. Do not reissue a diagnostic.
+
+The additive observation is a deployment contract: old consumers ignore the
+optional field and existing provider/runtime/handoff shapes stay compatible.
+New readers preserve unsupported/unproven absence against older servers. No
+stored record is rewritten. Rollback is a protected source revert that removes
+only this read projection; execution and approval history remain intact.
+
+### Backlog coverage
+
+One atomic deliverable under BI-B0BB2D60 maps OBJ-SR-1/OBJ-SR-2,
+CT-SR-SAVED, FLOW-SR-OWNED and VERIFY-SR-READBACK. Parser, exact binding,
+shared presentation and tests are dependent internal steps; none independently
+delivers safe owner readback. Initial immutable coverage is recorded before
+implementation admission and refreshed for the final design in DPF.
+
+Main risks are unrelated-output disclosure, false health/recovery claims,
+authorization drift and ambiguous/truncated reports. Closed schema/projection,
+current access checks, original binding and no-execution tests address those
+risks. Unknown original effects remain unknown. Actual report classifications,
+owner UI and D4/D6 acceptance are pending until their own evidence exists.
+
 Backlog: BI-A83A4188. Workroom: WC-B7FF346F.
 Extends [approval cards and authorization](2026-09-01-approval-cards-recommendation-versus-authorization-design.md), especially its recorded failed-outcome contract.
 
