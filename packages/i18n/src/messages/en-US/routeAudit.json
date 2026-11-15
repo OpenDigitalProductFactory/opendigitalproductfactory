@@ -1,0 +1,25 @@
+{
+  "lowConfidence": {
+    "heading": "Ran with low confidence",
+    "belowFloor": "No model met the quality bar; the best available ran.",
+    "noChoice": "Only one model available — nothing competed.",
+    "fallback": "A fallback ran, not the ranked choice."
+  },
+  "callParameters": {
+    "heading": "How it was called",
+    "providerDefaults": "Provider defaults — nothing set.",
+    "outputCeiling": "Output ceiling:",
+    "reasoningLabel": "Reasoning:",
+    "reasoningOn": "on",
+    "reasoningBudget": "({$tokens} tokens)",
+    "jsonConstrained": "JSON constrained",
+    "recipe": "Recipe:",
+    "effortUnexpressed": "Asked for extended reasoning. This model has no way to accept it, so it ran without.",
+    "dropped": "Not accepted by this model: {$names}.",
+    "temperature": "Temperature",
+    "topP": "Top-p",
+    "topK": "Top-k",
+    "minP": "Min-p",
+    "repeatPenalty": "Repeat penalty"
+  }
+}
