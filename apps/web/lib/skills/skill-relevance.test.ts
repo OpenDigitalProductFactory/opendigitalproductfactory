@@ -128,7 +128,11 @@ describe("skill-eligibility ratchet (BI-8AD9D018, corrected by BI-4B0C27D4)", ()
     //    inputs, outputs and authority boundary that service already declares.
     //    Additive capability, not drift: the service was already published, so
     //    this makes an existing promise real rather than adding a new one.
-    "build-specialist": 30,
+    // +1 each: the standing craft-stewardship skill their acumen room shape
+    //    (cadence: "standing") already declared and neither had. build-specialist's
+    //    cadence axis had been WAIVED as event-triggered, which that shape contradicts;
+    //    the waiver is removed in the same change.
+    "build-specialist": 31,
     // 9 -> 10: compliance-requirements-review was added to back
     // svc-compliance-pci-requirements, whose backingSkillId resolved to nothing
     // (BI-5C1978C7) — an advertised service with no skill behind it. The raise is
@@ -159,7 +163,7 @@ describe("skill-eligibility ratchet (BI-8AD9D018, corrected by BI-4B0C27D4)", ()
     // axis asked what tools and skills the role needs, and neither had an answer
     // authored for it (BI-4CE4F52F).
     "change-reviewer": 7,
-    "security-engineer": 7,
+    "security-engineer": 8,
     // These five had no entry, so the ratchet read them as 0. Each now holds
     // exactly one skill of its own on top of the wildcard tax (BI-4CE4F52F).
     bookkeeper: 7,

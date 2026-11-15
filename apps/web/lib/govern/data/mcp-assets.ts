@@ -34,4 +34,25 @@ export const MCP_ASSETS: readonly DataAssetDefinition[] = [
     classification: CLASSIFICATION,
     fields: [],
   },
+  {
+    // BI-ED52AB82: a connected MCP client's subscription to one Work Room
+    // resource. Keyed by the auth context (OAuth refresh family or credential),
+    // the room URI and the room's work item; it holds no message content and
+    // lapses a day after the client last subscribed or listened.
+    id: "data:mcp-resource-subscription",
+    physical: { prismaModel: "McpResourceSubscription" },
+    domain: "platform-operations",
+    ownerRole: "platform-operator",
+    stewardRole: "data-steward",
+    categories: ["configuration"],
+    sensitivity: "internal",
+    criticality: "low",
+    subjectLocators: [],
+    lifecycleClass: "ephemeral",
+    purposeCapabilities: ["platform-operations"],
+    residencyClass: "local-only",
+    projectionClass: "structure",
+    classification: { ...CLASSIFICATION, effectiveFrom: "2026-11-12" },
+    fields: [],
+  },
 ];

@@ -115,7 +115,7 @@ export function buildNetworkTopologyModel(args: {
       },
     });
     relationships.push({ fromKey: NETWORK_HOSTS_KEY, toKey: key, relSlug: "contains" });
-    crossLayerRelationships.push({ fromKey: key, toKey: EDGE_NODE_MODEL_KEY, relSlug: "traces" });
+    crossLayerRelationships.push({ fromKey: key, toKey: EDGE_NODE_MODEL_KEY, relSlug: "traces", traceKind: "instance-of" });
   }
 
   const known = new Set(args.entities.map((e) => e.entityKey));
@@ -138,7 +138,7 @@ export function buildNetworkTopologyModel(args: {
       },
     });
     relationships.push({ fromKey: NETWORK_DEVICES_KEY, toKey: key, relSlug: "contains" });
-    crossLayerRelationships.push({ fromKey: key, toKey: INVENTORY_ENTITY_MODEL_KEY, relSlug: "traces" });
+    crossLayerRelationships.push({ fromKey: key, toKey: INVENTORY_ENTITY_MODEL_KEY, relSlug: "traces", traceKind: "instance-of" });
   }
 
   // Inventory dependency edges — only when both endpoints were projected.

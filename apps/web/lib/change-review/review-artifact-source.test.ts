@@ -4,7 +4,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { parseReviewArtifactSource, readReviewArtifactFromSource } from "./review-artifact-source";
+import { parseReviewArtifactSource, readCommitTree, readReviewArtifactFromSource } from "./review-artifact-source";
 
 let repo: string;
 let base: string;
@@ -89,5 +89,21 @@ describe("parseReviewArtifactSource", () => {
       { baseSha: "abc", headSha: "b".repeat(40) }, { baseSha: "a".repeat(40), headSha: "b".repeat(40), extra: 1 }]) {
       expect(parseReviewArtifactSource(value)).toBeNull();
     }
+  });
+});
+
+// BI-7430A9CC: the evidence resolver compares a reused local-CI record's tree
+// with the tree of the Workroom head, read from this install's own checkout.
+describe("readCommitTree", () => {
+  it("reads the same tree for a head rebuilt with identical content", async () => {
+    const rebuilt = out("commit-tree", headTree, "-p", base, "-m", "head, re-signed");
+    expect(rebuilt).not.toBe(head);
+    expect(await readCommitTree(rebuilt, { roots: [repo] })).toBe(headTree);
+  });
+  it("returns null when no checkout holds the commit", async () => {
+    expect(await readCommitTree("f".repeat(40), { roots: [repo] })).toBeNull();
+  });
+  it("refuses anything that is not a full commit id", async () => {
+    expect(await readCommitTree("HEAD", { roots: [repo] })).toBeNull();
   });
 });

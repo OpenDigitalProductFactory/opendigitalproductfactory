@@ -58,18 +58,18 @@ function exhaustedSuggestion(params: {
   cause?: DowngradeCause | null;
 }): string {
   if (params.downgradeReason === "provider-unavailable") {
-    return "Reconnecting or restoring that provider at Platform > AI > Providers unlocks the work I'm built for. Otherwise, try a narrower question.";
+    return "The provider connection needs review at Platform > AI > Providers before this work can continue. Check the existing result and any effects before another attempt.";
   }
   if (params.downgradeReason !== "not-eligible") {
-    return "Try the same question again, or break it into a smaller piece.";
+    return "The existing result and any effects need to be checked before this work can continue.";
   }
   switch (params.cause) {
     case "residency":
     case "clearance":
       // Nothing the owner can retype changes a data-boundary decision.
-      return "This is a data-handling rule, not a size limit — rewording or shortening won't change it. Asking the same thing somewhere that doesn't carry confidential data will route to the stronger model.";
+      return "This is a data-handling rule, not a size limit — rewording or shortening won't change it. The provider and data-handling requirements need review before this work can continue.";
     case "rate-limit":
-      return "The stronger model was at its rate limit; the same question in a few minutes should reach it.";
+      return "The stronger model was at its rate limit. Its availability and the existing result need to be checked before this work can continue.";
     case "context-window":
       return "This request was longer than the stronger model's context window, so a shorter one will route back to it.";
     case "capability":

@@ -79,6 +79,21 @@ A standing room declares its activity shape by passing `workShape` to `create_wo
 `standing-operations-shapes.ts`. Like the collaboration shape, it persists as a `scopeClaims`
 entry with no migration, and is read back by `readWorkShapeClaim` / `resolveWorkShapeClaim`.
 
+Registry order is part of this read contract, not formatting. Existing definitions retain their
+family order because list, migration-proof and signature consumers observe `listWorkShapes()` in
+that order. A newly ratified standing shape may be declared with its family, but it is appended
+after the pre-existing registry unless a separately governed migration intentionally changes the
+order. `backlog-steward-watch@1.0.0` follows that rule: `work-shapes.ts` separates it from the
+pre-existing standing set and appends that same definition after the existing source-inquiry
+shapes. This makes the addition observable without silently reordering established definitions.
+
+That backlog-steward shape is deliberately advisory. Its `observe` and `reconcile` stages attach
+only backlog, epic and duplicate-analysis reads; they record coverage and proposed dispositions,
+but hold no backlog writer. The accountable `role:backlog-owner` decides proposals under the
+existing `backlog-admission` decision scope. Accepted corrections then use the existing governed
+backlog action lane. A cadence grant therefore cannot turn similarity, placement or peer-system
+evidence into an unattended mutation.
+
 The same registry carries the five **delivery shapes** (`delivery-shapes.ts`, BI-B90F7CBB,
 design `2026-09-02-work-shape-taxonomy-and-proportional-gates-design.md` §3.0):
 `delivery-break-fix@1.0.0`, `delivery-small@1.0.0`, `delivery-medium@1.0.0`,

@@ -9,6 +9,8 @@ const lease = vi.hoisted(() => ({
   renewNonprodEnvironmentLease: vi.fn(),
 }));
 vi.mock("@/lib/nonprod/environment-lease", () => lease);
+const overseerView = vi.hoisted(() => ({ readOverseerQueues: vi.fn(async () => [{ environmentKey: "local-integration-ci", queue: [] }]) }));
+vi.mock("@/lib/nonprod/environment-lease-overseer-view", () => overseerView);
 const durableWait = vi.hoisted(() => ({
   checkpointNonprodLeaseWait: vi.fn(),
   settleNonprodLeaseWait: vi.fn(),
@@ -190,6 +192,8 @@ describe("nonprod-lease pack — handler behavior (delegation preserved)", () =>
     expect(res.data).toEqual({
       leases: [{ id: "L1" }],
       queued: [{ id: "L2" }],
+      // BI-218A4555: the overseer's policy-ordered view rides alongside.
+      overseer: [{ environmentKey: "local-integration-ci", queue: [] }],
     });
     expect(lease.listActiveNonprodEnvironmentLeases).toHaveBeenCalledOnce();
     expect(lease.listQueuedNonprodEnvironmentLeases).toHaveBeenCalledOnce();

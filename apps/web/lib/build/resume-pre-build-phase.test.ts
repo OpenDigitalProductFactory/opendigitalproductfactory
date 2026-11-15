@@ -60,8 +60,10 @@ vi.mock("@/lib/mcp-tools", () => ({
 const performPlanToBuildTransitionMock = vi.fn();
 const enforceReadinessMock = vi.fn();
 const healShapeMock = vi.fn();
+const reconcileReviewShapeMock = vi.fn();
 vi.mock("@/lib/build/heal-build-workroom-shape", () => ({
   healBuildWorkroomShape: (...args: unknown[]) => healShapeMock(...args),
+  reconcileReviewBuildWorkroomShape: (...args: unknown[]) => reconcileReviewShapeMock(...args),
 }));
 vi.mock("@/lib/build/build-entry-gate", () => ({
   enforceBuildInitiativeReadiness: (...args: unknown[]) => enforceReadinessMock(...args),
@@ -103,6 +105,15 @@ describe("resumePreBuildPhase (BI-9257CF19)", () => {
     createdAt: new Date(Date.now() - minutesAgo * 60_000),
   });
 
+  it("does not resume a build parked on an owner answer (BI-B6894001)", async () => {
+    findUniqueMock.mockResolvedValue({ ...incompletePlan, waitingOnOwnerSince: new Date("2026-11-14T00:00:00Z") });
+    buildActivityFindManyMock.mockResolvedValue([incompleteRow(31)]);
+    const result = await resumePreBuildPhase({ buildId: "FB-PARKED", phase: "plan", userId: "u" });
+    expect(result).toMatchObject({ kind: "skipped", reason: "waiting on an owner answer" });
+    expect(executeToolMock).not.toHaveBeenCalled();
+    expect(dispatchPlanMock).not.toHaveBeenCalled();
+  });
+
   it("backs off after an incomplete plan review, preserving the plan", async () => {
     findUniqueMock.mockResolvedValue(incompletePlan);
     buildActivityFindManyMock.mockResolvedValue([incompleteRow(5)]);
@@ -139,6 +150,7 @@ describe("resumePreBuildPhase (BI-9257CF19)", () => {
     queueBuildReviewVerificationMock.mockReset().mockResolvedValue(undefined);
     dispatchIdeateMock.mockReset().mockResolvedValue({ kind: "dispatched-success" });
     healShapeMock.mockReset().mockResolvedValue({ healed: false, detail: "delivery shape already bound" });
+    reconcileReviewShapeMock.mockReset().mockResolvedValue({ kind: "ready", healed: false, detail: "delivery shape already bound" });
     enforceReadinessMock.mockReset().mockResolvedValue({ allowed: true, message: "plan readiness allowed." });
     dispatchDesignFixMock.mockReset().mockResolvedValue({ kind: "repaired", rounds: 1 });
     dispatchPlanMock.mockReset().mockResolvedValue({ kind: "dispatched-success" });
@@ -240,6 +252,17 @@ describe("resumePreBuildPhase (BI-9257CF19)", () => {
     expect(queueBuildReviewVerificationMock).toHaveBeenCalledWith("FB-1");
     expect(findUniqueMock).not.toHaveBeenCalled(); // review path doesn't need the row
     expect(out.kind).toBe("resumed");
+    expect(reconcileReviewShapeMock).toHaveBeenCalledWith({ buildId: "FB-1" });
+    expect(healShapeMock).not.toHaveBeenCalled();
+    expect(reconcileReviewShapeMock.mock.invocationCallOrder[0]).toBeLessThan(queueBuildReviewVerificationMock.mock.invocationCallOrder[0]!);
+  });
+
+  it("does not queue review while its existing native room metadata remains held", async () => {
+    reconcileReviewShapeMock.mockResolvedValue({ kind: "held", detail: "native room ownership is ambiguous" });
+    const out = await resumePreBuildPhase({ buildId: "FB-HELD", phase: "review", userId: "u1" });
+    expect(out).toMatchObject({ kind: "skipped", phase: "review", reason: "native room ownership is ambiguous" });
+    expect(queueBuildReviewVerificationMock).not.toHaveBeenCalled();
+    expect(healShapeMock).not.toHaveBeenCalled();
   });
 
   it("re-dispatches plan generation when no plan exists yet", async () => {
@@ -838,6 +861,13 @@ describe("abandonStrandedPreBuild", () => {
     const updateArg = txUpdateMock.mock.calls[0]![0] as { data: { phase: string } };
     expect(updateArg.data.phase).toBe("abandoned");
     expect(txActivityCreateMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("never ages out a build parked on an owner answer (BI-B6894001)", async () => {
+    txFindUniqueMock.mockResolvedValue({ phase: "ideate", abandonedAt: null, waitingOnOwnerSince: new Date("2026-11-01T00:00:00Z") });
+    const ok = await abandonStrandedPreBuild({ buildId: "FB-PARKED", phase: "ideate", ageMs: 20 * 86_400_000 });
+    expect(ok).toBe(false);
+    expect(txUpdateMock).not.toHaveBeenCalled();
   });
 
   it("never throws — returns false when the row is missing", async () => {

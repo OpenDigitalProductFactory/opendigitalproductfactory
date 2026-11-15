@@ -232,8 +232,9 @@ async function loadUnlinkedMentions(
   const terms = mentionTerms(page);
   if (terms.length === 0) return [];
 
-  // A plain ILIKE over the organization-scoped pages; the trigram index of
-  // spec §4.3 is deferred to BI-FC5E4832.
+  // An ILIKE per term over the organization-scoped pages, served by the GIN
+  // trigram index WikiPage_body_trgm_idx once the table outgrows a seq scan
+  // (spec §4.3, BI-FC5E4832).
   const candidates = (await db.wikiPage.findMany({
     where: {
       AND: [

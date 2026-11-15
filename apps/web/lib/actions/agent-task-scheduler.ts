@@ -20,6 +20,7 @@ import { runConsolidationParitySteward } from "@/lib/ea/consolidation-parity-ste
 import { computeNextCronRun, isOneShotCron } from "@/lib/operate/cron-next-run";
 import { extractScheduledTaskSummary } from "./agent-task-scheduler-summary";
 import { readWorkroomStageTaskConfig } from "@/lib/scheduling/workroom-stage-task-config";
+import { coworkerSelfTaskMandatedTools } from "@/lib/operate/scheduled-jobs/coworker-self-task-mandate";
 import { formatScheduledTurnPrompt } from "./scheduled-turn-prompt";
 import {
   classifyScheduledRequiredTools, scheduledToolsNeedingPin, scheduledRunLastStatus,
@@ -41,7 +42,7 @@ import { resolveDelegatedPosture } from "@dpf/validators/workroom-policy/delegat
 import { resolveScheduledTickPlan } from "@/lib/scheduling/scheduled-work-posture.server";
 import { applyProviderRouteModelPreference } from "@/lib/ai-provider-route-context";
 import { getRequiredProceduralToolForScheduledTask } from "@/lib/operate/scheduled-jobs/scheduled-required-procedural-tool";
-import { assertScheduledReportingEligible, readScheduledReportingMode, scheduledReportingScopeDigest, scheduledReportingPrompt } from "@/lib/operate/scheduled-jobs/scheduled-reporting-contract";
+import { projectScheduledReportDiagnostic, assertScheduledReportingEligible, readScheduledReportingMode, scheduledReportingScopeDigest, scheduledReportingPrompt } from "@/lib/operate/scheduled-jobs/scheduled-reporting-contract";
 import { settleScheduledReportingRun, failScheduledReportingRun, runScheduledReportingLoop, type ScheduledReportingRunInput } from "@/lib/operate/scheduled-jobs/scheduled-reporting-run";
 import {
   PRODUCT_INTELLIGENCE_WATCH_TASK_KIND,
@@ -482,9 +483,8 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
       intentQuery: task.prompt,
     };
     let { tools, toolsForProvider, deferredTools } = await resolveAutonomousWorkTools(toolArgs);
-    const pinned = scheduledToolsNeedingPin({
-      prompt: task.prompt, attached: tools, deferred: deferredTools, taskConfig: task.taskConfig,
-    });
+    const pinned = scheduledToolsNeedingPin({ prompt: task.prompt, attached: tools, deferred: deferredTools,
+      taskConfig: task.taskConfig, cadenceTools: coworkerSelfTaskMandatedTools(task.agentId) });
     if (pinned.length > 0) {
       ({ tools, toolsForProvider, deferredTools } = await resolveAutonomousWorkTools({
         ...toolArgs, requiredToolNames: pinned,
@@ -542,7 +542,7 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
       ? await runScheduledReportingLoop([...tools, ...deferredTools], () => executeAutonomousAgenticLoop(loopInput))
       : await executeAutonomousAgenticLoop(loopInput);
     if (reportingRun) {
-      reportingRun = { ...reportingRun, content: result.content ?? "", admittedTools: [...tools, ...deferredTools], failure: result.failure };
+      reportingRun = { ...reportingRun, content: result.content ?? "", admittedTools: [...tools, ...deferredTools], failure: result.failure, diagnostic: projectScheduledReportDiagnostic("readEvidenceInspection" in result ? result.readEvidenceInspection : undefined) };
       await settleScheduledReportingRun(reportingRun);
       return;
     }

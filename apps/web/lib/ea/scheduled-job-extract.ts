@@ -96,7 +96,7 @@ export function buildSchedulingModel(
       });
       relationships.push({ fromKey: substrateKey, toKey: jobKey, relSlug: "contains" });
       // Cross-layer: this scheduled job traces to its substrate's data-model type.
-      crossLayerRelationships.push({ fromKey: jobKey, toKey: dataModelKeyFor(substrate), relSlug: "traces" });
+      crossLayerRelationships.push({ fromKey: jobKey, toKey: dataModelKeyFor(substrate), relSlug: "traces", traceKind: "instance-of" });
     }
   }
 

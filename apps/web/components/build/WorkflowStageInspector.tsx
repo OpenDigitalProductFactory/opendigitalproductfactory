@@ -1,5 +1,6 @@
 "use client";
 
+import { normalizeVerificationOutput, projectVerificationEvidence } from "@/lib/build/verification-output";
 import { useCallback, useEffect, useRef } from "react";
 import type { BuildPhase, FeatureBuildRow } from "@/lib/feature-build-types";
 import { PHASE_LABELS } from "@/lib/feature-build-types";
@@ -118,11 +119,8 @@ function getLocalIntegrationStatus(build: FeatureBuildRow): EnvironmentStatusSum
     return { status: "pending", summary: "Merged-code verification has not been recorded yet." };
   }
 
-  if (build.verificationOut.typecheckPassed && build.verificationOut.testsFailed === 0) {
-    return { status: "passed", summary: "Merged-code gate passed." };
-  }
-
-  return { status: "failed", summary: "Merged-code verification needs attention before release." };
+  const display = projectVerificationEvidence(normalizeVerificationOutput(build.verificationOut));
+  return { status: display.failed ? "failed" : display.qualified ? "passed" : "pending", summary: display.summary };
 }
 
 function getEvidenceEvents(
@@ -164,7 +162,8 @@ function getEvidenceEvents(
       source: "local-integration",
       label: "Local integration",
       summary: getVerificationSummary(build.verificationOut),
-      status: build.verificationOut.typecheckPassed && build.verificationOut.testsFailed === 0 ? "passed" : "failed",
+      status: projectVerificationEvidence(normalizeVerificationOutput(build.verificationOut)).failed ? "failed"
+        : projectVerificationEvidence(normalizeVerificationOutput(build.verificationOut)).qualified ? "passed" : "recorded",
       timestamp: build.verificationOut.timestamp,
     });
   }
@@ -188,15 +187,7 @@ function getEvidenceEvents(
 }
 
 function getVerificationSummary(verification: NonNullable<FeatureBuildRow["verificationOut"]>): string {
-  if (verification.typecheckPassed && verification.testsFailed === 0) {
-    return "Merged-code gate passed.";
-  }
-
-  if (!verification.typecheckPassed) {
-    return "Typecheck needs attention before release.";
-  }
-
-  return `${verification.testsFailed} test warning${verification.testsFailed === 1 ? "" : "s"} need review.`;
+  return projectVerificationEvidence(normalizeVerificationOutput(verification)).summary;
 }
 
 function buildStudioEngineLabel(provider: string | null): string {

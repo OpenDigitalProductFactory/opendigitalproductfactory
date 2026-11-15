@@ -43,6 +43,21 @@
     "task-waiting-again": "The task continued and needs another decision. Review the next request in your Inbox.",
     "expired": "The approval window closed before execution. Your assistant must check the target before sending a fresh request."
   },
+  "runtime": {
+    "unproven": "The original request did not complete. Its effect on services is not confirmed.",
+    "inspect": "Your assistant must reconcile the original result before another attempt.",
+    "recovery": "The platform recorded that this change still needs recovery. Restoration is not confirmed.",
+    "inspectRecovery": "Your assistant must reconcile the original recovery before any new change.",
+    "verified": "The original request completed and its saved host receipt was verified.",
+    "continue": "Your assistant can continue from this recorded result.",
+    "appliedPending": "The service change was recorded, but completion is still being reconciled.",
+    "settingsChanged": "The request could not verify that the saved settings still matched. Its effect on services is not confirmed.",
+    "incomplete": "The original change is not settled. Your assistant must check its recorded progress.",
+    "reportedCompletion": "The request reported completion, but its host result has not been verified.",
+    "evidence": "Original runtime execution",
+    "hostUnproven": "Host result not verified",
+    "hostVerified": "Historical host receipt verified"
+  },
   "failure": {
     "handoff-transaction-required": {
       "reason": "The handoff stopped before transfer. The platform's required transfer check did not pass.",

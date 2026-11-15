@@ -1,10 +1,13 @@
 import { createHash } from "node:crypto";
 import { readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
+import { redactDiagnosticEvidenceText } from "../shared/diagnostic-evidence-redaction";
+import { excerptHeadAndTail } from "../shared/excerpt-head-and-tail";
 import {
   PROMOTER_DOCKERFILE,
   stageMinimalPromoterBuildContext,
 } from "./promoter-build-context";
+import { retryOnTransientNetwork, summarizeBuildOutput } from "./transient-network";
 
 export const SELF_UPGRADE_CALLER_PROTOCOL_VERSION = 2;
 export const PROMOTER_CONTRACT_SCHEMA_VERSION = 1;
@@ -38,15 +41,33 @@ function isLocalPromoterReference(image: string): boolean {
   return image === DEFAULT_PROMOTER_IMAGE || /^dpf-promoter:[A-Za-z0-9._-]+$/.test(image);
 }
 
-function requireDockerSuccess(result: ArtifactDockerResult, operation: string): string {
+function requireDockerSuccess(result: ArtifactDockerResult, operation: string, includeCauseSummary = false): string {
   if (result.exitCode !== 0) {
-    throw new Error(`${operation}_failed: ${(result.stderr || result.stdout).trim().slice(-500)}`);
+    const streams = ([["stderr", result.stderr], ["stdout", result.stdout]] as const)
+      .filter(([, text]) => text.trim())
+      .map(([label, text]) => [label, redactDiagnosticEvidenceText(text.trim(), {
+        credentialAssignments: true,
+      })] as const);
+    // Preserve the retry repair's buried causal lines without exposing raw
+    // credentials or displacing either stream's bounded beginning and end.
+    const cause = includeCauseSummary ? summarizeBuildOutput(streams.map(([, text]) => text).join("\n")) : "";
+    const summary = cause ? `Cause summary:\n${cause}\n` : "";
+    // Reserve room for labels and the shared excerpt helper's omission markers.
+    // Redact whole streams before slicing: a token can span an excerpt boundary.
+    const budget = Math.floor((12_000 - 128 - summary.length) / Math.max(streams.length, 1));
+    const output = streams.map(([label, text]) =>
+      `--- ${label} ---\n${excerptHeadAndTail(text, budget)}`,
+    ).join("\n");
+    throw new Error(`${operation}_failed: exit code ${result.exitCode}\n${summary}${output || "No Docker diagnostic output was captured; cause unknown."}`);
   }
   return result.stdout;
 }
 
+const CANDIDATE_BUILD_NETWORK_ATTEMPTS = 3;
+const CANDIDATE_BUILD_NETWORK_RETRY_DELAY_MS = 15_000;
+
 export async function buildCandidatePromoterArtifactImage(
-  params: { sourcePath: string; targetSha: string; promoterImage?: string },
+  params: { sourcePath: string; targetSha: string; promoterImage?: string; networkRetryDelayMs?: number },
   runDocker: ArtifactDockerRunner,
 ): Promise<string> {
   if ((params.promoterImage?.trim() || DEFAULT_PROMOTER_IMAGE) !== DEFAULT_PROMOTER_IMAGE) {
@@ -65,13 +86,24 @@ export async function buildCandidatePromoterArtifactImage(
   // instead of the portal's baked-in /promoter/ layout.
   const contextDir = await stageMinimalPromoterBuildContext(params.sourcePath);
   try {
-    requireDockerSuccess(await runDocker([
+    // A network blip during the base-image pull or `apk add` must not fail the
+    // upgrade (BI-7FFF5CB0); only network-caused failures are retried.
+    const result = await retryOnTransientNetwork(() => runDocker([
       "buildx", "build", "--load",
       "-f", join(contextDir, PROMOTER_DOCKERFILE), "-t", targetImage,
       "--build-arg", `DPF_PROMOTER_SOURCE_SHA=${params.targetSha}`,
       "--build-arg", `DPF_PROMOTER_CONTRACT_DIGEST=${contractDigest}`,
       contextDir,
-    ]), "promoter_candidate_build");
+    ]), {
+      failed: (r) => r.exitCode !== 0,
+      output: (r) => `${r.stderr}\n${r.stdout}`,
+      attempts: CANDIDATE_BUILD_NETWORK_ATTEMPTS,
+      baseDelayMs: params.networkRetryDelayMs ?? CANDIDATE_BUILD_NETWORK_RETRY_DELAY_MS,
+      onRetry: (attempt, cause) => console.warn(
+        `[self-upgrade] candidate promoter build hit a network failure (attempt ${attempt}/${CANDIDATE_BUILD_NETWORK_ATTEMPTS}); retrying: ${excerptHeadAndTail(redactDiagnosticEvidenceText(cause, { credentialAssignments: true }), 1200)}`,
+      ),
+    });
+    requireDockerSuccess(result, "promoter_candidate_build", true);
   } finally {
     await rm(contextDir, { recursive: true, force: true });
   }

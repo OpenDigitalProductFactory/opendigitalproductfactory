@@ -236,6 +236,29 @@ describe("structural hierarchy snapshot (rev 2 D2)", () => {
     expect(normaliseSnapshot(manyRows)).toBe(normaliseSnapshot(oneRow));
   });
 
+  it("coalesces adjacent technical attribution paragraphs without crossing the evidence link", () => {
+    const disclosure = [
+      "- group:",
+      '  - button "Technical evidence"',
+      "  - paragraph:",
+      '    - text: "codex-desktop"',
+      "  - paragraph:",
+      '    - text: "A2A: caller → callee"',
+      '  - link "Open evidence"',
+      "  - paragraph:",
+      '    - text: "Recovery condition"',
+    ].join("\n");
+    expect(normaliseSnapshot(disclosure)).toBe([
+      "- group",
+      "  - button",
+      "  - paragraph",
+      "    - text",
+      "  - link",
+      "  - paragraph",
+      "    - text",
+    ].join("\n"));
+  });
+
   it("stays sensitive to the hierarchy questions the gate exists to ask", () => {
     const n = normaliseSnapshot;
     // A new KIND of node inside a row (e.g. an action button appears).

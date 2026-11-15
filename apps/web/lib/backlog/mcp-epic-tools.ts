@@ -239,6 +239,12 @@ function ownerPayload(owner: EpicOwner | null | undefined) {
   };
 }
 
+/** BI-A63A9476: the description's entity ids become MENTIONS edges. */
+async function syncEpicMentions(epicId: string, userId: string, agentId: string | undefined): Promise<void> {
+  const { referenceWriter, syncEpicReferences } = await import("@/lib/references/sync-references");
+  await syncEpicReferences({ epicId }, referenceWriter({ userId, agentId }));
+}
+
 export async function createEpicTool(
   params: Record<string, unknown>,
   userId: string,
@@ -348,6 +354,7 @@ export async function createEpicTool(
     priority,
     owner: ownerResult.owner,
   });
+  await syncEpicMentions(epic.epicId, userId, context?.agentId);
 
   return {
     success: true,
@@ -543,6 +550,9 @@ export async function updateEpicTool(
       : existing.lifecycleTags,
     priority: priorityResult.priority ?? existing.priority ?? undefined,
   });
+  if (typeof data["description"] === "string" || data["description"] === null) {
+    await syncEpicMentions(updated.epicId, userId, context?.agentId);
+  }
 
   return {
     success: true,

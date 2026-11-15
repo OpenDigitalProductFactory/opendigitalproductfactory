@@ -247,6 +247,8 @@ export interface WorkroomView {
   completedCycles: WorkroomCycleView[];
   participants: WorkroomParticipantView[];
   activity: WorkroomActivityView[];
+  /** BI-A63A9476: hrefs of the readable entity ids in the activity messages, resolved for this reader. */
+  entityRefHrefs?: Record<string, string>;
   work: WorkroomWorkView;
   context: WorkroomContextView;
   receipts: ReceiptEnvelope[];

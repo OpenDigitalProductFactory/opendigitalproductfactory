@@ -196,6 +196,28 @@ describe("applySysmlModel", () => {
     expect(xcall).toBeFalsy(); // no phantom edge created
   });
 
+  it("refuses a cross-layer traces edge that does not say what it records, and stores the kind it does (BI-52280538)", async () => {
+    const tracesModel: SysmlDesiredModel = { ...crossModel, relTypeSlugs: ["contains", "traces"] };
+    const refused = makeDb([], { crossTargets: { "other:logical": "el-other" } });
+    const r = await applySysmlModel(
+      { ...tracesModel, crossLayerRelationships: [{ fromKey: "x:a", toKey: "other:logical", relSlug: "traces" }] },
+      { db: refused as never },
+    );
+    expect(r.crossLayerUnresolved).toBe(1);
+    expect(r.crossLayerLinked).toBe(0);
+
+    const kept = makeDb([], { crossTargets: { "other:logical": "el-other" } });
+    const ok = await applySysmlModel(
+      { ...tracesModel, crossLayerRelationships: [{ fromKey: "x:a", toKey: "other:logical", relSlug: "traces", traceKind: "instance-of" }] },
+      { db: kept as never },
+    );
+    expect(ok.crossLayerLinked).toBe(1);
+    const xcall = kept.eaRelationship.create.mock.calls.find(
+      ([a]) => (a as { data: { toElementId: string } }).data.toElementId === "el-other",
+    );
+    expect((xcall![0] as { data: { properties: { traceKind: string } } }).data.properties.traceKind).toBe("instance-of");
+  });
+
   it("is idempotent for cross-layer edges: counts linked but creates no duplicate", async () => {
     const db = makeDb([], { crossTargets: { "other:logical": "el-other" } });
     db.eaRelationship.findFirst.mockResolvedValue({ id: "rx" }); // every edge already present

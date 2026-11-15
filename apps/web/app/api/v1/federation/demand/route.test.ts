@@ -1,21 +1,27 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { NextRequest } from "next/server";
 
-const { mockResolveAuth, mockHandleIncomingDemand, mockHandleIncomingDemandResponse, mockHandleIncomingDisposition, mockHandleIncomingPosture, mockResolveIdentity } = vi.hoisted(() => ({
+const { mockHandleWorkClaim, mockResolveAuth, mockHandleIncomingDemand, mockHandleIncomingDemandResponse, mockHandleIncomingDisposition, mockHandleIncomingPosture, mockResolveIdentity, mockHandleIncomingGuidance, mockRecordVoteTally } = vi.hoisted(() => ({
+  mockRecordVoteTally: vi.fn(),
+  mockHandleIncomingGuidance: vi.fn(),
   mockResolveAuth: vi.fn(),
   mockHandleIncomingDemand: vi.fn(),
   mockHandleIncomingDemandResponse: vi.fn(),
   mockHandleIncomingDisposition: vi.fn(),
   mockHandleIncomingPosture: vi.fn(),
   mockResolveIdentity: vi.fn(),
+  mockHandleWorkClaim: vi.fn(),
 }));
 
 vi.mock("@/lib/auth/federation-link-token", () => ({ resolveFederationLinkAuth: mockResolveAuth }));
 vi.mock("@/lib/federation/demand-exchange", () => ({ handleIncomingDemand: mockHandleIncomingDemand }));
 vi.mock("@/lib/federation/demand-response", () => ({ handleIncomingDemandResponse: mockHandleIncomingDemandResponse }));
+vi.mock("@/lib/ecosystem/vote-tally", () => ({ tallyAfterInboundVote: mockRecordVoteTally }));
 vi.mock("@/lib/federation/demand-identity", () => ({ resolveFederationIdentity: mockResolveIdentity }));
 vi.mock("@/lib/federation/demand-disposition", () => ({ handleIncomingDemandDisposition: mockHandleIncomingDisposition }));
 vi.mock("@/lib/federation/operational-posture-exchange", () => ({ handleIncomingOperationalPosture: mockHandleIncomingPosture }));
+vi.mock("@/lib/federation/guidance-snapshot-exchange", () => ({ handleIncomingGuidanceSnapshot: mockHandleIncomingGuidance }));
+vi.mock("@/lib/federation/work-claim-exchange.server", () => ({ handleWorkClaimFromPeer: mockHandleWorkClaim }));
 
 import { POST } from "./route";
 
@@ -101,6 +107,30 @@ describe("POST /api/v1/federation/demand", () => {
     expect(mockHandleIncomingDemand).not.toHaveBeenCalled();
   });
 
+  it("counts a vote: recomputes the tally for the item an interest is about (BI-626A4ECA)", async () => {
+    mockHandleIncomingDemandResponse.mockResolvedValueOnce({ action: "created", responseId: "rsp_x", localRecordRef: "BI-LOCAL-1" });
+    mockRecordVoteTally.mockResolvedValueOnce({ written: true });
+    const response = await POST(request("dpf.demand.interest-recorded", { specVersion: "dpf.demand-response/1" }));
+    expect(response.status).toBe(202);
+    expect(mockRecordVoteTally).toHaveBeenCalledWith(expect.anything(), "BI-LOCAL-1");
+  });
+
+  it("still accepts the delivery when the tally fails — the response is already stored", async () => {
+    mockHandleIncomingDemandResponse.mockResolvedValueOnce({ action: "updated", responseId: "rsp_x", localRecordRef: "BI-LOCAL-1" });
+    mockRecordVoteTally.mockRejectedValueOnce(new Error("db busy"));
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const response = await POST(request("dpf.demand.interest-recorded", { specVersion: "dpf.demand-response/1" }));
+    expect(response.status).toBe(202);
+    expect(warn).toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
+  it("does not recount on a replayed response", async () => {
+    mockHandleIncomingDemandResponse.mockResolvedValueOnce({ action: "noop", responseId: "rsp_x", localRecordRef: "BI-LOCAL-1" });
+    await POST(request("dpf.demand.interest-recorded", { specVersion: "dpf.demand-response/1" }));
+    expect(mockRecordVoteTally).not.toHaveBeenCalled();
+  });
+
   it("routes founder disposition notices over the same authenticated channel", async () => {
     const notice = { specVersion: "dpf.demand-disposition/1", noticeId: "fdn_opaque" };
     const response = await POST(request("dpf.demand.dispositioned", notice));
@@ -164,5 +194,79 @@ describe("POST /api/v1/federation/inbox — operational posture (BI-648F01A0)", 
 
     mockHandleIncomingPosture.mockResolvedValueOnce({ action: "conflict", mirrorId: "fopm_1", originVersion: 9, reason: "origin-version-not-advancing" });
     expect((await POST(request("dpf.operational-posture.reported", posture))).status).toBe(409);
+  });
+});
+
+describe("POST /api/v1/federation/demand — guidance snapshot (BI-1B165D02)", () => {
+  const snapshot = { specVersion: "dpf.guidance-snapshot/1" };
+  const did = `did_${"c".repeat(64)}`;
+
+  it("hands a same-organization peer's snapshot to the guidance handler with this installation's DID", async () => {
+    mockResolveAuth.mockResolvedValue({ ok: true, linkId: "link_1", role: "same-org-peer" });
+    mockResolveIdentity.mockResolvedValue({ installationId: "inst_receiver", deviceId: did });
+    mockHandleIncomingGuidance.mockResolvedValue({ action: "created", originVersion: 10 });
+
+    const response = await POST(request("dpf.guidance-snapshot.published", snapshot));
+
+    expect(response.status).toBe(202);
+    expect(await response.json()).toMatchObject({ originVersion: 10 });
+    expect(mockHandleIncomingGuidance).toHaveBeenCalledWith(
+      expect.anything(), "link_1", snapshot, expect.objectContaining({ selfInstallationDid: did }),
+    );
+  });
+
+  it("refuses a snapshot from any other kind of link", async () => {
+    mockResolveAuth.mockResolvedValue({ ok: true, linkId: "link_1", role: "managed-by" });
+    const response = await POST(request("dpf.guidance-snapshot.published", snapshot));
+    expect(response.status).toBe(403);
+    expect(mockHandleIncomingGuidance).not.toHaveBeenCalled();
+  });
+
+  it("maps refused, rejected and older-version outcomes to 403, 422 and 409", async () => {
+    mockResolveAuth.mockResolvedValue({ ok: true, linkId: "link_1", role: "same-org-peer" });
+    mockResolveIdentity.mockResolvedValue({ installationId: "inst_receiver", deviceId: did });
+    const cases: Array<[unknown, number]> = [
+      [{ action: "refused", reason: "link-not-authority" }, 403],
+      [{ action: "rejected", reason: "bad-signature" }, 422],
+      [{ action: "conflict", reason: "version-not-advancing", originVersion: 10 }, 409],
+    ];
+    for (const [receipt, status] of cases) {
+      mockHandleIncomingGuidance.mockResolvedValueOnce(receipt);
+      expect((await POST(request("dpf.guidance-snapshot.published", snapshot))).status).toBe(status);
+    }
+  });
+});
+
+describe("POST /api/v1/federation/demand — claim at the item's home (BI-30EDDB7F)", () => {
+  async function claim() {
+    const { computeDemandResponseDigest } = await import("@dpf/db/federated-demand-contract");
+    const value = {
+      specVersion: "dpf.demand-response/1", responseId: "rsp_claim", envelopeId: "work:BI-HOME",
+      originInstallationId: "inst_receiver", originRecordRef: "BI-HOME", responseKind: "help-offer",
+      responderAttribution: "organization", createdAt: "2026-11-12T00:00:00.000Z", payloadDigest: "sha256:pending",
+      workClaim: { itemId: "BI-HOME", action: "claim", requesterInstallationId: "inst_dev", requesterWorkroomId: "WC-DEV", repositoryFullName: "org/repo", headBranch: "feat/x" },
+    };
+    return { ...value, payloadDigest: computeDemandResponseDigest(value as never) };
+  }
+
+  it("returns the home's decision in the acknowledgement, a refusal included", async () => {
+    const data = await claim();
+    for (const decision of [
+      { decision: "granted", homeWorkroomId: "WC-HOME", leaseExpiresAt: "2026-11-18T00:00:00.000Z" },
+      { decision: "refused", reason: "held-elsewhere", holder: null, message: "held" },
+    ]) {
+      mockHandleWorkClaim.mockResolvedValueOnce(decision);
+      const response = await POST(request("dpf.demand.help-offered", data));
+      expect(response.status).toBe(200);
+      expect(await response.json()).toMatchObject({ ok: true, responseId: "rsp_claim", workClaim: decision });
+    }
+    expect(mockHandleWorkClaim).toHaveBeenCalledWith("link_1", data);
+    expect(mockHandleIncomingDemandResponse).not.toHaveBeenCalled();
+  });
+
+  it("rejects a malformed claim request without deciding it", async () => {
+    const response = await POST(request("dpf.demand.help-offered", { ...(await claim()), originRecordRef: "BI-OTHER" }));
+    expect(response.status).toBe(422);
+    expect(mockHandleWorkClaim).not.toHaveBeenCalled();
   });
 });

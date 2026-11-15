@@ -5,13 +5,20 @@
 // existed, Trip rows could be written by nothing and read by nobody.
 
 import { prisma } from "@dpf/db";
+import { namespaceMessages } from "@dpf/i18n";
 import { redirect } from "next/navigation";
+import { MessagesProvider } from "@/components/i18n/MessagesProvider";
+import { formatInstant } from "@/lib/datetime";
+import { getLocaleContext } from "@/lib/i18n/locale-context.server";
+import { formatMoney } from "@/lib/org-locale/org-locale";
+import { can } from "@/lib/permissions";
 import { auth } from "@/lib/auth";
 import { getOrgSettings } from "@/lib/actions/currency";
 import { getCurrencySymbol } from "@/lib/currency-symbol";
 import { FinanceTabNav } from "@/components/finance/FinanceTabNav";
 import { metresToMiles } from "@/lib/mileage/rates";
 import { MileageTripsTable, type MileageTripRow } from "./MileageTripsTable";
+import { MileageEntryPanel, type CurrentRateView } from "./MileageEntryPanel";
 import type { TripClassification } from "@/lib/mileage/classification";
 
 export default async function MileagePage() {
@@ -75,6 +82,34 @@ export default async function MileagePage() {
 
   const unclassified = rows.filter((r) => r.classification === "unclassified").length;
 
+  // BI-3DD6EFEB: the company rate in force today, formatted here so the client
+  // never formats money or dates. Calendar dates are stored at UTC midnight and
+  // formatted in UTC so a western viewer never sees the previous day.
+  const locale = await getLocaleContext();
+  const canManageFinance = can(
+    { platformRole: session.user.platformRole, isSuperuser: session.user.isSuperuser },
+    "manage_finance",
+  );
+  const now = new Date();
+  const rateRow = await prisma.mileageRate.findFirst({
+    where: {
+      purposeKind: "business",
+      effectiveFrom: { lte: now },
+      OR: [{ effectiveTo: null }, { effectiveTo: { gt: now } }],
+      plan: { lifecycle: "active", isOrgOverride: true },
+    },
+    orderBy: { effectiveFrom: "desc" },
+    select: { amountPerMile: true, currency: true, effectiveFrom: true, sourceUrl: true },
+  });
+  const currentRate: CurrentRateView | null = rateRow
+    ? {
+        rateLabel: formatMoney(Number(rateRow.amountPerMile), rateRow.currency, locale.language, { maximumFractionDigits: 4 }),
+        fromLabel: formatInstant(rateRow.effectiveFrom, { mode: "date", timeZone: "UTC", withZone: false }),
+        sourceUrl: rateRow.sourceUrl,
+      }
+    : null;
+  const today = now.toISOString().slice(0, 10);
+
   return (
     <div>
       <FinanceTabNav />
@@ -97,6 +132,18 @@ export default async function MileagePage() {
           See my drives
         </a>
       </header>
+
+      <MessagesProvider
+        locale={locale.language}
+        messages={{ mileage: namespaceMessages(locale.language, "mileage") }}
+      >
+        <MileageEntryPanel
+          today={today}
+          monthStart={`${today.slice(0, 7)}-01`}
+          canManageFinance={canManageFinance}
+          currentRate={currentRate}
+        />
+      </MessagesProvider>
 
       <div id="mileage-drives">
         <MileageTripsTable rows={rows} currencySymbol={sym} />

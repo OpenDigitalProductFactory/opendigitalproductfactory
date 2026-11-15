@@ -13,6 +13,7 @@ import { getOpsContext, getDevLoopContext } from "@/lib/tak/route-context/provid
 import { getWorkspaceContext, getEmployeeContext } from "@/lib/tak/route-context/providers/workspace";
 import { getCapsuleBuildContext, getBuildContext } from "@/lib/tak/route-context/providers/build";
 import { getFinanceContext } from "@/lib/tak/route-context/providers/finance";
+import { getMailroomContext } from "@/lib/tak/route-context/providers/mailroom";
 import { getPortfolioContext, getStorefrontMarketingContext, getCustomerFunnelContext } from "@/lib/tak/route-context/providers/commerce";
 
 type RouteContextResult = string | null;
@@ -42,6 +43,8 @@ const PAGE_CONTEXT_PROVIDERS: PageContextProvider[] = [
   // /workspace is the top-level overview — `exact` so a child page never claims
   // to be the workspace overview.
   { route: "/workspace", match: "exact", build: () => getWorkspaceContext() },
+  // /workspace/mailroom serves its item pages too → `prefix` (BI-2A815481).
+  { route: "/workspace/mailroom", match: "prefix", build: () => getMailroomContext() },
   { route: "/finance", match: "prefix", build: () => getFinanceContext() },
   { route: "/portfolio/product", match: "prefix", build: (i) => getProductEstateContext(i.userId, i.route) },
   { route: "/portfolio", match: "prefix", build: () => getPortfolioContext() },

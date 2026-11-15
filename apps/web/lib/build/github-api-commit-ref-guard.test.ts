@@ -8,7 +8,7 @@
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { isAncestorCommit, readRefSha } from "./github-api-commit";
+import { buildTrailerOf, isAncestorCommit, isEarlierPublicationOfSameBuild, readRefSha } from "./github-api-commit";
 
 const API = "https://api.github.com/repos/o/r";
 const TOKEN = "t";
@@ -85,5 +85,45 @@ describe("isAncestorCommit", () => {
     // else's work, so the safe direction is to refuse.
     mockFetch(() => ({ ok: false }));
     await expect(isAncestorCommit(API, "old", "new", TOKEN)).resolves.toBe(false);
+  });
+});
+
+describe("isEarlierPublicationOfSameBuild (BI-93CB58D6)", () => {
+  const MESSAGE = "feat: Cart parts\n\nBuild: FB-2F2D46D5\nAuthor: dpf-agent (AI Coworker)\n\nSigned-off-by: dpf-agent <agent@hive.dpf>";
+  const expected = { commitMessage: MESSAGE, authorEmail: "agent@hive.dpf", baseSha: "newbase" };
+  const existing = (over: Record<string, unknown> = {}) => ({
+    message: MESSAGE, author: { email: "agent@hive.dpf" }, parents: [{ sha: "oldbase" }], ...over,
+  });
+  const serve = (commit: unknown, compareStatus = "ahead") => mockFetch((url) =>
+    url.includes("/git/commits/") ? { ok: true, body: commit } : { ok: true, body: { status: compareStatus } });
+
+  it("reads the Build trailer", () => {
+    expect(buildTrailerOf(MESSAGE)).toBe("FB-2F2D46D5");
+    expect(buildTrailerOf("feat: no trailer")).toBeNull();
+  });
+
+  it("recognises the platform's own earlier commit for the same build on the base's history", async () => {
+    serve(existing());
+    await expect(isEarlierPublicationOfSameBuild(API, "c598e1c3", expected, TOKEN)).resolves.toBe(true);
+  });
+
+  it("refuses a similarly titled build, another author, a stacked commit, and a parent off the base", async () => {
+    serve(existing({ message: MESSAGE.replace("FB-2F2D46D5", "FB-OTHER") }));
+    await expect(isEarlierPublicationOfSameBuild(API, "x", expected, TOKEN)).resolves.toBe(false);
+    vi.restoreAllMocks();
+    serve(existing({ author: { email: "someone@else" } }));
+    await expect(isEarlierPublicationOfSameBuild(API, "x", expected, TOKEN)).resolves.toBe(false);
+    vi.restoreAllMocks();
+    serve(existing({ parents: [{ sha: "a" }, { sha: "b" }] }));
+    await expect(isEarlierPublicationOfSameBuild(API, "x", expected, TOKEN)).resolves.toBe(false);
+    vi.restoreAllMocks();
+    serve(existing(), "diverged");
+    await expect(isEarlierPublicationOfSameBuild(API, "x", expected, TOKEN)).resolves.toBe(false);
+  });
+
+  it("refuses when the commit cannot be read or the new message names no build", async () => {
+    mockFetch(() => ({ ok: false }));
+    await expect(isEarlierPublicationOfSameBuild(API, "x", expected, TOKEN)).resolves.toBe(false);
+    await expect(isEarlierPublicationOfSameBuild(API, "x", { ...expected, commitMessage: "feat: x" }, TOKEN)).resolves.toBe(false);
   });
 });

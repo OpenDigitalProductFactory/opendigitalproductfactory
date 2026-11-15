@@ -7,6 +7,19 @@ vi.mock("@/lib/federation/demand-exchange", () => ({
   decodeDemandMirrorPayload: (payload: unknown) => payload,
 }));
 vi.mock("./dependabot-reader", () => ({ readDependabotAlerts: async () => ({ ok: true, alerts: [] }) }));
+vi.mock("./code-scanning-reader", () => ({ readCodeScanningAlerts: async () => ({ ok: true, alerts: [] }) }));
+vi.mock("./secret-scanning-reader", () => ({ readSecretScanningAlerts: async () => ({ ok: true, alerts: [] }) }));
+vi.mock("@dpf/db", () => ({ prisma: {} }));
+const lifecycle = vi.hoisted(() => ({ reconcile: vi.fn() }));
+vi.mock("./security-finding-lifecycle", () => ({
+  reconcileSecurityLifecycle: lifecycle.reconcile,
+  prismaSecurityLifecycleStore: () => ({}),
+}));
+lifecycle.reconcile.mockResolvedValue({ resolved: [], heldByBuild: [], reopened: [], regressions: [], reprioritized: [] });
+
+const undici = (number: number, severity: string) => ({ number, state: "open", packageName: "undici", ecosystem: "npm",
+  manifest: "pnpm-lock.yaml", severity, advisory: `GHSA-${number}`, summary: "s", vulnerable: "<7", patched: "7.0.0",
+  url: `https://github.com/x/y/security/dependabot/${number}` });
 
 const commissioned = async () => ({
   commissioned: true as const,
@@ -31,6 +44,23 @@ describe("runEcosystemInboundTriage", () => {
     });
     expect(result).toMatchObject({ ran: true, complete: false, unchanged: 1,
       sourceErrors: [{ source: "dependabot", error: "Dependabot HTTP 403" }] });
+  });
+
+  it("files one prioritised item per package, most urgent first, and resolves only fully-read surfaces (BI-C67E5CCB)", async () => {
+    const ingest = vi.fn().mockImplementation(async (input: { origin: { id: string } }) => ({ itemId: input.origin.id, created: true }));
+    const result = await runEcosystemInboundTriage({
+      loadCommission: commissioned, readIssues: async () => ({ ok: true, issues: [] }), readPeerDemand: async () => [], ingest,
+      readAlerts: async () => ({ ok: true, alerts: [undici(1, "medium"), undici(2, "high")] }),
+      readCodeScanning: async () => ({ ok: true, alerts: [{ number: 528, state: "open", ruleId: "js/polynomial-redos",
+        ruleDescription: "d", severity: "high", tool: "CodeQL", path: "p.ts", startLine: 1, url: "u" }] }),
+      readSecretScanning: async () => ({ ok: false, error: "Secret scanning coverage unreadable (HTTP 403)" }),
+    });
+    expect(ingest.mock.calls.map(([input]) => [input.origin.kind, input.priority])).toEqual([
+      ["ecosystem-dependabot-package", 2], ["ecosystem-code-scanning-rule", 2]]);
+    expect(result).toMatchObject({ ran: true, complete: false,
+      sourceErrors: [{ source: "secret-scanning" }],
+      security: { surfaces: { "dependabot-package": { alerts: 2, groups: 1 }, "code-scanning-rule": { alerts: 1, groups: 1 } } } });
+    expect(lifecycle.reconcile).toHaveBeenCalledWith(expect.objectContaining({ completeKinds: ["dependabot-package", "code-scanning-rule"] }));
   });
 
   it("marks a successful empty scan as complete", async () => {

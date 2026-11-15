@@ -90,6 +90,17 @@ export function parseFailedGuards(output: string): string[] {
   return names;
 }
 
+/**
+ * What the gauntlet last said before it stopped. A crash that discards its own
+ * output cannot be repaired from the trail: for six days "exited 88" hid two
+ * different causes (a stale-root refusal and an install older than its lockfile).
+ */
+export function lastGauntletLine(output: string, max = 400): string {
+  const lines = output.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  const last = lines.at(-1);
+  return last ? ` Last output: ${last.length > max ? `${last.slice(0, max)}…` : last}` : "";
+}
+
 /** Keep the tail: the verdict and the failure summary are at the end. */
 export function boundOutput(output: string, max = MAX_OUTPUT_CHARS): string {
   if (output.length <= max) return output;
@@ -306,7 +317,7 @@ export async function runGuardGauntlet(input: {
   if (exitCode !== 0 && failedGuards.length === 0) {
     return {
       ran: false,
-      reason: `The guard gauntlet exited ${exitCode} without naming a failing guard, which is a crash rather than a finding.`,
+      reason: `The guard gauntlet exited ${exitCode} without naming a failing guard, which is a crash rather than a finding.${lastGauntletLine(output)}`,
       workdir,
       durationMs: now() - startedAt,
     };

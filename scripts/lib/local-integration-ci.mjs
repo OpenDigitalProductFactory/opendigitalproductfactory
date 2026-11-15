@@ -453,7 +453,7 @@ export function createLocalIntegrationPlan(input) {
     ...(input.evidencePlanOutput ? ["--output", input.evidencePlanOutput] : []),
   ];
   const setupCommands = [
-    ...(input.fetchBase ? [["git", "fetch", "origin", "main"]] : []),
+    ...(input.fetchBase ? [["node", "scripts/lib/git-fetch-shared-safe.mjs", "fetch"]] : []),
     ["git", "checkout", "-B", branch, baseRef],
     // BI-4820A197: sign the merge at creation so the gated HEAD is the HEAD
     // the pre-push DCO hook will accept. BI-E3044AEC: merge the invoking

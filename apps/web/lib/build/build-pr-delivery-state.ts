@@ -35,6 +35,13 @@ export type BuildPrDeliveryStateV1 = {
   lastObservedAt: string | null;
   escalationKey: string | null;
   lastError: string | null;
+  /**
+   * Undecided merge-state observations of the same head in a row (BI-0EDCF2EC).
+   * Any decisive observation or a new head resets it.
+   */
+  unknownObservations: number;
+  /** Earliest time the room is observed again while backing off; null means the normal cadence. */
+  nextObservationAt: string | null;
   /** CI follow-through: classification, holds and the reused recovery budget. */
   followThrough: PrFollowThroughV1;
 };
@@ -64,6 +71,8 @@ export function createBuildPrDeliveryState(input: {
     lastObservedAt: null,
     escalationKey: null,
     lastError: null,
+    unknownObservations: 0,
+    nextObservationAt: null,
     followThrough: createPrFollowThrough(),
   };
 }
@@ -105,6 +114,8 @@ export function readBuildPrDeliveryState(workspaceState: unknown): BuildPrDelive
     lastObservedAt: typeof value.lastObservedAt === "string" ? value.lastObservedAt : null,
     escalationKey: typeof value.escalationKey === "string" ? value.escalationKey : null,
     lastError: typeof value.lastError === "string" ? value.lastError : null,
+    unknownObservations: integer(value.unknownObservations),
+    nextObservationAt: typeof value.nextObservationAt === "string" ? value.nextObservationAt : null,
     followThrough: readPrFollowThrough(value.followThrough),
   };
 }

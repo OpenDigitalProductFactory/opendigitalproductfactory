@@ -5,6 +5,7 @@ type RenderRelevantBootReconcilers = {
   archetypeWorkforce: () => Promise<unknown>;
   commercialCatalog: () => Promise<unknown>;
   discoveryEstate: () => Promise<unknown>;
+  pageMaterial: () => Promise<unknown>;
 };
 
 const productionReconcilers: RenderRelevantBootReconcilers = {
@@ -30,6 +31,14 @@ const productionReconcilers: RenderRelevantBootReconcilers = {
     );
     await runDiscoveryOnBootSelfHeal();
   },
+  // BI-BD9DEC45: revoke decision material behind pages archived before the
+  // page-status rule existed. Revoke-only — boot never grants authority.
+  async pageMaterial() {
+    const { reconcilePageMaterialOnBoot } = await import(
+      "@/lib/decision-perspective/page-material-lifecycle"
+    );
+    await reconcilePageMaterialOnBoot();
+  },
 };
 
 /**
@@ -46,5 +55,6 @@ export async function settleRenderRelevantBootReconcilers(
     reconcilers.archetypeWorkforce,
     reconcilers.commercialCatalog,
     reconcilers.discoveryEstate,
+    reconcilers.pageMaterial,
   ]);
 }

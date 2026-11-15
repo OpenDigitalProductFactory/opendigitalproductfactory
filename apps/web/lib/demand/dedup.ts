@@ -51,6 +51,34 @@ export function itemSimilarity(a: DedupItem, b: DedupItem): number {
   return Math.round((titleSim * 0.8 + bodySim * 0.2) * 1000) / 1000;
 }
 
+type PreparedDedupItem = DedupItem & {
+  titleGrams: Set<string>;
+  bodyGrams: Set<string> | null;
+};
+
+function prepareItem(item: DedupItem): PreparedDedupItem {
+  return {
+    ...item,
+    titleGrams: trigrams(item.title),
+    bodyGrams: item.body ? trigrams(item.body) : null,
+  };
+}
+
+function diceFromSets(left: Set<string>, right: Set<string>): number {
+  if (left.size === 0 && right.size === 0) return 1;
+  if (left.size === 0 || right.size === 0) return 0;
+  let intersection = 0;
+  const [small, large] = left.size <= right.size ? [left, right] : [right, left];
+  for (const gram of small) if (large.has(gram)) intersection += 1;
+  return (2 * intersection) / (left.size + right.size);
+}
+
+function preparedSimilarity(a: PreparedDedupItem, b: PreparedDedupItem): number {
+  const titleSim = diceFromSets(a.titleGrams, b.titleGrams);
+  const bodySim = a.bodyGrams && b.bodyGrams ? diceFromSets(a.bodyGrams, b.bodyGrams) : 0;
+  return Math.round((titleSim * 0.8 + bodySim * 0.2) * 1000) / 1000;
+}
+
 export type DuplicateCandidate = {
   itemId: string;
   title: string;
@@ -66,11 +94,15 @@ export function findDuplicateCandidates(
   items: DedupItem[],
   threshold = 0.5,
 ): DuplicateCandidate[] {
+  const preparedTarget = prepareItem(target);
   return items
     .filter((i) => i.itemId !== target.itemId)
-    .map((i) => ({ itemId: i.itemId, title: i.title, similarity: itemSimilarity(target, i) }))
+    .map((i) => {
+      const prepared = prepareItem(i);
+      return { itemId: i.itemId, title: i.title, similarity: preparedSimilarity(preparedTarget, prepared) };
+    })
     .filter((c) => c.similarity >= threshold)
-    .sort((a, b) => b.similarity - a.similarity);
+    .sort((a, b) => b.similarity - a.similarity || a.itemId.localeCompare(b.itemId));
 }
 
 /**
@@ -139,27 +171,73 @@ export type DuplicatePair = {
 };
 
 /**
- * All-pairs sweep: every pair of items at or above `threshold`, most-similar
- * first. Read-only detection over the open backlog — no hot-path cost at ingest.
- * O(n^2) in the candidate set; callers bound `items` (e.g. open, same portfolio).
+ * Complete sweep: every pair that can reach `threshold`, most-similar first.
+ * Read-only detection over the open backlog — no hot-path cost at ingest. For
+ * ordinary thresholds, a title-gram index eliminates pairs that cannot reach
+ * the score even with a perfect body match. `maxPairs` bounds retained output,
+ * not population coverage.
  */
-export function findDuplicatePairs(items: DedupItem[], threshold = 0.6): DuplicatePair[] {
+export function findDuplicatePairs(
+  items: DedupItem[],
+  threshold = 0.6,
+  maxPairs = Number.POSITIVE_INFINITY,
+): DuplicatePair[] {
+  const prepared = [...items]
+    .sort((a, b) => a.itemId.localeCompare(b.itemId))
+    .map(prepareItem);
+  const postings = new Map<string, number[]>();
+  const titleKeys = prepared.map((item) => item.titleGrams.size > 0
+    ? item.titleGrams
+    : new Set(["__EMPTY_TITLE__"]));
+
+  // Body similarity contributes at most 0.2. Above that threshold a matching
+  // pair must share at least one normalized title gram, so an inverted index
+  // removes provably-impossible comparisons without weakening coverage.
+  if (threshold > 0.2) {
+    for (let index = 0; index < prepared.length; index += 1) {
+      for (const gram of titleKeys[index]!) {
+        const bucket = postings.get(gram) ?? [];
+        bucket.push(index);
+        postings.set(gram, bucket);
+      }
+    }
+  }
+
   const pairs: DuplicatePair[] = [];
-  for (let i = 0; i < items.length; i++) {
-    for (let j = i + 1; j < items.length; j++) {
-      const similarity = itemSimilarity(items[i], items[j]);
+  for (let i = 0; i < prepared.length; i += 1) {
+    const candidates = new Set<number>();
+    if (threshold > 0.2) {
+      for (const gram of titleKeys[i]!) {
+        for (const candidate of postings.get(gram) ?? []) {
+          if (candidate > i) candidates.add(candidate);
+        }
+      }
+    } else {
+      for (let j = i + 1; j < prepared.length; j += 1) candidates.add(j);
+    }
+    for (const j of candidates) {
+      const left = prepared[i]!;
+      const right = prepared[j]!;
+      const similarity = preparedSimilarity(left, right);
       if (similarity >= threshold) {
         pairs.push({
-          a: items[i].itemId,
-          b: items[j].itemId,
-          titleA: items[i].title,
-          titleB: items[j].title,
+          a: left.itemId,
+          b: right.itemId,
+          titleA: left.title,
+          titleB: right.title,
           similarity,
         });
       }
     }
+    if (Number.isFinite(maxPairs) && pairs.length > maxPairs * 2) {
+      pairs.sort(compareDuplicatePairs).splice(maxPairs);
+    }
   }
-  return pairs.sort((x, y) => y.similarity - x.similarity);
+  return pairs.sort(compareDuplicatePairs).slice(0, maxPairs);
+}
+
+function compareDuplicatePairs(x: DuplicatePair, y: DuplicatePair): number {
+  return y.similarity - x.similarity || x.a.localeCompare(y.a) || x.b.localeCompare(y.b);
 }
 
 export type MergeInput = {

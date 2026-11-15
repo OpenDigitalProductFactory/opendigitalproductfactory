@@ -68,6 +68,40 @@ describe("atlas room tuple", () => {
 });
 
 describe("atlas projection", () => {
+  it.each([
+    ["recorded decisions", { drive: { action: "attention", reason: "decision", attentionRecorded: true }, decisions: [{ title: "Question", condition: "Choose an option" }, { title: "Second question", condition: "Choose again" }] }, "inventory.actor.decisionOwner", "inventory.action.decision"],
+    ["unrecorded decision", { drive: { action: "attention", reason: "decision", attentionRecorded: false } }, "inventory.actor.unknown", "inventory.action.decisionUnknown"],
+    ["coworker writeback", { executorKind: "codex-desktop", drive: { action: "pause", reason: "executor_writeback_unavailable" } }, "inventory.actor.executor", "inventory.action.recordResult"],
+    ["capacity wait", { executorKind: "codex-desktop", liveness: "durable-wait" }, "inventory.actor.executor", "inventory.action.capacity"],
+    ["source recovery", { liveness: "recovery-required", recovery: { prerequisite: { accountableRole: "artifact-resolver" }, command: "PRIVATE-COMMAND", secret: "PRIVATE-SECRET" } }, "inventory.actor.delivery", "inventory.action.source"],
+  ] as const)("discloses the shared safe action only for the selected room: %s", (_name, fields, actor, instruction) => {
+    const selected = room({ ...fields, capsuleId: "WC-SELECTED" });
+    const other = room({ ...fields, capsuleId: "WC-OTHER" });
+    const owners = new Map([selected, other].map(r => [r.capsuleId, { accountability: owner, accountableDisplayName: "Mark" }]));
+    const baseline = projectAtlas({ rooms: [selected, other], owners, limit: 10, observedAt: new Date(0) });
+    const picture = projectAtlas({ rooms: [selected, other], owners, limit: 10, observedAt: new Date(0), selectedCapsuleId: selected.capsuleId });
+    const shared = projectWorkroomOperatorSummary({ ...selected, accountability: owner, drive: selected.drive ?? undefined });
+    expect(picture.rooms[0]).toMatchObject({ action: { actor, instruction }, nextAction: shared.nextAction });
+    expect(picture.rooms[0]!.action).toEqual(shared.action);
+    expect(picture.rooms[1]).toEqual(baseline.rooms[1]);
+    expect(picture.counts).toEqual(baseline.counts);
+    expect(JSON.stringify(picture)).not.toMatch(/PRIVATE-COMMAND|PRIVATE-SECRET/);
+  });
+
+  it("keeps owner setup ahead of a secondary recorded decision", () => {
+    const input = room({ drive: { action: "attention", reason: "decision", attentionRecorded: true }, decisions: [{ title: "Secondary question", condition: "Do not hide setup" }] });
+    const setup = { state: "setup-required", reason: "no-organization-owner-recorded", message: "No owner", atWorkroomId: null } as const;
+    const picture = projectAtlas({ rooms: [input], owners: new Map([[input.capsuleId, { accountability: setup, accountableDisplayName: null }]]), limit: 10, observedAt: new Date(0), selectedCapsuleId: input.capsuleId });
+    expect(picture.rooms[0]).toMatchObject({ action: null, nextAction: "inventory.nextAction.owner" });
+    expect(JSON.stringify(picture)).not.toContain("Secondary question");
+  });
+
+  it("does not disclose an action for an unknown or unread selection", () => {
+    const input = room();
+    const baseline = projectAtlas({ rooms: [input], owners: new Map(), limit: 1, observedAt: new Date(0) });
+    expect(projectAtlas({ rooms: [input], owners: new Map(), limit: 1, observedAt: new Date(0), selectedCapsuleId: "WC-NOT-READ" })).toEqual(baseline);
+  });
+
   it("counts every room once by health", () => {
     const atlas = projectAtlas({
       rooms: [room({ capsuleId: "WC-A" }), room({ capsuleId: "WC-B", liveness: "stalled" }), room({ capsuleId: "WC-C", liveness: "paused" })],

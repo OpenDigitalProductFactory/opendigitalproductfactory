@@ -21,8 +21,8 @@ const LOCAL_PROVIDER_ID = "local";
 /** Plain, non-alarming, actionable. Rendered as markdown (italic) in the bubble. */
 export const LOCAL_UNVERIFIED_CAVEAT =
   "_I answered this on the bundled local model and couldn't use my tools this turn, " +
-  "so I couldn't check live data — treat the below as unverified, and send the message " +
-  "again in a moment for a tool-backed answer._";
+  "so I couldn't check live data. This answer is unverified and does not confirm completion " +
+  "of work that needed tools. A provider or capability check is needed before that work can continue._";
 
 // If the answer already names the degraded/local state (an honest diagnostic the
 // loop itself produced), a second caveat is noise. Keep this in sync with the

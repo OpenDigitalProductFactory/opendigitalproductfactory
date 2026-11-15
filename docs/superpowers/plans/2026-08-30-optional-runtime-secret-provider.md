@@ -1,13 +1,14 @@
 ---
-status: draft
+status: active
 ---
 
 # Optional runtime-secret provider implementation plan
 
 **Backlog:** BI-E7553A1C  
 **Design:** `docs/superpowers/specs/2026-08-30-optional-runtime-secret-provider-design.md`  
-**Workroom:** WC-9BD0CE91  
-**Branch:** `feat/security-auth-1password`
+**Workroom:** WC-711FF534
+
+**Branch:** `feat/1password-runtime-secret-provider`
 
 > **For agentic workers:** execute this plan one independently reviewable backlog item at a time — one BI, one branch, one PR. Use `dpf-tdd` for red-green implementation, `dpf-local-merge-ci-before-push` plus the plan's completion gate before any success claim, and `dpf-pr-with-dco` for handoff.
 
@@ -77,6 +78,12 @@ Run the focused Node test and record the expected module-not-found/assertion fai
 
 Run focused tests, affected source-local checks, `pnpm docs:index`, production web build, `pnpm run pregate:preflight`, exact-tree `pnpm run pregate`, and independent semantic review. Commit DCO-signed, push, run `pnpm pr:ready`, open a ready non-draft PR, and update BI-E7553A1C only after evidence is accepted.
 
+The earlier documentation-only PR #4878 is design/plan evidence, not delivery
+evidence for this implementation BI. A status actuator or acceptance sweep must
+not infer completion from that PR title: completion requires the resolver,
+production boot wiring, focused tests, and exact-tree verification on the
+implementation commit.
+
 **Verification:** AC-RSP-007 and all workroom impact obligations.
 
 ## Backlog coverage
@@ -86,7 +93,7 @@ Run focused tests, affected source-local checks, `pnpm docs:index`, production w
 - **Deliverable mapping:** `runtime-secret-provider` → BI-E7553A1C.
 - **Dependencies:** none outside the current platform substrate.
 - **Rationale:** assessment, design, resolver, boot wiring, and operator contract form one security boundary and cannot be released safely in isolation.
-- **Governed receipt:** pending independent spec approval and immutable plan commit; insert the returned receipt before implementation.
+- **Governed delivery:** WC-711FF534 admits the implementation branch. Independent design, plan, and semantic review evidence remains required before completion.
 
 ## Risks and rollback
 

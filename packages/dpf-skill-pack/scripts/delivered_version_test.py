@@ -92,6 +92,24 @@ class DeliveredVersionTest(unittest.TestCase):
             updater.stamp_delivered_version(pack, "0.2.18+c.222222222222")
             self.assertEqual(updater.read_json(pack / ".claude-plugin" / "plugin.json", {})["version"], "0.2.18+c.222222222222")
 
+    def test_a_pack_served_with_blank_versions_delivers_the_real_version(self) -> None:
+        # BI-04A16AB8: the portal serves stamped manifests blank so an updater
+        # from before the stamp verifies them; the delivery still reads the base
+        # version from the Codex manifest and stamps every client manifest.
+        with tempfile.TemporaryDirectory() as tmp:
+            pack = write_pack(Path(tmp))
+            digest = freshness.delivered_digest(pack)
+            for client in CLIENT_MANIFESTS:
+                path = pack / client / "plugin.json"
+                path.write_bytes(freshness.blank_version(path.read_bytes()))
+            self.assertEqual(freshness.delivered_digest(pack), digest)
+            self.assertEqual(freshness.pack_version(pack), "0.2.18")
+            delivered = freshness.delivered_version(pack)
+            self.assertEqual(delivered, f"0.2.18+c.{digest[:12]}")
+            updater.stamp_delivered_version(pack, delivered)
+            for client in CLIENT_MANIFESTS:
+                self.assertEqual(updater.read_json(pack / client / "plugin.json", {})["version"], delivered)
+
     def test_base_version_readers_ignore_the_stamp(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             pack = write_pack(Path(tmp))

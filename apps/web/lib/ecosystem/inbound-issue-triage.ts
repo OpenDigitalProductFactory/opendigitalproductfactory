@@ -24,12 +24,12 @@ import {
   type BacklogIngestOutcome,
 } from "@/lib/operate/backlog-ingest";
 import { BACKLOG_WORK_TYPE_VALUES, type BacklogWorkType } from "@/lib/explore/backlog";
-import type { RepositoryAlert } from "./dependabot-reader";
+import { isSecurityGroupKind, securityOriginKind, type SecurityGroupKind } from "./security-finding-groups";
 
 /** Where an inbound item came from. Part of the provenance marker, so a re-run
  *  matches the same origin instead of filing a second copy. Upstream issues
  *  are additionally qualified by repository (BI-952F08BA). */
-export type InboundSourceKind = "upstream-issue" | "peer-demand" | "dependabot-alert";
+export type InboundSourceKind = "upstream-issue" | "peer-demand" | SecurityGroupKind;
 
 export interface InboundEcosystemItem {
   sourceKind: InboundSourceKind;
@@ -50,6 +50,10 @@ export interface InboundEcosystemItem {
   repository?: string | null;
   /** Source state as the origin reports it (e.g. "open" / "closed"). */
   state?: string | null;
+  /** Backlog priority to file with (lower is more urgent). Security groups only. */
+  priority?: number | null;
+  /** The open alerts a security group stands for (BI-C67E5CCB). */
+  securityGroup?: { alertNumbers: number[]; highestSeverity: string } | null;
 }
 
 export interface InboundTriageResult {
@@ -131,7 +135,7 @@ export function inboundSourceFingerprint(item: InboundEcosystemItem): string {
  * repositories. A peer demand mirror id is already globally unique.
  */
 function originFor(item: InboundEcosystemItem): Pick<BacklogIngestInput, "origin" | "reconcile"> {
-  const kind = `ecosystem-${item.sourceKind}`;
+  const kind = isSecurityGroupKind(item.sourceKind) ? securityOriginKind(item.sourceKind) : `ecosystem-${item.sourceKind}`;
   if (item.sourceKind === "peer-demand") return {
     origin: { kind, id: item.sourceId },
     reconcile: {
@@ -181,8 +185,9 @@ export function toBacklogIngestInput(item: InboundEcosystemItem): BacklogIngestI
     // The origin really is a person at another install asking for something;
     // it merely ARRIVES by automation. Recording it as automated-detection
     // would erase the submitter the arbitration model depends on.
-    source: item.sourceKind === "dependabot-alert" ? "automated-detection" : "user-request",
+    source: isSecurityGroupKind(item.sourceKind) ? "automated-detection" : "user-request",
     workType: isWorkType(item.workType) ? item.workType : "feature",
+    ...(typeof item.priority === "number" ? { priority: item.priority } : {}),
     // Provenance marker: a re-run of the sweep matches this same origin rather
     // than filing a duplicate.
     ...originFor(item),
@@ -191,17 +196,6 @@ export function toBacklogIngestInput(item: InboundEcosystemItem): BacklogIngestI
     ...(scope.archetypeIds.length > 0 ? { archetypeIds: scope.archetypeIds } : {}),
     lifecycleTags: ["ecosystem-inbound", item.sourceKind],
   };
-}
-
-/** Each provider finding becomes actionable work through the same intake front door. */
-export function mapDependabotAlerts(alerts: RepositoryAlert[], repo: { owner: string; name: string }): InboundEcosystemItem[] {
-  return alerts.map(alert => ({
-    sourceKind: "dependabot-alert", sourceId: String(alert.number),
-    repository: `${repo.owner}/${repo.name}`.toLowerCase(), state: alert.state,
-    title: `Address ${alert.severity} ${alert.packageName} advisory (${alert.manifest}, Dependabot #${alert.number})`,
-    summary: `${alert.summary}\n\nAdvisory: ${alert.advisory}\nSeverity: ${alert.severity}\nPackage: ${alert.packageName}\nManifest: ${alert.manifest}\nAffected range: ${alert.vulnerable}\nPatched release: ${alert.patched ?? "none published — assess exposure or patch/remove the dependency"}\n\nVerify the resolved dependency and existing vulnerability treatment before remediation. A provider finding is not proof of deployed reachability.`,
-    workType: "bug", url: alert.url,
-  }));
 }
 
 export async function runInboundIssueTriage(deps: InboundTriageDeps): Promise<InboundTriageResult> {

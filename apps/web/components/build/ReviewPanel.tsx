@@ -1,7 +1,9 @@
 // apps/web/components/build/ReviewPanel.tsx
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, type ReactNode } from "react";
+import Link from "next/link";
+import { useT } from "@/lib/i18n/use-t";
 import { LocalTime } from "@/components/ui/LocalTime";
 import { Spinner } from "@/components/ui/Spinner";
 import { formatText } from "@/lib/actions/local-format";
@@ -15,38 +17,34 @@ import type {
 } from "@/lib/feature-build-types";
 import { safeRenderValue } from "@/lib/safe-render";
 import { normalizeTaskResults, type NormalizedTaskResults } from "@/lib/build/task-results";
-import { normalizeVerificationOutput, type NormalizedVerificationOutput } from "@/lib/build/verification-output";
+import { normalizeVerificationOutput, projectVerificationEvidence, type NormalizedVerificationOutput } from "@/lib/build/verification-output";
 import { DecompositionCoordinator } from "@/components/build/DecompositionCoordinator";
-import { Notice } from "@/components/ui/report-kit";
+import { Notice, DataTable, type Column } from "@/components/ui/report-kit";
 import { semanticReviewDecisionPresentation } from "@/lib/change-review/review-decision-presentation";
 import type { SemanticReviewDecision } from "@/lib/change-review/semantic-change-review";
 import { isReviewExecutionIncomplete } from "@/lib/build/review-execution-state";
 
 type Props = {
   build: FeatureBuildRow;
+  executionAvailable?: boolean;
 };
 
-export function ReviewPanel({ build }: Props) {
+export function ReviewPanel({ build, executionAvailable = true }: Props) {
   const taskResults = normalizeTaskResults(build.taskResults);
   const verification = normalizeVerificationOutput(build.verificationOut);
-  const deliberationEntries = Object.entries(build.deliberationSummary ?? {}) as Array<
-    ["ideate" | "plan" | "review", NonNullable<FeatureBuildRow["deliberationSummary"]>[keyof NonNullable<FeatureBuildRow["deliberationSummary"]>]]
-  >;
+  type Summary = NonNullable<FeatureBuildRow["deliberationSummary"]>;
+  const deliberationEntries = Object.entries(build.deliberationSummary ?? {}) as Array<["ideate" | "plan" | "review", Summary[keyof Summary]]>;
 
   return (
     <div className="p-4 space-y-3 max-w-3xl">
       <h3 className="text-sm font-bold text-[var(--dpf-text)]">Review: {build.title}</h3>
 
-      {/* Compact evidence bar */}
-      <EvidenceBar build={build} />
-
       {deliberationEntries.length > 0 && (
         <div className="space-y-3">
-          {deliberationEntries.map(([phase, summary]) =>
-            summary ? (
-              <DeliberationSummaryCard key={phase} phase={phase} summary={summary} />
-            ) : null,
-          )}
+          {deliberationEntries.map(([phase, summary]) => {
+            if (!summary) return null;
+            return <DeliberationSummaryCard key={phase} phase={phase} summary={summary} />;
+          })}
         </div>
       )}
 
@@ -57,6 +55,7 @@ export function ReviewPanel({ build }: Props) {
         review={build.designReview}
         buildId={build.buildId}
         buildTitle={build.title}
+        executionAvailable={executionAvailable}
       />
       <BuildPlanSection plan={build.buildPlan} review={build.planReview} />
       <TaskResultsSection results={taskResults} />
@@ -124,42 +123,6 @@ function Section({
   );
 }
 
-/* ── Evidence bar ────────────────────────────────────────────────────────── */
-
-function EvidenceBar({ build }: { build: FeatureBuildRow }) {
-  const taskResults = normalizeTaskResults(build.taskResults);
-  const verification = normalizeVerificationOutput(build.verificationOut);
-  const items = [
-    { label: "Design", ok: !!build.designDoc && build.designReview?.decision === "pass" && !isReviewExecutionIncomplete(build.designReview) },
-    { label: "Plan", ok: !!build.buildPlan && build.planReview?.decision === "pass" && !isReviewExecutionIncomplete(build.planReview) },
-    { label: "Build", ok: taskResults.totalTasks > 0 },
-    { label: "Verify", ok: verification.typecheckPassed === true },
-    {
-      label: "AC",
-      ok: build.acceptanceMet
-        ? Array.isArray(build.acceptanceMet)
-          ? build.acceptanceMet.every((c) => c.met)
-          : true
-        : false,
-    },
-  ];
-
-  return (
-    <div className="flex items-center gap-1 px-3 py-2 rounded-md bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)]">
-      {items.map((item, i) => (
-        <div key={item.label} className="flex items-center gap-1">
-          {i > 0 && <span className="text-[var(--dpf-border)] mx-0.5">&middot;</span>}
-          <span
-            className="w-1.5 h-1.5 rounded-full shrink-0"
-            style={{ background: item.ok ? "var(--dpf-success)" : "var(--dpf-muted)" }}
-          />
-          <span className="text-[10px] text-[var(--dpf-muted)]">{item.label}</span>
-        </div>
-      ))}
-    </div>
-  );
-}
-
 /* ── Feature Brief ───────────────────────────────────────────────────────── */
 
 function BriefSection({ brief }: { brief: FeatureBrief | null }) {
@@ -206,11 +169,13 @@ function DesignDocSection({
   review,
   buildId,
   buildTitle,
+  executionAvailable,
 }: {
   doc: BuildDesignDoc | null;
   review: FeatureBuildRow["designReview"];
   buildId: string;
   buildTitle: string;
+  executionAvailable: boolean;
 }) {
   const [formatted, setFormatted] = useState<Record<string, string>>({});
   const [isFormatting, startFormatting] = useTransition();
@@ -247,7 +212,7 @@ function DesignDocSection({
     <Section title="Design Document" badge={reviewBadge} badgeColor={reviewColor} hidden={!doc}>
       {doc && (
         <div className="space-y-2 text-sm">
-          {Object.keys(formatted).length === 0 && (
+          {executionAvailable && Object.keys(formatted).length === 0 && (
             <button
               type="button"
               onClick={handleFormat}
@@ -279,7 +244,7 @@ function DesignDocSection({
           {review && (
             <ReviewBadgeBlock decision={review.decision} executionIncomplete={isReviewExecutionIncomplete(review)} summary={review.summary} issues={review.issues} />
           )}
-          {review?.decision === "pass" && !isReviewExecutionIncomplete(review) && (
+          {executionAvailable && review?.decision === "pass" && !isReviewExecutionIncomplete(review) && (
             <DecompositionCoordinator
               buildId={buildId}
               buildTitle={buildTitle}
@@ -487,18 +452,16 @@ function VerificationSection({ verification }: { verification: NormalizedVerific
     return null;
   }
 
-  const testsFailed = verification.testsFailed ?? 0;
-  const testsPassed = verification.testsPassed ?? 0;
-  const allPassed = verification.typecheckPassed === true && testsFailed === 0;
-  const badge = allPassed ? "Passed" : "Failed";
-  const badgeColor = allPassed ? "var(--dpf-success)" : "var(--dpf-error)";
+  const display = projectVerificationEvidence(verification);
+  const allPassed = display.qualified;
+  const badge = display.label;
+  const badgeColor = display.failed ? "var(--dpf-error)" : allPassed && !display.exempt ? "var(--dpf-success)" : undefined;
 
   const errors = parseVerificationErrors(verification.outputExcerpt);
-  const totalTests = testsPassed + testsFailed;
-  const typecheckCardClassName = verification.typecheckPassed
+  const typecheckCardClassName = verification.typecheckPassed !== false
     ? "border-[var(--dpf-border)] bg-[var(--dpf-surface-2)]"
     : "border-[var(--dpf-error)] bg-[var(--dpf-surface-2)]";
-  const testsCardClassName = testsFailed === 0
+  const testsCardClassName = !display.failed
     ? "border-[var(--dpf-border)] bg-[var(--dpf-surface-2)]"
     : "border-[var(--dpf-error)] bg-[var(--dpf-surface-2)]";
 
@@ -510,19 +473,18 @@ function VerificationSection({ verification }: { verification: NormalizedVerific
           <div className={`rounded border p-2 ${typecheckCardClassName}`}>
             <div className="text-[10px] text-[var(--dpf-muted)]">TypeCheck</div>
             <div className="text-xs font-medium text-[var(--dpf-text)]">
-              {verification.typecheckPassed ? "No errors" : `${errors.length} error${errors.length === 1 ? "" : "s"}`}
+              {display.typecheckLabel}
             </div>
           </div>
           <div className={`rounded border p-2 ${testsCardClassName}`}>
             <div className="text-[10px] text-[var(--dpf-muted)]">Tests</div>
             <div className="text-xs font-medium text-[var(--dpf-text)]">
-              {totalTests > 0
-                ? `${testsPassed} passed${testsFailed > 0 ? `, ${testsFailed} failed` : ""}`
-                : "No tests run"}
+              {display.testsLabel}
             </div>
           </div>
         </div>
 
+        {display.conflictNotice && <p className="text-xs text-[var(--dpf-muted)]">{display.conflictNotice}</p>}
         {/* Parsed error list */}
         {errors.length > 0 && (
           <div className="space-y-1">
@@ -538,7 +500,7 @@ function VerificationSection({ verification }: { verification: NormalizedVerific
         )}
 
         {/* Raw output toggle */}
-        {verification.outputExcerpt && (
+        {display.rawOutput && (
           <>
             <button
               type="button"
@@ -549,7 +511,7 @@ function VerificationSection({ verification }: { verification: NormalizedVerific
             </button>
             {showRaw && (
               <pre className="p-2 rounded bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] text-[10px] text-[var(--dpf-muted)] whitespace-pre-wrap leading-relaxed max-h-48 overflow-auto">
-                {verification.outputExcerpt}
+                {display.rawOutput}
               </pre>
             )}
           </>
@@ -719,7 +681,7 @@ function ManualTestSteps({
     <Section title="Test It Yourself" badge={`${criteria.length} step${criteria.length === 1 ? "" : "s"}`} badgeColor="var(--dpf-accent)">
       <div className="space-y-0">
         <p className="text-[10px] text-[var(--dpf-muted)] mb-2">
-          Manual walkthrough for <strong>{title}</strong>:
+          Manual walkthrough: <strong>{title}</strong>:
         </p>
         <ol className="space-y-1.5">
           {criteria.map((c, i) => (
@@ -756,6 +718,7 @@ function UxTestsSection({
   status: FeatureBuildRow["uxVerificationStatus"];
 }) {
   const [expandedStep, setExpandedStep] = useState<number | null>(null);
+  const title = "UX Test Results";
 
   // Verification is live — show a running banner even when no results have
   // landed yet. Without this the panel would collapse back to "null" while
@@ -763,7 +726,7 @@ function UxTestsSection({
   if (status === "running") {
     return (
       <Section
-        title="UX Test Results"
+        title={title}
         badge="running"
         badgeColor="var(--dpf-accent)"
         defaultOpen={true}
@@ -784,13 +747,13 @@ function UxTestsSection({
   if (status === "skipped") {
     return (
       <Section
-        title="UX Test Results"
+        title={title}
         badge="skipped"
         badgeColor="var(--dpf-muted)"
         defaultOpen={false}
       >
         <p className="px-2 py-1.5 text-xs text-[var(--dpf-muted)]">
-          UX verification skipped &mdash; no acceptance criteria were provided to test against.
+          UX verification skipped: no acceptance criteria.
         </p>
       </Section>
     );
@@ -804,7 +767,7 @@ function UxTestsSection({
 
   return (
     <Section
-      title="UX Test Results"
+      title={title}
       badge={badge}
       badgeColor={allPass ? "var(--dpf-success)" : "var(--dpf-error)"}
       defaultOpen={!allPass}
@@ -839,7 +802,7 @@ function UxTestsSection({
                   <pre className="text-[10px] text-[var(--dpf-error)] whitespace-pre-wrap">{s.error}</pre>
                 )}
                 {!s.screenshotUrl && !s.error && (
-                  <span className="text-[10px] text-[var(--dpf-muted)]">No details available</span>
+                  <span className="text-[10px] text-[var(--dpf-muted)]">No details.</span>
                 )}
               </div>
             )}
@@ -891,4 +854,41 @@ function ReviewBadgeBlock({
       )}
     </Notice>
   );
+}
+
+type SavedReaderProps = {
+  builds: FeatureBuildRow[];
+  initialBuildId?: string | null;
+  initialActiveBuild?: FeatureBuildRow | null;
+  runnerSetup?: ReactNode;
+  availabilityUnknown?: boolean;
+  loadFailed?: boolean;
+};
+/** No execution shell or mutation effects mount on this unavailable-runner path. */
+export function SavedBuildReader({ builds, initialBuildId, initialActiveBuild, runnerSetup, availabilityUnknown = false, loadFailed = false }: SavedReaderProps) {
+  const t = useT("workrooms");
+  const savedBuildColumns: Column<FeatureBuildRow>[] = [{
+    key: "title", header: t("savedProof.column"), cell: build => <Link href={`/build?buildId=${encodeURIComponent(build.buildId)}`}>{build.title}</Link>,
+  }];
+  const selected = initialActiveBuild ?? (initialBuildId
+    ? builds.find(build => build.buildId === initialBuildId) ?? null
+    : builds[0] ?? null);
+  return <section className="relative p-4 space-y-4">
+    <h2 className="text-dpf-h2">{t("savedProof.heading")}</h2>
+    {loadFailed ? <div role="alert"><p>{t("savedProof.loadFailed")}</p><Link href="/build">{t("savedProof.retry")}</Link></div> : <>
+    <p role="status">{availabilityUnknown ? t("savedProof.availabilityUnknown") : t("savedProof.buildingUnavailable")}</p>
+    {initialBuildId && !selected ? <p role="status">{t("savedProof.requestedUnavailable")}</p> : null}
+    {selected ? <div>
+      <p>{selected.title}</p>
+      <details><summary>{t("savedProof.review")}</summary>
+        <section aria-label={selected.title}><ReviewPanel build={selected} executionAvailable={false} /></section>
+      </details>
+    </div> : null}
+    {builds.length > 0 ? <details><summary>{t("savedProof.heading")}</summary>
+      <DataTable ariaLabel={t("savedProof.heading")} columns={savedBuildColumns} rows={builds} getRowKey={build => build.buildId} />
+    </details> : null}
+    {builds.length === 0 && !selected ? <p>{t("savedProof.empty")}</p> : null}
+    </>}
+    {runnerSetup ? <details><summary>{t("savedProof.setup")}</summary>{runnerSetup}</details> : null}
+  </section>;
 }

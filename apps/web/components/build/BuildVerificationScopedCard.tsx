@@ -20,7 +20,7 @@ export function BuildVerificationScopedCard({ verification }: Props) {
         <div className="mt-3 grid gap-2 text-xs sm:grid-cols-2">
           <div className="rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-2">
             <div className="text-[10px] uppercase text-[var(--dpf-muted)]">Build scope</div>
-            <div className="mt-1 font-medium text-[var(--dpf-text)]">{verification.buildScoped.failureAxis ?? "no failure"}</div>
+            <div className="mt-1 font-medium text-[var(--dpf-text)]">{verification.buildScoped.failureAxis ?? (verification.buildScoped.typecheckPassed === true && verification.buildScoped.testsFailed === 0 ? "No failure recorded" : "Unverified")}</div>
             <div className="mt-1 text-[var(--dpf-muted)]">
               {verification.buildScoped.affectedFiles.length} affected file(s)
             </div>
@@ -28,7 +28,7 @@ export function BuildVerificationScopedCard({ verification }: Props) {
           <div className="rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-2">
             <div className="text-[10px] uppercase text-[var(--dpf-muted)]">Global health</div>
             <div className="mt-1 font-medium text-[var(--dpf-text)]">
-              {verification.globalHealth.testsFailed ?? 0} failed test(s)
+              {verification.globalHealth.testsFailed === null ? "Not verified" : `${verification.globalHealth.testsFailed} failed test(s)`}
             </div>
             {verification.globalHealth.outputExcerpt && (
               <div className="mt-1 truncate text-[var(--dpf-muted)]">{verification.globalHealth.outputExcerpt}</div>

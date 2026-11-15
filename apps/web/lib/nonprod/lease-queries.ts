@@ -32,16 +32,22 @@ export async function listNonprodEnvironmentLeases(params: Record<string, unknow
     listActiveNonprodEnvironmentLeases,
     listQueuedNonprodEnvironmentLeases,
   } = await import("@/lib/nonprod/environment-lease");
-  const [leases, queued] = await Promise.all([
+  const { readOverseerQueues } = await import("@/lib/nonprod/environment-lease-overseer-view");
+  const [leases, queued, overseer] = await Promise.all([
     listActiveNonprodEnvironmentLeases({}),
     listQueuedNonprodEnvironmentLeases({}),
+    // BI-218A4555: who holds, who waits, in what order and why. A failed read
+    // leaves the raw lists intact rather than failing the whole call.
+    readOverseerQueues().catch(() => null),
   ]);
   return {
     success: true,
-    message: `Found ${leases.length} admitted and ${queued.length} queued nonproduction environment lease(s).`,
+    message: `Found ${leases.length} admitted and ${queued.length} queued nonproduction environment lease(s).`
+      + (overseer ? " `overseer` lists each queue in policy order with an estimated wait and the reason." : ""),
     data: {
       leases: leases.map((lease) => toolSafeLease(lease as Record<string, unknown>)),
       queued: queued.map((lease) => toolSafeLease(lease as Record<string, unknown>)),
+      ...(overseer ? { overseer } : { overseerUnavailable: true }),
     },
   };
 }

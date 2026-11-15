@@ -104,7 +104,7 @@ Decision: `decomposed`. Umbrella: BI-C7E2E924. Every independently shippable del
 | D3 — coworker mount | yes | BI-DB302392 | D2 |
 | D4 — gate verdict + gated tool-use decoration | yes | BI-405AD4FD | D2; paced with EP-1C37C089 |
 
-**Governed coverage receipt: blocked by BI-B9403248.** `record_plan_backlog_coverage` (v2) was submitted for this plan four times from workroom WC-B0E0E6BE on branch `docs/workroom-shape-view-plan-main`, and refused each time:
+**Governed coverage receipt: not yet recorded; the causes below are historical.** `record_plan_backlog_coverage` (v2) was submitted for this plan four times from workroom WC-B0E0E6BE on branch `docs/workroom-shape-view-plan-main`, and refused each time:
 
 | # | Error | State at submission |
 |---|---|---|
@@ -115,7 +115,13 @@ Decision: `decomposed`. Umbrella: BI-C7E2E924. Every independently shippable del
 
 Failures 1 and 2 are the known provenance defect BI-B9403248 (filed 2026-08-16). Failure 3 is a **third, previously undocumented precondition behind them** — recorded on that BI as occurrence 2, finding (c). All three are opaque: none names the offending value or the remedy.
 
-The mapping table above is therefore the coverage of record until BI-B9403248 ships. Every deliverable maps to a live BI; this plan carries no receipt id, and the `**Umbrella item:**` marker keeps it outside the receipt requirement rather than pretending the receipt exists.
+**Status 2026-11-11, verified against the live install.** Every cause in the table above is closed. `BI-B9403248` (failures 1 and 2) is `done`; citing it as a live blocker was itself the defect filed as `BI-38A353B2` and fixed in PR #4603, which also added the `Live Blocker References` CI guard so a closed id cited from user-facing text now fails the build. Failure 3, "Current scope baseline could not be resolved", was a reviewer-attribution defect fixed in PR #4605. The refusal text that produced these four opaque errors now names the offending value and the remedy.
+
+The lane itself works: **683** `initiative_scope_baseline` rows and **50** schema-v2 receipts exist install-wide, the most recent recorded today. What is still missing is specific to this plan — its umbrella `BI-C7E2E924` has no baseline, and no canonical design under `docs/superpowers/specs/` carries the `OBJ-*` / `AC-*` scope manifest a `spec-approval` would baseline. That is authoring work.
+
+One live constraint remains: `BI-72F368BC` is open, rescoped to "reachable only from an in-portal coworker — no external surface can produce one", so an external CLI session cannot mint the baseline even once a design exists.
+
+The mapping table above therefore remains the coverage of record. Every deliverable maps to a live BI; this plan carries no receipt id, and the `**Umbrella item:**` marker keeps it outside the receipt requirement rather than pretending the receipt exists. Re-read the live backlog before trusting this note.
 
 ## References
 

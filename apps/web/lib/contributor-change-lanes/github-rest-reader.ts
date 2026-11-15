@@ -19,6 +19,7 @@ import { createOffThreadpoolFetchTransport } from "@/lib/network/off-threadpool-
 import {
   createPullRequestObservation,
   parseVerifiedPullRequestObservation,
+  type PullRequestObservation,
 } from "./pull-request-observation";
 import type { PullRequestSnapshot } from "./types";
 
@@ -287,6 +288,42 @@ async function persistEtag(prisma: PrismaLike, etag: string): Promise<void> {
       metadata: { ...md, githubPrEtag: etag },
     },
   });
+}
+
+/**
+ * BI-8129F585: one PR, read the same way as the inventory list, so a ship
+ * build whose PR merged outside the inventory window can still be proven.
+ * Returns null when the PR cannot be read or does not verify; throws nothing
+ * on a provider refusal (a rate limit is not evidence).
+ */
+export async function readGithubPullRequestObservation(input: {
+  repositoryFullName: string;
+  number: number;
+  token: string;
+  fetchImpl?: typeof fetch;
+  now?: () => Date;
+}): Promise<PullRequestObservation | null> {
+  const [owner, name] = input.repositoryFullName.split("/");
+  if (!owner || !name || !Number.isSafeInteger(input.number) || input.number <= 0) return null;
+  const res = await (input.fetchImpl ?? fetch)(
+    `https://api.github.com/repos/${owner}/${name}/pulls/${input.number}`,
+    {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${input.token}`,
+        Accept: "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+        "User-Agent": "dpf-contributor-inventory-sync",
+      },
+    },
+  );
+  if (!res.ok) {
+    await cancelGithubResponseBody(res);
+    return null;
+  }
+  const observedAt = (input.now ?? (() => new Date()))().toISOString();
+  const parsed = parsePullRequest((await res.json()) as RawPullRequest, { owner, name }, observedAt);
+  return parsed ? parseVerifiedPullRequestObservation(parsed) : null;
 }
 
 type FetchOutcome =

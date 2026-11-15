@@ -1,4 +1,5 @@
 import { err, ok, type ActionResult } from "@/lib/shared/action-result";
+import { parseCheckpointCapacity, type CheckpointCapacity } from "./executor-capacity";
 
 /**
  * The latest note an executor keeps with its heartbeat, so whoever takes the
@@ -13,6 +14,8 @@ export type ExecutorCheckpoint = {
   headSha?: string;
   pushed?: boolean;
   openRisks?: string[];
+  /** The executor's plan is limited until about this time (BI-53BED66C). */
+  capacity?: CheckpointCapacity;
 };
 
 const MAX_BYTES = 4096;
@@ -41,6 +44,11 @@ export function parseExecutorCheckpoint(input: unknown): ActionResult<ExecutorCh
   if (raw.pushed !== undefined) {
     if (typeof raw.pushed !== "boolean") return err("pushed must be true or false.");
     checkpoint.pushed = raw.pushed;
+  }
+  if (raw.capacity !== undefined) {
+    const parsed = parseCheckpointCapacity(raw.capacity);
+    if (!parsed.ok) return err(parsed.error);
+    checkpoint.capacity = parsed.data;
   }
   if (Object.keys(checkpoint).length === 0) return err("checkpoint has no fields.");
   if (Buffer.byteLength(JSON.stringify(checkpoint), "utf8") > MAX_BYTES) return err(`checkpoint exceeds ${MAX_BYTES} bytes.`);

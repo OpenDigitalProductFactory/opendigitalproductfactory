@@ -325,7 +325,10 @@ function getImplementationConcernState(
   const scoped = progressVisibility?.verification?.buildScoped ?? null;
   const scopedSurfaceClean =
     scoped != null
-    && scoped.typecheckPassed !== false
+    && verification.typecheckPassed !== null
+    && verification.verificationSource?.unchanged !== false
+    && (scoped.typecheckPassed === true
+      || scoped.failureAxis === "out-of-scope-noise")
     && (scoped.affectedTests?.length ?? 0) === 0;
 
   const verificationFailed =

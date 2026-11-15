@@ -231,7 +231,14 @@ export function describeQueuedAdmission({ admission, poolPolicy, delayMs }) {
       + `so this claim is parked at position ${position} behind host pressure, not behind other work`
       + `${shortfall ? `. ${shortfall}` : ""}${again}`;
   }
-  return `local-CI admission queued at position ${position}${again}`;
+  // BI-218A4555: the overseer says how long and why, not only where.
+  const estimate = Number.isFinite(admission?.estimatedWaitMs)
+    ? `, estimated wait about ${Math.max(1, Math.round(admission.estimatedWaitMs / 60_000))} min`
+    : "";
+  const reason = typeof admission?.queueReason === "string" && admission.queueReason
+    ? ` (${admission.queueReason.replace(/\.$/, "")})`
+    : "";
+  return `local-CI admission queued at position ${position}${estimate}${reason}${again}`;
 }
 
 function die(message) {
@@ -2082,6 +2089,8 @@ async function main() {
         at: new Date().toISOString(),
         queuePosition: admission.queuePosition ?? null,
         waitAgeMs: admission.waitAgeMs ?? null,
+        estimatedWaitMs: admission.estimatedWaitMs ?? null,
+        queueReason: admission.queueReason ?? null,
         expiresAt,
         ...(closedReason ? { poolClosedReason: closedReason } : {}),
       });

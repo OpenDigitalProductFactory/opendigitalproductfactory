@@ -9,7 +9,9 @@ import type { AcceptanceSweepPage, AcceptanceSweepPageItem } from "./acceptance-
 import {
   emptyRouting,
   foldRouteOutcomes,
+  FAILED_CHECK_ROUTE_DAYS,
   isRoutingCandidate,
+  ownsFailedCheck,
   routingHeadline,
   type AcceptanceSweepRouting,
   type AgedSweepCandidate,
@@ -281,7 +283,10 @@ export async function runAcceptanceSweep(
     }
     // BI-729D9B27: a build-originated item whose change is proven live routes at
     // once; the aged-item wait is for acceptance nobody owns, and this one has none.
-    if (isRoutingCandidate(itemAge?.ageDays, deliveredBuildEntry(item) ? 0 : config.agedDays, projection)) {
+    // BI-1D5FCEBE: a failure-held item owes a fresh check now, not in 14 days.
+    const routeAfterDays = deliveredBuildEntry(item) ? 0
+      : ownsFailedCheck(projection) ? Math.min(FAILED_CHECK_ROUTE_DAYS, config.agedDays) : config.agedDays;
+    if (isRoutingCandidate(itemAge?.ageDays, routeAfterDays, projection)) {
       agedCandidates.push({ item, ageDays: itemAge!.ageDays, projection });
     }
     if (projection.owner) page.owned += 1;

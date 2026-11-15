@@ -12,9 +12,11 @@
 // cannot prove it is disposable is treated as production.
 
 import type { PrismaClient } from "@dpf/db";
+import type { GuidanceSnapshotV1 } from "@dpf/db/guidance-snapshot-contract";
 import {
   resolveInstanceStance,
   type InstanceStanceProfile,
+  type OrganizationGuidanceFact,
 } from "@dpf/db/installation-instance-stance";
 import {
   pairingSupportsWorkSync,
@@ -30,6 +32,8 @@ import {
 
 import { shortDeviceId } from "@/lib/federation/instance-identity";
 import { loadEnvironmentClassResolution } from "@/lib/install/environment-class";
+import { normalizeOrganizationRef } from "@/lib/install/estate-identity-contract";
+import { loadEstateNameResolution } from "@/lib/install/estate-identity";
 import { readInstallHostProfile } from "@/lib/install/host-profile";
 
 // The installer-state read lives with the precedence chain that ranks it.
@@ -144,6 +148,11 @@ export interface InstanceStanceStore {
   listFederationLinks?(): Promise<readonly PairingLink[]>;
   /** The one federation health sentence, or null when it cannot be read. */
   readWorkSyncHealthLine?(): Promise<string | null>;
+  /**
+   * The guidance snapshot held from the authority on this link, verified, or
+   * null (BI-1B165D02). Optional: absent reports no guidance on a companion.
+   */
+  readHeldGuidanceSnapshot?(linkId: string): Promise<GuidanceSnapshotV1 | null>;
 }
 
 /**
@@ -155,7 +164,7 @@ export interface InstanceStanceStore {
  * a different set of rows.
  */
 export function prismaInstanceStanceStore(
-  prisma: Pick<PrismaClient, "platformConfig" | "backlogItem" | "federationLink" | "organization">,
+  prisma: Pick<PrismaClient, "platformConfig" | "backlogItem" | "federationLink" | "organization" | "federatedRecordMirror">,
 ): InstanceStanceStore {
   return {
     readConfig: async (key) =>
@@ -188,6 +197,15 @@ export function prismaInstanceStanceStore(
       const { getFederationHealth } = await import("@/lib/federation/work-sync-read-model");
       return (await getFederationHealth()).line;
     },
+    readHeldGuidanceSnapshot: async (linkId) => {
+      const [{ resolveFederationIdentity }, { readHeldGuidanceSnapshot }] = await Promise.all([
+        import("@/lib/federation/demand-identity"),
+        import("@/lib/federation/guidance-snapshot-exchange"),
+      ]);
+      const identity = await resolveFederationIdentity(prisma as never);
+      if (!identity.deviceId) return null;
+      return readHeldGuidanceSnapshot(prisma as never, { linkId, selfInstallationDid: identity.deviceId });
+    },
     listFederationLinks: async () => {
       const rows = await prisma.federationLink.findMany({
         select: {
@@ -196,6 +214,7 @@ export function prismaInstanceStanceStore(
           role: true,
           peerOrganizationRef: true,
           peerDeviceId: true,
+          peerInstallationId: true,
           peerEnvironmentClass: true,
           revokedAt: true,
           quarantinedAt: true,
@@ -214,12 +233,21 @@ export function prismaInstanceStanceStore(
         // declaration is compared against.
         peerEnvironmentClass: isInstallationEnvironmentClass(row.peerEnvironmentClass) ? row.peerEnvironmentClass : null,
         peerInstallationLabel: peerInstallationLabel(row.principal?.displayName, row.peerDeviceId),
+        peerDeviceId: row.peerDeviceId,
+        peerInstallationId: row.peerInstallationId,
         revokedAt: row.revokedAt,
         quarantinedAt: row.quarantinedAt,
       }));
     },
   };
 }
+
+type LoadStanceOptions = {
+  readText?: (path: string) => Promise<string>;
+  env?: Record<string, string | undefined>;
+  readHostProfile?: typeof readInstallHostProfile;
+  now?: Date;
+};
 
 /**
  * Compose the full instance stance from every canonical authority.
@@ -229,12 +257,24 @@ export function prismaInstanceStanceStore(
  */
 export async function loadInstanceStance(
   store: InstanceStanceStore,
-  options: {
-    readText?: (path: string) => Promise<string>;
-    env?: Record<string, string | undefined>;
-    readHostProfile?: typeof readInstallHostProfile;
-  } = {},
+  options: LoadStanceOptions = {},
 ): Promise<InstanceStanceProfile> {
+  return (await loadInstanceStanceWithPairing(store, options)).stance;
+}
+
+/**
+ * The stance plus the link that backs its pairing and the guidance snapshot held
+ * over it, for callers that act on the relationship (BI-1B165D02): the authority
+ * publishes on that link, and a companion decides under that snapshot.
+ */
+export async function loadInstanceStanceWithPairing(
+  store: InstanceStanceStore,
+  options: LoadStanceOptions = {},
+): Promise<{
+  stance: InstanceStanceProfile;
+  pairedLinkId: string | null;
+  heldGuidanceSnapshot: GuidanceSnapshotV1 | null;
+}> {
   const readHostProfile = options.readHostProfile ?? readInstallHostProfile;
   const [{ environmentClass }, hostProfile] = await Promise.all([
     loadEnvironmentClassResolution(store, { readText: options.readText, env: options.env }),
@@ -289,6 +329,35 @@ export async function loadInstanceStance(
     declaredRef: snapshot.pairedProductionInstallationRef,
     links,
   });
+  // BI-B50BE189: the relationship needs the peer to be of this estate. The
+  // link's organization ref is the peer's normalised estate name.
+  let peerEstateMatches = false;
+  if (pairing.source === "federation-link") {
+    try {
+      const local = normalizeOrganizationRef((await loadEstateNameResolution(store, options)).estateName);
+      peerEstateMatches = local !== null && local === normalizeOrganizationRef(pairing.ref);
+    } catch {
+      peerEstateMatches = false;
+    }
+  }
+  // BI-1B165D02: a development or test install reads the guidance its paired
+  // authority sent. The stance reports it only when the relationship is companion.
+  let heldGuidanceSnapshot: GuidanceSnapshotV1 | null = null;
+  let organizationGuidance: OrganizationGuidanceFact | undefined;
+  if (pairing.source === "federation-link" && pairing.linkId
+    && (environmentClass === "development" || environmentClass === "test")) {
+    try {
+      heldGuidanceSnapshot = (await store.readHeldGuidanceSnapshot?.(pairing.linkId)) ?? null;
+    } catch {
+      heldGuidanceSnapshot = null;
+    }
+    const now = options.now ?? new Date();
+    organizationGuidance = !heldGuidanceSnapshot
+      ? { state: "none" }
+      : Date.parse(heldGuidanceSnapshot.meta.expiresAt) <= now.getTime()
+        ? { state: "expired", expiresAt: heldGuidanceSnapshot.meta.expiresAt }
+        : { state: "current", version: heldGuidanceSnapshot.meta.version, expiresAt: heldGuidanceSnapshot.meta.expiresAt };
+  }
   let workSyncHealthLine: string | undefined;
   try {
     workSyncHealthLine = (await store.readWorkSyncHealthLine?.()) ?? undefined;
@@ -296,14 +365,19 @@ export async function loadInstanceStance(
     workSyncHealthLine = undefined;
   }
 
-  return resolveInstanceStance(
+  const stance = resolveInstanceStance(
     { ...snapshot, pairedProductionInstallationRef: pairing.ref ?? undefined },
     {
       sourceCapable: hostProfile.sourceCapable,
       pairingIsEstablished: pairingSupportsWorkSync(pairing),
       peerEnvironmentClass: pairing.peerEnvironmentClass,
       ...(pairing.peerInstallationLabel ? { peerInstallationLabel: pairing.peerInstallationLabel } : {}),
+      peerEstateMatches,
+      ...(pairing.staleDeclaredRef
+        ? { stalePairedRef: { ...pairing.staleDeclaredRef, repairRef: pairing.repairRef } }
+        : {}),
       ...(workSyncHealthLine ? { workSyncHealthLine } : {}),
+      ...(organizationGuidance ? { organizationGuidance } : {}),
     },
     {
       holdsIrreplaceableWork: holdsIrreplaceableWork({
@@ -313,4 +387,9 @@ export async function loadInstanceStance(
       }),
     },
   );
+  return {
+    stance,
+    pairedLinkId: pairing.source === "federation-link" ? pairing.linkId ?? null : null,
+    heldGuidanceSnapshot: stance.relationship === "companion" ? heldGuidanceSnapshot : null,
+  };
 }

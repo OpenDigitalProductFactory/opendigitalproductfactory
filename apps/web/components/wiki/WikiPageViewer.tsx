@@ -16,6 +16,8 @@ import { LocalTime } from "@/components/ui/LocalTime";
 import type { WikiBacklinks } from "@/lib/wiki/backlinks";
 
 import { WikiBacklinksPanel, type WikiBacklinksLabels } from "./WikiBacklinksPanel";
+import { ReferencedByPanel, type ReferencedByLabels } from "@/components/references/ReferencedByPanel";
+import type { ReferenceRow } from "@/lib/references/read-references";
 import { WikiBodyRenderer } from "./WikiBodyRenderer";
 import { WikiPageKindBadge } from "./WikiPageKindBadge";
 import { WikiSourceCitations, type WikiSourceCitation } from "./WikiSourceCitations";
@@ -81,6 +83,8 @@ type Props = {
   page: WikiPageDetail;
   /** Inbound links and unlinked mentions, already limited to what the reader may open (BI-4EAFF7AC). */
   backlinks?: { data: WikiBacklinks; labels: WikiBacklinksLabels };
+  /** BI-A63A9476: readable entity ids in the body, and what references this page; both reader-filtered. */
+  references?: { hrefs: Readonly<Record<string, string>>; rows: ReferenceRow[]; labels: ReferencedByLabels };
 };
 
 function formatOrigin(page: WikiPageDetail): string {
@@ -187,7 +191,7 @@ function PrincipleMetadataPanel({ page }: { page: WikiPageDetail }): ReactNode {
   );
 }
 
-export function WikiPageViewer({ page, backlinks }: Props): ReactNode {
+export function WikiPageViewer({ page, backlinks, references }: Props): ReactNode {
   // Wide screens: the page, then a right-hand "Linked from" column. Narrow
   // screens: the panel follows the page body (spec 2026-10-14 §4.2).
   return (
@@ -234,7 +238,7 @@ export function WikiPageViewer({ page, backlinks }: Props): ReactNode {
       {page.pageKind === "principle" && <PrincipleMetadataPanel page={page} />}
 
       <section className="mb-8">
-        <WikiBodyRenderer body={page.body} />
+        <WikiBodyRenderer body={page.body} entityRefHrefs={page.organizationId !== null ? references?.hrefs : undefined} />
       </section>
 
       <aside className="border-t border-[var(--dpf-border)] pt-4 mt-8">
@@ -253,6 +257,11 @@ export function WikiPageViewer({ page, backlinks }: Props): ReactNode {
       <aside aria-labelledby="wiki-backlinks-heading" className="mt-8 lg:mt-0">
         <div className="lg:sticky lg:top-6">
           <WikiBacklinksPanel backlinks={backlinks.data} labels={backlinks.labels} />
+          {references ? (
+            <div className="mt-4">
+              <ReferencedByPanel rows={references.rows} labels={references.labels} headingId="wiki-referenced-by-heading" />
+            </div>
+          ) : null}
         </div>
       </aside>
     ) : null}

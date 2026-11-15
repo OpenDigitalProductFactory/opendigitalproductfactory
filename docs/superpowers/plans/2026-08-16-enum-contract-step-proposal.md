@@ -1,8 +1,19 @@
-# Enum contract step — ordered proposal (OPERATOR REVIEW REQUIRED)
+---
+status: active
+---
 
-**Status: proposal only — nothing in this document is executed by the W4 PR.**
+# Enum contract step — ordered proposal (PARTIALLY DECIDED)
+
+**Status: proposal with the `BacklogItem.status` decision accepted for execution;
+the other Wave 2 decisions remain open.** Nothing in this document was executed
+by the original W4 PR.
 BI-817ED2D4 · Simplify & Strengthen W4 · architecture pass 2026-08-16 §3.2-a ·
 expand step shipped as migrations `20260816110000` + `20260816111000`.
+
+The independently shippable status slice is `BI-22CDF13B`, governed by WWMD
+decision `DI-FB8D23E524B1`: normalize historical `blocked` rows to governed
+deferrals rather than resurrecting `blocked` in the canonical lifecycle. This
+does not ratify the effort-size, source, or FeatureBuild decisions below.
 
 ## Where the expand step left the schema
 
@@ -47,7 +58,7 @@ fleet install downgrades that column to Wave 2 with an explicit mapping.
 
 | Column | Legacy value(s) observed | Decision needed |
 | --- | --- | --- |
-| `BacklogItem.status` | `blocked` (4 rows on reference install) | Map to `deferred` (semantically closest: paused, review-triggered) or resurrect `blocked` as a canonical status. Recommended: map to `deferred` with a `deferReason` backfill. |
+| `BacklogItem.status` | `blocked` (4 rows on reference install) | **Normalization decided — `BI-22CDF13B`, `DI-FB8D23E524B1`.** Map every historical row to `deferred` with the complete governed deferral projection: reason, observable resume trigger, future review date, deferral timestamp, and an active human owner resolved from the original submitting user (falling back to the governed install-work owner only when needed). Record activity history, remove `blocked` from the CHECK/application tolerance, and validate the narrowed CHECK. The later Prisma field flip remains in this parent contract program because mapped enum identifiers change the application-facing `in-progress` and `awaiting-acceptance` literals; it is not hidden inside the cleanup migration. |
 | `BacklogItem.effortSize` | `xs`, `XS` | Map to `small` or extend the canonical set with `xsmall`. Recommended: map to `small` (RICE jobSize seeds already treat sub-small as small). |
 | `BacklogItem.source` | `build-failure`, `hive-scout`, `self-upgrade-failure` — **live writer vocabulary**, not just legacy rows | These writers bypassed `BACKLOG_SOURCE_VALUES` ("new values are added only when a writer needs them" — the writers needed them). Recommended: promote all three into `BacklogSource` (+ TS union + MCP mirrors, same commit per AGENTS.md §3) rather than rewriting history. |
 | `FeatureBuild.phase` | `panicked` (retired writer vocabulary, readable in `operator-triage.ts`) | Map to `failed`, keep triage read-compat until the mapping lands. |

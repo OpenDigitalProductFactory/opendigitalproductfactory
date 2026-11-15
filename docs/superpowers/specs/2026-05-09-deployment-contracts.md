@@ -213,6 +213,16 @@ Wrappers must not invent new secret semantics. If a deployment
 needs a new logical secret, it goes into the runtime config schema
 (contract 2) and propagates to every other wrapper.
 
+Portal startup resolves application root secrets through the provider-neutral
+`scripts/runtime-secret-bootstrap.mjs` boundary before migrations. The default
+`environment` provider preserves existing installs. The optional
+`onepassword-connect` adapter reads one explicitly configured item once at
+startup and passes only allow-listed values in the child process environment.
+Provider-specific configuration stops at this boundary: DPF continues to own
+the meaning, authorization, encryption, rotation, and audit of each logical
+secret. An explicitly selected external provider fails closed; it never falls
+back silently to environment values.
+
 ### 9. LLM and agent-provider routing
 
 Every deployment uses the same LLM provider contract. Wrappers may

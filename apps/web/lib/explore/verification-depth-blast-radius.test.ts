@@ -178,17 +178,18 @@ describe("verification-depth binding — blast radius", () => {
     const blocking = new Set(post.filter((c) => c.newlyBlocks).map((c) => c.profile));
     expect([...blocking].sort()).toEqual([
       "absent",
+      "canonical-green",
       "canonical-tests-failed",
       "canonical-typecheck-failed",
       "contradictory-not-run",
       "nested-tests-green",
     ]);
-    // canonical-green is the ONLY production shape that clears the bar, at
-    // either depth. Three of the five blocked shapes are spurious or
-    // contradictory rather than genuine quality failures — BI-397F87A9,
-    // BI-E4E70B9A.
+    // BI-57AF5162: the historical "canonical-green" shape has no executed
+    // count or execution facts. Zero failures cannot establish required tests.
+    // No historical profile here qualifies; observed positive cases and
+    // established exemptions are covered in verification-depth-requirement.test.
     const clears = new Set(post.filter((c) => !c.newlyBlocks && c.allowedToday).map((c) => c.profile));
-    expect([...clears]).toEqual(["canonical-green"]);
+    expect([...clears]).toEqual([]);
   });
 
   it("quantifies how much of the new blocking is spurious", () => {
@@ -199,6 +200,7 @@ describe("verification-depth binding — blast radius", () => {
     expect(byProfile("canonical-tests-failed")).toBe(64); // 1185 tests failed
     expect(byProfile("canonical-typecheck-failed")).toBe(32); // already refused at build->review
     expect(byProfile("absent")).toBe(32); // no verification evidence at all
+    expect(byProfile("canonical-green")).toBe(64); // execution unestablished, not a test failure
 
     // SPURIOUS: zero failed tests and a passing typecheck, refused only because
     // the count lives under `tests.failed` instead of `testsFailed`
@@ -210,13 +212,14 @@ describe("verification-depth binding — blast radius", () => {
     // requirement: 16 (kind,size) x 2 depths.
     expect(byProfile("contradictory-not-run")).toBe(32);
 
-    // nested-tests-green is still a false positive (BI-397F87A9): 64 of 224.
-    expect(byProfile("nested-tests-green") / newly.length).toBeCloseTo(64 / 224, 5);
+    // Retain the historical nested-profile measurement; the denominator now
+    // includes 64 additional unknown-execution refusals (BI-57AF5162).
+    expect(byProfile("nested-tests-green") / newly.length).toBeCloseTo(64 / 288, 5);
   });
 
   it("reports the headline blast radius", () => {
     const newly = cells.filter((c) => c.newlyBlocks);
-    expect(newly).toHaveLength(224);
+    expect(newly).toHaveLength(288);
     expect(cells).toHaveLength(1152);
     // Every one of them is post-build; none at ideate->plan or plan->build.
     expect([...new Set(newly.map((c) => c.transition))].sort())

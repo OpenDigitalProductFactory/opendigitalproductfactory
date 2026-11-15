@@ -1,5 +1,5 @@
 {
-  "description": "Pre-existing `${{ github.event.* }}` or `${{ inputs.* }}` interpolations inside `run:` blocks of workflow files, accepted at audit-actions-injection.yml's inception. The auditor blocks PRs that ADD new occurrences but allows these. Burn-down is tracked through Build Studio. Regenerate this file after each fix: see scripts/security/regenerate-baseline.mjs pattern.",
+  "description": "Pre-existing `${{ github.event.* }}` or `${{ inputs.* }}` interpolations inside `run:` blocks of workflow files, accepted at audit-actions-injection.yml's inception. The auditor blocks PRs that ADD new occurrences but allows these. Burn-down is tracked through Build Studio. Remove an entry from this file in the same PR that fixes it.",
   "generatedAt": "2026-05-21T23:00:00.000Z",
   "occurrences": []
 }

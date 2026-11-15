@@ -87,6 +87,23 @@ describe("findDuplicatePairs", () => {
       ),
     ).toEqual([]);
   });
+
+  it("keeps stable pair ordering across a complete population larger than the former 500-item ceiling", () => {
+    const items: DedupItem[] = Array.from({ length: 620 }, (_, index) => ({
+      itemId: `BI-${String(index).padStart(8, "0")}`,
+      title: `Independent outcome ${index}`,
+    }));
+    items.push(
+      { itemId: "BI-Z-A", title: "Reconcile the exact shared backlog record", body: "same evidence" },
+      { itemId: "BI-Z-B", title: "Reconcile the exact shared backlog record", body: "same evidence" },
+    );
+
+    const first = findDuplicatePairs(items, 0.95);
+    const second = findDuplicatePairs([...items].reverse(), 0.95);
+
+    expect(first).toContainEqual(expect.objectContaining({ a: "BI-Z-A", b: "BI-Z-B", similarity: 1 }));
+    expect(second).toEqual(first);
+  });
 });
 
 describe("computeMerge", () => {

@@ -2,10 +2,48 @@
 // Tests for pure state machine functions in the build pipeline.
 
 import { describe, it, expect, vi } from "vitest";
-vi.mock("@dpf/db", () => ({ prisma: { featureBuild: { findUnique: async () => ({ createdById: "human" }) } } }));
+const verificationFixture = vi.hoisted(() => ({ update: vi.fn().mockResolvedValue({}), run: vi.fn(), exec: vi.fn() }));
+vi.mock("@/lib/sandbox", () => ({ execInSandbox: verificationFixture.exec }));
+vi.mock("@dpf/db", () => ({ prisma: { featureBuild: { findUnique: async () => ({ createdById: "human" }), update: verificationFixture.update } } }));
+vi.mock("./coding-agent", () => ({ runSandboxTests: verificationFixture.run, diagnoseTestFailures: () => ({ summary: "fixture" }) }));
+vi.mock("./sandbox-state", () => ({ getSandboxStateForBuild: async () => ({ sourceDiffstat: [{ path: "docs/fixture.md" }] }) }));
+vi.mock("./sandbox/build-branch", () => ({ resolveBuildWorkdir: (id: string) => `/workspace/.builds/${id}`, getClientIdentity: async () => ({ clientBranch: "client/fixture" }) }));
 vi.mock("@/lib/govern/operation-authority", () => ({ currentOperationAuthority: async () => ({ userId: "human", platformRole: "HR-000", isSuperuser: false }) }));
 import { getResumeStep, shouldRetry, nextStep, buildFailedState, executeStep } from "./build-pipeline";
 import type { BuildExecutionState } from "./build-exec-types";
+
+describe("BI-57AF5162: persisted pipeline verification", () => {
+  it("does not substitute a typecheck of unidentified source after discovery fails", async () => {
+    verificationFixture.update.mockClear();
+    verificationFixture.run.mockClear();
+    verificationFixture.exec.mockRejectedValue(new Error("fixture source unavailable"));
+    verificationFixture.run.mockResolvedValue({ passed: false, typeCheckPassed: true,
+      scope: "none", testsExecuted: false, testsApplicable: null, testsPassed: 0, testsFailed: 0,
+      testOutput: "Unknown source.", typeCheckOutput: "", testCommands: [] });
+    await executeStep("code_generated", "FB-VERIFICATION-FIXTURE", { step: "code_generated", retryCount: 0, containerId: "fixture-container" } as BuildExecutionState, () => {});
+    expect(verificationFixture.run).not.toHaveBeenCalled();
+    expect(verificationFixture.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({
+      verificationOut: expect.objectContaining({ typecheckPassed: null, testsPassed: 0, testsQualified: false }),
+    }) }));
+  });
+  it("persists a no-test exemption without inventing a passing test", async () => {
+    verificationFixture.update.mockClear();
+    verificationFixture.exec.mockImplementation(async (_id, command) => command.startsWith("node -e ") ? "a".repeat(64) : "docs/current-source.md\0");
+    verificationFixture.run.mockResolvedValue({ passed: true, typeCheckPassed: true,
+      scope: "none", testsExecuted: false, testsApplicable: false, testsPassed: 0, testsFailed: 0,
+      testOutput: "No tests ran.", typeCheckOutput: "", testCommands: [] });
+    await executeStep("code_generated", "FB-VERIFICATION-FIXTURE", {
+      step: "code_generated", retryCount: 0, containerId: "fixture-container",
+    } as BuildExecutionState, () => {});
+    expect(verificationFixture.run).toHaveBeenLastCalledWith("fixture-container", expect.objectContaining({ changedFiles: ["docs/current-source.md"], changedFilesKnown: true }));
+    expect(verificationFixture.update).toHaveBeenCalledWith(expect.objectContaining({
+      where: { buildId: "FB-VERIFICATION-FIXTURE" },
+      data: expect.objectContaining({ verificationOut: expect.objectContaining({
+        testsPassed: 0, testsFailed: 0, testsExecuted: false, testsApplicable: false,
+      }) }),
+    }));
+  });
+});
 
 describe("getResumeStep", () => {
   it("returns 'pending' for null state", () => {

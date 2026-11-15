@@ -9,6 +9,7 @@ import {
 } from "@/lib/build/github-pr-readiness";
 import {
   createBuildPrDeliveryState,
+  readBuildPrDeliveryState,
   type BuildPrDeliveryStateV1,
   type BuildPrDeliveryStatus,
 } from "./build-pr-delivery-state";
@@ -23,8 +24,8 @@ import {
   type PrRepairAuthority,
   type PrRepairPacket,
 } from "./pr-follow-through";
+import { MAX_UNKNOWN_OBSERVATIONS, consecutiveUnknownObservations, nextUnknownObservation } from "./build-pr-delivery-recheck";
 const MAX_STALE_UPDATES = 2;
-const MAX_UNKNOWN_OBSERVATIONS = 6;
 
 export type BuildPrDeliveryAction =
   | { kind: "queue" | "update-branch"; headSha: string }
@@ -95,19 +96,16 @@ export function decideBuildPrDeliveryAction(input: {
         reason: readiness.reason,
       };
     case "unknown":
-      return state.reconciliationAttempts >= MAX_UNKNOWN_OBSERVATIONS
-        ? {
-            kind: "escalate",
-            status: "escalated",
-            headSha: readiness.headSha,
-            reason: `observation-budget-exhausted:${readiness.reason}`,
-          }
-        : {
-            kind: "wait",
-            status: "checking",
-            headSha: readiness.headSha,
-            reason: readiness.reason,
-          };
+      // GitHub has not decided yet (BI-0EDCF2EC): never a stop. Past the
+      // budget the room backs off (nextUnknownObservation) and keeps looking.
+      return {
+        kind: "wait",
+        status: "checking",
+        headSha: readiness.headSha,
+        reason: consecutiveUnknownObservations(state, readiness.headSha) + 1 >= MAX_UNKNOWN_OBSERVATIONS
+          ? `observation-deferred:${readiness.reason}`
+          : readiness.reason,
+      };
   }
 }
 
@@ -243,8 +241,12 @@ export async function executeBuildPrDeliveryAction(input: {
     dispatchRepair: input.dispatchRepair,
   });
   const followThrough = effects.decision;
+  const undecided = input.readiness.kind === "unknown"
+    ? nextUnknownObservation(input.state, input.readiness.headSha, input.now ?? new Date())
+    : { unknownObservations: 0, nextObservationAt: null };
   let next: BuildPrDeliveryStateV1 = {
     ...input.state,
+    ...undecided,
     reconciliationAttempts: input.state.reconciliationAttempts + 1,
     lastObservedHeadSha: input.readiness.headSha,
     lastReadiness: input.readiness.kind,
@@ -349,6 +351,12 @@ export async function initializeAndReconcileBuildPrDelivery(input: {
     prNumber: input.prNumber,
     prUrl: input.prUrl,
   });
+  // BI-085A37EC: a republish onto the same PR keeps that PR's repair budget, or the loop would never end.
+  const prior = (await input.db.workroom.findMany({
+    where: { featureBuildId: input.featureBuildId },
+    select: { id: true, workspaceState: true, updatedAt: true },
+  })).map((room) => readBuildPrDeliveryState(room.workspaceState)).find((state) => state?.prNumber === input.prNumber);
+  if (prior) initial.followThrough = { ...initial.followThrough, attempts: prior.followThrough.attempts };
   const capture = await captureBuildPrOntoCapsule({
     db: input.db,
     featureBuildId: input.featureBuildId,

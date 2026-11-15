@@ -2,6 +2,7 @@ import { prometheusPoll, fullDiscoverySweep } from "./discovery-poll";
 import { modelDiscoveryRefresh } from "./model-discovery-refresh";
 import { routingReachabilityPreflight } from "./routing-reachability-preflight";
 import { infraPrune } from "./infra-prune";
+import { entityReferencesRebuild } from "./entity-references-rebuild";
 import { rateRecovery } from "./rate-recovery";
 import { providerRecovery } from "./provider-recovery";
 import { providerPauseExpiry, providerPauseReconcile } from "./provider-operator-pause";
@@ -13,10 +14,12 @@ import { ecosystemSubmissionSweep } from "./ecosystem-submission-sweep";
 import { ecosystemWatchdog } from "./ecosystem-watchdog";
 import { issueReportTriage } from "./issue-report-triage";
 import { issueReportProjectOnCreate } from "./issue-report-project";
+import { roomMessageDispatch, roomWakeRun } from "./room-message-wake";
 import { documentRenditionBackfill, documentRenditionGenerate } from "./document-renditions";
 import { backlogTriageDrain } from "./backlog-triage-drain";
 import { coworkerRegressionDetect } from "./coworker-regression-detect";
-import { agentTaskDispatch } from "./agent-task-dispatch";
+import { planGateStallInvariant } from "./plan-gate-stall-invariant";
+import { agentTaskDispatch, agentTaskRunNow } from "./agent-task-dispatch";
 import { foregroundWorkRun } from "./foreground-work";
 import { taskrunWatchdog } from "./taskrun-watchdog";
 import { evalBackground, probeBackground } from "./eval-background";
@@ -185,6 +188,7 @@ export const scheduledFunctions = [
   modelDiscoveryRefresh,
   routingReachabilityPreflight, // BI-E2CCFAC1: coworker routing dead-ends surface before a human hits one
   infraPrune,
+  entityReferencesRebuild,
   codeGraphReconcileScheduled,
   issueReportTriage,
   ecosystemInboundTriage,
@@ -192,6 +196,7 @@ export const scheduledFunctions = [
   ecosystemWatchdog,
   backlogTriageDrain,
   coworkerRegressionDetect,
+  planGateStallInvariant, // BI-9FA1F9CF: a passed plan stuck on PLAN_REQUIRED raises a signal
   agentTaskDispatch,
   taskrunWatchdog,
   governedBacklogTeeUpScheduled,
@@ -298,6 +303,9 @@ export const eventFunctions = [
   deliberationRun,
   governedBacklogTeeUpRequested,
   issueReportProjectOnCreate,
+  roomMessageDispatch, // BI-31C1FDEC: an addressed room message wakes its recipient
+  roomWakeRun, // BI-31C1FDEC: one coalesced reply run per coworker per room
+  agentTaskRunNow, // BI-31C1FDEC: run one due task now (a room wake's reply)
   documentRenditionGenerate, // BI-9D43CBEF: office file saved -> PDF + text renditions, indexed
   documentRenditionBackfill, // BI-9D43CBEF/BI-153EC72C: bounded, draining sweep at portal start, on a pin change, and when the converter becomes available
   contributorInventorySyncOnDemand,

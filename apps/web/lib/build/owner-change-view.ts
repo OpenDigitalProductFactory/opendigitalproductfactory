@@ -1,5 +1,5 @@
 import type { BuildStudioCustomerStatus } from "./customer-status-projection";
-import { normalizeVerificationOutput } from "./verification-output";
+import { normalizeVerificationOutput, projectVerificationEvidence } from "./verification-output";
 import type { BuildPhase, FeatureBuildRow } from "@/lib/feature-build-types";
 import type { BusinessBuildBrief } from "./business-build-brief";
 import type { BuildStudioOwnerState } from "./owner-status-reconciliation";
@@ -140,17 +140,21 @@ function automatedCheck(build: FeatureBuildRow): OwnerProofCheck {
       verification.observedAt,
     );
   }
+  const display = projectVerificationEvidence(verification);
   if (!verification.observedAt) {
     return proof("automated", "Automated checks", "not-recorded", "The automated result has no observation time.");
   }
   if (isOlderThanBuild(verification.observedAt, build.updatedAt)) {
     return proof("automated", "Automated checks", "stale", "The Change was updated after these checks ran.", verification.observedAt);
   }
+  if (!display.qualified) {
+    return proof("automated", "Automated checks", "not-recorded", display.summary, verification.observedAt);
+  }
   return proof(
     "automated",
     "Automated checks",
     "passed",
-    `${verification.testsPassed ?? 0} automated test${verification.testsPassed === 1 ? "" : "s"} passed and the production type check passed.`,
+    display.summary,
     verification.observedAt,
   );
 }

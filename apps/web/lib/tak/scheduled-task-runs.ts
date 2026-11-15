@@ -18,6 +18,9 @@ import {
 
 export type ScheduledTaskRunRef = AutonomousWorkRunRef;
 
+/** What a room reply turn (taskConfig.roomReply) must hold to answer: read the room, then post. */
+const ROOM_REPLY_TOOLS = ["read_room_messages", "post_room_message"] as const;
+
 /**
  * A scheduled run whose loop executed zero tools and produced only a
  * provider-failure apology did no work: it must fail (and enter the
@@ -161,12 +164,22 @@ export function scheduledToolsNeedingPin(input: {
   /** The task's taskConfig; its workroomStage record supplies declaredStageTools
    *  when they are not passed directly (BI-43C3E914, GPP element 5). */
   taskConfig?: unknown;
+  /** A coworker cadence's declared writes (mandatedTools). Pinned only for a run
+   *  with no Workroom stage, and only those the run is authorized for (BI-3F641F91). */
+  cadenceTools?: readonly string[] | null;
 }): string[] {
-  const promptRequired = scheduledRequiredToolNames({
-    prompt: input.prompt,
-    authorizedTools: [...input.attached, ...input.deferred],
-  });
-  const required = [...new Set([...promptRequired, ...(input.declaredStageTools ?? workroomStageToolsFromTaskConfig(input.taskConfig))])];
+  const authorized = [...input.attached, ...input.deferred];
+  const promptRequired = scheduledRequiredToolNames({ prompt: input.prompt, authorizedTools: authorized });
+  const stageTools = input.declaredStageTools ?? workroomStageToolsFromTaskConfig(input.taskConfig);
+  const authorizedNames = new Set(authorized.map((tool) => tool.name));
+  const cadence = stageTools.length > 0 ? [] : (input.cadenceTools ?? []).filter((name) => authorizedNames.has(name));
+  // BI-8747A73D: a room reply needs to read the room as well as post. The read
+  // has no side effect, so the prompt rule above never pins it, and the reply
+  // turn could lose it to the cap. Only the authorized ones are pinned.
+  const roomReply = isRecord(input.taskConfig) && isRecord(input.taskConfig.roomReply)
+    ? ROOM_REPLY_TOOLS.filter((name) => authorizedNames.has(name))
+    : [];
+  const required = [...new Set([...promptRequired, ...stageTools, ...cadence, ...roomReply])];
   if (required.length === 0) return [];
   const deferredNames = new Set(input.deferred.map((tool) => tool.name));
   return required.some((name) => deferredNames.has(name)) ? required : [];

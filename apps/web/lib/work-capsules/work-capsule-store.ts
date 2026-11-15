@@ -419,7 +419,11 @@ export async function claimBacklogItemWorkspace(args: {
   });
 
   const claimed = admission.overrideConflicts.length === 0;
-  if (claimed) {
+  // The item's claim fields are written only when this Workroom's claim is
+  // the local one. A mirror's claim lives at its home (claimAtHome), and a
+  // claim held here for a paired installation is the Workroom itself, so it
+  // lapses and releases with that Workroom's lease (BI-30EDDB7F).
+  if (claimed && !args.input.claimAtHome && args.input.executorKind !== "federated-peer") {
     await args.db.backlogItem.update({
       where: { id: item.id },
       data: {

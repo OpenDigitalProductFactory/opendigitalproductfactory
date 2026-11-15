@@ -831,8 +831,11 @@ describe("agent coworker external access", () => {
     }));
   });
 
-  it("persists substantive coworker responses as TaskArtifact and Work Capsule evidence", async () => {
+  it("does not record a blocked anchored reply as response evidence", async () => {
     mockPrisma.taskRun.findFirst.mockResolvedValue({ taskRunId: "run-123" });
+    mockPrisma.agentMessage.create.mockReset().mockImplementation(async ({ data }: any) => ({
+      ...data, id: data.role === "user" ? "user-msg-1" : "agent-msg-1", createdAt: new Date("2026-11-13T00:00:00Z"),
+    }));
     mockGetAvailableTools.mockReturnValue([]);
     mockRouteAndCall.mockResolvedValue({
       content: "I reviewed the anchored capsule and recommend finishing the evidence handoff before promotion.",
@@ -859,40 +862,15 @@ describe("agent coworker external access", () => {
       },
     });
 
-    await sendMessage({
+    const result = await sendMessage({
       threadId: "thread-1",
       content: "What should happen next?",
       routeContext: "/build",
       buildId: "FB-123",
     });
-
-    expect(mockCreateTaskArtifact).toHaveBeenCalledWith(
-      expect.objectContaining({
-        taskRunId: "run-123",
-        artifactType: "coworker_response",
-        name: "Coworker response",
-        producerAgentId: "admin-assistant",
-      }),
-    );
-    expect(mockRecordWorkCapsuleEvidence).toHaveBeenCalledWith(
-      expect.objectContaining({
-        capsuleId: "WC-123",
-        evidence: expect.objectContaining({
-          kind: "note",
-          summary: "Admin Assistant response captured for the current portal context.",
-        }),
-      }),
-    );
-    expect(mockPrisma.backlogItemActivity.create).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({
-          backlogItemId: "backlog-row-1",
-          kind: "portal-context-coworker-response",
-          summary: "Admin Assistant response captured for the current portal context.",
-          recordedById: "user-1",
-          recordedByAgentId: "admin-assistant",
-        }),
-      }),
-    );
+    expect("agentMessage" in result && result.agentMessage.role).toBe("system");
+    expect(mockCreateTaskArtifact).not.toHaveBeenCalled();
+    expect(mockRecordWorkCapsuleEvidence).not.toHaveBeenCalled();
+    expect(mockPrisma.backlogItemActivity.create).not.toHaveBeenCalled();
   });
 });

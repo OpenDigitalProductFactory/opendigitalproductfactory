@@ -278,3 +278,43 @@ describe("prepareUpgradeSource — upstream URL read (BI-574098A3)", () => {
   });
 });
 
+describe("prepareUpgradeSource — transient network on upstream fetch (BI-7FFF5CB0)", () => {
+  const workspace = { ...baseUpstream, workspacePath: "/host-dpf/.upgrade-workspace", networkRetryDelayMs: 0 };
+  // Live SUR-256EAF95: one dropped connection to github.com failed the upgrade.
+  const TIMEOUT = "fatal: unable to access 'https://github.com/x/y/': Failed to connect to github.com port 443 after 75004 ms: Could not connect to server";
+
+  function gitWithFetches(fetches: GitResult[]) {
+    const git = fakeGit([
+      ["rev-parse --git-dir", ok()],
+      ["config --get remote.origin.url", ok("https://github.com/x/y.git\n")],
+      ["config --get remote.upgrade-upstream.url", ok("")],
+      ["rev-parse upgrade-upstream/main", ok(`${UPSTREAM}\n`)],
+      ["diff --quiet", fail("local content delta", 1)],
+      ["rev-parse HEAD", ok(`${MERGE}\n`)],
+      ["status --porcelain", ok("")],
+    ]);
+    const fetchCalls: string[][] = [];
+    const runner = (async (args: string[]) => {
+      if (args.includes("fetch") && args.includes("upgrade-upstream")) {
+        fetchCalls.push(args);
+        return fetches.shift() ?? ok();
+      }
+      return git(args);
+    }) as GitRunner;
+    return { runner, fetchCalls };
+  }
+
+  it("retries the upstream fetch after a network timeout instead of failing the run", async () => {
+    const { runner, fetchCalls } = gitWithFetches([fail(TIMEOUT, 128), ok()]);
+    const r = await prepareUpgradeSource(workspace, runner);
+    expect(r).toMatchObject({ ok: true, stamp: MERGE });
+    expect(fetchCalls).toHaveLength(2);
+  });
+
+  it("does not retry a fetch that fails for a non-network reason", async () => {
+    const { runner, fetchCalls } = gitWithFetches([fail("fatal: couldn't find remote ref main", 128)]);
+    const r = await prepareUpgradeSource(workspace, runner);
+    expect(r).toMatchObject({ ok: false, reason: "prep-error" });
+    expect(fetchCalls).toHaveLength(1);
+  });
+});

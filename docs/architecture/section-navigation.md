@@ -38,6 +38,11 @@ driven by the shared shape in
 The `dense` flag (pill) tightens spacing and hides the description for embedded
 surfaces (e.g. the AI Operations Map).
 
+Every nav link renders at `text-xs` or larger. The UX route sweep counts a link
+set at 9–11px as sub-legible, and a nav link appears on every route under the
+nav, so one small link becomes a defect on every page there. A net-new route's
+budget for those is zero (BI-8E1FD1BD).
+
 ## Adding or changing a section nav
 
 Build a `SectionNavConfig` from your domain nav data (resolving `active` for each

@@ -292,3 +292,14 @@ test("the cloud-session allowance needs exactly CLAUDE_CODE_REMOTE=true and stil
     "an explicit free-text override is still refused in a cloud session",
   );
 });
+
+// EP-DELIVERY-ENGINE-V2 E3 (BI-31C988D5): a push with no runtime-bound file
+// needs no local-CI record; only `git push` defers, PR creation still needs proof.
+test("a git push the local-CI admission exempts is not blocked; a PR create still is", () => {
+  const dir = mkdtempSync(join(tmpdir(), "dpf-guard-e3-"));
+  const head = { branch: "fix/x", sha: "a".repeat(40), statePath: join(dir, "none.json"), topLevel: dir };
+  const exempt = () => true;
+  assert.equal(decide("git push -u origin HEAD", {}, { head, localCiNotRequired: exempt }).block, false);
+  assert.equal(decide("gh pr create --title t --body b", {}, { head, localCiNotRequired: exempt }).block, true);
+  assert.equal(decide("git push -u origin HEAD", {}, { head, localCiNotRequired: () => false }).block, true);
+});

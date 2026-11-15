@@ -90,6 +90,25 @@ function stanceRows(stance: InstanceStanceProfile): StanceRow[] {
   });
 }
 
+/** The repair the form offers when the saved paired reference is dead (BI-B50BE189). */
+export function pairingRepair(stance: InstanceStanceProfile): InstallationIdentityView["pairingRepair"] {
+  const stale = stance.stalePairedRef;
+  if (!stale) return undefined;
+  const reason = stale.reason === "not-trusted" ? "no longer trusted" : stale.reason;
+  const peer = stance.pairedInstallationLabel ?? stale.repairRef;
+  return stale.repairRef
+    ? {
+      message: `The saved paired installation, ${stale.ref}, names a connection that is ${reason}. Point it at ${peer} instead.`,
+      repairRef: stale.repairRef,
+      actionLabel: `Use ${peer}`,
+    }
+    : {
+      message: `The saved paired installation, ${stale.ref}, names a connection that is ${reason}, and no live connection can replace it yet.`,
+      repairRef: null,
+      actionLabel: null,
+    };
+}
+
 function pairingDetail(stance: InstanceStanceProfile): string | null {
   return stance.pairedProductionInstallationRef
     ? `Paired with ${stance.pairedProductionInstallationRef}.`
@@ -136,6 +155,7 @@ export async function loadInstallationIdentityView(
       environmentClass: environment.environmentClass,
       pairedProductionInstallationRef: stance.pairedProductionInstallationRef ?? null,
     },
+    ...(pairingRepair(stance) ? { pairingRepair: pairingRepair(stance) } : {}),
     secondaryPurposes: loaded.status === "valid"
       ? loaded.intent.secondaryPurposes.filter((secondary) => secondary !== purpose)
       : [],

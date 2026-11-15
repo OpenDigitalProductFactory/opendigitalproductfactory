@@ -3,6 +3,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/portal-context/invalidation", () => ({ revalidatePortalContext: vi.fn() }));
+const takeover = vi.hoisted(() => vi.fn());
+vi.mock("./own-room-takeover", () => ({ assessOwnRoomTakeover: takeover }));
 
 import { reassignCapsuleExecutor } from "./reassign-executor-handler";
 import type { CapsuleDb, WorkCapsuleActor } from "./work-capsule-store-types";
@@ -126,5 +128,38 @@ describe("reassignCapsuleExecutor with capsuleIds", () => {
     expect(db.workroomActivity.create).toHaveBeenCalledWith({ data: expect.objectContaining({
       kind: "executor-changed", payload: expect.objectContaining({ handoffManifest: { checkpoint: null } }),
     }) });
+  });
+});
+
+// BI-1986D3C1: a takeover nobody approved ran only because it was classified as
+// the owner's own room. The writer proves that again inside its transaction.
+describe("own-room takeover recheck", () => {
+  beforeEach(() => { takeover.mockReset(); });
+
+  it("re-proves the takeover inside the transaction before changing the executor", async () => {
+    const db = fakeDb();
+    takeover.mockResolvedValue({});
+    const result = await reassignCapsuleExecutor({ params: { ...params, toExecutorRef: "new-session" }, db: db as unknown as CapsuleDb,
+      resolveActor: async () => oauthActor, ownRoomTakeoverRecheck: true });
+    expect(result).toMatchObject({ success: true });
+    expect(takeover).toHaveBeenCalledWith(expect.objectContaining({ actor: oauthActor,
+      takeover: { capsuleId: "WC-1", toExecutorKind: "claude-desktop", toExecutorRef: "new-session" } }));
+  });
+
+  it("refuses without writing when the room left the owner's scope after classification", async () => {
+    const db = fakeDb();
+    const { BoundedHandoffRefusal } = await import("./bounded-handoff-command");
+    takeover.mockRejectedValue(new BoundedHandoffRefusal("takeover-other-holder", "Another person holds this room's lease."));
+    const result = await reassignCapsuleExecutor({ params, db: db as unknown as CapsuleDb,
+      resolveActor: async () => oauthActor, ownRoomTakeoverRecheck: true });
+    expect(result).toMatchObject({ success: false, error: "takeover-other-holder" });
+    expect(db.workroom.update).not.toHaveBeenCalled();
+    expect(db.workroomParticipant.create).not.toHaveBeenCalled();
+  });
+
+  it("does not recheck a takeover a person approved", async () => {
+    const db = fakeDb();
+    await reassignCapsuleExecutor({ params, db: db as unknown as CapsuleDb, resolveActor: async () => oauthActor });
+    expect(takeover).not.toHaveBeenCalled();
   });
 });

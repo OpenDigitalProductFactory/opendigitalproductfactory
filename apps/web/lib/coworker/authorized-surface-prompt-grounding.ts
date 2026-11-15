@@ -7,6 +7,7 @@ import type {
 } from "@dpf/types";
 
 import { authorizedSurfaceRuntime, createServerSurfaceContext } from "./authorized-surface-registry";
+import { FINANCE_EXPENSE_GUIDANCE_ID, isExpenseWorkflowGuidance } from "./surfaces/finance-expense-guidance-surface";
 
 type OpenResult =
   | { ok: true; session: SurfaceSession; summary: SurfaceSummary }
@@ -52,11 +53,12 @@ const GUIDANCE_REQUEST =
 
 /** True only for questions that can be answered from a prehydrated surface
  * without mutating it. Imperative/action language keeps the governed tools. */
-export function isAuthorizedSurfaceGuidanceRequest(content: string): boolean {
+export function isAuthorizedSurfaceGuidanceRequest(content: string, surfaceId?: string): boolean {
   const text = content.trim();
   if (!text || !GUIDANCE_REQUEST.test(text)) return false;
   if (ACTION_REQUEST.test(text)) return false;
   if (OPERATE_FOR_ME.test(text)) return false;
+  if (surfaceId === FINANCE_EXPENSE_GUIDANCE_ID) return isExpenseWorkflowGuidance(text);
   return true;
 }
 
