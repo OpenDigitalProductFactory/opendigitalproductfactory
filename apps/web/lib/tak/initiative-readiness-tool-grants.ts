@@ -620,6 +620,10 @@ function recoveryGate(entry: ReadinessRequirementResult, lane: InitiativeReadine
   const exact = REQUIREMENT_GATES[entry.code];
   if (exact === "objective-mapping" && lane.accountableRoles.includes("acceptance-reviewer")) return exact;
   if (exact && exact !== "objective-mapping" && lane.gates.includes(exact)) return exact;
+  // The design writer owns three gates, but this role owns only plan review.
+  // Keep ambiguous checklist failures closed and reuse the bound plan route.
+  if (["REVIEW_REQUIRED", "REVIEW_FAILED", "BLOCKING_FINDINGS_OPEN"].includes(entry.code)
+    && entry.accountableRole === "plan-reviewer" && lane.gates.includes("plan-review")) return "plan-review";
   if (["REVIEW_REQUIRED", "REVIEW_FAILED", "BLOCKING_FINDINGS_OPEN"].includes(entry.code)
     && lane.gates.length === 1) return lane.gates[0] ?? null;
   return lane.gates.length === 1 ? lane.gates[0] ?? null : null;
