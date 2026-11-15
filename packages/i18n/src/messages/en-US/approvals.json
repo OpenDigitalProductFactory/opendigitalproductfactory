@@ -33,6 +33,26 @@
     "task-waiting-again": "The task continued and needs another decision. Review the next request in your Inbox.",
     "expired": "The approval window closed before execution. Your assistant must check the target before sending a fresh request."
   },
+  "serviceReport": {
+    "available": "Saved service check. This observation does not confirm current health or recovery.",
+    "unproven": "The original saved service check could not be verified.",
+    "inspect": "Your assistant can inspect the recorded details. This does not authorize another command.",
+    "evidence": "Original diagnostic execution",
+    "target": "Recorded version",
+    "observedAt": "Observed at",
+    "outcome": "Report outcome",
+    "none": "None",
+    "outcomes": { "current": "No configuration update reported", "degraded": "Check incomplete", "would-recreate": "Configuration updates reported" },
+    "groups": {
+      "wouldRecreate": "Services needing an update",
+      "unchanged": "Reported as unchanged",
+      "skippedStopped": "Stopped services skipped",
+      "dataOwnerChanged": "Data services needing review",
+      "unclassified": "Services not classified",
+      "failed": "Services not verified",
+      "bindDrift": "Services with different network settings"
+    }
+  },
   "runtime": {
     "unproven": "The original request did not complete. Its effect on services is not confirmed.",
     "inspect": "Your assistant must reconcile the original result before another attempt.",

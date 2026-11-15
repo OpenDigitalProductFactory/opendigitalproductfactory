@@ -1,6 +1,6 @@
 import "server-only";
 import { prisma } from "@dpf/db";
-import { projectApprovalOutcome, withApprovalFailureEvidence, withApprovalRuntimeEvidence, type ApprovalOutcome, type ApprovalOutcomeRow } from "./approval-outcome";
+import { projectApprovalOutcome, withApprovalFailureEvidence, withApprovalRuntimeEvidence, withApprovalServiceReportEvidence, type ApprovalOutcome, type ApprovalOutcomeRow } from "./approval-outcome";
 import { labelOnBehalfDecision } from "./on-behalf-decision";
 import type { ApprovedRequestRun } from "./approved-request-run-types";
 import { parseInitiativeReviewBinding, type InitiativeReviewBinding } from "@/lib/mcp-task-review-contract";
@@ -61,7 +61,7 @@ export async function readApprovalOutcome(
   });
   if (!row) return null;
   const projected = await projectOwnedApprovalOutcome(row, db, now, agentId);
-  return { ...projected, actionEvidence: projected.runtimeEvidence ?? await readApprovalActionEvidence(row, db, now) };
+  return { ...projected, actionEvidence: projected.runtimeEvidence ?? projected.serviceReportEvidence ?? await readApprovalActionEvidence(row, db, now) };
 }
 
 /** Recent history is separate from the actionable Inbox and never inflates its count.
@@ -91,6 +91,15 @@ async function projectOwnedApprovalOutcome(
   db: Db, now: Date, agentId?: string,
 ): Promise<ApprovalOutcome> {
   const outcome = projectApprovalOutcome(row, now);
+  if (row.manifestActionId === "admin_run_command") {
+    if (row.status !== "executed" && row.status !== "failed") return outcome;
+    const user = await currentUserContext(row.delegatingUserId, db).catch(() => null);
+    if (!user || !can(user, "manage_platform")) return outcome;
+    const evidence = await readApprovalActionEvidence(row, db, now, undefined, true);
+    if (evidence.state === "unsupported") return outcome;
+    return withApprovalServiceReportEvidence(outcome, evidence.state !== "available" || evidence.toolName === "admin_run_command"
+      ? evidence : { state: "missing", reason: "result-unproven" });
+  }
   if (row.manifestActionId === "reconcile_runtime_capabilities") {
     if (row.status !== "executed" && row.status !== "failed") return outcome;
     const evidence = await readApprovalActionEvidence(row, db, now, request => readOwnedRuntimeTransition(request, db, now));

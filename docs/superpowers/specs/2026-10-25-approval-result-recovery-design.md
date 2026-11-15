@@ -74,6 +74,12 @@ shared presentation and tests are dependent internal steps; none independently
 delivers safe owner readback. Initial immutable coverage is recorded before
 implementation admission and refreshed for the final design in DPF.
 
+Initial atomic receipt `cmwh5m17i0qm40er1teo0w4dm` binds the ordered design at
+`5f8dc3104f72417719582ff76f3cae32a74257b1`. The existing Inbox locale adapter
+also translates the additive explanation and group labels; platform audit and
+workspace guides explain the original saved-result flow. No default-arrival
+control, heading or numeric budget is added or widened.
+
 Main risks are unrelated-output disclosure, false health/recovery claims,
 authorization drift and ambiguous/truncated reports. Closed schema/projection,
 current access checks, original binding and no-execution tests address those
