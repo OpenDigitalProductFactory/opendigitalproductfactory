@@ -23,7 +23,7 @@ function str(value: unknown): string | null {
  */
 export async function loadAtlasPicture(
   db: AtlasDb,
-  options: { portfolioRole?: WorkPortfolioRoleKey; limit?: number; now?: Date } = {},
+  options: { portfolioRole?: WorkPortfolioRoleKey; limit?: number; now?: Date; selectedCapsuleId?: string } = {},
 ): Promise<AtlasPicture> {
   const limit = options.limit ?? ATLAS_ROOM_READ_LIMIT;
   const inventory = await loadCapsuleLivenessInventory(db, {
@@ -54,6 +54,9 @@ export async function loadAtlasPicture(
       drive: drive ? { action: drive.action, reason: drive.reason, attentionRecorded: drive.attentionRecorded } : null,
       stageKey: str(drive?.stageKey),
       shapeKey: shapeById.get(String(room.capsuleId)) ?? null,
+      executorKind: str(room.executorKind),
+      recovery: room.recovery,
+      decisions: room.decisions as AtlasInventoryRoom["decisions"],
       placement: placementById.get(String(room.capsuleId)) ?? null,
     };
   });
@@ -63,5 +66,5 @@ export async function loadAtlasPicture(
     const owner = typeof room.id === "string" ? ownersById.get(room.id) : undefined;
     return owner ? [[String(room.capsuleId), owner] as const] : [];
   }));
-  return projectAtlas({ rooms, owners, limit, observedAt: options.now ?? new Date() });
+  return projectAtlas({ rooms, owners, limit, observedAt: options.now ?? new Date(), selectedCapsuleId: options.selectedCapsuleId });
 }

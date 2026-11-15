@@ -12,6 +12,7 @@
 // Pure mapper + a thin db loader, mirroring storefront-inquiry. Read-only.
 
 import type { prisma } from "@dpf/db";
+import { COMMON_MAILROOM_PROFILE, isPrivilegedMailroomReason } from "@dpf/storefront-templates";
 
 import type { AttentionItem, TimeToAct } from "../types";
 
@@ -103,9 +104,14 @@ export function mailroomItemToAttentionItem(row: MailroomItemRow, now: Date): At
   const overdue = row.acknowledgeBy && row.acknowledgeBy.getTime() <= now.getTime();
   const reason = row.reasonKey ? row.reasonKey.replace(/-/g, " ") : "correspondence";
   const about = row.subjectRef ? ` about ${row.subjectRef}` : "";
+  // Privileged reasons (counsel mail, BI-757C961E) never show their content here:
+  // the reason and sender only, as in rooms and notifications.
+  const gist = isPrivilegedMailroomReason(COMMON_MAILROOM_PROFILE, row.reasonKey)
+    ? "privileged; open the item to read it"
+    : clip(row.triageSummary ?? row.subject ?? "");
   const context = overdue
-    ? `${reason}${about} · ${agePast(now, row.acknowledgeBy!)} · ${clip(row.triageSummary ?? row.subject ?? "")}`
-    : `${reason}${about} · needs a person now · ${clip(row.triageSummary ?? row.subject ?? "")}`;
+    ? `${reason}${about} · ${agePast(now, row.acknowledgeBy!)} · ${gist}`
+    : `${reason}${about} · needs a person now · ${gist}`;
   return {
     id: `mailroom-item:${row.inboundId}`,
     source: "mailroom-item",

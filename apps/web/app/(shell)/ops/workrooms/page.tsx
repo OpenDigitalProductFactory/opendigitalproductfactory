@@ -34,7 +34,7 @@ export default async function WorkroomsPage({ searchParams }: Props = {}) {
   const view = { ...parseAtlasFilters(params), ...(group ? { group } : {}), ...(selected ? { room: selected } : {}) };
   // A6a (BI-B0D8394B): the install's business layout and the Just now feed.
   const [picture, held, rhythms, locale, t, layout, justNow] = await Promise.all([
-    loadAtlasPicture(prisma), loadHeldWorkrooms(prisma), loadStandingRhythms(prisma), getLocaleContext(), getT("workrooms"),
+    loadAtlasPicture(prisma, { selectedCapsuleId: selected }), loadHeldWorkrooms(prisma), loadStandingRhythms(prisma), getLocaleContext(), getT("workrooms"),
     loadAtlasLayout(prisma as never), loadAtlasJustNow(prisma as never),
   ]);
 
