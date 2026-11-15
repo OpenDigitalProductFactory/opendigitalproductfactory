@@ -243,8 +243,26 @@ their wage bases, using what each person has already been paid this year.
 
 **Reviewing it.** Open a run to see every payslip line: earnings, federal and state
 income tax, Social Security, Medicare, net pay, and the employer's own taxes. A
-draft can be computed again for the same period until it is approved. Nothing on
-this page approves a run, posts to the ledger or moves money.
+draft can be computed again for the same period until it is approved.
+
+**Approving and paying.** Each run shows the net pay to send and the taxes it
+leaves to remit, tax by tax. **Approve and post to the books** locks the run, so it
+can no longer be recomputed. It also records wages and the employer's taxes as
+expenses, the net pay owed, and the taxes owed in Payroll Taxes Payable. Then send
+each person's net pay from your bank. DPF does not move money. Back on the run,
+enter the date and the bank's reference under **Record as paid**. The payslips are
+marked paid and the books show the net pay leaving your bank account. The taxes
+stay in Payroll Taxes Payable until you remit them. An automated session cannot
+approve a run or record it paid.
+
+**Accounts payroll posts to.** If your chart of accounts does not have them yet,
+DPF adds them the first time you approve a run:
+
+- 5300 Wages and Salaries
+- 5310 Employer Payroll Taxes
+- 2300 Net Pay Payable
+- 2310 Payroll Taxes Payable
+- 2320 Payroll Deductions Payable
 
 **States DPF can compute.** A state with no wage income tax, such as Texas, or one
 with a single flat rate. A state that withholds with allowances or several brackets

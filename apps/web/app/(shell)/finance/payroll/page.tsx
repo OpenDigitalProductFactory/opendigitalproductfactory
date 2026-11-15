@@ -20,6 +20,7 @@ import { auth } from "@/lib/auth";
 import { formatInstant } from "@/lib/datetime";
 import { loadUsPayRun } from "@/lib/hr/us-pay-run.server";
 import type { PayComponent } from "@/lib/hr/payroll";
+import { taxesToRemit } from "@/lib/hr/pay-run-books";
 import { getLocaleContext } from "@/lib/i18n/locale-context.server";
 import { getT } from "@/lib/i18n/t.server";
 import { formatMoney } from "@/lib/org-locale/org-locale";
@@ -76,6 +77,14 @@ export default async function PayrollPage() {
     periodLabel: `${day(run.periodStart)} – ${day(run.periodEnd)}`,
     payDateLabel: day(run.payDate),
     status: run.status,
+    // BI-3B8FA6D8: what this run leaves to remit, by tax, formatted here.
+    taxesToRemit: taxesToRemit(run.payslips.map((slip) => ({
+      netPay: Number(slip.netPay),
+      earnings: lines(slip.earnings),
+      employeeDeductions: lines(slip.employeeDeductions),
+      employerCosts: lines(slip.employerCosts),
+    }))).map((t) => ({ label: t.label, amount: money(t.amount) })),
+    netTotal: money(run.payslips.reduce((sum, slip) => sum + Number(slip.netPay), 0)),
     payslips: run.payslips.map((slip) => ({
       payslipId: slip.id,
       name: slip.employeeProfile.displayName,

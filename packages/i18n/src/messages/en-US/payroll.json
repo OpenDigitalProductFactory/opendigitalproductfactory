@@ -57,5 +57,16 @@
     "employerCost": "Employer cost",
     "deductions": "Taken from pay",
     "employerTaxes": "Employer taxes"
+  },
+  "books": {
+    "netTotal": "Net pay to send",
+    "taxesToRemit": "Taxes to remit",
+    "approve": "Approve and post to the books",
+    "approved": "Pay run approved and posted to the books.",
+    "payHelp": "Send each person's net pay from your bank, then record it here with the bank's reference.",
+    "paidOn": "Date the payment left the bank",
+    "bankReference": "Bank reference",
+    "recordPaid": "Record as paid",
+    "paid": "Pay run recorded as paid."
   }
 }
