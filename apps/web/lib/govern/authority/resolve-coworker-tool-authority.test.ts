@@ -230,6 +230,45 @@ describe("resolveInitiativeAuthorityContext", () => {
   });
 });
 
+describe("resolveInitiativeAuthorityContext install-organization seam (BI-3895E6F5)", () => {
+  // The real seam (lib/install/single-organization.ts) runs against these rows;
+  // nothing here stubs the "exactly one organization" check.
+  const dbWithOrganizations = (organizationIds: string[]) => ({
+    backlogItem: { findUnique: async () => ({ itemId: "BI-94880FE6", organizationId: "org-canonical" }) },
+    organization: {
+      findMany: async ({ take }: { take: number }) => organizationIds.slice(0, take).map((id) => ({ id })),
+    },
+  });
+  const resolve = (organizationIds: string[] | null, authenticatedOrganizationId: string | null = null) =>
+    resolveInitiativeAuthorityContext({
+      params: { itemId: "BI-94880FE6" },
+      toolName: "approve_demand_for_funding",
+      authenticatedOrganizationId,
+      db: organizationIds === null
+        ? { backlogItem: dbWithOrganizations([]).backlogItem }
+        : dbWithOrganizations(organizationIds),
+    });
+
+  it("resolves an organization-owned item when the install holds exactly that organization", async () => {
+    await expect(resolve(["org-canonical"])).resolves.toEqual({
+      subject: { kind: "backlog-item", id: "BI-94880FE6" },
+      organizationId: "org-canonical",
+    });
+  });
+
+  it("still refuses with no organization, several organizations, a different one, or no organization reader", async () => {
+    for (const organizationIds of [[], ["org-canonical", "org-other"], ["org-other"], null]) {
+      const error = await resolve(organizationIds).then(() => null, (caught: unknown) => caught);
+      expect(classifyDeterministicAuthorityRefusal(error)).toBe("authority_scope_missing");
+    }
+  });
+
+  it("never lets the seam override an authenticated organization", async () => {
+    const error = await resolve(["org-canonical"], "org-other").then(() => null, (caught: unknown) => caught);
+    expect(classifyDeterministicAuthorityRefusal(error)).toBe("authority_binding_mismatch");
+  });
+});
+
 describe("resolveBoundInitiativeReviewItem", () => {
   const artifactRef = {
     kind: "repo-blob-at-commit",

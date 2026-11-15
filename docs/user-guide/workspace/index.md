@@ -40,6 +40,11 @@ one request covers that exact change once.
 
 ## Connecting business mail
 
+The coworker beside the Mailroom can see the **Connect a mailbox** form and
+which mailboxes are connected. Ask it to help, and it fills in everything
+except the password or client secret, which you type yourself. For Gmail, use
+IMAP, server `imap.gmail.com`, port 993 and an app password.
+
 Mailroom tests the mailbox connection before saving it, then attempts a first
 read. A successful connection test alone does not finish setup. If the first
 read fails, setup stays incomplete; the saved connection remains available for
@@ -55,6 +60,15 @@ acknowledgement window. **Record the bill** opens a new bill in Bills, where it
 is approved and paid. **Open in Mailroom** shows the email. Mailroom doesn't copy
 amounts out of the email, so check the figures against the invoice when you
 record it. Acknowledge the email once the bill is recorded.
+
+### Mail from your lawyers
+
+Mail from your counsel, or about a legal matter, goes to its own **Legal** room,
+which the business owner answers. Mailroom treats it as privileged. The
+notification and the room name the sender and the reason, not what the letter
+says. Open the item to read it. Mailroom does not draft replies to legal
+correspondence, so **Draft a reply** says so instead of writing one. Answer
+your lawyer directly.
 
 ## Checking an approval result
 
