@@ -41,12 +41,21 @@ or adding an eighth facade without an actual receiving requirement. Workroom,
 GPP and Workroom policy retain separate responsibilities and a downward package
 dependency graph. No package is created merely to mirror an audit heading.
 
-Candidate: `@opendigitalproductfactory/dpf-scoped-judgment@0.1.0-candidate.2`,
+Historical baseline candidate: `@opendigitalproductfactory/dpf-scoped-judgment@0.1.0-candidate.2`,
 source `79bfff540fa8a11c5f725cf60d46764e600868fe`, archive SHA256
 `cf79f4ee40c72706439af9e51155b2a12c9b14c5029a6253d14f8a6848a87af9`.
 Existing standalone CI and strict Node24.22.0/24.22.1 TS7 receiver proofs qualify
 the candidate only. They do not prove this receiving implementation.
 Connected GitHub PR creation for its repository remains403; do not bypass it.
+
+The receiving implementation uses the separately qualified loader successor
+`0.1.0-candidate.3`, source `27a4cd62865e80685f4f12e43f6eb6c1b4b3483e`,
+archive SHA256 `24fdf47bc9d43bc3a47b79843a1e35eb0e7e640b88d55f83443678267c241837`.
+Its import and require exports share the same synchronous ESM values; all 18
+emitted implementation files remain byte-identical to candidate.2. The exact
+qualification record is retained with the vendored archive. This succession
+preserves the five acceptance criteria and does not relabel the historical
+W.4/J.2/GPP.4 receiver matrix or establish receiving acceptance.
 
 ## Contracts, flow and source ownership
 
