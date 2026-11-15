@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { createHash } from "node:crypto";
 import { observeHostReservation } from "./host-reservation-observation.mjs";
 
 const binding = { leaseId: "NPEL-OWN", claimKey: "host-resource:v2:attempt:fingerprint",
@@ -199,6 +200,10 @@ test('preview prerequisite failure after validated admission reads only that res
   const worktree = await fs.realpath(join(root, 'source'));
   const stateDirectory = join(root, 'state'), install = join(root, 'install');
   await fs.mkdir(join(worktree, 'apps/web'), { recursive: true });
+  await fs.mkdir(join(worktree, 'packages/db/src'), { recursive: true });
+  const cloneSource = '// synthetic clone identity fixture\n';
+  const cloneDigest = createHash('sha256').update(cloneSource).digest('hex');
+  await fs.writeFile(join(worktree, 'packages/db/src/sanitized-clone.ts'), cloneSource);
   await fs.mkdir(stateDirectory);
   await fs.mkdir(install);
   await fs.writeFile(join(worktree, 'apps/web/next-env.d.ts'), '// fixture declarations\n');
@@ -242,7 +247,7 @@ test('preview prerequisite failure after validated admission reads only that res
     child.stdout = new PassThrough(); child.stderr = new PassThrough(); child.kill = () => assert.fail('unexpected fixture termination');
     const output = args[0] === 'ps' ? 'canonical-fixture'
       : args[0] === 'inspect' ? JSON.stringify([{ State: { Running: true }, Image: 'sha256:' + 'a'.repeat(64) }])
-        : args[0] === 'exec' ? '' : JSON.stringify({ services: {} });
+        : args[0] === 'exec' ? (args[2] === 'node' ? cloneDigest : '') : JSON.stringify({ services: {} });
     setImmediate(() => { child.stdout.end(output); child.stderr.end(); child.emit('close', 0); });
     return child;
   });
