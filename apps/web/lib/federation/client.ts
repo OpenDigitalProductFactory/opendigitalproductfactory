@@ -317,6 +317,17 @@ export async function getFromPeer(input: {
   }
 }
 
+/** Pull a same-organization peer's own AI plan usage, hourly per provider (BI-6361A930). */
+export async function fetchAiUsageFromPeer(target: PeerLinkTarget): Promise<PeerPostResult> {
+  return getFromPeer({
+    peerAuthorityUrl: target.peerAuthorityUrl,
+    linkToken: target.linkToken,
+    path: "/api/v1/federation/ai-usage",
+    sameOrgLan: target.sameOrgLan ?? false,
+    ...(target.fetchImpl ? { fetchImpl: target.fetchImpl } : {}),
+  });
+}
+
 /** Pull one page of a same-organization peer's share-safe backlog (BI-FF8A57EF). */
 export async function fetchWorkPageFromPeer(
   target: PeerLinkTarget,
