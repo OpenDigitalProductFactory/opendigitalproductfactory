@@ -40,7 +40,7 @@ all-repairs instruction. No new provider, funding, access or execution follows.
 3. **FLOW-EED-RELOAD:** Reuse existing initial history and snapshot-on-done/reload
    paths. Carry only an optional display hint for an exact canonical capacity
    notice on that same completed task. Render “Earlier capacity wait. Coworker
-   response saved below.” as a historical note, preserving the job reference.
+   response saved.” as a historical note, preserving the job reference.
    Active, unqualified, unrelated and approval notices retain their existing
    text and live semantics. Preserve proposal, provider, attachment and approval
    serialization. Do not mutate history or claim business acceptance.
@@ -58,6 +58,15 @@ contract CONTRACT-EED-PUBLICATION, flow FLOW-EED-RELOAD and verification
 VERIFY-EED-SETTLED form the four-way trace. Immutable plan coverage will bind
 this ordered design before implementation admission. No new design baseline
 or broader B7 acceptance is implied.
+
+### Backlog coverage
+
+Initial atomic receipt `cmwh4sf2a0leq0er17tpbjp5n` binds the ordered design at
+`b291050e3a23893a91a1428c19bfd0bb39a491c5` to BI-EED738D9. The one deliverable
+maps OBJ-EED-1 / CONTRACT-EED-PUBLICATION / FLOW-EED-RELOAD /
+VERIFY-EED-SETTLED to that same BI, without independent children or external
+dependencies. Refresh coverage for the final immutable design before publication;
+DPF stores the current receipt without changing the original one.
 
 Rollback reverts only this presentation/read projection through a protected PR;
 stored requests, results, original notices and recovery state stay untouched.
