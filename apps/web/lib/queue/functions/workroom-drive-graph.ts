@@ -44,6 +44,7 @@ import { graphTaskEffects, withUndispatchedTokensRestored } from "@/lib/work-man
 import type { DriveMarking } from "@dpf/validators/workroom/marking";
 import type { DrivePlan } from "@/lib/work-management/drive-resolution";
 import { buildContinuationBrief, stageBriefInputFromDefinition } from "@/lib/work-management/stage-briefing";
+import { resolveStageEffort } from "@/lib/work-management/work-shapes";
 import type { DispatchScope } from "@/lib/work-management/workroom-drive-checkpoint";
 import {
   WORKROOM_DRIVE_ACTIVITY_KIND,
@@ -81,9 +82,12 @@ export function buildNativeContinuationDispatch(input: {
   if (!result.success) return result;
   const { brief } = result;
   const identity = brief.identity;
+  // Phase G (BI-B3BBF9AD): the stage's effort tier rides the same stage record as its tools.
+  // A governed-decision stage resolves high; an undeclared stage carries none.
+  const effort = resolveStageEffort(plan.definition?.stages.find((candidate) => candidate.key === input.stageKey));
   return { success: true as const, fields: {
     prompt: result.prompt, source: brief.source,
-    stage: { shapeKey: brief.shapeKey, shapeVersion: brief.shapeVersion, stageKey: brief.stageKey, tools: [...brief.stageTools] },
+    stage: { shapeKey: brief.shapeKey, shapeVersion: brief.shapeVersion, stageKey: brief.stageKey, tools: [...brief.stageTools], ...(effort ? { effort } : {}) },
     ...(identity.runKey !== null && identity.cycleKey !== null && identity.iteration !== null
       ? { dispatchScope: { runKey: identity.runKey, cycleKey: identity.cycleKey, iteration: identity.iteration } } : {}),
   } };

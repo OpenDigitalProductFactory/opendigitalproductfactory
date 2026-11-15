@@ -9,6 +9,25 @@ import {
 } from "./AgentMessageBubble";
 
 describe("formatProviderBadge", () => {
+  it("renders a qualified earlier wait as history rather than a live retry promise", () => {
+    const message = { id: "wait", role: "system" as const, content: "Your request is retained. DPF will retry when provider capacity permits.\n\nJob: TR-one",
+      agentId: null, routeContext: "/finance", createdAt: "2026-11-15T00:00:00Z", settledCapacityWait: true };
+    const html = renderToStaticMarkup(<AgentMessageBubble message={message} showAgentLabel={false} agentName={null} />);
+    expect(html).toContain("Earlier capacity wait. Coworker response saved.");
+    expect(html).toContain('role="note"');
+    expect(html).not.toContain('role="status"');
+    expect(html).not.toContain('aria-live="polite"');
+    expect(html).not.toContain("DPF will retry");
+    expect(html).toContain("TR-one");
+    expect(message.content).toContain("DPF will retry");
+  });
+  it("keeps an unqualified capacity wait as current platform recovery", () => {
+    const html = renderToStaticMarkup(<AgentMessageBubble message={{ id: "wait", role: "system",
+      content: "Your request is retained. DPF will retry when provider capacity permits.\n\nJob: TR-waiting", agentId: null,
+      routeContext: "/finance", createdAt: "2026-11-15T00:00:00Z" }} showAgentLabel={false} agentName={null} />);
+    expect(html).toContain('role="status"'); expect(html).toContain('aria-live="polite"');
+    expect(html).toContain("DPF will retry"); expect(html).not.toContain("Earlier capacity wait");
+  });
   it("returns null when no provider is attached", () => {
     expect(formatProviderBadge(undefined)).toBeNull();
   });

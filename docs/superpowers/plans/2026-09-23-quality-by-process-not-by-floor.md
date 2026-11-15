@@ -13,7 +13,7 @@ status: draft
 | Item | Scope | Spec | State |
 |---|---|---|---|
 | BI-1A5204A0 | Routing confidence becomes an activation input | §1 | landed |
-| BI-A08285BC | A below-floor run is an attributable event | §4 | partial — structural, not yet persisted |
+| BI-A08285BC | A below-floor run is an attributable event | §4 | landed — structural, persisted, and shown |
 | BI-0FC71985 | Grade and record reviewer independence | §3 | open |
 | BI-A8EAC294 | Register `multi-pass` as a pattern | §2 | open |
 | BI-2A67FAE2 | Cap escalation cost on the Golden Triangle dial | §5 | open |
@@ -66,12 +66,15 @@ The largest piece: N runs, reconciliation through the existing `majority-vote` /
 *below* `review` in strength — a second sample is a weaker instrument than an
 independent critic and must never displace one.
 
-### Phase 5 — BI-A08285BC (persistence) · The event
+### Phase 5 — BI-A08285BC (persistence) · The event — **landed**
 
-Promote the signal from structural to countable, so "how often did we run below
-the floor last week, and why" is answerable. Deliberately last: the column it
-needs sits on `RouteDecisionLog`, which is also being extended by BI-B4081AA1 on
-another branch. Landing both at once would collide for no benefit.
+The signal is now persisted on `RouteDecisionLog.routingConfidence` and surfaced
+in the audit row, so "how often did we run below the floor last week, and why" is
+answerable. The collision that justified deferring it is gone — BI-B4081AA1
+merged, so both columns land together.
+
+The panel stays silent on a confident decision, so it never becomes noise on a
+healthy route.
 
 ---
 

@@ -12,7 +12,8 @@ import { describe, expect, it } from "vitest";
 // gate purposes — a real build gate could then be dequeued-from-review while
 // still blocking the build, invisibly. No path in main does this today (the 25
 // live cases came from an out-of-band DB write), and both sanctioned writers
-// create the capture and set clearsGate atomically in one transaction. This
+// create the capture and set clearsGate atomically in one transaction
+// (both now live in decision/owner-ruling-capture.ts, BI-0C0B0836). This
 // ratchet keeps it that way: a future writer that sets clearsGate truthy must
 // also create a capture row.
 
@@ -75,14 +76,15 @@ describe("gate-clear write invariant (BI-6EC1EE25)", () => {
     ).toEqual([]);
   });
 
-  it("recognises the two sanctioned writers so the ratchet is proven live", () => {
+  it("recognises the one sanctioned writer so the ratchet is proven live", () => {
     // Guards against the regex silently matching nothing (e.g. a rename) and the
     // invariant passing vacuously.
     const writers = tsFiles(LIB_ROOT).filter((f) => setsClearsGateTruthy(readFileSync(f, "utf8")));
     const rel = writers.map(relativeSourcePath).sort();
+    // BI-0C0B0836: both portal Answer actions and record_owner_ruling write
+    // through this one core.
     expect(rel).toEqual([
-      "actions/decision-perspective.ts",
-      "actions/org-decision-capture.ts",
+      "decision/owner-ruling-capture.ts",
     ]);
   });
 });

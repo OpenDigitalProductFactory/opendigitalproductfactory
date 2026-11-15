@@ -121,6 +121,7 @@ export const COWORKER_STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
       {
         key: "gap-scan",
         title: "Name the coverage gaps",
+        effort: "low",
         accountablePrincipalRef: "agent:soc-threat-hunter",
         advance: {
           kind: "status-change",
@@ -132,6 +133,7 @@ export const COWORKER_STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
       {
         key: "hunt",
         title: "Run the hypothesis hunt",
+        effort: "medium",
         accountablePrincipalRef: "agent:soc-threat-hunter",
         advance: {
           kind: "status-change",
@@ -181,6 +183,7 @@ export const COWORKER_STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
       {
         key: "sweep",
         title: "Read the estate as recorded and as observed",
+        effort: "low",
         accountablePrincipalRef: "agent:data-steward",
         advance: {
           kind: "status-change",
@@ -192,6 +195,7 @@ export const COWORKER_STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
       {
         key: "assess",
         title: "Assess each divergence",
+        effort: "medium",
         accountablePrincipalRef: "agent:data-architect",
         advance: {
           kind: "status-change",
@@ -205,6 +209,7 @@ export const COWORKER_STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
       {
         key: "inventory",
         title: "Reconcile the asset inventory",
+        effort: "low",
         accountablePrincipalRef: "agent:inventory-specialist",
         advance: {
           kind: "status-change",
@@ -252,6 +257,7 @@ export const COWORKER_STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
       {
         key: "compare",
         title: "Compare delivered against recorded architecture",
+        effort: "medium",
         accountablePrincipalRef: "agent:ea-architect",
         advance: {
           kind: "status-change",
@@ -299,6 +305,7 @@ export const COWORKER_STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
       {
         key: "re-verify",
         title: "Re-confirm requirements against the authority",
+        effort: "low",
         accountablePrincipalRef: "agent:licensing-specialist",
         advance: {
           kind: "status-change",
@@ -312,6 +319,7 @@ export const COWORKER_STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
       {
         key: "determine",
         title: "Determine the legal position on a changed requirement",
+        effort: "medium",
         accountablePrincipalRef: "agent:legal-operations-counsel",
         advance: {
           kind: "status-change",
@@ -478,6 +486,7 @@ export const COWORKER_STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
       {
         key: "draft",
         title: "Draft or revise the outward content",
+        effort: "medium",
         accountablePrincipalRef: "agent:marketing-specialist",
         advance: {
           kind: "status-change",
@@ -489,6 +498,7 @@ export const COWORKER_STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
       {
         key: "storefront-fit",
         title: "Check it against what the storefront actually sells",
+        effort: "low",
         accountablePrincipalRef: "agent:storefront-advisor",
         advance: {
           kind: "status-change",
@@ -499,6 +509,7 @@ export const COWORKER_STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
       {
         key: "document",
         title: "Reconcile the documentation",
+        effort: "medium",
         accountablePrincipalRef: "agent:doc-specialist",
         advance: {
           kind: "status-change",
@@ -510,6 +521,7 @@ export const COWORKER_STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
       {
         key: "accessibility",
         title: "Accessibility review",
+        effort: "medium",
         accountablePrincipalRef: "agent:ux-accessibility-agent",
         advance: {
           kind: "status-change",
@@ -626,6 +638,7 @@ export const COWORKER_STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
       {
         key: "scan",
         title: "Scan for candidates",
+        effort: "low",
         accountablePrincipalRef: "agent:external-catalog-scout",
         advance: {
           kind: "status-change",
@@ -680,6 +693,7 @@ export const COWORKER_STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
       {
         key: "intake",
         title: "Read new mail idempotently",
+        effort: "low",
         accountablePrincipalRef: "agent:mailroom-coordinator",
         advance: {
           kind: "status-change",
@@ -692,6 +706,7 @@ export const COWORKER_STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
       {
         key: "triage-and-route",
         title: "Assign a typed reason and route to its queue",
+        effort: "low",
         accountablePrincipalRef: "agent:mailroom-coordinator",
         advance: {
           kind: "status-change",
@@ -705,6 +720,7 @@ export const COWORKER_STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
       {
         key: "chase",
         title: "Chase what nobody acknowledged",
+        effort: "low",
         accountablePrincipalRef: "agent:mailroom-coordinator",
         advance: {
           kind: "status-change",

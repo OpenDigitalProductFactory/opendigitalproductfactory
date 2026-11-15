@@ -6,6 +6,7 @@ import { captureTaskExecutionFence, sameTaskExecutionFence, taskExecutionEligibl
 import { createResourceWaitProjection, parseResourceWaitProjection } from "@/lib/mcp-task-capacity-contract";
 import { foregroundExecutionContext } from "./foreground-work-context";
 import { sanitizeFieldUpdates, type AgentFormAssistField } from "@/lib/agent-form-assist";
+import { FOREGROUND_CAPACITY_WAIT, foregroundCapacityNotice } from "./foreground-work-contract";
 
 type Kind = "responded" | "approval-required" | "capacity-wait" | "blocked";
 type Disposition = { kind: Kind; resourceWait?: Parameters<typeof createResourceWaitProjection>[0];
@@ -72,7 +73,7 @@ export async function publishForegroundMessage<T extends { id: string }>(
       ? createResourceWaitProjection(disposition.resourceWait, Number(attempt)) : null;
     if (disposition.kind === "capacity-wait" && !pending) throw stopped();
     const summary = pending
-      ? "Your request is retained. DPF will retry when provider capacity permits, within its original recovery window. You do not need to resend."
+      ? FOREGROUND_CAPACITY_WAIT
       : disposition.kind === "approval-required" ? "The proposed action is waiting for your approval in this conversation."
       : disposition.kind === "responded" ? "Coworker response saved. Business-result acceptance is separate."
       : "Your request is retained but needs attention before it can continue.";
@@ -104,9 +105,8 @@ export async function publishForegroundMessage<T extends { id: string }>(
   });
 }
 
-/** A committed response survives worker-return interruption; this never dispatches or revives a task. */
-export async function readForegroundPublication(taskRunId: string, fence: TaskExecutionFence | null, messageId?: string) {
-  const run = await prisma.taskRun.findUnique({ where: { taskRunId } });
+type PublicationRun = NonNullable<Awaited<ReturnType<typeof prisma.taskRun.findUnique>>>;
+function validatedPublication(run: PublicationRun | null, fence: TaskExecutionFence | null, messageId?: string): (Record<string, unknown> & { messageId: string }) | null {
   const progress = isRecord(run?.progressPayload) ? run.progressPayload : {};
   const metadata = isRecord(run?.a2aMetadata) ? run.a2aMetadata : {};
   const request = isRecord(metadata.foregroundRequest) ? metadata.foregroundRequest : {};
@@ -118,11 +118,6 @@ export async function readForegroundPublication(taskRunId: string, fence: TaskEx
     || typeof publication.acceptedAt !== "string" || typeof request.deadlineAt !== "string"
     || !Number.isFinite(Date.parse(publication.acceptedAt)) || !Number.isFinite(Date.parse(request.deadlineAt))
     || Date.parse(publication.acceptedAt) >= Date.parse(request.deadlineAt)) return null;
-  const [human, thread] = await Promise.all([
-    currentUserContext(run.userId),
-    prisma.agentThread.findUnique({ where: { id: run.threadId ?? "" }, select: { userId: true } }),
-  ]);
-  if (!human || thread?.userId !== run.userId) return null;
   if (isRecord(publication.formAssistUpdate)) {
     const extras = isRecord(request.extras) ? request.extras : {};
     const form = isRecord(extras.formAssistContext) ? extras.formAssistContext : {};
@@ -132,6 +127,20 @@ export async function readForegroundPublication(taskRunId: string, fence: TaskEx
   if (!["responded", "approval-required", "capacity-wait", "blocked"].includes(String(kind))
     || (kind === "capacity-wait" ? !["submitted", "input-required"].includes(run.status) || !parseResourceWaitProjection(progress)
       : run.status !== (kind === "responded" ? "completed" : "input-required")) || progress.foregroundOutcome !== kind) return null;
+  return { ...publication, messageId: publication.messageId };
+}
+
+/** A committed response survives worker-return interruption; this never dispatches or revives a task. */
+export async function readForegroundPublication(taskRunId: string, fence: TaskExecutionFence | null, messageId?: string) {
+  const run = await prisma.taskRun.findUnique({ where: { taskRunId } });
+  const publication = validatedPublication(run, fence, messageId);
+  if (!run || !publication) return null;
+  const [human, thread] = await Promise.all([
+    currentUserContext(run.userId),
+    prisma.agentThread.findUnique({ where: { id: run.threadId ?? "" }, select: { userId: true } }),
+  ]);
+  if (!human || thread?.userId !== run.userId) return null;
+  const kind = publication.kind;
   const message = await prisma.agentMessage.findUnique({ where: { id: publication.messageId }, select: { threadId: true, taskRunId: true, role: true } });
   if (publication.systemMessageId) {
     if (typeof publication.systemMessageId !== "string") return null;
@@ -145,4 +154,39 @@ export async function readForegroundPublication(taskRunId: string, fence: TaskEx
       ...(typeof publication.formAssistFormId === "string" ? { formAssistFormId: publication.formAssistFormId } : {}),
       ...(typeof publication.systemMessageId === "string" ? { systemMessageId: publication.systemMessageId } : {}),
     } : null;
+}
+
+/** Read-only history hint. Call only after authorizing this conversation; no execution authority is returned. */
+export async function readSettledForegroundNotices(threadId: string, messages: Array<{
+  id: string; role: string; content: string; taskRunId?: string | null;
+}>) {
+  const settled = new Set<string>();
+  const waits = messages.filter(m => m.role === "system" && m.taskRunId && m.content === foregroundCapacityNotice(m.taskRunId));
+  if (!waits.length) return settled;
+  const thread = await prisma.agentThread.findUnique({ where: { id: threadId }, select: { userId: true } });
+  if (!thread || !await currentUserContext(thread.userId)) return settled;
+  const runs = await prisma.taskRun.findMany({ where: { taskRunId: { in: [...new Set(waits.map(m => m.taskRunId!))] },
+    threadId, userId: thread.userId, source: "coworker", status: "completed", archivedAt: null } });
+  const publications = runs.flatMap(run => {
+    if (run.threadId !== threadId || run.userId !== thread.userId || run.source !== "coworker") return [];
+    const metadata = isRecord(run.a2aMetadata) ? run.a2aMetadata : {};
+    if (metadata.trigger !== "interactive") return [];
+    const publication = validatedPublication(run, captureTaskExecutionFence(run.progressPayload, metadata.requestDigest));
+    return publication?.kind === "responded" ? [{ run, publication }] : [];
+  });
+  if (!publications.length) return settled;
+  const bound = await prisma.agentMessage.findMany({ where: { threadId, id: { in: publications.flatMap(({ publication }) =>
+    [String(publication.messageId), ...(typeof publication.systemMessageId === "string" ? [publication.systemMessageId] : [])]) } },
+    select: { id: true, role: true, threadId: true, taskRunId: true } });
+  const byId = new Map(bound.map(m => [m.id, m]));
+  for (const { run, publication } of publications) {
+    const result = byId.get(String(publication.messageId));
+    if (result?.role !== "assistant" || result.threadId !== threadId || result.taskRunId !== run.taskRunId) continue;
+    if (publication.systemMessageId) {
+      const notice = typeof publication.systemMessageId === "string" ? byId.get(publication.systemMessageId) : null;
+      if (notice?.role !== "system" || notice.threadId !== threadId || notice.taskRunId !== run.taskRunId) continue;
+    }
+    for (const wait of waits) if (wait.taskRunId === run.taskRunId) settled.add(wait.id);
+  }
+  return settled;
 }

@@ -13,6 +13,43 @@ import { prepareRuntimeReconciliationIntent, signTransitionPayload } from "@/lib
 import { computeCapabilityStateVersion } from "../../../../scripts/lib/capability-state-hash.mjs";
 
 const now = new Date("2026-09-27T12:00:00Z");
+describe("owned saved service report", () => {
+  function savedReportFixture() {
+    const command = "docker compose exec -T portal cat /dpf-state/service-converge-outcome.json";
+    const inputFingerprint = fingerprintCoworkerInput({ command });
+    const envelope = { id: "saved-report", status: "executed", createdAt: now, expiresAt: now, delegatingUserId: "u1",
+      coworkerAgentId: "a1", threadId: "thread1", manifestActionId: "admin_run_command", inputFingerprint,
+      argsJson: { approvalBinding: { actingHumanUserId: "u1", actingAgentId: "a1", toolName: "admin_run_command",
+        inputFingerprint, taskRunId: null, chainId: null, routeContext: null } }, toolExecutions: [] };
+    const report = { mode: "shadow", targetSha: "a".repeat(40), at: "2026-09-27T11:00:00Z", outcome: "current",
+      wouldRecreate: [], unchanged: ["postgres"], skippedStopped: [], dataOwnerChanged: [], unclassified: [], failed: [], bindDrift: [] };
+    const execution = { id: "saved-report-execution", envelopeId: envelope.id, userId: "u1", agentId: "a1", threadId: "thread1",
+      taskRunId: null, toolName: "admin_run_command", executionMode: "external-mcp", createdAt: now, durationMs: 1,
+      parameters: { command }, success: true, result: { success: true, data: { command, output: JSON.stringify(report), exitCode: 0 } } };
+    const db = { coworkerActionEnvelope: { findFirst: vi.fn(async ({ where }: any) => where.delegatingUserId === "u1" && where.coworkerAgentId === "a1" ? envelope : null),
+      findMany: vi.fn(async () => [envelope]) }, toolExecution: { findMany: vi.fn(async () => [execution]) },
+      user: { findUnique: vi.fn(async () => ({ isActive: true, isSuperuser: true, groups: [] })) } };
+    return { db, envelope };
+  }
+  it("shares original safe evidence between owned Inbox and exact assistant read without replay", async () => {
+    const f = savedReportFixture();
+    const exact = await readApprovalOutcome(f.envelope.id, "u1", "a1", f.db as never, now);
+    const [owner] = await loadApprovalOutcomes("u1", f.envelope.id, f.db as never, now);
+    expect(exact).toMatchObject({ state: "executed", actionEvidence: { state: "available", operation: "service-convergence-shadow" },
+      serviceReportEvidence: { state: "available", executionId: "saved-report-execution", report: { classifications: { unchanged: ["postgres"] } } } });
+    expect(owner.serviceReportEvidence).toEqual(exact?.serviceReportEvidence);
+    expect(JSON.stringify(exact)).not.toContain("docker compose");
+  });
+  it("does not read diagnostic executions after current platform access is lost", async () => {
+    const f = savedReportFixture(); f.db.user.findUnique.mockResolvedValue({ isActive: true, isSuperuser: false, groups: [] });
+    expect(await readApprovalOutcome(f.envelope.id, "u1", "a1", f.db as never, now)).not.toHaveProperty("serviceReportEvidence");
+    expect(f.db.toolExecution.findMany).not.toHaveBeenCalled();
+  });
+  it.each([["u2", "a1"], ["u1", "a2"]])("does not expose another owner/assistant's result", async (userId, agentId) => {
+    const f = savedReportFixture(); expect(await readApprovalOutcome(f.envelope.id, userId, agentId, f.db as never, now)).toBeNull();
+    expect(f.db.toolExecution.findMany).not.toHaveBeenCalled();
+  });
+});
 it("reads the original provider test evidence after the approval replay window without running the action", async () => {
   const parameters = { operation: "test", providerId: "chatgpt", connectionId: "provider-default-chatgpt" };
   const inputFingerprint = fingerprintCoworkerInput(parameters);
