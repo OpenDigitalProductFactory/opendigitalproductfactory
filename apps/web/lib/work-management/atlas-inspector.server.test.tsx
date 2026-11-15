@@ -65,14 +65,35 @@ describe("Work Atlas inspector (BI-94C9AFC1)", () => {
     expect(html).toContain("Show in flow map");
   });
 
-  it("names who must act for a room waiting on a person", async () => {
+  it("never invents the accountable person as actor when action data is absent", async () => {
     const data = await loadAtlasInspector(db({ drive: null, activity: null }), "WC-1A2B3C4D", now);
     const html = renderToStaticMarkup(
       <AtlasInspector room={{ ...atlasRoom, health: "needs-person", label: "inventory.status.closeout" }} data={data!} hold={undefined}
         roomHref="/x" flowHref={null} closeHref="/ops/workrooms" locale="en-US" t={t} />,
     );
-    expect(html).toContain("Needs Release reviewer: Ready for closeout.");
+    expect(html).toContain("Actor not recorded");
+    expect(html).toContain("Action not recorded.");
+    expect(html).not.toContain("Needs Release reviewer:");
     expect(html).toContain("Nothing recorded in this room yet.");
+  });
+
+  it.each([
+    ["recorded decision", { actor: "inventory.actor.decisionOwner", instruction: "inventory.action.decision", decisionRecorded: true, detail: "Recorded question: Choose the recorded option", decisionCount: 2 }, "inventory.nextAction.decision", ["Decision owner", "Decide the recorded question in the room.", "Recorded question: Choose the recorded option", "2 decisions recorded"]],
+    ["missing decision", { actor: "inventory.actor.unknown", instruction: "inventory.action.decisionUnknown", decisionRecorded: false }, "inventory.nextAction.hold", ["Actor not recorded", "Decision details are unavailable."]],
+    ["coworker result", { actor: "inventory.actor.executor", instruction: "inventory.action.recordResult", decisionRecorded: false }, "inventory.nextAction.hold", ["Assigned coworker", "Record the missing result."]],
+    ["capacity wait", { actor: "inventory.actor.executor", instruction: "inventory.action.capacity", decisionRecorded: false }, "inventory.nextAction.capacity", ["Assigned coworker", "Waiting for capacity; progress is not confirmed."]],
+    ["review recovery", { actor: "inventory.actor.requester", instruction: "inventory.action.reviewResult", decisionRecorded: false }, "inventory.nextAction.hold", ["Requesting coworker", "Confirm the original review outcome before continuing."]],
+    ["owner setup", null, "inventory.nextAction.owner", ["Assign an accountable person in the room"]],
+  ] as const)("renders canonical actor and instruction separately from accountability: %s", async (_name, action, nextAction, expected) => {
+    const data = await loadAtlasInspector(db(), "WC-1A2B3C4D", now);
+    const html = renderToStaticMarkup(
+      <AtlasInspector room={{ ...atlasRoom, health: "needs-person", action, nextAction }} data={data!} hold={undefined}
+        roomHref="/x" flowHref={null} closeHref="/ops/workrooms" locale="en-US" t={t} />,
+    );
+    for (const text of expected) expect(html).toContain(text);
+    expect(html).toContain("Accountable");
+    expect(html).toContain("Release reviewer");
+    expect(html).not.toContain("Needs Release reviewer:");
   });
 
   it("opens no panel for a room that is not open", async () => {

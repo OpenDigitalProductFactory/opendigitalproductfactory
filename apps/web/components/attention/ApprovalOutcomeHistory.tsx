@@ -4,7 +4,8 @@ import { StatusBadge } from "@/components/ui/report-kit";
 import type { ApprovalOutcome } from "@/lib/coworker/approval-outcome";
 import { SOURCE_CATALOG } from "@dpf/i18n";
 
-type Copy = Record<"result" | "recent" | "unavailable" | "details" | "open", string> & { inspectRoom?: string; roomUnavailable?: string; evidence?: string };
+type Copy = Record<"result" | "recent" | "unavailable" | "details" | "open", string> & { inspectRoom?: string; roomUnavailable?: string; evidence?: string;
+  runtimeEvidence?: string; hostUnproven?: string; hostVerified?: string };
 
 /** Read-only history; these are not fresh decisions and do not enter the queue. */
 /** `onBehalfText`: "Decided by ADMIN on behalf of OWNER: REASON", formatted by the page (BI-7BCC87BB). */
@@ -21,6 +22,7 @@ export function ApprovalOutcomeHistory({ outcomes, exact = false, copy = SOURCE_
           <Surface key={outcome.envelopeId} padding="sm" rounded="md">
             <StatusBadge label={outcome.label} intent={outcome.state === "executed" ? "success" : "neutral"} />
             {outcome.failureExplanation ? <p className="mt-2 text-dpf-body text-dpf-text">{outcome.failureExplanation}</p> : null}
+            {outcome.runtimeExplanation ? <p className="mt-2 text-dpf-body text-dpf-text">{outcome.runtimeExplanation}</p> : null}
             <p className="mt-2 text-dpf-body text-dpf-text">{outcome.nextAction}</p>
             {outcome.failureEvidence?.state === "available" ? outcome.failureEvidence.roomHref
               ? <ButtonLink variant="ghost" className="mt-2 min-h-11" href={outcome.failureEvidence.roomHref}>{copy.inspectRoom ?? SOURCE_CATALOG.approvals.failure.inspectRoom}</ButtonLink>
@@ -32,6 +34,13 @@ export function ApprovalOutcomeHistory({ outcomes, exact = false, copy = SOURCE_
               <time dateTime={outcome.createdAtIso}>{outcome.createdAtIso}</time>
               {outcome.failureEvidence?.state === "available" ? <p className="mt-2 break-words">
                 {copy.evidence ?? SOURCE_CATALOG.approvals.failure.evidence}: {outcome.failureEvidence.executionId} · {outcome.failureEvidence.code} · {outcome.failureEvidence.executedAtIso}
+              </p> : null}
+              {outcome.runtimeEvidence?.state === "available" ? <p className="mt-2 break-words">
+                {copy.runtimeEvidence ?? SOURCE_CATALOG.approvals.runtime.evidence}: {outcome.runtimeEvidence.executionId} · {outcome.runtimeEvidence.transitionId}
+                {" · "}{outcome.runtimeEvidence.failureCode ?? outcome.runtimeEvidence.operationStatus}
+                {" · "}{outcome.runtimeEvidence.hostEvidence.receiptVerification === "verified"
+                  ? (copy.hostVerified ?? SOURCE_CATALOG.approvals.runtime.hostVerified)
+                  : (copy.hostUnproven ?? SOURCE_CATALOG.approvals.runtime.hostUnproven)}
               </p> : null}
               <p><a className="underline" href={outcome.inboxHref}>{copy.open}</a></p>
             </details>
