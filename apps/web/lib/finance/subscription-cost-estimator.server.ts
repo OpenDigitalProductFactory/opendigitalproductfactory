@@ -10,6 +10,8 @@
 // List prices: ModelProvider input/output prices. Read-only.
 
 import { prisma } from "@dpf/db";
+
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 import {
   ESTIMATE_LOOKBACK_DAYS,
   estimateSubscriptionPlan,
@@ -141,7 +143,7 @@ async function loadPeerUsage(now: Date): Promise<{ peers: PeerUsageStatus[]; buc
     ]);
     return peerUsageFromRecord(parsePeerAiUsageRecord(row?.value), links.map((l) => l.linkId), now);
   } catch (error) {
-    console.warn(`[subscription-cost] could not read the paired install's usage: ${error instanceof Error ? error.message : String(error)}`);
+    console.warn(`[subscription-cost] could not read the paired install's usage: ${getErrorMessage(error)}`);
     return { peers: [], buckets: [] };
   }
 }

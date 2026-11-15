@@ -19,15 +19,25 @@ function usd(value: number): string {
   return formatMoney(value, "USD", null, { maximumFractionDigits: value < 10 ? 2 : 0 });
 }
 
-const TOKENS = new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 1 });
-const AS_OF = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZoneName: "short" });
+/** The viewer's number and date conventions, from the page's LocaleContext. */
+export type PanelLocale = { formatLocale: string; timeZone: string };
+type Formats = { tokens: (n: number) => string; asOf: (iso: string) => string };
+
+function formatsFor(locale: PanelLocale | undefined): Formats {
+  const tokens = new Intl.NumberFormat(locale?.formatLocale, { notation: "compact", maximumFractionDigits: 1 });
+  const asOf = new Intl.DateTimeFormat(locale?.formatLocale, {
+    month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZoneName: "short",
+    ...(locale?.timeZone ? { timeZone: locale.timeZone } : {}),
+  });
+  return { tokens: (n) => tokens.format(n), asOf: (iso) => asOf.format(new Date(iso)) };
+}
 
 function installLabel(install: string, t: FinanceT): string {
   return install === LOCAL_INSTALL ? t("subscriptionCosts.installLocal") : t("subscriptionCosts.installPeer", { id: install });
 }
 
 /** Token-equivalent value, savings, and where the usage ran. */
-function PlanValue({ plan, t }: { plan: SubscriptionPlanEstimate; t: FinanceT }) {
+function PlanValue({ plan, t, fmt }: { plan: SubscriptionPlanEstimate; t: FinanceT; fmt: Formats }) {
   const v = plan.value;
   const unpriced = v.unpricedProviderIds.join(", ");
   const partial = v.status === "partial";
@@ -57,7 +67,7 @@ function PlanValue({ plan, t }: { plan: SubscriptionPlanEstimate; t: FinanceT })
             <li key={i.install}>
               {t("subscriptionCosts.installUsage", {
                 install: installLabel(i.install, t),
-                tokens: TOKENS.format(i.tokens),
+                tokens: fmt.tokens(i.tokens),
                 value: usd(toMonth != null ? i.periodValueUsd * toMonth : i.periodValueUsd),
               })}
             </li>
@@ -68,7 +78,7 @@ function PlanValue({ plan, t }: { plan: SubscriptionPlanEstimate; t: FinanceT })
   );
 }
 
-function PeerUsageNotice({ plan, t }: { plan: SubscriptionPlanEstimate; t: FinanceT }) {
+function PeerUsageNotice({ plan, t, fmt }: { plan: SubscriptionPlanEstimate; t: FinanceT; fmt: Formats }) {
   const notices = plan.peers.filter((p) => p.state !== "current");
   if (!notices.length) return null;
   return (
@@ -79,7 +89,7 @@ function PeerUsageNotice({ plan, t }: { plan: SubscriptionPlanEstimate; t: Finan
           <Notice key={p.linkId} variant="warn">
             {p.state === "missing" || !p.lastSuccessAt
               ? t("subscriptionCosts.peerMissing", { reason })
-              : t("subscriptionCosts.peerStale", { reason, time: AS_OF.format(new Date(p.lastSuccessAt)) })}
+              : t("subscriptionCosts.peerStale", { reason, time: fmt.asOf(p.lastSuccessAt) })}
           </Notice>
         );
       })}
@@ -87,7 +97,7 @@ function PeerUsageNotice({ plan, t }: { plan: SubscriptionPlanEstimate; t: Finan
   );
 }
 
-function PlanEstimate({ plan, t }: { plan: SubscriptionPlanEstimate; t: FinanceT }) {
+function PlanEstimate({ plan, t, fmt }: { plan: SubscriptionPlanEstimate; t: FinanceT; fmt: Formats }) {
   const e = plan.estimate;
   const band = e.usdPerMillionTokens;
   const days = String(Math.round(e.observedDays));
@@ -109,7 +119,7 @@ function PlanEstimate({ plan, t }: { plan: SubscriptionPlanEstimate; t: FinanceT
           ? t("subscriptionCosts.fee", { fee: usd(e.monthlyFeeUsd) })
           : t("subscriptionCosts.feeNotRecorded")}
       </p>
-      <PlanValue plan={plan} t={t} />
+      <PlanValue plan={plan} t={t} fmt={fmt} />
       {e.status === "estimated" && band ? (
         <>
           <p className="mt-1 text-sm text-[var(--dpf-text)]">
@@ -131,7 +141,7 @@ function PlanEstimate({ plan, t }: { plan: SubscriptionPlanEstimate; t: FinanceT
           {e.status === "currency-unsupported" && t("subscriptionCosts.currencyUnsupported", { currency: plan.currency })}
         </p>
       )}
-      <PeerUsageNotice plan={plan} t={t} />
+      <PeerUsageNotice plan={plan} t={t} fmt={fmt} />
     </Surface>
   );
 }
@@ -140,11 +150,14 @@ export function SubscriptionCostEstimatesPanel({
   plans,
   unpriced,
   t,
+  locale,
 }: {
   plans: SubscriptionPlanEstimate[];
   unpriced: UnpricedSubscription[];
   t: FinanceT;
+  locale?: PanelLocale;
 }) {
+  const fmt = formatsFor(locale);
   return (
     // Closed by default: the AI Spend page's arrival view stays within its frozen word budget.
     <Surface as="section">
@@ -162,7 +175,7 @@ export function SubscriptionCostEstimatesPanel({
         ) : null}
         {plans.length > 0 ? (
           <div className="mt-4 grid gap-3 lg:grid-cols-2">
-            {plans.map((plan) => <PlanEstimate key={plan.contractId} plan={plan} t={t} />)}
+            {plans.map((plan) => <PlanEstimate key={plan.contractId} plan={plan} t={t} fmt={fmt} />)}
           </div>
         ) : null}
       </details>

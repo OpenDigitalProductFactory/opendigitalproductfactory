@@ -12,7 +12,9 @@ Delivery shape: medium. One deliverable, one PR.
 ## Backlog coverage
 
 - Decision: atomic
+- Parent: `BI-6361A930`
 - Receipt: `cmwha9kz80cx90emqaebtapc0`
+- Dependencies: none
 - Rationale: the value figure, the paired-install usage channel and the panel
   deliver the owner outcome only together. No other backlog item depends on it.
 
