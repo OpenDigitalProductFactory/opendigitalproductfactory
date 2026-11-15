@@ -6,6 +6,11 @@
       "name": "@opendigitalproductfactory/dpf-workroom",
       "version": "0.1.0-candidate.5",
       "source": "exact local tarball"
+    },
+    {
+      "name": "@opendigitalproductfactory/dpf-scoped-judgment",
+      "version": "0.1.0-candidate.3",
+      "source": "exact local tarball"
     }
   ],
   "sources": [
@@ -51,5 +56,13 @@
     "version": "0.1.0-candidate.5",
     "path": "packages/validators/vendor/opendigitalproductfactory-dpf-workroom-0.1.0-candidate.5.tgz",
     "sha256": "74f04029b39fad0dff0395edc4ca8e6445b961348adc76f8b376b794eb0fa987"
+  },
+  "judgmentArtifact": {
+    "name": "@opendigitalproductfactory/dpf-scoped-judgment",
+    "version": "0.1.0-candidate.3",
+    "path": "packages/validators/vendor/opendigitalproductfactory-dpf-scoped-judgment-0.1.0-candidate.3.tgz",
+    "sha256": "24fdf47bc9d43bc3a47b79843a1e35eb0e7e640b88d55f83443678267c241837",
+    "sourceRepository": "OpenDigitalProductFactory/dpf-scoped-judgment",
+    "sourceCommit": "27a4cd62865e80685f4f12e43f6eb6c1b4b3483e"
   }
 }

@@ -1,3 +1,3 @@
-/** Existing DPF decision scopes; ownership and authority stay with each host. */
-export const DECISION_SCOPES = ["wwmd", "wwwd", "wsid"] as const;
-export type DecisionScope = (typeof DECISION_SCOPES)[number];
+/** Identity-preserving compatibility bridge. Canonical owner: scoped-judgment component maintainers.
+ * DPF receiving owner: DPF maintainers; tracking/removal: vendor/JUDGMENT-ADOPTION.json, BI-BDF358CB. */
+export * from "@opendigitalproductfactory/dpf-scoped-judgment/decision-scopes";
