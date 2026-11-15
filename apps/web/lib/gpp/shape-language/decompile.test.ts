@@ -169,6 +169,7 @@ describe("decompile: the §4.5 worked example", () => {
       "advance",
       "evidence",
       "tools",
+      "effort",
     ]);
     expect(Object.keys(document.stages[1].advance)).toEqual(["kind", "condition", "decisionScope", "gate"]);
   });
@@ -311,6 +312,7 @@ describe("decompile and lower: field-level contracts", () => {
       "advance",
       "evidence",
       "tools",
+      "effort",
       "binding",
       "deadline",
       "subShape",

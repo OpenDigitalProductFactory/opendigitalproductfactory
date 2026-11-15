@@ -33,13 +33,20 @@ export default async function WorkspaceInboxPage({ searchParams }: { searchParam
     ...outcome, label: t(`states.${outcome.state}.label`), nextAction: t(outcome.nextActionKey),
     ...(outcome.failureExplanationKey ? { failureExplanation: t(outcome.failureExplanationKey) } : {}),
     ...(outcome.runtimeExplanationKey ? { runtimeExplanation: t(outcome.runtimeExplanationKey) } : {}),
+    ...(outcome.serviceReportExplanationKey ? { serviceReportExplanation: t(outcome.serviceReportExplanationKey) } : {}),
     ...(outcome.decidedOnBehalf ? { onBehalfText: t("card.decidedOnBehalf", {
       by: outcome.decidedOnBehalf.by, owner: outcome.decidedOnBehalf.onBehalfOf, reason: outcome.decidedOnBehalf.reason,
     }) } : {}),
   }));
   const outcomeCopy = { result: t("result"), recent: t("recent"), unavailable: t("unavailable"), details: t("details"), open: t("open"),
     inspectRoom: t("failure.inspectRoom"), roomUnavailable: t("failure.roomUnavailable"), evidence: t("failure.evidence"),
-    runtimeEvidence: t("runtime.evidence"), hostUnproven: t("runtime.hostUnproven"), hostVerified: t("runtime.hostVerified") };
+    runtimeEvidence: t("runtime.evidence"), hostUnproven: t("runtime.hostUnproven"), hostVerified: t("runtime.hostVerified"),
+    serviceReport: { evidence: t("serviceReport.evidence"), target: t("serviceReport.target"), observedAt: t("serviceReport.observedAt"),
+      outcome: t("serviceReport.outcome"), none: t("serviceReport.none"),
+      outcomes: { current: t("serviceReport.outcomes.current"), degraded: t("serviceReport.outcomes.degraded"), "would-recreate": t("serviceReport.outcomes.would-recreate") },
+      groups: { wouldRecreate: t("serviceReport.groups.wouldRecreate"), unchanged: t("serviceReport.groups.unchanged"),
+        skippedStopped: t("serviceReport.groups.skippedStopped"), dataOwnerChanged: t("serviceReport.groups.dataOwnerChanged"),
+        unclassified: t("serviceReport.groups.unclassified"), failed: t("serviceReport.groups.failed"), bindDrift: t("serviceReport.groups.bindDrift") } } };
 
   // Best-effort auto-resolve so settled escalations clear when the inbox is viewed
   // (re-homed from /ops with the band; the 15-min cron still covers it). Idempotent,

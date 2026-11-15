@@ -209,6 +209,16 @@
           "description": "Writes a drive-dispatched run of this non-governed stage may make without a person (scheduled mandate, BI-C1781121). Absent means none.",
           "uniqueItems": true
         },
+        "effort": {
+          "type": "string",
+          "enum": [
+            "minimal",
+            "low",
+            "medium",
+            "high"
+          ],
+          "description": "Effort tier (Phase G). A capability floor for routing; a governed-decision stage runs high whatever it declares. Absent means undeclared."
+        },
         "binding": {
           "$ref": "#/$defs/binding"
         },

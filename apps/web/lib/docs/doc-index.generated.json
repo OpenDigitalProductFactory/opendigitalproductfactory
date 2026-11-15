@@ -2836,6 +2836,7 @@
         "offered-or-not-dispatched-offered-then-corrected-once-bi-62db6c03",
         "required-means-required-forced-at-the-last-step-busy-is-a-requeue-bi-a8679d84",
         "a-stage-names-the-tools-it-needs",
+        "stage-effort-tier-phase-g-bi-b3bbf9ad",
         "a-new-shape-version-reaches-a-live-room-only-by-rebind-bi-cb5c0dce",
         "related-references",
         "a-shape-must-outlive-the-room-that-decided-it-bi-82dcd601",
@@ -13356,6 +13357,7 @@
         "use-this-doc-for",
         "choose-the-evidence-surface",
         "investigate-an-unexpected-action",
+        "what-a-route-decision-records-about-the-call",
         "separate-the-failure-domains",
         "change-and-recovery-rules",
         "what-to-watch"

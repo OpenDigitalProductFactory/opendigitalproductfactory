@@ -47,7 +47,7 @@ vi.mock("@/lib/work-management/workroom-shape-claim", async (importOriginal) => 
 const driveDb = {
   workroom: { findUnique: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
   workroomActivity: { create: vi.fn() },
-  scheduledAgentTask: { upsert: vi.fn(), findUnique: vi.fn() },
+  scheduledAgentTask: { upsert: vi.fn(), findUnique: vi.fn().mockResolvedValue(null) },
   $transaction: vi.fn(),
 };
 
@@ -515,7 +515,7 @@ describe("stage-declared tools reach the dispatched task", () => {
     });
     expect(result.dispatched).toBe(1);
     const call = fx.upsertAgentTask.mock.calls[0]?.[0];
-    expect(call?.stage).toEqual({
+    expect(call?.stage).toMatchObject({
       shapeKey: "dependency-advisory-watch",
       shapeVersion: "1.0.0",
       stageKey: "sweep",

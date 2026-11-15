@@ -1,6 +1,7 @@
 import { RESPONSE_FEEDBACK_BINDING_SELECT } from "../routing/response-producer";
 import { cache } from "react";
 import { prisma } from "@dpf/db";
+import { readSettledForegroundNotices } from "@/lib/agent/foreground-work-publication";
 import type {
   AgentMessageProvider,
   AgentMessageRow,
@@ -55,6 +56,7 @@ function serializeMessage(
   } | null,
   provider?: AgentMessageProvider,
   approvalRequests?: InlineApprovalRequest[],
+  settledCapacityWait?: boolean,
 ): AgentMessageRow {
   const row: AgentMessageRow = {
     id: m.id,
@@ -95,6 +97,7 @@ function serializeMessage(
   if (provider) {
     row.provider = provider;
   }
+  if (m.role === "system" && settledCapacityWait) row.settledCapacityWait = true;
   if (approvalRequests && approvalRequests.length > 0) {
     row.approvalRequests = approvalRequests;
   }
@@ -230,7 +233,7 @@ async function loadProviderInfo(
  * MUST only be called after session verification (shell layout).
  */
 export const getRecentMessages = cache(
-  async (threadId: string, limit = 50): Promise<AgentMessageRow[]> => {
+  async (threadId: string, limit = 50, includeCards = true): Promise<AgentMessageRow[]> => {
     // Fetch newest N in desc order, then reverse to get chronological for display
     const messages = await prisma.agentMessage.findMany({
       where: { threadId },
@@ -238,6 +241,7 @@ export const getRecentMessages = cache(
       take: limit,
       select: {
         id: true,
+        taskRunId: true,
         role: true,
         content: true,
         agentId: true,
@@ -265,13 +269,13 @@ export const getRecentMessages = cache(
         },
       },
     });
-    const [providerInfo, approvalRequests] = await Promise.all([
+    const ordered = messages.reverse();
+    const [providerInfo, approvalRequests, settled] = await Promise.all([
       loadProviderInfo(messages),
-      loadInlineApprovalRequests(messages),
+      includeCards ? loadInlineApprovalRequests(messages) : Promise.resolve(new Map<string, InlineApprovalRequest[]>()),
+      readSettledForegroundNotices(threadId, ordered),
     ]);
-    return messages
-      .reverse()
-      .map((m) => serializeMessage(m, m.proposal, providerInfo.get(m.id), approvalRequests.get(m.id)));
+    return ordered.map((m) => serializeMessage(m, includeCards ? m.proposal : undefined, providerInfo.get(m.id), approvalRequests.get(m.id), settled.has(m.id)));
   },
 );
 

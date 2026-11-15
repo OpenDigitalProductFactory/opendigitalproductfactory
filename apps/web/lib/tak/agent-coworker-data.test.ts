@@ -1,5 +1,10 @@
-import { describe, expect, it } from "vitest";
-import { selectVisibleTelemetry, serializeMessage } from "./agent-coworker-data";
+import { describe, expect, it, vi } from "vitest";
+const history = vi.hoisted(() => ({ messages: vi.fn(), telemetry: vi.fn(), settled: vi.fn() }));
+vi.mock("react", async () => ({ ...await vi.importActual<typeof import("react")>("react"), cache: (fn: unknown) => fn }));
+vi.mock("@dpf/db", () => ({ prisma: { agentMessage: { findMany: history.messages }, adapterRunTelemetry: { findMany: history.telemetry },
+  coworkerActionEnvelope: { findMany: vi.fn().mockResolvedValue([]) } } }));
+vi.mock("@/lib/agent/foreground-work-publication", () => ({ readSettledForegroundNotices: history.settled }));
+import { getRecentMessages, selectVisibleTelemetry, serializeMessage } from "./agent-coworker-data";
 
 const assistantMsg = {
   id: "m1",
@@ -9,6 +14,22 @@ const assistantMsg = {
   routeContext: "/customer",
   createdAt: new Date("2026-07-12T00:00:00Z"),
 };
+
+describe("owned history settled-notice projection", () => {
+  it.each([true, false])("retains same-request history hints and original content with includeCards=%s", async includeCards => {
+    const wait = { ...assistantMsg, id: "wait", role: "system", taskRunId: "TR-one", content: "Original capacity wait", attachments: [] };
+    const answer = { ...assistantMsg, id: "answer", taskRunId: "TR-one", proposal: null, attachments: [] };
+    history.messages.mockResolvedValue([answer, wait]); history.telemetry.mockResolvedValue([]);
+    history.settled.mockResolvedValue(new Set(["wait"]));
+    const rows = await getRecentMessages("owned-thread", 50, includeCards);
+    expect(history.messages).toHaveBeenLastCalledWith(expect.objectContaining({ where: { threadId: "owned-thread" }, take: 50,
+      select: expect.objectContaining({ taskRunId: true }) }));
+    expect(history.settled).toHaveBeenLastCalledWith("owned-thread", [wait, answer]);
+    expect(rows[0]).toMatchObject({ id: "wait", content: "Original capacity wait", settledCapacityWait: true });
+    expect(rows[1]).not.toHaveProperty("settledCapacityWait");
+    expect(rows[0]).not.toHaveProperty("taskRunId");
+  });
+});
 
 describe("serializeMessage — proposal join (BI-867263F4)", () => {
   it("attaches a joined proposal so its Approve/Reject card renders (incl. on reload)", () => {

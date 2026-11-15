@@ -1,4 +1,4 @@
-import { projectCurrentScopeBaselineTraceability, readPlanDeliveryScope, type PlanDeliveryScope } from "./plan-coverage-delivery-scope";
+import { projectCurrentScopeBaselineTraceability, type PlanDeliveryScope } from "./plan-coverage-delivery-scope";
 export { projectCurrentScopeBaselineTraceability } from "./plan-coverage-delivery-scope";
 import type { BoundWorkShapeDb } from "@/lib/backlog/initiative-readiness/bound-work-shape";
 
@@ -8,6 +8,7 @@ import { resolveRepositoryArtifact } from "@/lib/backlog/initiative-readiness/re
 import type { InitiativeArtifactRef } from "@/lib/backlog/initiative-readiness/receipt-schema";
 import { deriveAuthoritativeReadinessProfile } from "@/lib/backlog/initiative-readiness/profiles";
 import { projectMissingBaselineRecovery } from "./plan-coverage-recovery";
+import { resolveCoverageBaseline } from "./plan-coverage-baseline";
 
 export {
   projectPlanBacklogDependencies,
@@ -476,11 +477,9 @@ export async function checkBranchPlanBacklogGate(args: {
   if (!resolved.ok) {
     return { ok: false, required: true, code: "receipt-invalid", error: resolved.error, itemId: parent.itemId };
   }
-  const baseline = projectCurrentScopeBaselineTraceability(await db.backlogItemActivity.findMany({
-    where: { backlogItemId: parent.id, kind: "initiative_scope_baseline" },
-    orderBy: [{ recordedAt: "asc" }, { id: "asc" }],
-    select: { payload: true },
-  }));
+  const baseline = projectCurrentScopeBaselineTraceability(
+    (await resolveCoverageBaseline(db, parent, { deliveryScope: false })).rows,
+  );
   const validation = validatePlanBacklogCoverageReceipt({
     receipt: payload,
     mappedBacklogItems,
@@ -584,11 +583,7 @@ export async function checkPlanBacklogCoverage(args: {
     if (!resolved.ok) {
       return { ok: false, valid: false, code: "receipt-invalid", error: resolved.error };
     }
-    const baselineRows = await db.backlogItemActivity.findMany({
-      where: { backlogItemId: parent.id, kind: "initiative_scope_baseline" },
-      orderBy: [{ recordedAt: "asc" }, { id: "asc" }],
-      select: { payload: true },
-    });
+    const { rows: baselineRows, deliveryScope: checkDeliveryScope } = await resolveCoverageBaseline(db, parent, { deliveryScope: true });
     const baseline = projectCurrentScopeBaselineTraceability(baselineRows);
     const governed = validatePlanBacklogCoverageReceipt({
       receipt: payload,
@@ -603,7 +598,7 @@ export async function checkPlanBacklogCoverage(args: {
         acceptanceIds: baseline.acceptanceIds,
       } : undefined,
       allowFixDesignArtifact: deriveAuthoritativeReadinessProfile(parent) === "fix",
-      deliveryScope: baselineRows.length ? null : await readPlanDeliveryScope(db, parent),
+      deliveryScope: baselineRows.length ? null : checkDeliveryScope,
       planText: Buffer.from(resolved.artifact.bytes).toString("utf8"),
     });
     if (!governed.ok) return { ok: false, valid: false, code: "receipt-invalid", error: governed.error };
@@ -718,13 +713,10 @@ export async function recordPlanBacklogCoverage(args: {
           select: { itemId: true, status: true, workType: true },
         })
       : [];
-    const baselineRows = await tx.backlogItemActivity.findMany({
-      where: { backlogItemId: currentParent.id, kind: "initiative_scope_baseline" },
-      orderBy: [{ recordedAt: "asc" }, { id: "asc" }],
-      select: { payload: true },
-    });
+    const resolved = await resolveCoverageBaseline(tx, currentParent, { deliveryScope: true });
+    const baselineRows = resolved.rows;
     const baseline = projectCurrentScopeBaselineTraceability(baselineRows);
-    const deliveryScope = baselineRows.length ? null : await readPlanDeliveryScope(tx, currentParent);
+    const deliveryScope = baselineRows.length ? null : resolved.deliveryScope;
     if (!baseline && !deliveryScope) {
       const { recovery, instruction } = projectMissingBaselineRecovery({
         item: currentParent,
