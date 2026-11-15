@@ -1,3 +1,7 @@
+---
+status: draft
+---
+
 # Receive the shared GPP toolkit in actual DPF callers
 
 - **Backlog:** BI-2D3F986C; component maintainer BI-ABB5587B.
