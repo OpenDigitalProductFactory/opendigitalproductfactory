@@ -1792,8 +1792,29 @@ async function seedProfessionExternalSources(
 ): Promise<{ count: number; sourceKeyToId: Map<string, string> }> {
   const sourceKeyToId = new Map<string, string>();
   let count = 0;
+  const complianceKeys = Object.keys(PROVIDER_COMPLIANCE_SOURCE_REGISTRY);
+  const reviewedComplianceSources = new Map(
+    (await prisma.rawSource.findMany({
+      where: { sourceKey: { in: complianceKeys } },
+      select: { sourceKey: true, retrievedAt: true, locator: true },
+    })).map((row) => [row.sourceKey, row]),
+  );
 
   for (const [sourceKey, meta] of Object.entries(ALL_PROFESSION_EXTERNAL_SOURCES)) {
+    const reviewed = reviewedComplianceSources.get(sourceKey);
+    const locator = reviewed?.locator && typeof reviewed.locator === "object" && !Array.isArray(reviewed.locator)
+      ? reviewed.locator as Record<string, unknown>
+      : null;
+    const review = locator?.review && typeof locator.review === "object" && !Array.isArray(locator.review)
+      ? locator.review as Record<string, unknown>
+      : null;
+    const keepConfirmedReview = review?.decision === "confirmed"
+      && reviewed?.retrievedAt
+      && reviewed.retrievedAt.getTime() > Date.parse(meta.retrievedAt);
+    const retrievedAt = keepConfirmedReview ? reviewed.retrievedAt : new Date(meta.retrievedAt);
+    const persistedLocator: Prisma.InputJsonValue | undefined = (keepConfirmedReview
+      ? { ...(meta.locator as Record<string, unknown> | undefined), review }
+      : meta.locator ?? undefined) as Prisma.InputJsonValue | undefined;
     const upserted = (await prisma.rawSource.upsert({
       where: { sourceKey },
       create: {
@@ -1803,8 +1824,8 @@ async function seedProfessionExternalSources(
         url: meta.url,
         license: meta.license,
         abstract: meta.abstract ?? null,
-        retrievedAt: new Date(meta.retrievedAt),
-        locator: meta.locator ?? undefined,
+        retrievedAt,
+        locator: persistedLocator,
         isKernel: false,
       },
       update: {
@@ -1813,8 +1834,8 @@ async function seedProfessionExternalSources(
         url: meta.url,
         license: meta.license,
         abstract: meta.abstract ?? null,
-        retrievedAt: new Date(meta.retrievedAt),
-        locator: meta.locator ?? undefined,
+        retrievedAt,
+        locator: persistedLocator,
       },
     })) as { id: string };
 

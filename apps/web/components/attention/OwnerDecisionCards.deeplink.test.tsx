@@ -55,7 +55,7 @@ function entry(id: string, headline: string): OwnerAttentionEntry {
       headline,
       whyItMatters: "A coworker is waiting on your decision.",
       ifYouDoNothing: "If you do nothing, the coworker cannot proceed.",
-      recommendation: { lead: "AI recommendation", text: "review it.", specialistByline: "Backlog" },
+      recommendation: { lead: "AI recommendation", text: "review it.", specialistByline: "Backlog", visible: true },
       choices: [],
       tags: [],
       technical: { fields: [], builderActions: [] },

@@ -91,3 +91,10 @@ test("the Inngest telemetry compatibility pin is scoped and does not exempt othe
   ].join("\n"));
   assert.deepEqual(auditOverrides(text).untagged, ["@opentelemetry/auto-instrumentations-node"]);
 });
+
+test("judgment artifact transport is an exact parent-scoped compatibility exception", () => {
+  const key = "@dpf/validators>@opendigitalproductfactory/dpf-scoped-judgment";
+  assert.deepEqual(auditOverrides(wrap(`  '${key}': 'file:reviewed.tgz'`)).untagged, []);
+  for (const unknown of ["@dpf/other>@opendigitalproductfactory/dpf-scoped-judgment", "@dpf/validators>@opendigitalproductfactory/unreviewed"])
+    assert.deepEqual(auditOverrides(wrap(`  '${unknown}': 'file:unreviewed.tgz'`)).untagged, [unknown]);
+});

@@ -2394,6 +2394,9 @@
     "packages/validators/src/workroom/marking.ts": [
       "docs/architecture/gated-permissions-process.md"
     ],
+    "packages/validators/vendor/JUDGMENT-ADOPTION.json": [
+      "docs/architecture/scoped-judgment-adoption.md"
+    ],
     "sbom/dependency-allowlist.json": [
       "docs/architecture/dependency-reduction-routine.md",
       "docs/runbooks/dependency-compromise.md"
@@ -2435,6 +2438,9 @@
     ],
     "scripts/build-images.sh": [
       "docs/testing/findings/run-1-findings.md"
+    ],
+    "scripts/build-judgment-guard-runtime.mjs": [
+      "docs/architecture/scoped-judgment-adoption.md"
     ],
     "scripts/build-kernel-embeddings.ts": [
       "docs/founder-kernel/AUTHORING.md"
@@ -4003,6 +4009,10 @@
     ],
     "docs/architecture/principle-decide-mcda-identity.md": [
       "apps/web/lib/decision/option-input-contract.ts"
+    ],
+    "docs/architecture/scoped-judgment-adoption.md": [
+      "packages/validators/vendor/JUDGMENT-ADOPTION.json",
+      "scripts/build-judgment-guard-runtime.mjs"
     ],
     "docs/architecture/section-navigation.md": [
       "apps/web/components/shell/SectionNav.tsx",

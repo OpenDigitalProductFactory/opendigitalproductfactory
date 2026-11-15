@@ -126,7 +126,7 @@ describe("translateAttentionToOwnerDecision", () => {
     { source: "approval-expense", headline: "Approve this expense?", tag: "Costs money" },
     { source: "approval-outbound", headline: "Send this message?", tag: "Goes public" },
     { source: "compliance-submission", headline: "File this report?", tag: "Goes public" },
-    { source: "agent-proposal", headline: "Let this coworker do more?", tag: "Reversible" },
+    { source: "agent-proposal", headline: "Let this coworker do more?", tag: "Due in 3 days" },
   ])("uses plain owner copy and word-based tags for $source", ({ source, headline, tag }) => {
     const card = translateAttentionToOwnerDecision(
       item({
@@ -164,6 +164,33 @@ describe("translateAttentionToOwnerDecision", () => {
     expect([card.headline, card.whyItMatters, card.ifYouDoNothing, card.recommendation.text].join(" "))
       .not.toContain(raw);
     expect(card.technical.fields).toContainEqual({ label: "Original title", value: raw });
+  });
+
+  it("keeps default reversibility and generic advice out of the decision summary", () => {
+    const card = translateAttentionToOwnerDecision(
+      item({ source: "platform-health", title: "redis is offline" }),
+      Date.now(),
+    );
+
+    expect(card.tags.map((entry) => entry.label)).not.toContain("Reversible");
+    expect(card.recommendation.visible).toBe(false);
+  });
+
+  it("calls out the exceptional irreversible case", () => {
+    const card = translateAttentionToOwnerDecision(
+      item({
+        source: "approval-outbound",
+        triage: {
+          timeToAct: "none",
+          residueReason: "policy-approval",
+          decideEffort: "review",
+          irreversible: true,
+        },
+      }),
+      Date.now(),
+    );
+
+    expect(card.tags.map((entry) => entry.label)).toContain("Irreversible");
   });
 
   it("keeps raw coworker-memory content below technical detail", () => {

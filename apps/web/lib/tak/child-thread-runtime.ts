@@ -26,6 +26,7 @@ import {
   type ProviderComplianceResultSource,
 } from "@/lib/routing/provider-suitability/provider-compliance-cold-start";
 import { recordProviderComplianceAnswerGaps } from "@/lib/decision-perspective/profession-corpus-evidence";
+import { loadEffectiveProviderComplianceSources } from "@/lib/routing/provider-suitability/effective-compliance-sources";
 
 /**
  * EP-A2A: when a collaboration child thread reaches a terminal state, emit
@@ -386,7 +387,11 @@ export async function runChildThreadExecution(context: ChildRuntimeContext): Pro
       ? result.content
       : "(no response)";
     const providerResolution = providerComplianceCollaboration
-      ? resolveProviderComplianceColdStartReply({ specialistReply: replyText, chatHistory })
+      ? resolveProviderComplianceColdStartReply({
+          specialistReply: replyText,
+          chatHistory,
+          sources: await loadEffectiveProviderComplianceSources(prisma),
+        })
       : null;
     if (providerResolution) replyText = providerResolution.content;
     if (providerResolution?.gapReasons.length) {

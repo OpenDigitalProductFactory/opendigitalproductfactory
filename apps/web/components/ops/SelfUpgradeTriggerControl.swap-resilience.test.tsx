@@ -17,6 +17,10 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ refresh: vi.fn() }),
 }));
 
+vi.mock("@/components/ui/Dialog", () => ({
+  confirmDialog: vi.fn().mockResolvedValue(true),
+}));
+
 vi.mock("@/lib/actions/promotions", () => ({
   triggerSelfUpgrade: vi.fn(),
   forceActiveRun: vi.fn(),
@@ -126,22 +130,21 @@ describe("isExpectedDuringSwap", () => {
   });
 });
 
-// ─── Forced trigger severed by the swap ────────────────────────────────────
+// ─── Trigger severed by the swap ───────────────────────────────────────────
 
-describe("SelfUpgradeTriggerControl – forced upgrade swap resilience", () => {
+describe("SelfUpgradeTriggerControl – upgrade swap resilience", () => {
   it("keeps an interrupted trigger admission latched until durable server state changes", async () => {
     triggerMock.mockRejectedValue(makeE394());
 
     render(<SelfUpgradeTriggerControl {...baseProps} />);
 
-    fireEvent.click(screen.getByRole("checkbox", { name: /emergency override/i }));
-    fireEvent.click(screen.getByRole("button", { name: /upgrade now/i }));
+    fireEvent.click(screen.getByRole("button", { name: /install now/i }));
 
     await waitFor(() => {
       expect(screen.getByText(/Admission response interrupted:/i)).toBeInTheDocument();
     });
 
-    expect(screen.getByRole("button", { name: /upgrade now/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /install now/i })).toBeDisabled();
     // The button is disabled, so the copy no longer tells the operator not to press it (BI-CE244260).
     expect(screen.getByText(/Checking the server record/i)).toBeInTheDocument();
     expect(screen.queryByText(/do not click again/i)).not.toBeInTheDocument();
@@ -153,14 +156,14 @@ describe("SelfUpgradeTriggerControl – forced upgrade swap resilience", () => {
 
     render(<SelfUpgradeTriggerControl {...baseProps} />);
 
-    fireEvent.click(screen.getByRole("button", { name: /upgrade now/i }));
+    fireEvent.click(screen.getByRole("button", { name: /install now/i }));
 
     await waitFor(() => {
       expect(screen.getByText(/Admission response interrupted:/i)).toBeInTheDocument();
     });
     expect(screen.getByText(/Unauthorized/i)).toBeInTheDocument();
     expect(screen.queryByText(/Applying the upgrade/i)).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /upgrade now/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /install now/i })).toBeDisabled();
   });
 
   it("treats a severed Force-now request during a drain as applying, not a crash", async () => {
@@ -220,10 +223,9 @@ describe("SelfUpgradeTriggerControl – forced upgrade swap resilience", () => {
 
     const { rerender } = render(<SelfUpgradeTriggerControl {...baseProps} />);
 
-    fireEvent.click(screen.getByRole("checkbox", { name: /emergency override/i }));
-    fireEvent.click(screen.getByRole("button", { name: /upgrade now/i }));
+    fireEvent.click(screen.getByRole("button", { name: /install now/i }));
 
-    expect(triggerMock).toHaveBeenCalledOnce();
+    await waitFor(() => expect(triggerMock).toHaveBeenCalledOnce());
 
     const observeDurableRun = () => rerender(
       <SelfUpgradeTriggerControl
@@ -235,13 +237,13 @@ describe("SelfUpgradeTriggerControl – forced upgrade swap resilience", () => {
     );
     if (order === "run-first") {
       await act(async () => { observeDurableRun(); });
-      expect(screen.getByRole("button", { name: /upgrade now/i })).toBeDisabled();
+      expect(screen.getByRole("button", { name: /install now/i })).toBeDisabled();
     }
 
     await act(async () => { rejectAdmission(makeE394()); });
     if (order === "response-first") {
       expect(screen.getByText(/Admission response interrupted:/i)).toBeInTheDocument();
-      const trigger = screen.getByRole("button", { name: /upgrade now/i });
+      const trigger = screen.getByRole("button", { name: /install now/i });
       expect(trigger).toBeDisabled();
       fireEvent.click(trigger);
       expect(triggerMock).toHaveBeenCalledOnce();
@@ -250,7 +252,7 @@ describe("SelfUpgradeTriggerControl – forced upgrade swap resilience", () => {
     }
 
     expect(screen.queryByText(/Admission response interrupted:/i)).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /upgrade now/i })).toBeEnabled();
+    expect(screen.getByRole("button", { name: /install now/i })).toBeEnabled();
     expect(triggerMock).toHaveBeenCalledOnce();
   });
 
@@ -259,7 +261,7 @@ describe("SelfUpgradeTriggerControl – forced upgrade swap resilience", () => {
 
     render(<SelfUpgradeTriggerControl {...baseProps} />);
 
-    fireEvent.click(screen.getByRole("button", { name: /upgrade now/i }));
+    fireEvent.click(screen.getByRole("button", { name: /install now/i }));
 
     await waitFor(() => {
       expect(triggerMock).toHaveBeenCalledTimes(1);
