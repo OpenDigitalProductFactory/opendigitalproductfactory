@@ -103,4 +103,23 @@ describe("mailroom-item attention source", () => {
       expect((where as { OR: unknown[] }).OR).toContainEqual({ reasonKey: "supplier-invoice" });
     });
   });
+
+  // BI-757C961E: counsel mail is privileged; Needs you names the reason and sender, never the content.
+  it("a privileged (legal) item shows no content summary or subject on Needs you", () => {
+    const r = row({
+      fromAddress: "partner@lawfirm.example",
+      fromDisplayName: "A Partner",
+      subject: "RE: Engagement Letter",
+      triageSummary: "Counsel advises the IP clause is unenforceable",
+      reasonKey: "legal-correspondence",
+      urgency: "days",
+      queueKey: "legal",
+    });
+    const item = mailroomItemToAttentionItem(r, now);
+    expect(item.context).not.toContain("unenforceable");
+    expect(item.context).not.toContain("Engagement Letter");
+    expect(item.context).toContain("privileged");
+    expect(item.title).toBe("Acknowledge A Partner");
+  });
 });
+
