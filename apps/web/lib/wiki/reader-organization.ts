@@ -12,11 +12,11 @@
 // When BI-1B4AB42A lands, this resolves from the session and the single-
 // organization fallback goes away; callers already pass the result through.
 
-type ReaderOrganizationClient = {
-  organization: { findMany: (args: { select: { id: true }; take: number }) => Promise<Array<{ id: string }>> };
-};
+import { resolveSingleInstallOrganizationId, type SingleOrganizationClient } from "@/lib/install/single-organization";
 
+type ReaderOrganizationClient = SingleOrganizationClient;
+
+/** The single-organization invariant lives in lib/install/single-organization.ts (BI-3895E6F5). */
 export async function resolveReaderOrganizationId(db: ReaderOrganizationClient): Promise<string | null> {
-  const organizations = await db.organization.findMany({ select: { id: true }, take: 2 });
-  return organizations.length === 1 ? organizations[0]!.id : null;
+  return resolveSingleInstallOrganizationId(db);
 }
