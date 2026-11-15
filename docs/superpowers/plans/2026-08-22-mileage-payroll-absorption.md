@@ -222,7 +222,9 @@ payslip, with the reimbursement correctly excluded from taxable pay.
 
 ## Backlog coverage
 
+- Parent: BI-099EAE30
 - Decision: atomic
+- Rationale: The payroll page, the per-employee statutory function, the itemized US payslip lines, the state figure builder and withholding-table entry only deliver value together; none lets an owner run payroll alone, and the page without per-employee W-4s would withhold wrongly.
 - Receipt: `cmwgxx9fy0js50el7v8ax1ied`
 - Dependencies: BI-099EAE30 builds on BI-2BC8D614 (merged, #7106). BI-3DD6EFEB (mileage) is independent.
 
