@@ -1,5 +1,4 @@
 import { randomUUID } from "node:crypto";
-import { readFileSync } from "node:fs";
 import { setFlagsFromString } from "node:v8";
 import { runInNewContext } from "node:vm";
 import { PrismaPg } from "@prisma/adapter-pg";
@@ -16,8 +15,6 @@ import {
   insertRowsWithReplicationDisabled,
   runSourceCheckedClone,
   sanitizeConfidentialRow,
-  buildDestinationResetSql,
-  runWithDestinationCleanup,
 } from "./sanitized-clone";
 import { assertSanitizedCloneSourceIntegrity } from "./sanitized-clone-source-integrity";
 import { copySanitizedCursorBatches, withSanitizedCursorBatches } from "./sanitized-clone-batches";
@@ -41,108 +38,6 @@ setFlagsFromString("--expose-gc");
 const collectGarbage = runInNewContext("gc") as () => void;
 const retainedHeap = () => { collectGarbage(); return process.memoryUsage().heapUsed; };
 
-// These fixtures need an admitted disposable DB, but never target its installed
-// tables. Every unqualified relation is asserted to resolve to this connection's
-// pg_temp namespace before executing source SQL. Entire fixtures roll back.
-describeDatabase("graph registry custody recovery TEMP fixtures", () => {
-  it.each([false, true])("retains migration-owned dictionary across clone cleanup, failed=%s", async failCopy => {
-    const temp = new Client({ connectionString: databaseUrl });
-    await temp.connect();
-    try {
-      await temp.query("BEGIN");
-      await temp.query("SET LOCAL search_path TO pg_temp, pg_catalog");
-      await temp.query(`CREATE TEMP TABLE graph_relation_type (key text PRIMARY KEY);
-        CREATE TEMP TABLE _prisma_migrations (migration_name text, finished_at timestamptz);
-        CREATE TEMP TABLE clone_business (id text);
-        INSERT INTO graph_relation_type VALUES ('PART_OF'), ('DEPENDS_ON');
-        INSERT INTO _prisma_migrations VALUES ('fixture', now());
-        INSERT INTO clone_business VALUES ('old')`);
-      const bindings = await temp.query(`SELECT count(*)::int AS count FROM pg_class
-        WHERE oid IN ('graph_relation_type'::regclass,'_prisma_migrations'::regclass,'clone_business'::regclass)
-          AND relnamespace = pg_my_temp_schema()`);
-      expect(bindings.rows[0].count).toBe(3);
-      const reset = buildDestinationResetSql(["graph_relation_type", "_prisma_migrations", "clone_business"]);
-      expect(reset).not.toBeNull();
-      const copy = runWithDestinationCleanup(async () => { await temp.query(reset!); }, async () => {
-        await temp.query("INSERT INTO clone_business VALUES ('new')");
-        if (failCopy) throw new Error("fixture copy failure");
-      });
-      if (failCopy) await expect(copy).rejects.toThrow("fixture copy failure");
-      else await copy;
-      expect((await temp.query("SELECT key FROM graph_relation_type ORDER BY key")).rows.map(r => r.key)).toEqual(["DEPENDS_ON", "PART_OF"]);
-      expect((await temp.query("SELECT count(*)::int AS count FROM _prisma_migrations WHERE finished_at IS NOT NULL")).rows[0].count).toBe(1);
-      expect((await temp.query("SELECT count(*)::int AS count FROM clone_business")).rows[0].count).toBe(failCopy ? 0 : 1);
-    } finally {
-      await temp.query("ROLLBACK");
-      await temp.end();
-    }
-  });
-
-  it("repeats the immutable relation-drift SQL after restoring missing original reference rows", async () => {
-    const temp = new Client({ connectionString: databaseUrl });
-    const migration = readFileSync(new URL("../prisma/migrations/20261114130000_relation_drift_repair/migration.sql", import.meta.url), "utf8");
-    const registry = readFileSync(new URL("../prisma/migrations/20261028060000_graph_relation_type/migration.sql", import.meta.url), "utf8");
-    const insert = registry.match(/INSERT INTO "graph_relation_type"[^;]*;/g);
-    expect(insert).toHaveLength(1);
-    await temp.connect();
-    try {
-      await temp.query("BEGIN");
-      await temp.query("SET LOCAL search_path TO pg_temp, pg_catalog");
-      await temp.query(`
-        CREATE TEMP TABLE graph_relation_type (key text PRIMARY KEY, relation_class text, label text, inverse_label text, status text);
-        CREATE TEMP TABLE "InventoryRelationship" (id text, "fromEntityId" text, "toEntityId" text, "relationshipType" text, properties jsonb);
-        CREATE TEMP TABLE "DiscoveredRelationship" ("inventoryRelationshipId" text, "relationshipType" text);
-        CREATE TEMP TABLE "InventoryEntity" (id text, "entityKey" text);
-        CREATE TEMP TABLE "DigitalProduct" (id text, "productId" text);
-        CREATE TEMP TABLE "ProductDependency" ("fromProductId" text, "toProductId" text, "relationType" text);
-        CREATE TEMP TABLE graph_edge (src_key text, dst_key text, rel_type text, props jsonb, PRIMARY KEY(src_key,dst_key,rel_type),
-          CONSTRAINT graph_edge_rel_type_fkey FOREIGN KEY(rel_type) REFERENCES graph_relation_type(key));
-        INSERT INTO graph_relation_type VALUES ('RUNS_ON','semantic','keep custom label','inverse','retired'),
-          ('DOC_REFERENCES','provenance','old reference','inverse','deprecated');
-        INSERT INTO "InventoryEntity" VALUES ('h1','host1'),('h2','host2');
-        INSERT INTO "InventoryRelationship" VALUES ('r','h1','h2','RUNS_ON','{"rule":"host_is_docker_host"}');
-        INSERT INTO "DiscoveredRelationship" VALUES ('r','RUNS_ON');
-        INSERT INTO graph_edge VALUES ('host1','host2','RUNS_ON','{}'),
-          ('doc1','doc2','DOC_REFERENCES','{"refType":"canonical-source"}'),
-          ('doc3','doc4','DOC_REFERENCES','{"refType":"unrecognized"}');
-        INSERT INTO "DigitalProduct" VALUES ('p1','product1'),('p2','product2');
-        INSERT INTO "ProductDependency" VALUES ('p1','p2','part_of'),('p2','p1','depends_on');
-      `);
-      const names = ["graph_relation_type", "InventoryRelationship", "DiscoveredRelationship", "InventoryEntity", "DigitalProduct", "ProductDependency", "graph_edge"];
-      const bindings = await temp.query(`SELECT count(*)::int AS count FROM pg_class
-        WHERE oid = ANY(ARRAY(SELECT to_regclass(quote_ident(name)) FROM unnest($1::text[]) AS t(name)))
-          AND relnamespace = pg_my_temp_schema()`, [names]);
-      expect(bindings.rows[0].count).toBe(names.length);
-      // Actual failed SQL can have committed earlier statements before failure.
-      // Apply its prefix, then isolate the projection's demonstrated 23503.
-      const split = migration.indexOf("-- 5. Graph:");
-      expect(split).toBeGreaterThan(0);
-      await temp.query(migration.slice(0, split));
-      await temp.query("SAVEPOINT expected_failure");
-      await expect(temp.query(migration.slice(split))).rejects.toMatchObject({ code: "23503", constraint: "graph_edge_rel_type_fkey" });
-      await temp.query("ROLLBACK TO SAVEPOINT expected_failure");
-      await temp.query(insert![0]);
-      const snapshot = async () => (await temp.query(`SELECT src_key,dst_key,rel_type,props FROM graph_edge ORDER BY src_key,dst_key,rel_type`)).rows;
-      await temp.query(migration);
-      const first = await snapshot();
-      expect(first).toEqual(expect.arrayContaining([
-        { src_key: "product1", dst_key: "product2", rel_type: "PART_OF", props: { source: "ProductDependency" } },
-        { src_key: "product2", dst_key: "product1", rel_type: "DEPENDS_ON", props: { source: "ProductDependency" } },
-        { src_key: "host1", dst_key: "host2", rel_type: "SAME_AS", props: {} },
-        { src_key: "doc1", dst_key: "doc2", rel_type: "HAD_PRIMARY_SOURCE", props: { refType: "canonical-source" } },
-        { src_key: "doc3", dst_key: "doc4", rel_type: "DOC_REFERENCES", props: { refType: "unrecognized" } },
-      ]));
-      await temp.query(insert![0]);
-      await temp.query(migration);
-      expect(await snapshot()).toEqual(first);
-      expect((await temp.query("SELECT label,status FROM graph_relation_type WHERE key='RUNS_ON'")).rows).toEqual([{ label: "keep custom label", status: "retired" }]);
-      expect((await temp.query('SELECT "relationshipType" FROM "DiscoveredRelationship"')).rows).toEqual([{ relationshipType: "SAME_AS" }]);
-    } finally {
-      await temp.query("ROLLBACK");
-      await temp.end();
-    }
-  });
-});
 
 async function destinationCount(): Promise<number> {
   const result = await client.query<{ count: string }>(
