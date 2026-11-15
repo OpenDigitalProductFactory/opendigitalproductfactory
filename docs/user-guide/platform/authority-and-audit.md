@@ -63,6 +63,18 @@ Metrics instead of filling the journal with low-value chatter.
 
 ## Separate The Failure Domains
 
+For an approved read of the platform's saved service-convergence report, open
+the original **Approval result** and expand **Request details**. Platform
+administrators can see the recorded version, observation time and service
+classifications. The same saved evidence is available to the assistant that
+made the request; opening it does not run the diagnostic again.
+
+This is a report of an earlier observation. A “No configuration update reported”
+outcome can still list services with different network settings or services not
+classified. It does not confirm current health, safe recovery or permission to
+change services. Missing or conflicting evidence stays unverified. Arbitrary
+command output and private connection details are not shown.
+
 - **Route not visible** — inspect the user's platform role and authority
   binding.
 - **Route visible, action denied at execution** — inspect coworker grants,

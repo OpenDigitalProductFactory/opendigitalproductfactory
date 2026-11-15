@@ -5,6 +5,7 @@ import { originalToolParameters } from "@/lib/attention/coworker-envelope-decisi
 import { fingerprintCoworkerInput } from "@/lib/govern/authority/coworker-authority-decision";
 import type { ApprovalFailureEvidence, UnavailableApprovalEvidence } from "./approval-outcome";
 import { MCP_ROUTE_TOOL_RESULT_CHAR_CAP } from "@/lib/tak/tool-result-budget";
+import { parseServiceConvergeReport, SAVED_SERVICE_REPORT_COMMAND, type ServiceConvergeReport } from "./service-converge-report";
 
 const runtimeStatuses = ["succeeded", "failed", "transition_in_progress", "drain_required", "active_conflict",
   "host_applied_pending_verification", "rolled_back", "rollback_failed"] as const;
@@ -32,9 +33,13 @@ export type RuntimeApprovalActionEvidence = {
 export type RuntimeEvidenceRequest = { transitionId: string; requestedById: string; reconciliation: Record<string, unknown>;
   imageServices: unknown; executedAt: Date };
 type RuntimeEvidenceReader = (request: RuntimeEvidenceRequest) => Promise<RuntimeTransitionObservation>;
+export type ServiceReportApprovalEvidence = { state: "available"; executionId: string; executedAtIso: string;
+  toolName: "admin_run_command"; operation: "service-convergence-shadow";
+  threadBinding: "matched" | "not-recorded"; report: ServiceConvergeReport };
 
 export type ApprovalActionEvidence = UnavailableApprovalEvidence
   | RuntimeApprovalActionEvidence
+  | ServiceReportApprovalEvidence
   | { state: "available"; executionId: string; executedAtIso: string; toolName: "manage_provider_account";
       operation: "test"; connectionId: string; providerId?: string; outcome: "succeeded" | "failed";
       threadBinding: "matched" | "not-recorded";
@@ -92,14 +97,29 @@ function consistentResult(run: { success: boolean; result: unknown }) {
 }
 
 /** Read only after owner/assistant admission. No replay or consent renewal. */
-export async function readApprovalActionEvidence(envelope: Envelope, db: Db, now: Date, readRuntime?: RuntimeEvidenceReader): Promise<ApprovalActionEvidence> {
+export async function readApprovalActionEvidence(envelope: Envelope, db: Db, now: Date, readRuntime?: RuntimeEvidenceReader,
+  /** Server-only admission from the owned outcome store's current manage_platform check. */
+  canReadServiceReport = false): Promise<ApprovalActionEvidence> {
   if (envelope.status !== "executed" && envelope.status !== "failed") return { state: "missing", reason: "not-settled" };
-  if (envelope.manifestActionId !== "manage_provider_account" && envelope.manifestActionId !== "reconcile_runtime_capabilities") {
+  if (envelope.manifestActionId !== "manage_provider_account" && envelope.manifestActionId !== "reconcile_runtime_capabilities"
+    && !(envelope.manifestActionId === "admin_run_command" && canReadServiceReport)) {
     return { state: "unsupported", reason: "operation-unsupported" };
   }
   const bound = await readBoundApprovalExecution(envelope, db, now);
   if (bound.state !== "available") return bound;
   const { parameters, run } = bound;
+  if (envelope.manifestActionId === "admin_run_command") {
+    if (parameters.command !== SAVED_SERVICE_REPORT_COMMAND || Object.keys(parameters).length !== 1) return { state: "unsupported", reason: "operation-unsupported" };
+    const result = consistentResult(run);
+    try { if (!result || !run.success || JSON.stringify(result).length > MCP_ROUTE_TOOL_RESULT_CHAR_CAP) throw new Error(); }
+    catch { return { state: "missing", reason: "result-unproven" }; }
+    const data = isRecord(result.data) ? result.data : null;
+    if (data?.command !== parameters.command || data.exitCode !== 0 || data.signal !== undefined) return { state: "missing", reason: "result-unproven" };
+    const report = parseServiceConvergeReport(data.output, run.createdAt);
+    return report ? { state: "available", executionId: run.id, executedAtIso: run.createdAt.toISOString(),
+      toolName: "admin_run_command", operation: "service-convergence-shadow", threadBinding: bound.threadBinding, report }
+      : { state: "missing", reason: "result-unproven" };
+  }
   if (envelope.manifestActionId === "reconcile_runtime_capabilities") {
     if (typeof parameters.transitionId !== "string" || !/^RCT-[A-Za-z0-9-]{1,48}$/.test(parameters.transitionId)
       || !isRecord(parameters.reconciliation)) return { state: "missing", reason: "result-unproven" };

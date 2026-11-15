@@ -22,6 +22,33 @@ function fixture() {
   return { envelope, run, db, findMany, read: () => readApprovalActionEvidence(envelope, db as never, now) };
 }
 describe("bounded original approval action evidence", () => {
+  function diagnosticFixture() {
+    const f = fixture(); const input = { command: "docker compose exec -T portal cat /dpf-state/service-converge-outcome.json" };
+    const report = { mode: "shadow", targetSha: "a".repeat(40), at: "2026-10-15T00:00:00.000Z", outcome: "current",
+      wouldRecreate: [], unchanged: ["postgres"], skippedStopped: [], dataOwnerChanged: [], unclassified: [], failed: [], bindDrift: [] };
+    f.envelope.manifestActionId = "admin_run_command"; f.envelope.argsJson.approvalBinding.toolName = "admin_run_command";
+    f.envelope.inputFingerprint = fingerprintCoworkerInput(input); f.envelope.argsJson.approvalBinding.inputFingerprint = f.envelope.inputFingerprint;
+    Object.assign(f.run, { toolName: "admin_run_command", parameters: input,
+      result: { success: true, data: { command: input.command, output: JSON.stringify(report), exitCode: 0 } } });
+    return { ...f, input, readReport: () => readApprovalActionEvidence(f.envelope, f.db as never, now, undefined, true) };
+  }
+  it("projects only the exact already-executed report, never its command or raw output", async () => {
+    const f = diagnosticFixture(); const result = await f.readReport();
+    expect(result).toMatchObject({ state: "available", toolName: "admin_run_command", operation: "service-convergence-shadow",
+      executionId: "run1", threadBinding: "matched", report: { mode: "shadow", classifications: { unchanged: ["postgres"] } } });
+    expect(JSON.stringify(result)).not.toMatch(/docker compose|output|exitCode|parameters/);
+  });
+  it.each(["command", "output", "exit", "failed", "foreign", "ambiguous"])("keeps %s diagnostic evidence unproven or unsupported", async change => {
+    const f = diagnosticFixture();
+    if (change === "command") Object.assign(f.run.result.data, { command: "docker compose ps" });
+    if (change === "output") Object.assign(f.run.result.data, { output: "SECRET" });
+    if (change === "exit") Object.assign(f.run.result.data, { exitCode: 1 });
+    if (change === "failed") Object.assign(f.run, { success: false, result: { success: false, data: { command: f.input.command, output: "SECRET", exitCode: 1 } } });
+    if (change === "foreign") f.run.userId = "other";
+    if (change === "ambiguous") f.findMany.mockResolvedValue([f.run, { ...f.run, id: "duplicate" }]);
+    expect(await f.readReport()).not.toHaveProperty("report");
+    expect(JSON.stringify(await f.readReport())).not.toContain("SECRET");
+  });
   it("reads only persisted operation fields and never exposes messages or raw parameters", async () => {
     const f = fixture(); const result = await f.read();
     expect(result).toEqual({ state: "available", executionId: "run1", executedAtIso: createdAt.toISOString(),
