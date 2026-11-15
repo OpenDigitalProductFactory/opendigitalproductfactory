@@ -27,7 +27,7 @@ describe("primary decision disclosure", () => {
     expect(primary.unresolved).toBe(true);
     expect(primary.recommendation).toBe("Keep this on hold until its effect is clear.");
     expect(primary.consequence).toContain("Cannot be undone");
-    expect(primary.target).toBe(toolName === "request_self_upgrade" ? "This app" : "Work name unavailable");
+    expect(primary.target).toBe(toolName === "request_self_upgrade" ? "This app" : "");
     expect(JSON.parse(decision.completeProposedContent!)).toEqual(proposedParameters);
   });
 
@@ -49,8 +49,8 @@ describe("primary decision disclosure", () => {
     const primary = envelopePrimaryDecision(decision);
     expect(primary.title).toBe("Combine these duplicate work requests?");
     expect(primary.facts).toEqual(expect.arrayContaining([
-      { label: "Payment · Amount", value: "125" }, { label: "Payment · Currency", value: "USD" },
-      { label: "Payment · Recipient", value: "review@example.test" }, { label: "Access", value: "false" },
+      { label: "Amount", value: "125" }, { label: "Currency", value: "USD" },
+      { label: "Recipient", value: "review@example.test" }, { label: "Access", value: "false" },
     ]));
   });
 
@@ -100,6 +100,8 @@ describe("primary decision disclosure", () => {
       routingId: "internal-only", recipients: [], payment: { amount: 1250, currency: "USD", recipient },
     } });
     const primary = envelopePrimaryDecision(decision);
+    expect(primary.description).toBe("Unresolved; review before authorizing.");
+    expect(primary.target).toBe("");
     expect(primary.facts.some(fact => fact.value === recipient)).toBe(true);
     expect(primary.facts.some(fact => /recipients/i.test(fact.label) && fact.value === "Not provided")).toBe(true);
     expect(primary.facts.some(fact => fact.value === "internal-only")).toBe(false);

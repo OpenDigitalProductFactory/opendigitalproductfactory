@@ -38,6 +38,9 @@ const {
     delegationChain: {
       updateMany: vi.fn(),
     },
+    rawSource: {
+      findMany: vi.fn(),
+    },
   },
   mockResolveAgent: vi.fn(),
   mockResolveTools: vi.fn(),
@@ -204,6 +207,7 @@ describe("runChildThreadExecution", () => {
     mockPrisma.agentThread.update.mockResolvedValue({});
     mockPrisma.agentThread.findUnique.mockResolvedValue(null);
     mockPrisma.taskRun.findUnique.mockResolvedValue(null);
+    mockPrisma.rawSource.findMany.mockResolvedValue([]);
     mockResolveAgent.mockResolvedValue({
       agentId: "agent-mkt",
       systemPrompt: "You are the marketing specialist.",

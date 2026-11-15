@@ -33,7 +33,7 @@ describe("approval scenario fixture boundary", () => {
 
 
 describe("approval scenario acceptance", () => {
-  const metrics = { defaultVisibleWords: 400, leadBandWords: 0, primaryActions: 1,
+  const metrics = { defaultVisibleWords: 376, leadBandWords: 0, primaryActions: 1,
     visibleFields: 0, maxChoicesPerControl: 0, subLegibleControls: 0, buriedPrimaryAction: 0,
     hasLeadBand: false, disclosureRegions: 1, hasNextActionMarker: false, readingGradeLevel: 5 };
   const sample = (overrides = {}) => ({ routePath: "/workspace/inbox", shell: "detail" as const,

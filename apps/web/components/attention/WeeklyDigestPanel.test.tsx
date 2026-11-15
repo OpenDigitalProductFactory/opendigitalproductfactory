@@ -51,6 +51,7 @@ const entry = {
       lead: "AI recommendation",
       text: "review this with the weekly batch.",
       specialistByline: "Research",
+      visible: true,
     },
     choices: [
       {
@@ -78,13 +79,15 @@ describe("WeeklyDigestPanel", () => {
     expect(container.innerHTML).toBe("");
   });
 
-  it("renders one Friday batch with batch and per-item actions", () => {
+  it("renders one collapsed Friday batch and reveals per-item actions on request", () => {
     render(<WeeklyDigestPanel entries={[entry]} nowMs={Date.parse("2026-07-17T12:00:00Z")} />);
 
     expect(screen.getByText("Friday review")).toBeTruthy();
-    expect(screen.getByText("Approve this research?")).toBeTruthy();
+    expect(screen.queryByText("Approve this research?")).toBeNull();
     expect(screen.getByRole("button", { name: "Looks good, no changes" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Snooze to next week" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Open deferred items" }));
+    expect(screen.getByText("Approve this research?")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Approve research" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Skip this" })).toBeTruthy();
   });
