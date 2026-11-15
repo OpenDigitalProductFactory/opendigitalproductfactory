@@ -37,6 +37,11 @@ A provider-capacity wait keeps the same request. DPF checks again within its
 original recovery window, with a bounded number of attempts. You do not need to
 resend the message. The coworker must still have permission when work resumes.
 
+Once DPF confirms a saved response for that same request, its earlier capacity
+notice says **Earlier capacity wait. Coworker response saved.** The notice is
+history, and its job reference stays available. Other requests can still be
+waiting. This confirms a saved response, not completion of the business task.
+
 If execution ends without a confirmed outcome, DPF retains the request and
 records an explanation in the conversation. Existing results must be checked
 before another attempt, because an action may already have taken effect.

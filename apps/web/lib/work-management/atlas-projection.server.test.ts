@@ -59,7 +59,7 @@ describe("loadAtlasPicture", () => {
     const findMany = vi.fn(async () => [{ capsuleId: "WC-0", scopeClaims: [{ workShape: "delivery-small@1.0.0" }] }]);
     const picture = await loadAtlasPicture({ workroom: { findMany } } as never);
     expect(findMany).toHaveBeenCalledTimes(1);
-    expect(findMany).toHaveBeenCalledWith({ where: { capsuleId: { in: ["WC-0", "WC-1"] } }, select: { capsuleId: true, scopeClaims: true } });
+    expect(findMany).toHaveBeenCalledWith({ where: { capsuleId: { in: ["WC-0", "WC-1"] } }, select: { capsuleId: true, scopeClaims: true, outcomeAnchor: true } });
     expect(picture.rooms[0]).toMatchObject({ capsuleId: "WC-0", shape: "delivery-small" });
     expect(picture.rooms[1]).not.toHaveProperty("shape");
   });

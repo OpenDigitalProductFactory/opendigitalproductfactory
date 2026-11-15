@@ -72,6 +72,11 @@ your lawyer directly.
 
 ## Checking an approval result
 
+An approved saved service check can also show its original observation and
+classifications in **Request details**, for platform administrators. See
+[Authority and audit](../platform/authority-and-audit.md#separate-the-failure-domains)
+for the limits of that recorded report. Opening it does not rerun the check.
+
 After you approve or decline a coworker's request, the Inbox keeps its result.
 The request's link opens that result directly, including after a refresh. Open
 **Recent approval results** to review recent decisions separately from work that

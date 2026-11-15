@@ -45,6 +45,26 @@ owner setup takes priority over a secondary work action.
 
 Select a shape's name to open its rows. Each row shows the room, its stage rail (done, current, still to do) and what it is doing or why it is held, with its accountable person. A held room shows the drive's recorded cause and since when. Rows show eight at a time; filter by state to narrow the rest. **Not assigned** accountability means no person has been resolved; the page does not guess from who started the session.
 
+**Arranged the way your business runs.** A software platform or bank sees the portfolio map above. Every other kind of business sees its rooms on a board of lanes across the business's own time axis, chosen from its business type:
+
+| Business type, for example | Lanes | Across |
+|---|---|---|
+| Restaurant | service channel: dine-in, takeout, delivery, catering | breakfast, lunch, dinner, late |
+| Plumber, HVAC, home health, mobile services | service-area zone | arrival window |
+| Vet clinic, dental, medical, salon | provider | morning to evening |
+| Pet boarding | bed, kennel, stall or enclosure | arriving, staying, due out |
+| Legal, accounting, consulting | client or matter | stage |
+| Charity, shelter, sports club | program or fund | days to deadline |
+| Bakery, dry cleaning, tailoring | work centre or bay | promised by |
+| Catering, event venue, promoter | event | run of show |
+| Retail, florist, wholesale | stock, orders to fulfil, returns | order promise |
+| Equipment rental, self-storage | in yard, out, due back, in inspection | due back |
+| Warehousing and fulfilment | inbound, putaway, pick waves, outbound | cut-off |
+
+The squares and their meanings are the same on every board. A room appears in a lane once it records where it belongs (its `atlasPlacement`: a lane, and optionally a time slot). Until then it is shown under **Not yet placed**. It is never hidden. The question at the top is the one that kind of business asks first, for example "What has to be dispatched or rescued today?"
+
+**Just now**, beside the board, lists the last six things recorded across open rooms, newest first. Select a room's name to open its inspector.
+
 Filters live in the address, for example `/ops/workrooms?portfolio=forEmployees&state=stuck&shape=delivery-small`, so other pages and agents can link straight to a view and a refresh keeps it. An area's **Work** view now gives its room counts and links here filtered to that portfolio. Agents read the same picture through `list_workrooms` with `view: "atlas"`.
 
 The Atlas reads every open room, up to 2,000. Above that it says the picture is truncated. Open **Architecture > Workrooms** for reusable definitions rather than instance history.

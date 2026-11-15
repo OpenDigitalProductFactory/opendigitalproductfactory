@@ -167,6 +167,8 @@ flowchart LR
 
 ### 3.2 LLM routing — *which model the agent runs on*
 
+Subscription connection verification uses the selected account's current Codex app-server `model/list` catalog and prefers its advertised `isDefault` model. Shared saved profiles describe inventory; they do not establish account access. An explicit model capacity observation remains bound to that model. Catalog discovery failure sends no inference probe. This contract also applies when carrying provider integration into DPF2. Reference: T3 Code's `requestAllCodexModels` and `parseCodexModelListResponse` in `apps/server/src/provider/CodexProvider.ts`; DPF implementation: `apps/web/lib/inference/provider-auth-verification.ts` (BI-01A8260F).
+
 An agent does **not** hardcode one model; it declares a *policy* and the router resolves a concrete model per call.
 
 - **`AgentModelConfig`** (schema ~line 8804) — the routing *policy*:

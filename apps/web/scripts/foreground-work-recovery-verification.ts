@@ -8,7 +8,7 @@ import { resolveCoworkerRuntimeMode } from "../components/agent/coworker-runtime
 import { chromium, type Browser, type BrowserContext } from "@playwright/test";
 import { isRecord } from "../lib/shared/coerce";
 import { TERMINAL_TASK_STATE_LIST } from "../lib/tak/task-states";
-import { FOREGROUND_WORK_EVENT } from "../lib/agent/foreground-work-contract";
+import { FOREGROUND_WORK_EVENT, FOREGROUND_SETTLED_WAIT, FOREGROUND_CAPACITY_WAIT } from "../lib/agent/foreground-work-contract";
 import { assertForegroundFixtureRuntime, prepareForegroundFixtures, cleanupForegroundFixtures,
   assertForegroundBackgroundQuiet, hasSuccessfulForegroundReconciliation, waitForForegroundDelivery, startForegroundFixtureTransport, type ForegroundFixture } from "./foreground-work-recovery-fixtures";
 import { foregroundRequiredCaseIds, assertForegroundCasesExecuted } from "./foreground-work-recovery-fixtures";
@@ -226,6 +226,12 @@ export async function verifyForegroundRecovery() {
     executedCaseIds.push("no-unrelated-dispatch");
     await page.reload({ waitUntil: "domcontentloaded" });
     await page.getByText(answer, { exact: true }).waitFor({ state: "visible", timeout: 30_000 });
+    const historicalWait = page.getByRole("note").filter({ hasText: FOREGROUND_SETTLED_WAIT });
+    await historicalWait.waitFor({ state: "visible", timeout: 30_000 });
+    check((await historicalWait.innerText()).includes(taskRunId), "Historical wait lost its retained job reference");
+    check(await page.getByRole("status").filter({ hasText: FOREGROUND_CAPACITY_WAIT }).count() === 0,
+      "Completed recovery still announces its earlier capacity wait as current");
+    evidence.settledWaitNotice = { historical: true, jobReferenceRetained: true, liveRetryNoticeCount: 0 };
     executedCaseIds.push("result-reload");
     await page.screenshot({ path: resolve(OUT, "recovered-result.png"), fullPage: true });
     evidence.result = { taskRunId, messageId: message.id, contentDigest: digest, responseAttemptId: message.responseAttemptId,

@@ -202,3 +202,9 @@ Broader actions need their own current authorization.
 ---
 
 *Part of the [cognitive-load redesign](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/docs/superpowers/specs/2026-07-17-needs-you-cognitive-load-redesign-design.md). The per-coworker control also appears on each coworker's profile; this page is the one-place confirm/adjust view.*
+
+## Listing scheduled work
+
+The agent inventory returns compact pages of up to 20 tasks by default. It omits prompts and task configurations. Agents can filter by task kind, agent, active state, last status, title prefix or task identifier prefix within the existing product scope. A page reports its total, whether more rows remain, and the next cursor. Continue until `complete` is true before reporting a complete census.
+
+Cursors belong to the same caller, filters and task revisions. If the inventory changes, restart the census. An exact task lookup retains its existing revision and detail contract. Inventory pagination never grants permission to pause, cancel or otherwise change a task.
