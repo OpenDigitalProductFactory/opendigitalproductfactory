@@ -50,6 +50,21 @@ export type MailboxSecretsByProvider = {
   "postmark-inbound": Record<string, never>;
 };
 
+/**
+ * How far back a mailbox's FIRST read reaches (BI-D1D4FE9B). With no cursor, a
+ * provider reads only mail received in this window, never the mailbox's whole
+ * history. Connecting a long-used inbox would otherwise route years of old
+ * correspondence and bury this month's invoices and letters behind it. Two
+ * weeks covers a monthly bill or a letter that arrived shortly before the
+ * owner connected the box. Every pollable provider uses this one value.
+ */
+export const MAILROOM_FIRST_READ_LOOKBACK_DAYS = 14;
+
+/** The start of the first-read window, relative to `now`. */
+export function mailroomFirstReadSince(now: Date = new Date()): Date {
+  return new Date(now.getTime() - MAILROOM_FIRST_READ_LOOKBACK_DAYS * 86_400_000);
+}
+
 /** Where the last poll stopped. Provider-specific; opaque to the intake. */
 export type MailboxCursorByProvider = {
   imap: { uidValidity: string; lastUid: number } | null;

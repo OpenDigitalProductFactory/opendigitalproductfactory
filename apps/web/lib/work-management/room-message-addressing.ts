@@ -295,10 +295,12 @@ export function oneShotCronAt(at: Date): string {
   return `${at.getUTCMinutes()} ${at.getUTCHours()} ${at.getUTCDate()} ${at.getUTCMonth() + 1} *`;
 }
 
-export function buildRoomReplyPrompt(args: { caseKey: string; title: string; sinceCursor: string | null }): string {
+// BI-31E0C874: the woken coworker reads from its own stored position, which
+// starts at its last post in the room when it has never read with unreadForMe.
+export function buildRoomReplyPrompt(args: { caseKey: string; title: string }): string {
   return [
     `Messages in the Work Room ${args.caseKey} ("${args.title}") are addressed to you.`,
-    `Read them with read_room_messages (caseKey "${args.caseKey}"${args.sinceCursor ? `, sinceCursor "${args.sinceCursor}"` : ""}) and answer what is asked of you in the room with post_room_message.`,
+    `Read them with read_room_messages (caseKey "${args.caseKey}", unreadForMe true), reading again while hasMore is true, and answer what is asked of you in the room with post_room_message.`,
     "Reply only to what is addressed to you. If nothing needs an answer, or you cannot act within your grants, say so briefly in the room. Address another coworker only when you need it to act.",
   ].join("\n");
 }

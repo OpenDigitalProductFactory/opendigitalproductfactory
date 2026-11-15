@@ -25,7 +25,7 @@ import { executePersistedSemanticReview, enqueueSemanticReview, reconcileSemanti
 vi.mock("./failure-analysis-evidence", () => ({ resolveFailureAnalysisEvidence: mocks.resolveFailureEvidence }));
 vi.mock("./failure-readiness-status", () => ({ publishFailureReadinessStatus: vi.fn() }));
 import { createSemanticReviewRequest } from "./semantic-review-request";
-import { SEMANTIC_REVIEW_MAX_CAPACITY_WAIT_MS } from "./semantic-review-recovery-policy";
+import { SEMANTIC_REVIEW_MAX_CAPACITY_WAIT_MS, semanticReviewEffectiveDeadline } from "./semantic-review-recovery-policy";
 import { failureAnalysisFixture } from "./failure-analysis.test-fixtures";
 vi.mock("@/lib/routing/local-provider-capacity", async importOriginal => ({
   ...await importOriginal<typeof import("@/lib/routing/local-provider-capacity")>(),
@@ -264,7 +264,7 @@ describe("automatic semantic-review capacity recovery", () => {
     } finally { clock.mockRestore(); }
   });
 
-  it.each(["unknown-node", "missing-proof", "actual-fail", "source", "authority", "evidence", "quiescence", "expired", "attempts", "counter", "request", "cancellation"])(
+  it.each(["unknown-node", "missing-proof", "actual-fail", "source", "authority", "evidence", "quiescence", "counter", "request", "cancellation"])(
     "does not automatically dispatch after %s changes", async failure => {
       const nodes = await persistedCapacityWait();
       const progress = (row.progressPayload as { semanticReview: Record<string, unknown> }).semanticReview;
@@ -379,4 +379,115 @@ describe("automatic semantic-review capacity recovery", () => {
   });
 
 
+});
+
+describe("BI-49AA6BE8: a review that never reached a provider recovers without a person", () => {
+  const successors = new Map<string, Record<string, unknown>>();
+  beforeEach(() => {
+    successors.clear();
+    mocks.db.taskRun.create.mockImplementation(async ({ data }) => {
+      const created = { ...data, id: `row-${data.taskRunId}`, createdAt: new Date(), updatedAt: new Date() };
+      successors.set(data.taskRunId, created); return created;
+    });
+    mocks.db.taskRun.findUnique.mockImplementation(async ({ where }) =>
+      successors.has(where.taskRunId) ? { ...successors.get(where.taskRunId) } : { ...row });
+    const original = mocks.db.taskRun.updateMany.getMockImplementation()!;
+    mocks.db.taskRun.updateMany.mockImplementation(async (args) => {
+      const successor = successors.get(args.where.taskRunId);
+      if (!successor) return original(args);
+      if (args.where.status && successor.status !== args.where.status) return { count: 0 };
+      Object.assign(successor, args.data, { updatedAt: new Date() }); return { count: 1 };
+    });
+  });
+  const review = () => (row.progressPayload as { semanticReview: Record<string, unknown> }).semanticReview;
+  const spent = SEMANTIC_REVIEW_MAX_CAPACITY_WAIT_MS + 31 * 60_000;
+
+  it.each(["expired", "attempts"])("admits one server successor for a %s lineage once capacity returns", async kind => {
+    await persistedCapacityWait();
+    row.a2aMetadata = { ...(row.a2aMetadata as object), attempt: 1 };
+    if (kind === "attempts") review().dispatchAttempt = 3;
+    await reconcileSemanticReviews(new Date(Date.now() + (kind === "expired" ? spent : 4 * 60_000)));
+    expect(row.status).toBe("canceled");
+    const successorId = review().successorTaskRunId as string;
+    expect(successorId).toMatch(/^TR-GATE-/);
+    const successor = successors.get(successorId)!;
+    expect(successor.progressPayload).toMatchObject({ semanticReview: {
+      predecessorTaskRunId: "TR-1", successorAttempt: 1, successorBasis: "proven-no-dispatch", dispatchAttempt: 1 } });
+    expect(mocks.db.runtimeVerification.findUnique).not.toHaveBeenCalled();
+    expect(mocks.send).toHaveBeenCalledOnce();
+    expect(mocks.send.mock.calls[0]![0]).toBe(successorId);
+    expect(providerCalls).toBe(0);
+  });
+
+  it("keeps waiting, without a successor, while capacity is still unavailable", async () => {
+    await persistedCapacityWait();
+    row.a2aMetadata = { ...(row.a2aMetadata as object), attempt: 1 };
+    vi.mocked(inspectLocalProviderCapacity).mockResolvedValue({ available: false, reason: "local-ci-active-capacity-reservation" });
+    await reconcileSemanticReviews(new Date(Date.now() + spent));
+    expect(row.status).toBe("input-required");
+    expect(review()).toMatchObject({ reason: "review-capacity-deferred", successorOnCapacity: true, capacityRecovery: { checks: 1 } });
+    expect(successors.size).toBe(0);
+    expect(mocks.send).not.toHaveBeenCalled();
+  });
+
+  it.each(["unknown-node", "actual-fail", "source", "authority", "chain-exhausted"])(
+    "never admits a successor after %s", async failure => {
+      const nodes = await persistedCapacityWait();
+      row.a2aMetadata = { ...(row.a2aMetadata as object), attempt: 1 };
+      const node = nodes.get("semantic-review:TR-1:change-reviewer")!;
+      if (failure === "unknown-node") nodes.set("semantic-review:TR-1:change-reviewer:recovery-1", { taskNodeId: "semantic-review:TR-1:change-reviewer:recovery-1",
+        status: "failed", requestContract: { requestDigest: packet.digest, generation: "g2", agentId: "change-reviewer" },
+        outputSnapshot: { requestDigest: packet.digest, providerOutcome: "unknown", failure: { errorKind: "GovernedInferenceDeadlineError" } } });
+      if (failure === "actual-fail") node.outputSnapshot = { ...(node.outputSnapshot as object), result: { ...result, decision: "fail" } };
+      if (failure === "source") mocks.db.workroom.findUnique.mockResolvedValue({ id: "room-1", repositoryFullName: packet.repository, headSha: "d".repeat(40) });
+      if (failure === "authority") mocks.authority.mockResolvedValue(false);
+      if (failure === "chain-exhausted") Object.assign(review(), { predecessorTaskRunId: "TR-0", successorAttempt: 3, successorBasis: "proven-no-dispatch" });
+      await reconcileSemanticReviews(new Date(Date.now() + spent));
+      expect(successors.size).toBe(0);
+      expect(mocks.send).not.toHaveBeenCalled();
+      expect(row.status).not.toBe("canceled");
+      expect(providerCalls).toBe(0);
+    });
+
+  it("credits the time a branch waited before its capacity refusal", async () => {
+    const start = Date.now();
+    const clock = vi.spyOn(Date, "now");
+    try {
+      clock.mockReturnValue(start);
+      packet = createSemanticReviewRequest({ ...packet.input, identity: { ...packet.input.identity, sourceHeadSha: "c".repeat(40) } }, packet.actor);
+      mocks.db.taskArtifact.findUnique.mockResolvedValue({ taskRunId: "run-row-1", parts: [{ kind: "data", data: packet }] });
+      row.a2aMetadata = { gateKind: "semantic-review", gateKey: packet.gateKey, capsuleId: "WC-1" };
+      mocks.db.workroom.findUnique.mockResolvedValue({ id: "room-1", repositoryFullName: packet.repository, headSha: "c".repeat(40) });
+      row.progressPayload = { semanticReview: { schemaVersion: 1, requestDigest: packet.digest, deadlineAt: packet.deadlineAt, dispatchAttempt: 0 } };
+      const nodes = new Map<string, Record<string, unknown>>();
+      mocks.db.taskNode.create.mockImplementation(async ({ data }) => { const n = { ...data, id: data.taskNodeId }; nodes.set(data.taskNodeId, n); return n; });
+      mocks.db.taskNode.update.mockImplementation(async ({ where, data }) => Object.assign(nodes.get(where.taskNodeId)!, data));
+      mocks.db.taskNode.findUnique.mockImplementation(async ({ where }) => nodes.get(where.taskNodeId) ?? null);
+      mocks.db.taskNode.findMany.mockImplementation(async () => [...nodes.values()]);
+      mocks.dispatch.mockImplementation(async (_prompt, _context, branch) => branch("change-reviewer", async () => {
+        clock.mockReturnValue(start + 24 * 60_000); // queued for the local runner, then refused before dispatch
+        throw new LocalProviderCapacityDeferredError("local-ci-active-capacity-reservation");
+      }));
+      await enqueueSemanticReview("TR-1");
+      await executePersistedSemanticReview("TR-1");
+      expect(row.status).toBe("input-required");
+      expect(review()).toMatchObject({ reason: "review-capacity-deferred", capacityRecovery: { schemaVersion: 1 } });
+      const deadline = Date.parse(semanticReviewEffectiveDeadline(packet.deadlineAt, review(), start + 24 * 60_000)!);
+      expect(deadline - Date.parse(packet.deadlineAt)).toBeGreaterThanOrEqual(24 * 60_000);
+    } finally { clock.mockRestore(); }
+  });
+
+  it("parks, rather than fails, a resumed generation that reaches its deadline before dispatch", async () => {
+    await persistedCapacityWait();
+    await reconcileSemanticReviews(new Date(Date.now() + 4 * 60_000));
+    expect(row.status).toBe("submitted");
+    const clock = vi.spyOn(Date, "now");
+    try {
+      clock.mockReturnValue(Date.now() + spent);
+      await executePersistedSemanticReview("TR-1");
+    } finally { clock.mockRestore(); }
+    expect(row.status).toBe("input-required");
+    expect(review()).toMatchObject({ reason: "review-capacity-deferred", successorOnCapacity: true });
+    expect(providerCalls).toBe(0);
+  });
 });

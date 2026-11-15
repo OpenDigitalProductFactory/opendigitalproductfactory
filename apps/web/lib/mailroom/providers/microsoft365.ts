@@ -19,7 +19,7 @@ import type {
   Microsoft365MailboxSettings,
   NormalizedInboundMail,
 } from "./types";
-import { safeProviderError } from "./types";
+import { mailroomFirstReadSince, safeProviderError } from "./types";
 import { err, ok } from "@/lib/shared/action-result";
 
 export type GraphMessage = {
@@ -144,9 +144,10 @@ export function createMicrosoft365Adapter(deps: Microsoft365AdapterDeps = {}): M
       const accessToken = await token(settings, secrets.clientSecret);
       const upn = encodeURIComponent(settings.mailboxUserPrincipalName);
       // First read: a delta query with no cursor returns the current state, which
-      // for an established mailbox is its whole history. Bound it to recent mail so
-      // connecting a ten-year-old inbox does not route a decade of correspondence.
-      const since = new Date(Date.now() - 7 * 86_400_000).toISOString();
+      // for an established mailbox is its whole history. Bound it to the shared
+      // first-read window so connecting a ten-year-old inbox does not route a
+      // decade of correspondence (same window as IMAP, BI-D1D4FE9B).
+      const since = mailroomFirstReadSince().toISOString();
       let url =
         cursor?.deltaLink ??
         `/v1.0/users/${upn}/mailFolders/Inbox/messages/delta?${SELECT}&$filter=receivedDateTime ge ${since}&$top=${limit}`;
