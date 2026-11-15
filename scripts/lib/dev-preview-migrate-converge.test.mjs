@@ -19,6 +19,90 @@ import {
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "../..");
 
+function graphRegistryProof() {
+  const migrationName = "20261114130000_relation_drift_repair";
+  const logs = '23503 graph_edge_rel_type_fkey: Key (rel_type)=(PART_OF) is not present in table "graph_relation_type"';
+  return {
+    registrySql: readMigrationSql("20261028060000_graph_relation_type"),
+    failedSql: readMigrationSql(migrationName),
+    registryHistory: [{
+      migration_name: "20261028060000_graph_relation_type",
+      checksum: "b0b76a1bfceaa4909e00c3e820d9c103b5098d7f122054ff52c2b116f0a703b8",
+      finished_at: "2026-10-28T22:13:52.562Z", rolled_back_at: null, applied_steps_count: 1,
+    }],
+    failedRows: [{
+      migration_name: migrationName,
+      checksum: "2606adc435559392f8a9804ce6afbfb2e71708cfeeed5e08a782be2766b5edfa",
+      finished_at: null, rolled_back_at: null, applied_steps_count: 0, logs,
+    }],
+    schema: {
+      columns: [
+        { column_name: "key", data_type: "text", udt_name: "text", is_nullable: "NO" },
+        { column_name: "relation_class", data_type: "USER-DEFINED", udt_name: "GraphRelationClass", is_nullable: "NO" },
+        { column_name: "label", data_type: "text", udt_name: "text", is_nullable: "NO" },
+        { column_name: "inverse_label", data_type: "text", udt_name: "text", is_nullable: "NO" },
+        { column_name: "status", data_type: "USER-DEFINED", udt_name: "GraphRelationStatus", is_nullable: "NO" },
+      ],
+      primaryKeyColumns: ["key"], registrySchema: "public", historySchema: "public",
+    },
+    existingKeys: ["SAME_AS", "CITES", "SUPERSEDES"],
+  };
+}
+
+function graphDecision(proof) {
+  return decideMigrationRepair({
+    migrationName: "20261114130000_relation_drift_repair",
+    failureLog: proof.failedRows[0].logs,
+    effects: parseMigrationEffects(proof.failedSql),
+    present: { columns: {}, tables: {}, indexes: {} },
+    graphRegistry: proof,
+  });
+}
+
+test("verified registry-history drift admits missing-only restoration and a real migration retry", () => {
+  const decision = graphDecision(graphRegistryProof());
+  assert.equal(decision.action, "restore-registry-and-retry");
+  assert.ok(decision.missingKeys.includes("PART_OF"));
+  assert.ok(decision.missingKeys.includes("DEPENDS_ON"));
+  assert.match(decision.restoreSql, /ON CONFLICT \("key"\) DO NOTHING/);
+  assert.doesNotMatch(decision.restoreSql, /DO UPDATE|DELETE|TRUNCATE/);
+});
+
+test("verified failed migration can resume after reference rows were already restored", () => {
+  const proof = graphRegistryProof();
+  const original = graphDecision(proof);
+  proof.existingKeys = original.expectedKeys ?? ["PART_OF", "DEPENDS_ON"];
+  const resumed = graphDecision(proof);
+  assert.equal(resumed.action, "restore-registry-and-retry");
+  assert.deepEqual(resumed.missingKeys, []);
+});
+
+test("registry recovery refuses unbound history, source, schema, concurrent failures and repeated retry", () => {
+  const changes = [
+    p => { p.registryHistory = []; },
+    p => { p.registryHistory[0].finished_at = null; },
+    p => { p.registryHistory[0].checksum = "0".repeat(64); },
+    p => { p.registrySql += "\n-- changed source"; },
+    p => { p.failedSql += "\n-- changed source"; },
+    p => { p.failedRows[0].checksum = "0".repeat(64); },
+    p => { p.failedRows[0].logs = "unrelated failure"; },
+    p => { p.failedRows.push({ ...p.failedRows[0], migration_name: "another_failure" }); },
+    p => { p.failedRows[0].rolled_back_at = "2026-11-15T00:00:00Z"; },
+    p => { p.schema.columns.pop(); },
+    p => { p.schema.registrySchema = "private"; },
+    p => { p.schema.historySchema = "private"; },
+    p => { p.schema.primaryKeyColumns = []; },
+    p => { p.alreadyAttempted = true; },
+  ];
+  for (const change of changes) {
+    const proof = graphRegistryProof();
+    change(proof);
+    const decision = graphDecision(proof);
+    assert.equal(decision.action, "blocked_sandbox_drift");
+    assert.equal(decision.restoreSql, undefined);
+  }
+});
+
 function completeHiveSchemaSnapshot() {
   return {
     platformColumns: [
