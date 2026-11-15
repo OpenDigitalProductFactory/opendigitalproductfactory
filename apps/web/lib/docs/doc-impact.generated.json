@@ -2008,8 +2008,7 @@
       "docs/architecture/data-model-stewardship-runbook.md"
     ],
     "packages/db/prisma/schema/work-coordination.prisma": [
-      "docs/architecture/dpf-patterns.md",
-      "docs/maintenance/staleness-report.md"
+      "docs/architecture/dpf-patterns.md"
     ],
     "packages/db/scripts/apply-model-metadata-comments.ts": [
       "docs/architecture/data-model-stewardship-runbook.md"
@@ -4283,7 +4282,6 @@
       "docker-compose.edge.macvlan.yml",
       "packages/db/prisma/schema/ai-coworker.prisma",
       "packages/db/prisma/schema/build-delivery.prisma",
-      "packages/db/prisma/schema/work-coordination.prisma",
       "packages/db/scripts/schema-regression-guard.mjs",
       "packages/validators/src/field-dispatch.ts",
       "scripts/build-docs-staleness.mjs",

@@ -7,7 +7,7 @@
 > whether the doc's wording actually needs updating (BI-AA5DFEA2). It does NOT
 > mean the doc is definitely wrong.
 
-**210** stale-candidate doc(s).
+**212** stale-candidate doc(s).
 
 | Doc | Drift | Most-recently-changed reference(s) |
 | --- | ----- | ---------------------------------- |
@@ -32,6 +32,7 @@
 | `docs/user-guide/operations/business-journeys.md` | 101d | `docs/user-guide/operations/index.md` (+101d)<br>`docs/user-guide/operations/self-upgrade.md` (+99d) |
 | `docs/user-guide/finance/banking-and-reconciliation.md` | 96d | `docs/user-guide/finance/accounts-payable.md` (+96d)<br>`docs/user-guide/finance/reporting-and-close.md` (+96d)<br>`docs/user-guide/finance/accounts-receivable.md` (+61d) |
 | `docs/founder-kernel/wiki/principles/dco-sign-off-required.md` | 95d | `docs/architecture/build-gate-runbook.md` (+95d) |
+| `docs/founder-kernel/wiki/principles/never-ask-user-to-run-commands.md` | 95d | `docs/founder-kernel/wiki/principles/do-the-work-dont-task-the-operator.md` (+95d)<br>`docs/founder-kernel/wiki/principles/state-results-directly.md` (+42d)<br>`docs/founder-kernel/wiki/principles/autonomous-directives-are-blanket-approval.md` (+25d) |
 | `docs/architecture/ui-token-styling.md` | 93d | `scripts/style-drift-baseline.json` (+93d)<br>`scripts/check-style-drift.mjs` (+54d) |
 | `docs/architecture/customer-zero-and-use-case-zero.md` | 92d | `docs/architecture/vector-decisioning-and-jsi.md` (+92d)<br>`docs/operations/oss-repo-identity-hygiene.md` (+17d)<br>`docs/superpowers/specs/2026-06-07-business-operating-model-portfolio-wiring-design.md` (+4d)<br>…+1 more |
 | `docs/operations/customer-zero-preinstall-readiness.md` | 91d | `docs/index.html` (+91d)<br>`docs/README.md` (+87d)<br>`docs/user-guide/getting-started/index.md` (+75d)<br>…+1 more |
@@ -58,6 +59,7 @@
 | `docs/marketing/dpf-market-vision.md` | 75d | `docs/index.html` (+75d) |
 | `docs/founder-kernel/wiki/principles/worktree-selection-and-reaping.md` | 72d | `AGENTS.md` (+72d)<br>`docs/superpowers/specs/2026-06-05-unified-delivery-surfaces-execution-alignment-design.md` (+59d)<br>`docs/founder-kernel/wiki/principles/platform-function-never-depends-on-a-client.md` (+21d) |
 | `docs/architecture/field-service-work-item.md` | 71d | `packages/validators/src/field-dispatch.ts` (+71d) |
+| `docs/founder-kernel/wiki/principles/autonomous-directives-are-blanket-approval.md` | 70d | `docs/founder-kernel/wiki/principles/do-the-work-dont-task-the-operator.md` (+70d)<br>`docs/founder-kernel/wiki/principles/state-results-directly.md` (+17d) |
 | `docs/personas/marisol-retail.md` | 70d | `docs/edge-node/deployment-topology.md` (+70d)<br>`docs/superpowers/specs/2026-05-24-vertical-workspace-home-design.md` (+42d)<br>`docs/superpowers/specs/2026-06-19-edge-node-deployment-topology-and-remote-provisioning-design.md` (+0d) |
 | `docs/personas/dale-hvac.md` | 68d | `docs/superpowers/specs/2026-05-24-vertical-workspace-home-design.md` (+68d)<br>`docs/dogfood/2026-05-23-dale-hvac-build-studio.md` (+1d) |
 | `docs/personas/linda-clinic.md` | 68d | `docs/superpowers/specs/2026-05-24-vertical-workspace-home-design.md` (+68d) |
@@ -71,6 +73,7 @@
 | `docs/founder-kernel/wiki/principles/worktree-base-origin-main.md` | 60d | `docs/founder-kernel/wiki/principles/structural-verification-is-not-functional.md` (+60d)<br>`docs/founder-kernel/wiki/principles/all-changes-land-via-pr.md` (+22d) |
 | `docs/founder-kernel/wiki/principles/check-tool-signals-first.md` | 57d | `docs/founder-kernel/wiki/principles/fail-fast-explain-clearly.md` (+57d)<br>`docs/founder-kernel/wiki/principles/never-fabricate.md` (+57d) |
 | `docs/founder-kernel/wiki/principles/never-auto-execute-irreversible-or-estate-wide-response.md` | 54d | `docs/founder-kernel/wiki/principles/never-wipe-db-for-code-fixes.md` (+54d)<br>`docs/founder-kernel/wiki/principles/prefer-reversible-containment.md` (+46d) |
+| `docs/founder-kernel/wiki/principles/propose-acknowledge-reassign.md` | 52d | `docs/founder-kernel/wiki/principles/do-the-work-dont-task-the-operator.md` (+52d) |
 | `docs/founder-kernel/wiki/principles/platform-function-never-depends-on-a-client.md` | 51d | `docs/architecture/2026-06-09-long-running-agentic-process-architecture.md` (+51d) |
 | `docs/founder-kernel/wiki/stances/trust-the-cmdb-or-rebuild-it.md` | 51d | `docs/founder-kernel/raw-sources/frameworks/csdm.md` (+51d) |
 | `docs/architecture/2026-08-20-governed-autonomy-architecture.md` | 50d | `docs/architecture/trusted-ai-kernel.md` (+50d)<br>`docs/architecture/2026-08-20-assurance-operating-loop-and-capability-completeness.md` (+49d)<br>`docs/architecture/2026-08-20-recurring-obligation-work-shape-and-doc-robustness.md` (+39d)<br>…+1 more |
@@ -85,7 +88,6 @@
 | `docs/user-guide/getting-started/index.md` | 44d | `docs/user-guide/build-studio/index.md` (+44d)<br>`docs/user-guide/workspace/index.md` (+44d)<br>`docs/user-guide/getting-started/roles-and-access.md` (+43d)<br>…+3 more |
 | `docs/user-guide/index.md` | 44d | `docs/user-guide/build-studio/index.md` (+44d)<br>`docs/user-guide/finance/index.md` (+44d)<br>`docs/user-guide/operations/index.md` (+44d)<br>…+16 more |
 | `docs/architecture/orientation.md` | 42d | `docs/architecture/architecture-counts.generated.md` (+42d)<br>`docs/architecture/delivery-surfaces-runbook.md` (+42d)<br>`docs/architecture/mcp-tool-authorization-runbook.md` (+42d)<br>…+8 more |
-| `docs/founder-kernel/wiki/principles/never-ask-user-to-run-commands.md` | 42d | `docs/founder-kernel/wiki/principles/do-the-work-dont-task-the-operator.md` (+42d)<br>`docs/founder-kernel/wiki/principles/state-results-directly.md` (+42d)<br>`docs/founder-kernel/wiki/principles/autonomous-directives-are-blanket-approval.md` (+25d) |
 | `docs/architecture/skill-surfaces-runbook.md` | 41d | `AGENTS.md` (+41d)<br>`docs/superpowers/specs/2026-07-03-harness-enforced-decision-routing-and-lease-punt-gates-design.md` (+41d)<br>`docs/founder-kernel/wiki/principles/consult-scopes-before-asking.md` (+38d) |
 | `docs/architecture/theme-aware-styling-runbook.md` | 41d | `AGENTS.md` (+41d) |
 | `docs/founder-kernel/wiki/principles/consult-specs-first.md` | 41d | `docs/founder-kernel/wiki/principles/verify-substrate-before-proposing-new.md` (+41d)<br>`docs/architecture/four-portfolio-archetype-ai-workforce-operating-standard.md` (+38d)<br>`docs/founder-kernel/wiki/principles/research-and-use-standards.md` (+9d) |
@@ -136,7 +138,6 @@
 | `docs/professions/frontend-engineer/wiki/compose-report-kit-for-reporting-ux.md` | 18d | `docs/founder-kernel/wiki/principles/no-hardcoded-colors.md` (+18d) |
 | `docs/user-guide/compliance/posture-and-gaps.md` | 18d | `docs/user-guide/compliance/regulations-and-obligations.md` (+18d)<br>`docs/user-guide/compliance/controls-and-evidence.md` (+17d) |
 | `docs/architecture/2026-08-20-recurring-obligation-work-shape-and-doc-robustness.md` | 17d | `docs/user-guide/ai-workforce/provider-ollama.md` (+17d)<br>`docs/architecture/2026-08-20-assurance-operating-loop-and-capability-completeness.md` (+9d) |
-| `docs/founder-kernel/wiki/principles/autonomous-directives-are-blanket-approval.md` | 17d | `docs/founder-kernel/wiki/principles/do-the-work-dont-task-the-operator.md` (+17d)<br>`docs/founder-kernel/wiki/principles/state-results-directly.md` (+17d) |
 | `docs/founder-kernel/wiki/principles/schema-honesty-over-aspirational-naming.md` | 17d | `docs/founder-kernel/wiki/principles/single-source-of-truth.md` (+17d) |
 | `docs/install/windows.md` | 17d | `docs/install/platform-support-watchlist.md` (+17d)<br>`docs/install/macos.md` (+16d)<br>`docs/superpowers/specs/2026-05-09-deployment-contracts.md` (+13d) |
 | `docs/runbooks/bet5-windows-self-upgrade.md` | 17d | `docs/superpowers/specs/2026-07-18-install-state-readiness-migration-design.md` (+17d) |
@@ -169,6 +170,7 @@
 | `docs/operations/dpf-production-runtime.md` | 9d | `docs/superpowers/specs/2026-05-09-deployment-contracts.md` (+9d) |
 | `docs/user-guide/ai-workforce/how-governed-work-runs.md` | 9d | `docs/user-guide/ai-workforce/coworker-proactivity.md` (+9d)<br>`docs/user-guide/contributing/agent-dev-environments.md` (+9d)<br>`docs/user-guide/workspace/work-rooms.md` (+9d)<br>…+5 more |
 | `docs/user-guide/compliance/incidents-risks-and-response.md` | 9d | `docs/user-guide/compliance/controls-and-evidence.md` (+9d) |
+| `docs/operations/workroom-pagination.md` | 8d | `docs/superpowers/specs/2026-10-27-work-atlas-design.md` (+8d) |
 | `docs/user-guide/ai-workforce/decision-perspective-in-practice.md` | 8d | `docs/user-guide/ai-workforce/index.md` (+8d)<br>`docs/user-guide/platform/authority-and-audit.md` (+8d)<br>`docs/user-guide/ai-workforce/decision-perspective.md` (+6d)<br>…+1 more |
 | `docs/user-guide/build-studio/sandbox.md` | 8d | `docs/user-guide/build-studio/deployment.md` (+8d) |
 | `docs/architecture/archetypes/campground-operating-model.md` | 7d | `docs/architecture/archetype-operating-model-audit.md` (+7d) |
@@ -198,6 +200,8 @@
 | `docs/architecture/2026-06-09-long-running-agentic-process-architecture.md` | 1d | `apps/web/instrumentation.ts` (+1d)<br>`apps/web/lib/coworker/authorized-surface-runtime.ts` (+1d)<br>`apps/web/lib/mcp/packs/surface-pack.ts` (+1d)<br>…+5 more |
 | `docs/architecture/initiative-readiness-runbook.md` | 1d | `apps/web/lib/mcp/packs/coworker-pack.ts` (+1d)<br>`docs/architecture/mcp-tool-authorization-runbook.md` (+1d)<br>`apps/web/lib/work-capsules/governed-work-claim.ts` (+0d) |
 | `docs/Reference/html-living-standard.md` | 1d | `docs/Reference/sysml-v2.md` (+1d) |
+| `docs/security/README.md` | 1d | `docs/user-guide/operations/index.md` (+1d) |
+| `docs/security/secrets-scan.md` | 1d | `docs/user-guide/operations/index.md` (+1d) |
 | `docs/testing/pr-health.md` | 1d | `docs/architecture/failure-analysis-and-recovery.md` (+1d) |
 | `docs/user-guide/admin/index.md` | 1d | `docs/user-guide/operations/index.md` (+1d)<br>`docs/operations/acceptance-sweep.md` (+0d)<br>`docs/user-guide/ai-workforce/index.md` (+0d) |
 | `docs/user-guide/customers/index.md` | 1d | `docs/user-guide/platform/map-packs.md` (+1d) |
@@ -205,15 +209,13 @@
 | `docs/architecture/ai-agent-meta-model.md` | 0d | `docs/architecture/mcp-tool-authorization-runbook.md` (+0d) |
 | `docs/architecture/backlog-and-planning-runbook.md` | 0d | `docs/architecture/enforced-ci-gates.md` (+0d)<br>`docs/architecture/mcp-tool-authorization-runbook.md` (+0d) |
 | `docs/architecture/branch-and-worktree-runbook.md` | 0d | `docs/architecture/mcp-tool-authorization-runbook.md` (+0d) |
-| `docs/architecture/dpf-patterns.md` | 0d | `docs/architecture/delivery-surfaces-runbook.md` (+0d)<br>`packages/db/prisma/schema/build-delivery.prisma` (+0d)<br>`packages/db/prisma/schema/work-coordination.prisma` (+0d) |
+| `docs/architecture/dpf-patterns.md` | 0d | `docs/architecture/delivery-surfaces-runbook.md` (+0d)<br>`docs/founder-kernel/wiki/principles/do-the-work-dont-task-the-operator.md` (+0d)<br>`packages/db/prisma/schema/build-delivery.prisma` (+0d)<br>…+1 more |
 | `docs/architecture/enforced-ci-gates.md` | 0d | `docs/architecture/failure-analysis-and-recovery.md` (+0d) |
 | `docs/architecture/mcp-tool-authorization-runbook.md` | 0d | `docs/architecture/agent-client-capability-parity.md` (+0d)<br>`docs/superpowers/specs/2026-10-27-agent-dialog-broker-design.md` (+0d) |
 | `docs/architecture/mcp-tool-packs.md` | 0d | `docs/user-guide/workspace/work-rooms.md` (+0d) |
 | `docs/install/platform-support-watchlist.md` | 0d | `docs/architecture/build-gate-runbook.md` (+0d) |
 | `docs/operations/autonomous-build-completion.md` | 0d | `docs/user-guide/build-studio/autonomous-builds.md` (+0d) |
 | `docs/security/2026-05-24-shift-left-rollout.md` | 0d | `docs/architecture/build-gate-runbook.md` (+0d)<br>`docs/testing/pre-pr-gate.md` (+0d) |
-| `docs/security/README.md` | 0d | `docs/user-guide/operations/index.md` (+0d) |
-| `docs/security/secrets-scan.md` | 0d | `docs/user-guide/operations/index.md` (+0d) |
 | `docs/testing/pre-pr-gate.md` | 0d | `docs/architecture/build-gate-runbook.md` (+0d)<br>`docs/architecture/failure-analysis-and-recovery.md` (+0d)<br>`docs/install/platform-support-watchlist.md` (+0d) |
 | `docs/user-guide/ai-workforce/index.md` | 0d | `docs/user-guide/build-studio/index.md` (+0d)<br>`docs/user-guide/contributing/agent-dev-environments.md` (+0d) |
 | `docs/user-guide/compliance/controls-and-evidence.md` | 0d | `docs/user-guide/compliance/regulations-and-obligations.md` (+0d) |
