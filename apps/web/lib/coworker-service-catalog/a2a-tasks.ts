@@ -70,6 +70,8 @@ export type CoworkerA2aTaskInput = {
   requiredGrants?: string[];
   /** The federation link that authenticated a cross-boundary submission (BI-D00C5FD4). */
   submittingFederationLinkId?: string | null;
+  /** A request that arrived over the federation A2A ingress (BI-B45BBD8A): the sender's correlation. */
+  peer?: { requestId: string; senderTaskId: string | null; sourceInstallationDid: string } | null;
   routingRationale?: {
     selectedOfferReason?: string;
     alternativesConsidered?: string[];
@@ -143,6 +145,7 @@ export async function createCoworkerA2aTask(
       actingAgentGaid,
       delegatingAgentGaid,
       ...(input.submittingFederationLinkId ? { submittingFederationLinkId: input.submittingFederationLinkId } : {}),
+      ...(input.peer ? { peer: input.peer } : {}),
     },
     callChain: {
       actingAgentGaid,
