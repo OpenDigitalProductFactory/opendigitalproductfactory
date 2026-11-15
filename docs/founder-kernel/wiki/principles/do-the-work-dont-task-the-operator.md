@@ -66,6 +66,7 @@ If none of those four apply, the agent finishes the work.
 - True HITL gates (publishing to GitHub on the operator's behalf with their reputation attached, force-push to a shared branch, sending notifications to third parties, spending money).
 - Strategic judgment calls the operator hasn't delegated.
 - Actions the sandbox genuinely cannot perform — the operator deserves a clear "I can't because Y" diagnosis, not a hand-off dressed as completion.
+- Requests whose object is the platform's own capability ("make sure DPF handles this"). There the agent verifies, routes and files gaps, and does not stand in for the platform: see [[principles/verify-the-platform-dont-stand-in-for-it]].
 
 ## Amendment 2026-09-22 — a reach limit is a recorded outcome, not a silent stall
 
