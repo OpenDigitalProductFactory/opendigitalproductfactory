@@ -40,6 +40,8 @@ function hasWriteOnlyInput(schema: unknown): boolean {
 /** Spec D7: the declared consequence of each tool the live pending rows name, and its window. */
 const D7_TABLE: Array<[string, "outward" | "authority" | null, number]> = [
   ["correct_workroom_sensitivity", "authority", DURABLE_APPROVAL_LIFETIME_MS],
+  // BI-0C0B0836: the owner may take days to confirm a ruling they gave in chat.
+  ["record_owner_ruling", "authority", DURABLE_APPROVAL_LIFETIME_MS],
   ["run_hive_scout_ingest", "outward", APPROVAL_DECISION_WINDOW_MS],
   ["contribute_to_hive", "outward", APPROVAL_DECISION_WINDOW_MS],
   ["contribute_finding_to_hive", "outward", APPROVAL_DECISION_WINDOW_MS],
@@ -61,6 +63,7 @@ describe("approval convergence inventory — the live registry", () => {
       "contribute_to_hive",
       "correct_workroom_sensitivity",
       "publish_wiki_overlay_pages",
+      "record_owner_ruling",
       "start_deliberation",
       "wiki_ingest",
     ]);

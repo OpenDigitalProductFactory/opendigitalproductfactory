@@ -39,8 +39,7 @@ export const PERSON_FACING_WRITE_PRIMITIVES: readonly PersonFacingWritePrimitive
     rationale: "Captures a kernel decision for a person to rule on; humanCaptureOutcome refuses a record the rule table did not route to a person.",
     enforcedBy: "lib/decision-perspective/human-escalation.ts#export function humanCaptureOutcome",
     callers: {
-      "lib/actions/decision-perspective.ts": "platform decision capture",
-      "lib/actions/org-decision-capture.ts": "organization decision capture",
+      "lib/decision/owner-ruling-capture.ts": "platform and organization decision capture (portal Answer controls and record_owner_ruling, BI-0C0B0836)",
     },
   },
   {

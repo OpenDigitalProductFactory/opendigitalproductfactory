@@ -159,6 +159,6 @@ export async function getWikiGovernanceContext(): Promise<string> {
       : "There are no open reviews right now.",
     ...reviewLines,
     "",
-    "To act: call list_open_decision_reviews for the full queue with each item's unresolved reason and gap detail, read them, and recommend a resolution. The human reviews each Decision Canvas at /platform/ai/decisions/<interactionId> and records the outcome in the owning workflow; Founder Review is only a filtered residue lens, not the main action inbox.",
+    "To act: call list_open_decision_reviews for the full queue with each item's unresolved reason and gap detail, read them, and recommend a resolution. You never resolve a review on your own judgement. When the owner gives you a ruling on a review in this conversation, record it with record_owner_ruling in the owner's words: it is a proposal the owner approves with one action, and it is recorded as their answer. Funding or deferral rulings on the backlog item itself use approve_demand_for_funding or the backlog status tools. Founder Review is only a filtered residue lens, not the main action inbox.",
   ].join("\n");
 }
