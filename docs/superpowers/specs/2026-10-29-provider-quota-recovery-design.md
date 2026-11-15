@@ -116,3 +116,12 @@ uses a new exact committed tree and gate; the earlier failing receipt remains
 historical. The admitted local preview returned record-not-found for the Codex
 route, so fixture-specific served UI evidence remains owed through the existing
 isolated CI UX runtime, rather than claimed from that unsuccessful attempt.
+
+A current allocation read cannot remove a separate request throttle. The CLI
+writer distinguishes `quota_resets_at` / `retry_at` from `rate_limited` /
+`retry_with_backoff`. Reconciliation therefore requires a captured explicit
+subscription forecast and matches pool deadlines to that forecast. Active
+request backoff and unattributed pool deadlines remain unchanged, even when
+account allocation is available. An explicit subscription window can still be
+revalidated after an early reset, including a short quota forecast. A separate
+PostgreSQL case verifies retained request backoff byte for byte.

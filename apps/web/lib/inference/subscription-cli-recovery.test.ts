@@ -13,6 +13,7 @@ import { reconcileSubscriptionCliQuota } from "./subscription-cli-recovery";
 const binding = { providerId: "codex", connectionId: "provider-default-codex", modelId: "model", adapter: "responses",
   accountVersion: "a".repeat(64), credentialRevision: "b".repeat(64), modelRevision: "c".repeat(64), endpointRevision: "d".repeat(64), quotaRevision: "e".repeat(64) };
 const stamp = new Date("2026-11-14T00:00:00Z");
+const forecast = new Date(Date.now() + 7 * 86400_000);
 const account = { id: "sibling", status: "active", connectionId: "provider-default-chatgpt", updatedAt: stamp,
   credentialEntryId: "credential", credentialEntry: { updatedAt: stamp } };
 beforeEach(() => {
@@ -22,8 +23,8 @@ beforeEach(() => {
   m.read.mockResolvedValue(true); m.account.mockResolvedValue(account);
   m.accounts.mockResolvedValue([{ ...account }, { ...account, id: "selected", connectionId: "provider-default-codex" }]);
   m.lock.mockResolvedValue([{ enabled: true, schedule: "once", runCursor: "run", metadata: { hourly: true } }]);
-  m.pools.mockResolvedValue([{ id: "pool", providerId: "codex", adapterType: null, adapterKind: "codex", scopeKey: "cli:codex-cli:provider:codex", updatedAt: stamp }]);
-  m.capacities.mockResolvedValue([{ id: "capacity", providerId: "codex", ownedAccountId: null, scopeKey: null, source: "cli", state: "quota_resets_at", updatedAt: stamp }]);
+  m.pools.mockResolvedValue([{ id: "pool", providerId: "codex", adapterType: null, adapterKind: "codex", scopeKey: "cli:codex-cli:provider:codex", resetAt: forecast, updatedAt: stamp }]);
+  m.capacities.mockResolvedValue([{ id: "capacity", providerId: "codex", ownedAccountId: null, scopeKey: null, source: "cli", state: "quota_resets_at", retryAt: forecast, updatedAt: stamp }]);
   m.poolWrite.mockResolvedValue({ count: 1 }); m.capacityWrite.mockResolvedValue({ count: 1 });
 });
 const check = () => reconcileSubscriptionCliQuota(binding.connectionId, "model", async () => {}, { jobId: "job", runCursor: "run", scheduled: false });
@@ -46,6 +47,25 @@ describe("fresh CLI quota reconciliation", () => {
   it("a failed usage read leaves all existing holds intact", async () => {
     m.read.mockResolvedValue(false);
     expect(await check()).toBe(false); expect(m.poolWrite).not.toHaveBeenCalled(); expect(m.capacityWrite).not.toHaveBeenCalled();
+  });
+  it("does not lift a request-throttle backoff from an account allocation read", async () => {
+    m.capacities.mockResolvedValue([{ id: "capacity", providerId: "codex", ownedAccountId: null, scopeKey: null,
+      source: "cli", state: "rate_limited", action: "retry_with_backoff", retryAt: forecast, updatedAt: stamp }]);
+    expect(await check()).toBe(false);
+    expect(m.poolWrite).not.toHaveBeenCalled(); expect(m.capacityWrite).not.toHaveBeenCalled();
+  });
+  it("retains a pool deadline that does not match the captured subscription forecast", async () => {
+    m.pools.mockResolvedValue([{ id: "pool", providerId: "codex", adapterKind: "codex", adapterType: null,
+      scopeKey: "cli:codex-cli:provider:codex", resetAt: new Date(forecast.getTime() + 60_000), updatedAt: stamp }]);
+    expect(await check()).toBe(false); expect(m.poolWrite).not.toHaveBeenCalled();
+  });
+  it("can revalidate an explicit short subscription forecast after an early reset", async () => {
+    const short = new Date(Date.now() + 5 * 60_000);
+    m.pools.mockResolvedValue([{ id: "pool", providerId: "codex", adapterKind: "codex", adapterType: null,
+      scopeKey: "cli:codex-cli:provider:codex", resetAt: short, updatedAt: stamp }]);
+    m.capacities.mockResolvedValue([{ id: "capacity", providerId: "codex", ownedAccountId: null, scopeKey: null,
+      source: "cli", state: "quota_resets_at", retryAt: short, updatedAt: stamp }]);
+    expect(await check()).toBe(true); expect(m.read).toHaveBeenCalledTimes(1);
   });
   it("a sibling with a different upstream identity retains the shared hold", async () => {
     m.auth.mockResolvedValueOnce({ type: "chatgptAuthTokens", chatgptAccountId: "selected" })

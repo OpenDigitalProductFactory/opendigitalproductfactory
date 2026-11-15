@@ -3,7 +3,6 @@ import { resolveCodexCatalogAuth } from "./codex-cli-catalog-auth";
 import { readCodexCliCapacity } from "@/lib/routing/codex-cli-capacity";
 import { captureExecutionProofBinding } from "@/lib/routing/provider-capacity/execution-proof.server";
 import { currentExecutionProof, QUOTA_PROOF_TTL_MS } from "@/lib/routing/provider-capacity/execution-proof";
-import { isProviderQuotaState } from "@/lib/routing/provider-capacity/types";
 import { isRecord } from "@/lib/shared/coerce";
 
 /** Reconcile only captured CLI generations, after a current matching account-wide observation. */
@@ -31,6 +30,20 @@ export async function reconcileSubscriptionCliQuota(connectionId: string, modelI
   if (accounts.some(account => !["provider-default-chatgpt", "provider-default-codex"].includes(account.connectionId))) return false;
   const pools = await prisma.cliPoolStatus.findMany({ where: { providerId: { in: targets } } });
   const capacities = await prisma.providerCapacityStatus.findMany({ where: { providerId: { in: targets }, ownedAccountId: null, source: "cli" } });
+  const inScope = (capacity: typeof capacities[number]) => targets.includes(capacity.providerId ?? "")
+    && capacity.ownedAccountId === null && capacity.scopeKey === null && capacity.source === "cli";
+  const quotaForecasts = capacities.filter(capacity => inScope(capacity) && capacity.state === "quota_resets_at" && capacity.retryAt);
+  // Account allocation does not prove that an independent request-throttle
+  // Retry-After ended. Unknown pool deadlines remain authoritative as well.
+  if (!quotaForecasts.length || capacities.some(capacity => inScope(capacity)
+    && ["rate_limited", "cooling_down"].includes(capacity.state) && capacity.retryAt && capacity.retryAt.getTime() > Date.now())) return false;
+  const poolInScope = (pool: typeof pools[number]) => targets.includes(pool.providerId)
+    && (pool.adapterType === "codex-cli" || pool.adapterKind === "codex")
+    && (pool.scopeKey === null || pool.scopeKey === "cli:codex-cli:provider:codex");
+  const matchingPools = pools.filter(pool => poolInScope(pool) && pool.resetAt
+    && quotaForecasts.some(capacity => capacity.retryAt!.getTime() === pool.resetAt!.getTime()));
+  if (pools.some(pool => poolInScope(pool) && pool.resetAt && pool.resetAt.getTime() > Date.now()
+    && !matchingPools.some(matching => matching.id === pool.id))) return false;
   await beforeDispatch();
   if (!await readCodexCliCapacity(login)) return false;
   await beforeDispatch();
@@ -54,17 +67,12 @@ export async function reconcileSubscriptionCliQuota(connectionId: string, modelI
         || siblingCurrent.credentialEntryId !== siblingBefore!.credentialEntryId
         || siblingCurrent.credentialEntry?.updatedAt.getTime() !== siblingBefore!.credentialEntry?.updatedAt.getTime()) return false;
     }
-    for (const pool of pools) {
-      // Only the Codex CLI adapter's matching scope is evidenced by this read.
-      if (!targets.includes(pool.providerId) || (pool.adapterType !== "codex-cli" && pool.adapterKind !== "codex")
-        || (pool.scopeKey != null && pool.scopeKey !== "cli:codex-cli:provider:codex")) continue;
+    for (const pool of matchingPools) {
       const result = await tx.cliPoolStatus.updateMany({ where: { id: pool.id, updatedAt: pool.updatedAt },
         data: { resetAt: null, retryAfterSeconds: null, errorSnippet: null } });
       if (result.count !== 1) throw new Error("CLI capacity changed during observation");
     }
-    for (const capacity of capacities) {
-      if (!targets.includes(capacity.providerId ?? "") || capacity.ownedAccountId !== null || capacity.scopeKey !== null
-        || capacity.source !== "cli" || !isProviderQuotaState(capacity.state)) continue;
+    for (const capacity of quotaForecasts) {
       const result = await tx.providerCapacityStatus.updateMany({ where: { id: capacity.id, updatedAt: capacity.updatedAt, source: "cli", state: capacity.state },
         data: { state: "available", action: "none", retryAt: null, retryAfterSeconds: null, lastObservedAt: new Date(observedAt),
           safeSummary: "A current coding-tool usage check reports capacity available.", confidence: "exact", isHumanActionRequired: false } });
