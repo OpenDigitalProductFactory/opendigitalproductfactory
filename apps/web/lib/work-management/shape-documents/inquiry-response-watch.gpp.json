@@ -23,7 +23,8 @@
       "tools": [
         "list_storefront_activity",
         "list_customer_accounts"
-      ]
+      ],
+      "effort": "medium"
     },
     {
       "key": "send",

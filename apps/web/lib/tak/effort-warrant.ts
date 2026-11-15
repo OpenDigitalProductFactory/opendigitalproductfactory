@@ -40,6 +40,13 @@ export interface EffortWarrant {
   toolBudgetTarget: number;
   /** Provenance: which signals raised/lowered the level. */
   signals: string[];
+  /**
+   * Phase G (proactivity & capacity allocation §6.1): the tier the work shape's
+   * stage DECLARED, carried unchanged even when the length/heavy-tool rules
+   * raised `level`. Routing reads it as a capability floor (see
+   * tak/stage-effort-routing.ts). Absent on every undeclared turn.
+   */
+  declaredEffort?: EffortLevel;
 }
 
 export interface EffortWarrantInput {
@@ -51,6 +58,13 @@ export interface EffortWarrantInput {
   availableToolNames?: readonly string[];
   /** Length of the user turn's content, for a complexity proxy when depth is absent. */
   messageChars?: number;
+  /**
+   * Phase G: the effort tier a work-shape stage declared (resolveStageEffort).
+   * When present it sets the base level — beating reasoningDepth, taskType and
+   * the length proxy — and the length/heavy-tool rules may raise it, never
+   * lower it. Null/absent = today's exact output.
+   */
+  declaredEffort?: EffortLevel | null;
 }
 
 // ─── Ladders (monotonic; index by level) ────────────────────────────────────
@@ -140,10 +154,13 @@ function maxLevel(a: EffortLevel, b: EffortLevel): EffortLevel {
 export function deriveEffortWarrant(input: EffortWarrantInput): EffortWarrant {
   const signals: string[] = [];
 
-  // 1. Base level: prefer the content-classifier depth; else a taskType proxy;
-  //    else a message-length proxy; else minimal.
+  // 1. Base level: a stage-declared tier wins; else the content-classifier
+  //    depth; else a taskType proxy; else a message-length proxy; else low.
   let level: EffortLevel;
-  if (input.reasoningDepth) {
+  if (input.declaredEffort) {
+    level = input.declaredEffort;
+    signals.push(`declared:${input.declaredEffort}`);
+  } else if (input.reasoningDepth) {
     level = input.reasoningDepth;
     signals.push(`depth:${input.reasoningDepth}`);
   } else if (input.taskType && TASK_TYPE_BASE[input.taskType]) {
@@ -177,5 +194,6 @@ export function deriveEffortWarrant(input: EffortWarrantInput): EffortWarrant {
     contextTier: CONTEXT_TIER[level],
     toolBudgetTarget: TOOL_BUDGET_TARGET[level],
     signals,
+    ...(input.declaredEffort ? { declaredEffort: input.declaredEffort } : {}),
   };
 }

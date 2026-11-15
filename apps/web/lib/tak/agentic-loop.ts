@@ -39,6 +39,7 @@ import { interceptToolCallAsProposal } from "@/lib/proactivity/propose-intercept
 import { agentEventBus } from "./agent-event-bus";
 import { terminalTruncationMessage } from "./terminal-response-truncation";
 import { resolveEffectiveAgentRouteConfig } from "./agent-route-config";
+import { applyDeclaredEffortRouting } from "./stage-effort-routing"; // Phase G: declared stage tier -> routing, after DB config
 import {
   DEFAULT_MINIMUM_CONTEXT_TOKENS,
   resolveTurnGroundedGuidanceRoute,
@@ -1016,6 +1017,9 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
     turnToolPosture,
   );
   effectiveConfig.minimumDimensions = turnRoute.minimumDimensions;
+  // Phase G (BI-B3BBF9AD): a declared stage tier routes after the coworker's own
+  // config resolves. A restricted reassessment keeps its qualified composition.
+  if (!restricted) Object.assign(effectiveConfig, applyDeclaredEffortRouting(effectiveConfig, effortWarrant?.declaredEffort));
 
   // BI-7F2FBDA3: a pinned model is a preference with lineage; routing moves to
   // the family successor rather than to whatever ranked first.
@@ -1028,7 +1032,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
     const { spendAwareBudgetClass } = await import("@/lib/inference/spend-aware-routing");
     const budget = await checkAgentBudgetFromRegistry(agentId);
     const nearBudget = budget.status === "warning_80" || budget.status === "warning_95";
-    const biased = spendAwareBudgetClass(effectiveConfig.budgetClass, budget.status);
+    const biased = spendAwareBudgetClass(effectiveConfig.budgetClass, budget.status, effortWarrant?.declaredEffort === "high"); // a high/governed stage is never demoted
     if (nearBudget && biased !== effectiveConfig.budgetClass) {
       console.log(
         `[budget-gate] spend-aware downgrade agent=${JSON.stringify(agentId)} ` +

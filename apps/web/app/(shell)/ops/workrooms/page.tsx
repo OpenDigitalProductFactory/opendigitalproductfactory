@@ -5,11 +5,12 @@ import { MessagesProvider } from "@/components/i18n/MessagesProvider";
 import { OpsTabNav } from "@/components/ops/OpsTabNav";
 import { RhythmStrip } from "@/components/ops/workrooms/atlas/RhythmStrip";
 import { AtlasInspector } from "@/components/ops/workrooms/atlas/AtlasInspector";
+import { AtlasJustNow } from "@/components/ops/workrooms/atlas/AtlasLaneBoard";
 import { WorkAtlas, roomHref } from "@/components/ops/workrooms/atlas/WorkAtlas";
 import { getLocaleContext } from "@/lib/i18n/locale-context.server";
 import { getT } from "@/lib/i18n/t.server";
 import { loadAtlasInspector, type AtlasInspectorDb } from "@/lib/work-management/atlas-inspector.server";
-import { atlasFlowHref, atlasHolds, atlasShapeMeta } from "@/lib/work-management/atlas-page.server";
+import { atlasFlowHref, atlasHolds, atlasShapeMeta, loadAtlasJustNow, loadAtlasLayout } from "@/lib/work-management/atlas-page.server";
 import { atlasHref, parseAtlasFilters, parseAtlasGroup, parseAtlasRoom } from "@/lib/work-management/atlas-map";
 import { loadAtlasPicture } from "@/lib/work-management/atlas-projection.server";
 import { loadHeldWorkrooms } from "@/lib/work-management/held-workrooms";
@@ -31,8 +32,10 @@ export default async function WorkroomsPage({ searchParams }: Props = {}) {
   const group = parseAtlasGroup(params);
   const selected = parseAtlasRoom(params);
   const view = { ...parseAtlasFilters(params), ...(group ? { group } : {}), ...(selected ? { room: selected } : {}) };
-  const [picture, held, rhythms, locale, t] = await Promise.all([
-    loadAtlasPicture(prisma), loadHeldWorkrooms(prisma), loadStandingRhythms(prisma), getLocaleContext(), getT("workrooms"),
+  // A6a (BI-B0D8394B): the install's business layout and the Just now feed.
+  const [picture, held, rhythms, locale, t, layout, justNow] = await Promise.all([
+    loadAtlasPicture(prisma, { selectedCapsuleId: selected }), loadHeldWorkrooms(prisma), loadStandingRhythms(prisma), getLocaleContext(), getT("workrooms"),
+    loadAtlasLayout(prisma as never), loadAtlasJustNow(prisma as never),
   ]);
 
   // A3 (BI-94C9AFC1): the selected room opens beside the map. A room that is
@@ -56,7 +59,9 @@ export default async function WorkroomsPage({ searchParams }: Props = {}) {
       </div>
       <OpsTabNav />
       <WorkAtlas picture={picture} view={view} basePath="/ops/workrooms"
-        shapes={atlasShapeMeta(picture.rooms)} holds={holds} locale={locale.language} t={t} inspector={inspector} />
+        shapes={atlasShapeMeta(picture.rooms)} holds={holds} locale={locale.language} t={t} inspector={inspector}
+        layout={layout} workItems={layout.workItems}
+        justNow={<AtlasJustNow rows={justNow} view={view} basePath="/ops/workrooms" locale={locale.language} t={t} />} />
       {/* Work Atlas A4 (BI-D8A6F0F2): standing operations get their own band, so a missed day is as visible as a stuck project. */}
       <MessagesProvider locale={locale.language} messages={{ workrooms: namespaceMessages(locale.language, "workrooms") }}>
         <RhythmStrip rows={rhythms} locale={locale.language} />

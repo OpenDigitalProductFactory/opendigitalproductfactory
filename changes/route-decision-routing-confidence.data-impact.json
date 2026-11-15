@@ -1,0 +1,21 @@
+{
+  "version": "1",
+  "accountableOwner": "Mark Bodman (markdbodman@gmail.com)",
+  "summary": "BI-A08285BC. Add RouteDecisionLog.routingConfidence (nullable JSONB) so a below-floor run becomes a countable event rather than a sentence in the reason text. qualityFloorRelaxed is set in the hard filter and now travels on RouteDecision, where deliberation activation reads it, but it was never persisted — so 'how often did we run below the quality floor, and when' had no answer. The column holds whether the floor was relaxed, how many candidates ranked, and whether the winner came from fallback: counts and booleans only, no request content. Additive, non-destructive, with NO backfill — a decision recorded before this column cannot have its confidence reconstructed, and NULL must read as 'not recorded' rather than 'routing was confident'. Migration: 20260924010000_route_decision_routing_confidence.",
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "RouteDecisionLog",
+      "lifecycleDisposition": "retain-with-item",
+      "fields": [
+        {
+          "name": "routingConfidence",
+          "resolution": "governed",
+          "reason": "An audit record of how much confidence routing had in the endpoint it selected. Policy-safe by construction: a boolean, a count and a boolean. It carries no prompt text, no tool payloads and no identifiers. It exists so operators can see whether below-floor runs cluster in a particular window — the motivating incident happened inside a self-upgrade drain, and nothing could have shown that.",
+          "provenance": "Derived server-side by the routing pipeline at selection time and carried on RouteDecision. Never user-supplied. Absent on preview routes and on rows written before this column.",
+          "flags": []
+        }
+      ]
+    }
+  ]
+}

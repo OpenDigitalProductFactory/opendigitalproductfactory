@@ -40,6 +40,11 @@ one request covers that exact change once.
 
 ## Connecting business mail
 
+The coworker beside the Mailroom can see the **Connect a mailbox** form and
+which mailboxes are connected. Ask it to help, and it fills in everything
+except the password or client secret, which you type yourself. For Gmail, use
+IMAP, server `imap.gmail.com`, port 993 and an app password.
+
 Mailroom tests the mailbox connection before saving it, then attempts a first
 read. A successful connection test alone does not finish setup. If the first
 read fails, setup stays incomplete; the saved connection remains available for
@@ -56,7 +61,21 @@ is approved and paid. **Open in Mailroom** shows the email. Mailroom doesn't cop
 amounts out of the email, so check the figures against the invoice when you
 record it. Acknowledge the email once the bill is recorded.
 
+### Mail from your lawyers
+
+Mail from your counsel, or about a legal matter, goes to its own **Legal** room,
+which the business owner answers. Mailroom treats it as privileged. The
+notification and the room name the sender and the reason, not what the letter
+says. Open the item to read it. Mailroom does not draft replies to legal
+correspondence, so **Draft a reply** says so instead of writing one. Answer
+your lawyer directly.
+
 ## Checking an approval result
+
+An approved saved service check can also show its original observation and
+classifications in **Request details**, for platform administrators. See
+[Authority and audit](../platform/authority-and-audit.md#separate-the-failure-domains)
+for the limits of that recorded report. Opening it does not rerun the check.
 
 After you approve or decline a coworker's request, the Inbox keeps its result.
 The request's link opens that result directly, including after a refresh. Open

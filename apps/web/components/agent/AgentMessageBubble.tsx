@@ -1,6 +1,6 @@
 "use client";
 
-import { FOREGROUND_RECEIPT_PREFIX } from "@/lib/agent/foreground-work-contract";
+import { FOREGROUND_RECEIPT_PREFIX, FOREGROUND_SETTLED_WAIT } from "@/lib/agent/foreground-work-contract";
 
 import Link from "next/link";
 import { FileText, PlugZap } from "lucide-react";
@@ -388,8 +388,8 @@ export function AgentMessageBubble({
       <div
         data-testid="agent-message"
         data-message-role="system"
-        role="status"
-        aria-live="polite"
+        role={message.settledCapacityWait ? "note" : "status"}
+        aria-live={message.settledCapacityWait ? undefined : "polite"}
         style={{
           textAlign: retainedReceipt ? undefined : "center",
           padding: "8px 0",
@@ -398,7 +398,7 @@ export function AgentMessageBubble({
           fontStyle: retainedReceipt ? undefined : "italic",
         }}
       >
-        {retainedReceipt ? (
+        {message.settledCapacityWait ? `${FOREGROUND_SETTLED_WAIT}\n\n${message.content.split(/\n\n/).at(-1)}` : retainedReceipt ? (
           <details><summary>{message.content.split(/\n\n/)[0]}</summary><code>{message.id.slice(FOREGROUND_RECEIPT_PREFIX.length)}</code></details>
         ) : referencesTerminalProviderRecovery(message.content)
           ? <ProviderRoutingInlineRecovery content={message.content} />
