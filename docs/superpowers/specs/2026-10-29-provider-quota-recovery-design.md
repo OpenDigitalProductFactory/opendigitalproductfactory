@@ -103,3 +103,16 @@ of operator pause controls. Preserve unrelated simultaneous holds. The original
 contextual recovery design/DI-295459E701E6 and prototype remain the design source;
 there is no new page or navigation layer. CE-C5ACC1C0 requests advisory UX review;
 requested is not completed. Source tests are not served or actual-provider proof.
+
+The independent review of the first follow-through found an unintended proof
+invalidation on CLI-only success and gaps in the transport failure analysis.
+CLI-only recovery now leaves independent Responses proof storage untouched.
+Regression coverage asserts that boundary, synchronous spawn failures, each
+standard stream's error event, diagnostic/notification suppression, timeout and
+cleanup. Authentication material remains on the existing selected-account
+stdin protocol, outside argv and logs, inside the runner's ephemeral protected
+home. Transport uncertainty never establishes available capacity. Re-review
+uses a new exact committed tree and gate; the earlier failing receipt remains
+historical. The admitted local preview returned record-not-found for the Codex
+route, so fixture-specific served UI evidence remains owed through the existing
+isolated CI UX runtime, rather than claimed from that unsuccessful attempt.

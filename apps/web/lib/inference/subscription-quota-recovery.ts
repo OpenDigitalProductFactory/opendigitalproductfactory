@@ -113,7 +113,7 @@ export async function recheckSubscriptionQuota(connectionId: string, modelId: st
       }
     }
   } catch { recovered = false; }
-  if (!recovered) await proofStore.invalidateExecutionProof(connectionId, captured.binding.credentialRevision);
+  if (!recovered && !cliRecovered) await proofStore.invalidateExecutionProof(connectionId, captured.binding.credentialRevision);
   const message = cliRecovered
     ? "The coding-tool usage check confirms capacity is available. Matching old coding-tool limits were reconciled; account pauses and other restrictions remain in effect."
     : recovered

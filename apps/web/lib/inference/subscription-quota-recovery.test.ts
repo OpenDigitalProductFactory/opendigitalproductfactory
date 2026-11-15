@@ -63,6 +63,7 @@ describe("bounded subscription quota recovery", () => {
     expect(await recheckSubscriptionQuota(binding.connectionId, "target")).toMatchObject({ ok: true, observationCompleted: true,
       message: expect.stringContaining("coding-tool usage check") });
     expect(mocks.requests).not.toHaveBeenCalled(); expect(mocks.persist).not.toHaveBeenCalled();
+    expect(mocks.invalidate).not.toHaveBeenCalled();
   });
   it("an unavailable CLI usage read does not clear its holds through Responses success", async () => {
     mocks.cli.mockRejectedValue(new Error("usage unavailable"));
