@@ -327,6 +327,10 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   // BI-F302B80E: appends what the caller did with a kernel recommendation.
   // Same grant as propose_improvement — it records, it never re-decides.
   record_decision_outcome: ["decision_record_create"],
+  // BI-0C0B0836: carries the owner's own ruling on an escalated review. Same
+  // grant as record_decision_outcome; it is a proposal, so the owner approves
+  // every call.
+  record_owner_ruling: ["decision_record_create"],
 
   // Two more doors sealed the same way as evaluate_profession_decision, found
   // by the registry-wide sweep the BI-88B77204 fix added. Both packs already
