@@ -30,7 +30,7 @@ export class JsonRpcError extends Error {
 }
 
 export type JsonRpcPeer = {
-  request<T = unknown>(method: string, params?: Record<string, unknown>): Promise<T>;
+  request<T = unknown>(method: string, params?: Record<string, unknown> | null): Promise<T>;
   notify(method: string, params?: Record<string, unknown>): void;
   respond(id: string | number, result: unknown): void;
   respondError(id: string | number, code: number, message: string): void;
@@ -93,7 +93,7 @@ export function createJsonRpcPeer(streams: JsonRpcStreams, options: JsonRpcPeerO
   });
 
   return {
-    request<T>(method: string, params: Record<string, unknown> = {}): Promise<T> {
+    request<T>(method: string, params: Record<string, unknown> | null = {}): Promise<T> {
       if (closed) return Promise.reject(new JsonRpcError(method, null, "the runtime is not running"));
       const id = nextId++;
       return new Promise<T>((resolve, reject) => {

@@ -1,8 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
-  capture: vi.fn(), inspect: vi.fn(), persist: vi.fn(), invalidate: vi.fn(), read: vi.fn(), observe: vi.fn(), requests: vi.fn(), account: vi.fn(),
+  cli: vi.fn(), capture: vi.fn(), inspect: vi.fn(), persist: vi.fn(), invalidate: vi.fn(), read: vi.fn(), observe: vi.fn(), requests: vi.fn(), account: vi.fn(),
   jobs: { upsert: vi.fn(), updateMany: vi.fn(), findUnique: vi.fn(), findUniqueOrThrow: vi.fn(), findMany: vi.fn() },
 }));
+vi.mock("./subscription-cli-recovery", () => ({ reconcileSubscriptionCliQuota: mocks.cli }));
 vi.mock("@dpf/db", () => ({ prisma: { aiProviderConnection: { findUnique: mocks.account }, scheduledJob: mocks.jobs, providerCapacityStatus: { findUnique: vi.fn(async () => ({ executionProof: {} })) } } }));
 vi.mock("@/lib/routing/provider-capacity/execution-proof.server", () => ({ captureExecutionProofBinding: mocks.capture, persistExecutionProof: mocks.persist,
   inspectExecutionProofBinding: mocks.inspect, invalidateExecutionProof: mocks.invalidate, readCurrentExecutionProof: mocks.read }));
@@ -18,6 +19,7 @@ const captured = { accountId: "owned", binding, quotaRows: [], resetTimes: [], h
 let job: { jobId: string; enabled: boolean; schedule: string; updatedAt: Date; nextRunAt: Date | null; lastRunAt: Date | null; lastStatus: string | null; metadata: unknown; runCursor?: string };
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.cli.mockResolvedValue(false);
   job = { jobId: "subscription-quota-recovery:provider-default-chatgpt", enabled: true, schedule: "once", updatedAt: new Date(), nextRunAt: null, lastRunAt: null, lastStatus: null,
     metadata: { kind: "subscription-quota-recovery", version: 1, modelId: "target", hourly: true } };
   mocks.capture.mockResolvedValue(captured); mocks.persist.mockResolvedValue(true); mocks.read.mockResolvedValue({ ...binding });
@@ -54,6 +56,19 @@ describe("bounded subscription quota recovery", () => {
     expect(mocks.observe).toHaveBeenCalledWith("chatgpt", false, binding.connectionId, expect.objectContaining({ verificationOnly: true, observation: expect.objectContaining({ modelId: "target" }) }));
     expect(mocks.persist).toHaveBeenCalledWith(captured, expect.any(Number), expect.objectContaining({ jobId: job.jobId, runCursor: job.runCursor }));
     expect(job.lastStatus).toBe("recovered");
+  });
+  it("a current CLI observation restores early capacity without claiming Responses proof", async () => {
+    mocks.cli.mockResolvedValue(true);
+    mocks.capture.mockResolvedValue({ ...captured, resetTimes: [new Date(Date.now() + 5 * 60_000)] });
+    expect(await recheckSubscriptionQuota(binding.connectionId, "target")).toMatchObject({ ok: true, observationCompleted: true,
+      message: expect.stringContaining("coding-tool usage check") });
+    expect(mocks.requests).not.toHaveBeenCalled(); expect(mocks.persist).not.toHaveBeenCalled();
+  });
+  it("an unavailable CLI usage read does not clear its holds through Responses success", async () => {
+    mocks.cli.mockRejectedValue(new Error("usage unavailable"));
+    expect(await recheckSubscriptionQuota(binding.connectionId, "target")).toMatchObject({ ok: true,
+      message: expect.stringContaining("CLI limits and work permissions remain separate") });
+    expect(mocks.persist).toHaveBeenCalledTimes(1);
   });
   it("does not send a request after account/credential/quota ownership changes", async () => {
     mocks.capture.mockResolvedValueOnce(captured).mockResolvedValue(null);

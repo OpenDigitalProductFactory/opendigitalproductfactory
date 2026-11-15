@@ -12,10 +12,10 @@ import { InlineBusy } from "@/components/ui/InlineBusy";
 import { ExpandableCard } from "@/components/ui/report-kit/ExpandableCard";
 
 type QuotaDetailsProps = { connectionId: string; recovery: NonNullable<ProviderAccountOverviewRow["quotaRecovery"]>;
-  canWrite: boolean; copy: Record<string, string>; open?: boolean; onOpenChange?: (open: boolean) => void };
-export function ProviderQuotaDetails({ connectionId, recovery, canWrite, copy, open, onOpenChange }: QuotaDetailsProps) {
+  canWrite: boolean; copy: Record<string, string>; open?: boolean; defaultOpen?: boolean; onOpenChange?: (open: boolean) => void };
+export function ProviderQuotaDetails({ connectionId, recovery, canWrite, copy, open, defaultOpen = false, onOpenChange }: QuotaDetailsProps) {
   const id = useId(), router = useRouter();
-  const [localOpen, setLocalOpen] = useState(false);
+  const [localOpen, setLocalOpen] = useState(defaultOpen);
   const [modelId, setModelId] = useState(recovery.models.some(model => model.modelId === recovery.selectedModelId)
     ? recovery.selectedModelId! : recovery.models[0]?.modelId ?? "");
   const [hourly, setHourly] = useState(recovery.hourly);

@@ -80,6 +80,27 @@ Resuming removes the operator pause. It does not reset a provider's usage limit 
 
 Authentication proves only that a connection works. Before using company or customer data, also identify whether the connected account is personal/individual, business/team, enterprise, or unknown, and review its contract, retention, training, and processing-region terms. DPF keeps unreviewed hosted connections limited to public or synthetic work.
 
+### After an early subscription reset
+
+A recorded reset time is a forecast, not proof that the account remains exhausted.
+On the default ChatGPT or Codex provider page, open **Limits and recovery** in
+**Routing right now** and choose **Check again now** after resetting your allowance
+at the provider. The same recovery control is available in the account overview.
+It never redeems a reset or resumes original work.
+
+DPF first requests current Codex coding-tool usage for the selected account. A
+matching available observation can reconcile unchanged coding-tool restrictions
+before their old reset date. Unknown usage, different accounts, additional
+configured accounts, changed restrictions, or paused accounts retain their holds.
+If current usage is unavailable, the existing selected-model check can establish
+Responses capacity separately; that result does not clear coding-tool limits.
+
+**Recheck hourly while limited** uses the existing per-account schedule. Viewing
+the page does not start checks. A check does not enable paused or disconnected
+accounts, remove billing requirements, or grant permission to use company data.
+Providers without this usage-read integration retain their existing checks and
+restrictions; a successful OpenAI check says nothing about another provider.
+
 ### When the platform loses AI capacity
 
 Every five minutes the platform checks how much of its recent AI work actually succeeded, for each provider and in total, over the last 30 minutes. You get one item in **Needs you** (and a bell notification) when:

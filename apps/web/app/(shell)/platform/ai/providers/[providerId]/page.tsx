@@ -32,7 +32,8 @@ import { resolveProviderTrustFacts } from "@/lib/routing/provider-suitability/pr
 import { projectProviderConnectionReview } from "@/lib/routing/provider-suitability/provider-connection-review";
 import { shouldShowProviderAccountPosture } from "@/components/platform/local-models/provider-detail-policy";
 import { selectProviderAccount } from "@/lib/inference/provider-account-view";
-import { getProviderAccountCopy } from "@/lib/inference/provider-account-overview.server";
+import { ProviderQuotaDetails } from "@/components/platform/ProviderQuotaDetails";
+import { loadProviderAccountOverview, getProviderAccountCopy } from "@/lib/inference/provider-account-overview.server";
 import { ProviderAccountConnectionForm } from "@/components/platform/ProviderAccountConnectionForm";
 import { ProviderDetailSections } from "@/components/platform/ProviderDetailSections";
 import { ModelSection } from "@/components/platform/ModelSection";
@@ -175,6 +176,11 @@ export default async function ProviderDetailPage({ params, searchParams }: Props
   const routingView = !additionalAccount && pw.provider.endpointType !== "service"
     ? (await loadProviderRoutingControls([pw], new Map([[providerId, models.length]]), now)).get(providerId)
     : null;
+  const recoveryRow = routingView && ["chatgpt", "codex"].includes(providerId)
+    ? (await loadProviderAccountOverview({ providers: [pw], modelSummaries: new Map(),
+      controls: new Map([[providerId, routingView]]), resolvesPhases: new Map(), copy, now }))
+      .find(row => row.connectionId === requestedConnectionId)
+    : null;
   const showPosture = shouldShowProviderAccountPosture(providerId, pw.provider.endpointType);
   // Break-glass overrides (BI-FA412D44) — operator-only read; empty for everyone
   // else and on any error, so a read-only viewer never triggers the capability throw.
@@ -233,7 +239,11 @@ export default async function ProviderDetailPage({ params, searchParams }: Props
         )}
       </div>
 
-      {routingView && <ProviderRoutingControlPanel pw={pw} view={routingView} canWrite={canWrite} />}
+      {routingView && <ProviderRoutingControlPanel pw={pw} view={routingView} canWrite={canWrite}
+        recovery={recoveryRow?.quotaRecovery && <ProviderQuotaDetails connectionId={recoveryRow.connectionId}
+          recovery={{ ...recoveryRow.quotaRecovery, limits: [] }} canWrite={canWrite}
+          copy={{ ...copy, capacityCheck: copy.capacityCheckAgain }} defaultOpen />}
+      />}
       {connectionReview && <Notice title={copy.allowedWork}>
         <strong>{connectionReview.headline}</strong> {connectionReview.summary}
       </Notice>}

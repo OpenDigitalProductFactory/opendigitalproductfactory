@@ -71,3 +71,35 @@ Served verification extends the existing UX Route Sweep runtime and scoped fixtu
 ## Scope and rollback
 
 Existing consultation error handling and account readiness are reused; independently owned streaming/quality corrections are not copied here. Revert the scoped source through protected PR delivery if needed, preserving existing observations and audit history. Pause the same recovery commission through supported controls if verification is inconclusive. Never clear quota rows manually or replay unsettled original work.
+
+
+## Early reset follow-through — BI-2EB73C06 (2026-11-15)
+
+The Codex CLI usage-read seam was still unimplemented while Responses recovery
+left the CLI hold intact. Reuse the selected-account ephemeral Codex catalog
+transport for a bounded `account/rateLimits/read`, following T3's current
+`CodexProvider.ts` usage probe. Require the returned account identity and every
+reported primary/secondary window to show remaining allocation; malformed,
+missing, exhausted, timed-out and different-account responses establish nothing.
+
+The existing Check now/hourly job attempts this read before the Responses probe.
+A successful usage read reconciles only captured provider-scoped CLI quota and
+Codex pool generations, under serializable job/account/credential locks and
+conditional updates. No account-local, foreign-scope, billing or sign-in state is
+cleared. Shared aliases require matching upstream account identities. Additional
+configured accounts retain conservative shared holds because the old writer did
+not record which upstream account produced them. This repair introduces no table,
+provider, scheduler, credential store, or automatic reset redemption.
+
+A usage read can inspect an early reset inside a historical short wait without
+sending inference. If it is inconclusive, the existing Responses check still
+honors that short wait, and its proof remains model/channel scoped. A confirmed
+CLI read does not also send an unnecessary Responses request or claim Responses
+proof. All checks retain the existing commission and governance boundaries.
+
+Reuse ProviderQuotaDetails inside the existing routing panel, initially open but
+collapsible. Show the observation time and recorded reset forecast independently
+of operator pause controls. Preserve unrelated simultaneous holds. The original
+contextual recovery design/DI-295459E701E6 and prototype remain the design source;
+there is no new page or navigation layer. CE-C5ACC1C0 requests advisory UX review;
+requested is not completed. Source tests are not served or actual-provider proof.

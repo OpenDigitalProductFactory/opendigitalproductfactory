@@ -24,6 +24,10 @@ const tables = ["ModelProvider", "CredentialEntry", "AiProviderConnection", "Mod
 const connectionId = "provider-default-chatgpt", modelId = "proof-fixture-model";
 const providerRequest = vi.fn();
 vi.mock("@/lib/inference/provider-auth-verification", () => ({ testProviderAuthInternal: (...args: unknown[]) => providerRequest(...args) }));
+const cliUsage = vi.hoisted(() => ({ read: vi.fn(async () => false) }));
+vi.mock("@/lib/routing/codex-cli-capacity", () => ({ readCodexCliCapacity: cliUsage.read }));
+vi.mock("@/lib/inference/codex-cli-catalog-auth", () => ({ resolveCodexCatalogAuth: async () => ({ type: "chatgptAuthTokens", chatgptAccountId: "synthetic-account" }) }));
+import { reconcileSubscriptionCliQuota } from "@/lib/inference/subscription-cli-recovery";
 
 describe.skipIf(!url)("exact quota proof on isolated leased PostgreSQL", () => {
   let admin: Pool, pool: Pool, db: PrismaClient;
@@ -36,6 +40,7 @@ describe.skipIf(!url)("exact quota proof on isolated leased PostgreSQL", () => {
     for (const table of tables) await pool.query(`CREATE TABLE "${table}" (LIKE public."${table}" INCLUDING ALL)`);
   });
   beforeEach(async () => {
+    cliUsage.read.mockReset().mockResolvedValue(false);
     await pool.query(`TRUNCATE ${tables.map(table => `"${table}"`).join(", ")}`);
     await db.modelProvider.create({ data: { providerId: "chatgpt", name: "Fixture", status: "active", families: [], authMethod: "oauth2_authorization_code", baseUrl: "https://fixture.invalid/backend-api" } });
     await db.credentialEntry.create({ data: { id: "fixture-credential", status: "ok", cachedToken: "synthetic-ciphertext", refreshToken: "synthetic-refresh" } });
@@ -51,6 +56,29 @@ describe.skipIf(!url)("exact quota proof on isolated leased PostgreSQL", () => {
   });
   const capture = async () => (await captureExecutionProofBinding(connectionId, modelId))!;
   const saved = () => db.providerCapacityStatus.findUniqueOrThrow({ where: { ownedAccountId: "fixture-account" } });
+
+  it("reconciles an early reset with actual conditional CLI/provider writes", async () => {
+    await db.cliPoolStatus.updateMany({ data: { providerId: "chatgpt" } });
+    await db.providerCapacityStatus.updateMany({ data: { providerId: "chatgpt" } });
+    await db.scheduledJob.create({ data: { jobId: "cli-recovery-fixture", name: "Fixture", schedule: "once", runCursor: "current" } });
+    cliUsage.read.mockResolvedValue(true);
+    expect(await reconcileSubscriptionCliQuota(connectionId, modelId, async () => {}, { jobId: "cli-recovery-fixture", runCursor: "current", scheduled: false })).toBe(true);
+    expect((await db.cliPoolStatus.findFirstOrThrow()).resetAt).toBeNull();
+    expect((await db.providerCapacityStatus.findUniqueOrThrow({ where: { providerId: "chatgpt" } })).state).toBe("available");
+    expect((await db.aiProviderConnection.findUniqueOrThrow({ where: { connectionId } })).status).toBe("active");
+  });
+  it("retains a newer quota event written during the usage read", async () => {
+    await db.cliPoolStatus.updateMany({ data: { providerId: "chatgpt" } });
+    await db.providerCapacityStatus.updateMany({ data: { providerId: "chatgpt" } });
+    await db.scheduledJob.create({ data: { jobId: "cli-recovery-fixture", name: "Fixture", schedule: "once", runCursor: "current" } });
+    const later = new Date(Date.now() + 14 * 86400_000);
+    cliUsage.read.mockImplementation(async () => {
+      await db.cliPoolStatus.updateMany({ data: { resetAt: later } }); return true;
+    });
+    expect(await reconcileSubscriptionCliQuota(connectionId, modelId, async () => {}, { jobId: "cli-recovery-fixture", runCursor: "current", scheduled: false })).toBe(false);
+    expect((await db.cliPoolStatus.findFirstOrThrow()).resetAt).toEqual(later);
+    expect((await db.providerCapacityStatus.findUniqueOrThrow({ where: { providerId: "chatgpt" } })).state).toBe("quota_resets_at");
+  });
 
   it("qualifies exactly one model and preserves the broad forecast and CLI pool byte for byte", async () => {
     const quota = await db.providerCapacityStatus.findUniqueOrThrow({ where: { providerId: "codex" } });

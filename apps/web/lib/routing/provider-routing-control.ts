@@ -4,12 +4,14 @@ import type { CliPoolState } from "./cli-pool-status";
 import { capacityRoutingExclusionReason, type CapacitySnapshot } from "./capacity-routing-exclude";
 import { deriveRoutingEligibility, type RoutingEligibility, type RoutingEligibilityInput } from "./provider-routing-eligibility";
 import { resolveRuntimeConnectionStatus } from "./provider-suitability/onboarding-recommendation";
+import { isProviderQuotaState } from "./provider-capacity/types";
 
 export type RoutingRestriction = { key: string; summary: string; until: string | null };
 export type ProviderRoutingControlView = {
   eligibility: RoutingEligibility;
   restrictions: RoutingRestriction[];
   weeklyHint: string | null;
+  observedAt?: string | null;
   healthSummary: string;
   healthStatus?: ProviderHealth["status"];
 };
@@ -65,5 +67,19 @@ export function projectProviderRoutingControl(input: {
       : restrictions.length && (eligibility.eligible || eligibility.state === "disabled")
         ? { ...eligibility, eligible: false, recommendedAction: null, state: "disabled" as const, label: "Routing restricted", reason: restrictions[0]!.summary }
       : eligibility;
-  return { eligibility: effectiveEligibility, restrictions, weeklyHint: input.weeklyHint ?? null, healthSummary: input.health?.safeSummary ?? "No recent health observation.", healthStatus: healthRestricted ? input.health?.status : undefined };
+  const quotaHeld = restrictions.some(r => r.key === "quota") || Boolean(input.capacity && isProviderQuotaState(input.capacity.state)
+    && capacityRoutingExclusionReason(input.capacity, input.now));
+  const quotaUntil = restrictions.find(r => r.key === "quota")?.until;
+  const displayedRestrictions = quotaHeld ? restrictions.filter(r => {
+    const duplicateQuota = r.key === "capacity" && input.capacity && isProviderQuotaState(input.capacity.state)
+      || r.key === "health" && ["rate_limited", "cooling_down"].includes(input.health?.status ?? "");
+    return !duplicateQuota || !quotaUntil || r.until !== quotaUntil;
+  }) : restrictions;
+  const onlyQuotaRestrictions = restrictions.every(r => ["quota", "capacity", "health", "quota-recovery"].includes(r.key))
+    && (!input.health || !["billing", "needs_reauth"].includes(input.health.status));
+  const displayedEligibility = quotaHeld && onlyQuotaRestrictions && !p.operatorPause && p.defaultConnectionStatus !== "paused"
+    ? { ...effectiveEligibility, label: "Usage limit recorded", reason: "Routing is held by a recorded usage limit. Check current capacity if your allowance was reset early." }
+    : effectiveEligibility;
+  const observation = input.pool?.rateLimitedAt?.getTime() ?? input.capacity?.observedAtMs;
+  return { eligibility: displayedEligibility, observedAt: observation ? new Date(observation).toISOString() : null, restrictions: displayedRestrictions, weeklyHint: input.weeklyHint ?? null, healthSummary: input.health?.safeSummary ?? "No recent health observation.", healthStatus: healthRestricted ? input.health?.status : undefined };
 }
