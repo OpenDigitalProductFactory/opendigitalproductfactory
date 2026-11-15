@@ -163,6 +163,12 @@ The versioned trigger map uses the complete immutable diff plus existing impact 
 
 The steps are proposed sequencing, not a coverage receipt. No implementation, score approval, independent review, paid allocation, repository-protection change or passing runtime result is claimed by this document.
 
+### 8.4.1 Delivery record links
+
+The [implementation plan](../plans/2026-11-15-combined-review-evidence.md) records the decomposition. D1 shared classification is captured as BI-F4974D42; D3 bounded professional contribution assembly is captured as BI-21D7D25F. Both are triage intake under this E2 contract, not implementation admission. D2 is being reconciled with existing BI-F976CBFE and D4 with BI-D47C5CAC; coverage is incomplete until the normal writer binds the complete scopes and dependencies.
+
+Similarity review found different existing responsibilities: BI-7272643A repairs canonical artifact discovery; BI-A2A71149 owns the governed document lifecycle; BI-75890D92 concerns versioned stakeholder assessments; BI-C1AF3721 and BI-B78073F3 describe proactive-review acceptance documentation. These records retain their original ownership and obligations. No retirement or supersession follows from this cross-link, and no new review engine or document store is proposed.
+
 ### 8.5 Research & Benchmarking
 
 Research completed 2026-11-14 (America/Chicago). These comparisons justify the existing contracts; they do not replace the objective baseline or declare implementation verified. The prior [shared change reviewer design](2026-07-27-shared-change-reviewer-control-design.md#research--benchmarking) supplies the existing evidence/decision substrate. The [BMAD evaluation](../../security/tool-evaluations/2026-09-15-bmad-method.md) remains the dependency disposition; no package or service is added.
