@@ -7,9 +7,11 @@
 // "already exists") so `prisma migrate deploy` wedges and dev-init never
 // completes, blocking the leased :3001 preview.
 //
-// Safe repair: only the known hive-contributions migration is eligible, and
+// Schema-ahead repair: only the known hive-contributions migration is eligible, and
 // only when its complete column/table/key/index contract is already present.
 // Then mark it applied (`prisma migrate resolve --applied`) and continue deploy.
+// Graph dictionary drift uses a separate immutable-source/history proof and a
+// missing-only restoration followed by a real rollback/deploy retry, never applied.
 // Unrecoverable drift exits with blocked_sandbox_drift (code 3) and one next
 // action: recreate the disposable dev_pgdata volume only.
 
@@ -17,6 +19,8 @@ import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { decideGraphRegistryRecovery, RELATION_DRIFT_MIGRATION } from "./dev-preview-graph-registry-recovery.mjs";
+export { isDisposablePreviewDatabaseUrl } from "./dev-preview-graph-registry-recovery.mjs";
 
 export const HIVE_CONTRIBUTIONS_MIGRATION = "20260605060000_hive_contributions_surface";
 export const BLOCKED_SANDBOX_DRIFT_EXIT = 3;
@@ -51,23 +55,6 @@ function hasExpectedHiveContributionEffects(effects) {
     && sameMembers(columns, HIVE_CONTRIBUTIONS_EFFECTS.addColumns)
     && sameMembers(effects.createTables, HIVE_CONTRIBUTIONS_EFFECTS.createTables)
     && sameMembers(effects.createIndexes, HIVE_CONTRIBUTIONS_EFFECTS.createIndexes);
-}
-
-export function isDisposablePreviewDatabaseUrl(value) {
-  try {
-    const url = new URL(String(value ?? ""));
-    if (!["postgres:", "postgresql:"].includes(url.protocol)) return false;
-    if (url.username !== "dpf" || url.pathname !== "/dpf") return false;
-
-    if (url.hostname === "dev-postgres") {
-      return url.port === "" || url.port === "5432";
-    }
-
-    return ["localhost", "127.0.0.1"].includes(url.hostname)
-      && url.port === "5433";
-  } catch {
-    return false;
-  }
 }
 
 /**
@@ -134,6 +121,9 @@ export function parseMigrationEffects(sql) {
  */
 export function decideMigrationRepair(input) {
   const migrationName = String(input.migrationName ?? "").trim();
+  if (migrationName === RELATION_DRIFT_MIGRATION) {
+    return decideGraphRegistryRecovery(input.graphRegistry);
+  }
   if (!migrationName) {
     return {
       action: "blocked_sandbox_drift",

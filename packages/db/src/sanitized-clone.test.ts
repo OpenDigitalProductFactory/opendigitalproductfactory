@@ -142,6 +142,22 @@ describe("native PostgreSQL column projection", () => {
 });
 
 describe("destination cleanup", () => {
+  it("preserves the migration-owned graph dictionary while clearing application data", () => {
+    expect(buildDestinationResetSql([
+      "graph_relation_type", "User", "_prisma_migrations", "graph_relation_type_extra",
+    ])).toBe('TRUNCATE TABLE "User", "graph_relation_type_extra" RESTART IDENTITY CASCADE');
+  });
+
+  it("does not reset a destination containing only migration-owned tables", () => {
+    expect(buildDestinationResetSql(["graph_relation_type", "_prisma_migrations"])).toBeNull();
+  });
+
+  it("excludes the installed graph dictionary from source copying as well as reset", () => {
+    expect(shouldSkipTable("graph_relation_type")).toBe(true);
+    expect(shouldCopyTable("graph_relation_type")).toBe(false);
+    expect(shouldObfuscateTable("graph_relation_type")).toBe(false);
+  });
+
   it("refuses to clear a destination that resolves to the production database", () => {
     const identity = { databaseName: "dpf", serverAddress: "127.0.0.1", serverPort: 5432 };
     expect(() => assertDistinctDatabaseIdentities(identity, identity)).toThrow(

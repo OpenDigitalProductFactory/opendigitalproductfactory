@@ -38,6 +38,7 @@ setFlagsFromString("--expose-gc");
 const collectGarbage = runInNewContext("gc") as () => void;
 const retainedHeap = () => { collectGarbage(); return process.memoryUsage().heapUsed; };
 
+
 async function destinationCount(): Promise<number> {
   const result = await client.query<{ count: string }>(
     `SELECT count(*)::text AS count FROM "${schema}"."Destination"`,
