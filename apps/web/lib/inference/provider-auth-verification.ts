@@ -156,11 +156,20 @@ export async function testProviderAuthInternal(providerId: string, refreshCatalo
 
       const baseUrl = await resolveResponsesProbeBaseUrl(provider);
       attemptedUrl = buildResponsesUrl(providerId, baseUrl);
-      const model = await prisma.modelProfile.findFirst({
-        where: { providerId, modelStatus: "active", ...(options.observation ? { modelId: options.observation.modelId } : {}) },
-        orderBy: [{ lastSeenAt: "desc" }, { modelId: "asc" }],
-        select: { modelId: true },
-      });
+      // A shared profile is inventory, not evidence that this account can run it.
+      // Preserve exact-model observations; connection checks use the account catalog.
+      let model: { modelId: string } | null;
+      if (OPENAI_OAUTH_LINKED_PROVIDERS.has(providerId) && !options.observation) {
+        const { discoverCodexCliModels } = await import("./codex-cli-catalog-auth");
+        const models = await discoverCodexCliModels(providerId, connectionId);
+        model = models.find(candidate => candidate.rawMetadata.isDefault === true) ?? models[0] ?? null;
+      } else {
+        model = await prisma.modelProfile.findFirst({
+          where: { providerId, modelStatus: "active", ...(options.observation ? { modelId: options.observation.modelId } : {}) },
+          orderBy: [{ lastSeenAt: "desc" }, { modelId: "asc" }],
+          select: { modelId: true },
+        });
+      }
       if (!model) return { ok: false, message: "No active model found — refresh the model catalog and retry" };
       if (options.observation && model.modelId !== options.observation.modelId) return { ok: false, message: "Selected model changed before verification" };
       let quotaObservation: ProviderQuotaObservation | null = null;
