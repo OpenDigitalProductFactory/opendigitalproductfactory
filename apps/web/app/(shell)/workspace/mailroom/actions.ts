@@ -19,7 +19,7 @@ import { encryptJson } from "@/lib/govern/credential-crypto";
 import { resolvePrincipalIdForUser } from "@/lib/identity/principal-linking";
 import { MAILROOM_AGENT_ID } from "@/lib/mailroom/classifier";
 import { createMailboxProviderAdapters } from "@/lib/mailroom/providers/registry";
-import { draftMailroomReply, sendApprovedMailroomReply, type ReplyDb } from "@/lib/mailroom/reply";
+import { draftMailroomReply, MailroomReplyRefusedError, sendApprovedMailroomReply, type ReplyDb } from "@/lib/mailroom/reply";
 import { composeMailroomReply, pollMailboxNow, resolveMailroomOrganizationId, resolveOrganizationMailroomProfile } from "@/lib/mailroom/runtime.server";
 import { err, ok, type ActionResult } from "@/lib/shared/action-result";
 import { isEmailConfigured, sendEmail } from "@/lib/shared/email";
@@ -166,14 +166,20 @@ export async function draftMailroomReplyAction(inboundId: string): Promise<Actio
     resolveOrganizationMailroomProfile(ctx.organizationId),
     prisma.organization.findUnique({ where: { id: ctx.organizationId }, select: { name: true } }),
   ]);
-  const result = await draftMailroomReply({
-    db: prisma as unknown as ReplyDb,
-    profile,
-    item,
-    businessName: org?.name ?? "us",
-    compose: composeMailroomReply,
-    agentId: MAILROOM_AGENT_ID,
-  });
+  let result: Awaited<ReturnType<typeof draftMailroomReply>>;
+  try {
+    result = await draftMailroomReply({
+      db: prisma as unknown as ReplyDb,
+      profile,
+      item,
+      businessName: org?.name ?? "us",
+      compose: composeMailroomReply,
+      agentId: MAILROOM_AGENT_ID,
+    });
+  } catch (error) {
+    if (error instanceof MailroomReplyRefusedError) return err(error.message);
+    throw error;
+  }
   revalidatePath(`${MAILROOM_PATH}/items/${inboundId}`);
   return ok({ draftId: result.draftId });
 }
