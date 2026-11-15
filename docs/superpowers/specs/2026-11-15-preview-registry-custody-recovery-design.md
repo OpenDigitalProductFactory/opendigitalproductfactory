@@ -133,3 +133,67 @@ maps REG-01..REG-07 and OBJ-1..OBJ-3 to the ordered sequence above. The live
 coverage receipt must be recorded against this immutable design before
 implementation; a Markdown mapping alone is not a permit. Original receiving
 BI-BDF358CB remains a separate acceptance obligation and is not closed by this fix.
+
+## Verified post-delivery continuation
+
+PR7147 delivered the preceding source at protected merge
+`ec084600baf4238ac6d743af0b7670870a7d31e5`. Its actual admitted preview
+`NPEL-1B4649903A` passed install, generation and migration recovery, then entered
+sanitize before the owned keeper was stopped. The initializer deliberately runs
+the clone from the canonical image's `/app`, whose inspected source lacked the
+new registry policy. Mounted candidate source therefore did not establish clone
+custody. The subsequent read-only, binding-verified disposable database check
+found zero registry rows, the original exact registry migration completed, one
+rolled-back drift attempt and one completed drift attempt, each checksum-bound
+to the unchanged source. This records the present sequence; earlier historical
+actor attribution remains unknown. The reservation was released normally. No
+served acceptance or whole-process cleanup proof was obtained.
+
+Native repair evidence sequence71 and original receiver sequence305 retain this
+finding. `DI-4AB3F0F295FA` selects completing this same repair through qualified
+source continuation (high confidence, autonomy eligible, no commandment conflict).
+The initial featureless consultation abstained and authorized no action.
+
+The original seven requirements and their delivered evidence remain immutable
+historical proof. The following requirements complete the same outcome against
+the newly observed installation and destination state:
+
+| Requirement | Objective | Observable acceptance |
+|---|---|---|
+| REG-08 | OBJ-1 | Before stopping or initializing any preview, compare the canonical image's actual clone source bytes with the verified candidate clone source. A missing file, unreadable digest or mismatch refuses startup with no initializer, migration or clone command. Install advancement belongs solely to the designated canonical actuator. |
+| REG-09 | OBJ-2 | The existing disposable migration convergence entry also restores missing dictionary rows when both known migrations are completed with exact source checksums, the demonstrated prior failed drift attempt is rolled back, schema matches and no active failed migration exists. This branch performs no Prisma resolve, migration replay or history edit; all unrecognized states refuse. |
+
+Ordered continuation, before any further actual preview:
+
+1. Extend the existing initializer precondition with exact clone-source digest
+   identity, using only bounded read-only inspection of the canonical container.
+   Add a genuine old-image RED and matching-image GREEN in the existing preview
+   runtime test entry; prove the refusal precedes initializer/runtime mutation.
+2. Extend the existing checksum/schema/history recovery decision and locked
+   transaction, retaining its original failed-attempt branch. For the completed
+   branch require exactly one completed drift row with one applied step and the
+   exact checksum, plus exactly one rolled-back, unfinished, zero-step row with
+   that checksum and the demonstrated 23503 FK diagnostic. Require no active
+   failed migration anywhere. Restore only the original source INSERT's missing
+   keys, preserving existing values/custom rows and all ledger rows. Return
+   terminally without a history command or migration replay. Keep checksums,
+   original committed SQL, dev destination checks and transaction bounds.
+3. Exercise absent/mismatched source, ledger, schema, unrelated failures,
+   concurrent state changes, already-attempted recovery, interrupted inserts and
+   repeated completed-state recovery. Under a normally admitted PostgreSQL TEMP
+   fixture, qualify actual reviewed SQL, missing-only restore, dictionary custody
+   and unchanged history, with namespace assertions and full rollback.
+4. Run current impact obligations, affected tests/types, governed integration,
+   exact-source independent review and protected `pnpm land`. Preserve prior
+   source evidence under its original identities. Canonical actuator installation
+   and a fresh admitted preview are separate dependencies; neither a source
+   merge nor this plan authorizes an install advance or a blind retry.
+5. Verify actual restored registry/history and clone preservation, then resume
+   the original receiver's served ordinary/adverse/recovery and installed archive
+   acceptance. Release the owned reservation normally and reconcile both items.
+
+This extension introduces no table, service, permission, production mutation,
+destructive reset or manual ledger repair. Its rollback is one protected source
+revert with preview held when custody cannot be established. The two added
+criteria must enter the same item's acceptance baseline and fresh plan coverage
+before implementation; the old seven-criterion receipt is not relabelled.
