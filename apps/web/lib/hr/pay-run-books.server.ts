@@ -14,7 +14,7 @@ import { seedChartOfAccounts } from "@/lib/finance/ledger-service";
 import { isPlatformAutomationPersona } from "@/lib/govern/automation-persona-identity";
 import { err, ok, type ActionResult } from "@/lib/shared/action-result";
 import type { PayComponent } from "./payroll";
-import { recordManualDisbursement, type ManualDisbursementClient } from "./manual-disbursement";
+import { markPayslipDisbursed, type DisbursePayslipClient } from "./payroll-run";
 import { approvalJournal, paymentJournal, type BooksLine, type PayrollAccountIds, type RunPayslip } from "./pay-run-books";
 
 export interface PayRunActor {
@@ -154,20 +154,28 @@ export async function recordPayRunPaid(
   }
   const currency = await getOrgBaseCurrency();
 
-  await recordManualDisbursement(prisma as unknown as ManualDisbursementClient, {
-    payslipIds: run.payslips.map((s) => s.id),
-    attestation: { attestedBy: actor.userId, attestedAt: input.paidOn, bankReference },
-  });
+  const recordedAt = new Date();
+  // One transaction, claimed by a conditional status change, so a retried or
+  // concurrent submission cannot post a second payment journal, and payslips
+  // are never marked paid without the journal that records the payment.
   const entry = await prisma.$transaction(async (tx) => {
-    await tx.payRun.update({ where: { id: run.id }, data: { status: "paid" } });
+    const claimed = await tx.payRun.updateMany({ where: { id: run.id, status: "approved" }, data: { status: "paid" } });
+    if (claimed.count !== 1) return null;
+    for (const slip of run.payslips) {
+      // paidAt is the date the money left the bank; the attestation's own time
+      // (recordedAt) and the person are kept on the journal below.
+      await markPayslipDisbursed(tx as unknown as DisbursePayslipClient, slip.id, "paid", input.paidOn);
+    }
     return tx.journalEntry.create({
       data: journalData({
         organizationId: accounts.organizationId, entryRef: `JE-PAYOUT-${run.payRunRef}`, entryDate: input.paidOn, currency,
         sourceType: "PayRunPayment", sourceId: run.id,
-        memo: `Payroll ${run.payRunRef} paid, bank reference ${bankReference}, recorded by ${actor.userId}`, lines: journal,
+        memo: `Payroll ${run.payRunRef} paid on ${input.paidOn.toISOString().slice(0, 10)}, bank reference ${bankReference}; attested by ${actor.userId} at ${recordedAt.toISOString()}`,
+        lines: journal,
       }),
       select: { id: true },
     });
   });
+  if (!entry) return err("This pay run was recorded as paid a moment ago.");
   return ok({ journalEntryId: entry.id, payslips: run.payslips.length });
 }
