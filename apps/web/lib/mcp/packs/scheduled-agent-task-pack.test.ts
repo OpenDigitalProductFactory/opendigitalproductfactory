@@ -53,7 +53,7 @@ describe("scheduled-agent-task pack — registration", () => {
     core.getScheduledAgentTasksFor.mockResolvedValue([{ taskId: "selected", prompt: "private ".repeat(100), revision: "a".repeat(64) }]);
     const result = await scheduledAgentTaskPack.handlers.list_scheduled_agent_tasks({ taskId: "selected" }, "owner");
     expect(core.getScheduledAgentTasksFor).toHaveBeenCalledWith("owner", undefined, "selected");
-    expect((result.data?.tasks as Array<{ prompt: string }>)[0]!.prompt.length).toBeLessThanOrEqual(201);
+    expect((result.data?.tasks as Array<{ prompt: string }>)[0]!.prompt).toBe("private ".repeat(100).slice(0, 200) + "\u2026");
     expect(result.data?.tasks).toEqual([expect.objectContaining({ revision: "a".repeat(64) })]);
   });
   it.each(["", "   ", 42, null])("does not broaden an invalid exact task selector %j into a bulk list", async taskId => {

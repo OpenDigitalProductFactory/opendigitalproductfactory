@@ -298,7 +298,7 @@ async function listScheduledAgentTasksHandler(
 
   // Exact-task callers retain the established revision/detail contract.
   if (params.taskId) {
-    const compact = tasks.map(t => ({ ...t, prompt: t.prompt.length > 200 ? t.prompt.slice(0, 200) + "…" : t.prompt }));
+    const compact = tasks.map(t => ({ ...t, prompt: t.prompt.length > 200 ? t.prompt.slice(0, 200) + "\u2026" : t.prompt }));
     return { success: true, message: tasks.length + " scheduled agent task(s).", data: { tasks: compact } };
   }
   const limit = params.limit ?? 20;
