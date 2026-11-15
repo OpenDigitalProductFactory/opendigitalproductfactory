@@ -78,6 +78,13 @@ You can also enter a figure you read yourself. Open **Enter a figure you have
 read yourself**, and give the same evidence a coworker must: the page and the
 quoted passage. Type a rate as the authority prints it, such as 6.2 for 6.2%.
 
+The missing list names every figure payroll needs, including the six federal
+withholding tables from IRS Publication 15-T: three filing statuses, each with a
+standard table and a Step 2 checkbox table. Enter a table under **Enter a federal
+withholding table** by pasting its rows as printed. All its rows are confirmed
+together, or none are. **Finance > Spend > Payroll** shows the same list as the
+reasons a pay run cannot start yet.
+
 Only a person can confirm or reject a figure. An agent signed into the portal
 is refused, even through this page. Confirming a newer figure ends the earlier
 one on the new start date. The earlier figure still applies to the dates

@@ -562,7 +562,10 @@ describe("generated route-shell registry", () => {
     // and TaxJurisdictionReference; with no rules it renders the stable "N federal
     // figures missing" state, so it is measurable, and it carries an explicit
     // page-purpose contract.
-    expect(registry.routes.filter((route) => route.sweepEligible)).toHaveLength(218);
+    // 218 -> 219: /finance/payroll (BI-099EAE30) — reads confirmed PayrollTaxRule
+    // rows, W-4 employment events and PayRun rows; no live clock in its output
+    // beyond today's date as a form default, so it is sweep-eligible.
+    expect(registry.routes.filter((route) => route.sweepEligible)).toHaveLength(219);
     // 110 -> 113: the three exclusions above. Product Direction then adds seven
     // explicitly classified dynamic routes, bringing the combined total to 120.
     // 120 -> 121: /platform/ai/operations-map.

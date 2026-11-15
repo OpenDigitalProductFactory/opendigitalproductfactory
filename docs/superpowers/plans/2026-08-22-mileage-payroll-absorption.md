@@ -7,6 +7,7 @@ status: active
 > **For agentic workers:** REQUIRED: Use `dpf-platform:dpf-writing-plans` conventions and execute phase-by-phase. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Status:** planned
+**Backlog item:** BI-099EAE30 (current slice; earlier slices BI-3DD6EFEB, BI-2BC8D614)
 **Epics:** EP-MILEAGE-ABSORB (Phases 1–2), EP-PAYROLL-ABSORB (Phases 3–6)
 **Kernel decision:** DI-87A27C692B16 (`principle_decide`, profile `mark-dpf-platform`)
 **Related:** [finance-workforce-maturity-matrix](../../architecture/finance-workforce-maturity-matrix.md), [edge-adapter-to-native-convergence](../../architecture/edge-adapter-to-native-convergence.md), [tax-remittance-design](../specs/2026-04-23-tax-remittance-design.md), [tax-remittance-execution-automation](2026-04-30-tax-remittance-execution-automation.md)
@@ -148,6 +149,31 @@ disbursement spec; reconcile that epic before starting.
 **Exit:** a run computes from real approved timesheets, produces payslips, and posts a
 balanced journal — cost-of-labour truth without a single tax rule written.
 
+**Status 2026-11-14 (BI-099EAE30).** Phase 3 is marked done, but nothing in the
+portal creates a PayRun, so its exit was never met. BI-099EAE30 delivers it as one
+atomic change, `/finance/payroll`:
+
+- `runPayroll` takes a per-employee statutory function, so each payslip uses that
+  employee's own W-4 and year-to-date wages.
+- `computePayslip` accepts itemized statutory lines, and `usStatutory` returns US
+  lines under stable codes (`US_FWT`, `US_SS_EE`, `US_MED_EE`, `US_SS_ER`,
+  `US_MED_ER`, `US_FUTA`, `US_SUTA`), so a US payslip never shows "National
+  insurance".
+- `buildStatePayrollRules` reads a state's confirmed figures and supports only a
+  state with no wage income tax or one flat rate.
+- A pay-run service assembles readiness from `buildFederalPayrollRules` and the
+  state figures.
+
+Acceptance (BI-099EAE30):
+
+- AC-1: /finance/payroll lists every blocker by name; a run cannot be computed while any exists.
+- AC-2: A person records an employee's W-4 (filing status, Step 2, 3, 4a, 4b, 4c, exempt, work state, effective date).
+- AC-3: A computed run's payslips carry US lines computed from that employee's W-4 and YTD; a UK-style label never appears on a US payslip.
+- AC-4: The run and its payslips are reviewable on the page before anything is approved.
+
+Verification: `apps/web/lib/hr/statutory-us.test.ts`,
+`apps/web/lib/hr/us-state-payroll-rules.test.ts`, `apps/web/lib/hr/us-pay-run.test.ts`.
+
 ### Phase 4 — US statutory engine (EP-PAYROLL-ABSORB)
 
 `PayrollTaxRule` effective-dated; federal withholding, FICA, FUTA, state withholding
@@ -193,6 +219,14 @@ tool-evaluation and provider decision (disbursement spec BI-DR-05). No agent mov
 payslip, with the reimbursement correctly excluded from taxable pay.
 
 ---
+
+## Backlog coverage
+
+- Parent: BI-099EAE30
+- Decision: atomic
+- Rationale: The payroll page, the per-employee statutory function, the itemized US payslip lines, the state figure builder and withholding-table entry only deliver value together; none lets an owner run payroll alone, and the page without per-employee W-4s would withhold wrongly.
+- Receipt: `cmwgxx9fy0js50el7v8ax1ied`
+- Dependencies: BI-099EAE30 builds on BI-2BC8D614 (merged, #7106). BI-3DD6EFEB (mileage) is independent.
 
 ## Cross-cutting obligations
 
