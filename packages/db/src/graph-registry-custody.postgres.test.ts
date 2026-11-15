@@ -10,6 +10,51 @@ const describeDatabase = databaseUrl ? describe : describe.skip;
 // tables. Every unqualified relation is asserted to resolve to this connection's
 // pg_temp namespace before executing source SQL. Entire fixtures roll back.
 describeDatabase("graph registry custody recovery TEMP fixtures", () => {
+  it("restores completed-history dictionary drift without changing history, including interrupted insert and repeat", async () => {
+    const temp = new Client({ connectionString: databaseUrl });
+    const registry = readFileSync(new URL("../prisma/migrations/20261028060000_graph_relation_type/migration.sql", import.meta.url), "utf8");
+    const inserts = registry.match(/INSERT INTO "graph_relation_type"[^;]*;/g);
+    expect(inserts).toHaveLength(1);
+    const insert = inserts![0];
+    const expected = [...insert.matchAll(/^\s*\('([A-Z_]+)',/gm)].map(match => match[1]);
+    await temp.connect();
+    try {
+      await temp.query("BEGIN");
+      await temp.query("SET LOCAL search_path TO pg_temp, pg_catalog");
+      await temp.query(`CREATE TEMP TABLE graph_relation_type (key text PRIMARY KEY, relation_class text, label text, inverse_label text, status text);
+        CREATE TEMP TABLE _prisma_migrations (migration_name text, checksum text, finished_at timestamptz, rolled_back_at timestamptz, applied_steps_count integer);
+        INSERT INTO graph_relation_type VALUES ('RUNS_ON','semantic','retained custom label','inverse','retired'),('CUSTOM_LINK','semantic','custom','custom','active');
+        INSERT INTO _prisma_migrations VALUES
+          ('20261028060000_graph_relation_type','b0b76a1bfceaa4909e00c3e820d9c103b5098d7f122054ff52c2b116f0a703b8',now(),null,1),
+          ('20261114130000_relation_drift_repair','2606adc435559392f8a9804ce6afbfb2e71708cfeeed5e08a782be2766b5edfa',null,now(),0),
+          ('20261114130000_relation_drift_repair','2606adc435559392f8a9804ce6afbfb2e71708cfeeed5e08a782be2766b5edfa',now(),null,1)`);
+      expect((await temp.query(`SELECT count(*)::int AS count FROM pg_class
+        WHERE oid IN ('graph_relation_type'::regclass,'_prisma_migrations'::regclass)
+          AND relnamespace=pg_my_temp_schema()`)).rows[0].count).toBe(2);
+      const history = async () => (await temp.query("SELECT * FROM _prisma_migrations ORDER BY migration_name,applied_steps_count")).rows;
+      const before = await history();
+      await temp.query(`CREATE FUNCTION pg_temp.reject_registry_fixture() RETURNS trigger LANGUAGE plpgsql AS $$
+        BEGIN IF NEW.key='PART_OF' THEN RAISE EXCEPTION 'fixture interrupted insert'; END IF; RETURN NEW; END $$;
+        CREATE TRIGGER reject_registry_fixture BEFORE INSERT ON graph_relation_type FOR EACH ROW EXECUTE FUNCTION pg_temp.reject_registry_fixture()`);
+      await temp.query("SAVEPOINT interrupted_restore");
+      await expect(temp.query(insert)).rejects.toThrow("fixture interrupted insert");
+      await temp.query("ROLLBACK TO SAVEPOINT interrupted_restore");
+      expect((await temp.query("SELECT key FROM graph_relation_type ORDER BY key")).rows.map(row => row.key)).toEqual(["CUSTOM_LINK", "RUNS_ON"]);
+      expect(await history()).toEqual(before);
+      await temp.query("DROP TRIGGER reject_registry_fixture ON graph_relation_type");
+      await temp.query(insert);
+      const restored = (await temp.query("SELECT * FROM graph_relation_type ORDER BY key")).rows;
+      expect(restored.map(row => row.key)).toEqual(expect.arrayContaining(expected));
+      expect(restored.find(row => row.key === "RUNS_ON")).toMatchObject({ label: "retained custom label", status: "retired" });
+      await temp.query(insert);
+      expect((await temp.query("SELECT * FROM graph_relation_type ORDER BY key")).rows).toEqual(restored);
+      expect(await history()).toEqual(before);
+    } finally {
+      await temp.query("ROLLBACK");
+      await temp.end();
+    }
+  });
+
   it.each([false, true])("retains migration-owned dictionary across clone cleanup, failed=%s", async failCopy => {
     const temp = new Client({ connectionString: databaseUrl });
     await temp.connect();

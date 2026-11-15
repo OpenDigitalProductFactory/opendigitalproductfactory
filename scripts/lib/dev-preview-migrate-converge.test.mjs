@@ -17,7 +17,7 @@ import {
   readMigrationSql,
 } from "./dev-preview-migrate-converge.mjs";
 
-import { REGISTRY_MIGRATION, RELATION_DRIFT_MIGRATION, recoverGraphRegistry } from "./dev-preview-graph-registry-recovery.mjs";
+import { REGISTRY_MIGRATION, RELATION_DRIFT_MIGRATION, decideGraphRegistryRecovery, recoverGraphRegistry } from "./dev-preview-graph-registry-recovery.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "../..");
 
@@ -60,6 +60,58 @@ function graphDecision(proof) {
     graphRegistry: proof,
   });
 }
+
+function completedGraphProof() {
+  const proof = graphRegistryProof();
+  const failed = proof.failedRows[0];
+  proof.recoveryMode = "completed";
+  proof.failedRows = [];
+  proof.driftHistory = [
+    { ...failed, rolled_back_at: "2026-11-15T10:12:14Z" },
+    { ...failed, logs: null, finished_at: "2026-11-15T10:12:15Z", applied_steps_count: 1 },
+  ];
+  return proof;
+}
+
+test("completed exact history restores missing reference rows without migration retry", () => {
+  const decision = decideGraphRegistryRecovery(completedGraphProof());
+  assert.equal(decision.action, "restore-registry");
+  assert.ok(decision.missingKeys.includes("PART_OF"));
+  assert.doesNotMatch(decision.restoreSql, /UPDATE|DELETE|TRUNCATE/);
+});
+
+test("completed restoration refuses every unrecognized history shape or active failure", () => {
+  for (const change of [
+    p => { p.driftHistory = []; },
+    p => { p.driftHistory.pop(); },
+    p => { p.driftHistory.push({ ...p.driftHistory[1] }); },
+    p => { p.driftHistory[1].checksum = "wrong"; },
+    p => { p.driftHistory[1].applied_steps_count = 0; },
+    p => { p.driftHistory[0].logs = "unrelated failure"; },
+    p => { p.driftHistory[0].rolled_back_at = null; },
+    p => { p.driftHistory[0].applied_steps_count = 1; },
+    p => { p.driftHistory[0].finished_at = "2026-11-15T10:12:14Z"; },
+    p => { p.failedRows = graphRegistryProof().failedRows; },
+    p => { p.registrySql += "changed"; },
+    p => { p.schema.primaryKeyColumns = []; },
+    p => { p.recoveryMode = "unknown"; },
+    p => { p.alreadyAttempted = true; },
+  ]) {
+    const proof = completedGraphProof(); change(proof);
+    const decision = decideGraphRegistryRecovery(proof);
+    assert.equal(decision.action, "blocked_sandbox_drift");
+    assert.equal(decision.restoreSql, undefined);
+  }
+});
+
+test("healthy completed history without a prior failure needs no restoration", () => {
+  const proof = completedGraphProof();
+  proof.existingKeys = decideGraphRegistryRecovery(proof).expectedKeys;
+  proof.driftHistory = proof.driftHistory.filter(row => row.finished_at);
+  assert.equal(decideGraphRegistryRecovery(proof).action, "registry-current");
+  proof.existingKeys = [];
+  assert.equal(decideGraphRegistryRecovery(proof).action, "blocked_sandbox_drift");
+});
 
 test("verified registry-history drift admits missing-only restoration and a real migration retry", () => {
   const decision = graphDecision(graphRegistryProof());
@@ -405,15 +457,16 @@ test("database URL guard accepts only explicit contributor-preview endpoints", (
 
 // An I/O boundary double: actual immutable SQL is read; database replies model
 // the observed failure. Assertions concern durable effects and command ordering.
-function fixture({ wrongChecksum = false, restoreFails = false, incomplete = false, resolveFails = false, deployFails = false } = {}) {
+function fixture({ wrongChecksum = false, restoreFails = false, incomplete = false, resolveFails = false, deployFails = false, completed = false } = {}) {
   const events = [];
   let restoredKeys = [];
   const query = async (sql, values = []) => {
     events.push({ sql, values });
+    if (sql.includes("WHERE migration_name = $1") && values[0] === RELATION_DRIFT_MIGRATION) return completedGraphProof().driftHistory;
     if (sql.includes("WHERE migration_name = $1")) return [{ migration_name: REGISTRY_MIGRATION,
       checksum: wrongChecksum ? "wrong" : "b0b76a1bfceaa4909e00c3e820d9c103b5098d7f122054ff52c2b116f0a703b8",
       finished_at: "2026-10-28T22:13:52Z", rolled_back_at: null, applied_steps_count: 1 }];
-    if (sql.includes("WHERE finished_at IS NULL")) return [{ migration_name: RELATION_DRIFT_MIGRATION,
+    if (sql.includes("WHERE finished_at IS NULL")) return completed ? [] : [{ migration_name: RELATION_DRIFT_MIGRATION,
       checksum: "2606adc435559392f8a9804ce6afbfb2e71708cfeeed5e08a782be2766b5edfa",
       finished_at: null, rolled_back_at: null, applied_steps_count: 0,
       logs: '23503 graph_edge_rel_type_fkey Key (rel_type)=(PART_OF) is not present in table "graph_relation_type"' }];
@@ -428,7 +481,7 @@ function fixture({ wrongChecksum = false, restoreFails = false, incomplete = fal
       restoredKeys = [...sql.matchAll(/^\s*\('([A-Z_]+)',/gm)].map(m => m[1]);
     }
     if (sql.includes('WHERE "key" = ANY')) return (incomplete ? [] : restoredKeys).map(key => ({ key }));
-    if (sql.startsWith('SELECT "key"')) return [];
+    if (sql.startsWith('SELECT "key"')) return restoredKeys.map(key => ({ key }));
     return [];
   };
   const runPrisma = args => {
@@ -438,6 +491,28 @@ function fixture({ wrongChecksum = false, restoreFails = false, incomplete = fal
   return { query, runPrisma, readSql: readMigrationSql, events,
     context: { environment: "dev", databaseUrl: "postgresql://dpf@127.0.0.1:5433/dpf" } };
 }
+
+test("completed-state recovery commits missing-only rows and never invokes Prisma, including repeat", async () => {
+  const f = fixture({ completed: true });
+  const result = await recoverGraphRegistry({ ...f, recoveryMode: "completed" });
+  assert.equal(result.action, "restored");
+  assert.equal(f.events.filter(e => e.sql?.startsWith("INSERT")).length, 1);
+  assert.equal(f.events.filter(e => e.prisma).length, 0);
+  const repeated = await recoverGraphRegistry({ ...f, recoveryMode: "completed" });
+  assert.equal(repeated.action, "registry-current");
+  assert.equal(f.events.filter(e => e.sql?.startsWith("INSERT")).length, 1);
+  assert.equal(f.events.filter(e => e.prisma).length, 0);
+});
+
+test("completed-state interrupted or incomplete restoration rolls back without history commands", async () => {
+  for (const options of [{ restoreFails: true }, { incomplete: true }]) {
+    const f = fixture({ completed: true, ...options });
+    const result = await recoverGraphRegistry({ ...f, recoveryMode: "completed" });
+    assert.equal(result.action, "blocked_sandbox_drift");
+    assert.equal(f.events.at(-1).sql, "ROLLBACK");
+    assert.equal(f.events.filter(e => e.prisma).length, 0);
+  }
+});
 
 test("direct recovery entry refuses missing, production and foreign destinations before any query", async () => {
   for (const context of [undefined,
