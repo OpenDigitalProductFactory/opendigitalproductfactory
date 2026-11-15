@@ -22,15 +22,6 @@ const TONE_INTENT = {
   danger: "danger",
 } as const;
 
-function QuestionRow({ q, a }: { q: string; a: string }) {
-  return (
-    <div className="flex flex-col gap-0.5 border-t border-[var(--dpf-border)] py-2 first:border-t-0 sm:flex-row sm:gap-4">
-      <dt className="shrink-0 text-xs font-medium text-[var(--dpf-muted)] sm:w-48">{q}</dt>
-      <dd className="min-w-0 text-sm text-[var(--dpf-text)]">{a}</dd>
-    </div>
-  );
-}
-
 export function OwnerReleaseCard({
   summary,
   primaryAction,
@@ -100,54 +91,17 @@ export function OwnerReleaseCard({
         />
       </div>
 
-      {/* The questions an owner actually has, answered in plain words. */}
-      <dl className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-3">
-        <QuestionRow q="Can the business keep working?" a={summary.canKeepWorking.detail} />
-        <QuestionRow q="What's kept on your system?" a={summary.keptLocally.detail} />
-        <QuestionRow q="Can this be undone?" a={summary.rollback.detail} />
-        <QuestionRow q="If you do nothing" a={summary.ifYouDoNothing} />
-      </dl>
-
-      {/* Honest, short risk list. */}
-      {summary.whatCouldGoWrong.length > 0 && (
-        <div className="space-y-1">
-          <p className="text-xs font-medium uppercase tracking-[0.14em] text-[var(--dpf-muted)]">
-            What could go wrong
-          </p>
-          <ul className="list-disc space-y-1 pl-5 text-sm text-[var(--dpf-text)]">
-            {summary.whatCouldGoWrong.map((risk, i) => (
-              <li key={i}>{risk}</li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      {/* Consequence / reversibility / duration / recovery BEFORE the install action. */}
-      {summary.riskNotice && (
-        <Notice variant="warn" title="Before you install">
-          <ul className="space-y-0.5">
-            <li>
-              <span className="font-medium">What happens:</span> {summary.riskNotice.consequence}
-            </li>
-            <li>
-              <span className="font-medium">Can it be undone:</span> {summary.riskNotice.reversibility}
-            </li>
-            <li>
-              <span className="font-medium">How long:</span> {summary.riskNotice.duration}
-            </li>
-            <li>
-              <span className="font-medium">If it fails:</span> {summary.riskNotice.recovery}
-            </li>
-          </ul>
-        </Notice>
-      )}
-
-      {/* BI-D77BF495: the live trigger, directly below the risk notice it
-          answers to — visible on arrival, not buried behind the Advanced
-          disclosure (run history / ledgers / logs stay there). */}
+      {/* The action stays visible; consequence and recovery details move to
+          the invocation-time confirmation instead of making the arrival
+          surface read like a failure forecast. */}
       {primaryAction && (
         <div data-component="owner-release-primary-action">{primaryAction}</div>
       )}
+
+      <p className="text-sm text-[var(--dpf-muted)]">
+        <span className="font-medium text-[var(--dpf-text)]">If you do nothing: </span>
+        {summary.ifYouDoNothing}
+      </p>
     </section>
   );
 }

@@ -12,6 +12,10 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ refresh: mocks.refreshRoute }),
 }));
 
+vi.mock("@/components/ui/Dialog", () => ({
+  confirmDialog: vi.fn().mockResolvedValue(true),
+}));
+
 vi.mock("@/lib/actions/promotions", () => ({
   triggerSelfUpgrade: mocks.trigger,
   forceActiveRun: vi.fn(),
@@ -66,7 +70,7 @@ describe("SelfUpgradeTriggerControl live observation", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Upgrade now" }));
+    fireEvent.click(screen.getByRole("button", { name: "Install now" }));
 
     await waitFor(() => expect(mocks.trigger).toHaveBeenCalledOnce());
     expect(mocks.trigger).toHaveBeenCalledWith({ targetBinding: "server-signed-target" });

@@ -1,4 +1,3 @@
-import { cookies } from "next/headers";
 import { getSelfUpgradeStatus, listSelfUpgradeRuns } from "@/lib/actions/promotions";
 import { getPlatformDevConfig } from "@/lib/actions/platform-dev-config";
 import { loadPersistedImpactSummary, resolveCurrentLineageSha } from "@/lib/self-upgrade/impact";
@@ -15,7 +14,6 @@ import { ConnectedAgentClients } from "@/components/ops/ConnectedAgentClients";
 import { loadConnectedAgentClients } from "@/lib/agent-toolchain/connected-clients";
 import { getLocalChangesLedger } from "@/lib/self-upgrade/local-changes-ledger";
 import { getSelfUpgradeRecoveryState } from "@/lib/self-upgrade/recovery-eligibility";
-import { NAV_MODE_COOKIE, resolveNavModeFromCookie, isSimpleNavMode } from "@/lib/navigation/nav-mode";
 import { SelfUpgradeLiveProvider } from "@/components/ops/SelfUpgradeLiveProvider";
 import { namespaceMessages } from "@dpf/i18n";
 import { MessagesProvider } from "@/components/i18n/MessagesProvider";
@@ -188,8 +186,6 @@ export default async function SelfUpgradePage() {
     },
     localChanges,
   );
-  const navMode = resolveNavModeFromCookie((await cookies()).get(NAV_MODE_COOKIE)?.value);
-  const simple = isSimpleNavMode(navMode);
   const initialLiveSnapshot: SelfUpgradeStatusSnapshot = {
     observedAt: new Date().toISOString(),
     latestRun: effectiveStatus.latestRun,
@@ -236,10 +232,7 @@ export default async function SelfUpgradePage() {
     <SelfUpgradeLiveProvider initialSnapshot={initialLiveSnapshot}>
     <div>
       <div className="mb-6">
-        <h1 className="text-xl font-bold text-[var(--dpf-text)]">Self-Upgrade</h1>
-        <p className="text-sm text-[var(--dpf-muted)] mt-0.5">
-          Upgrade status.
-        </p>
+        <h1 className="text-xl font-bold text-[var(--dpf-text)]">Platform updates</h1>
       </div>
 
       <PlatformTabNav />
@@ -259,6 +252,7 @@ export default async function SelfUpgradePage() {
               quiescence={clientProps.quiescence}
               jobEngine={clientProps.jobEngine}
               targetBinding={targetBinding}
+              confirmation={ownerSummary.riskNotice}
             />
           }
         />
@@ -268,17 +262,14 @@ export default async function SelfUpgradePage() {
         <ConnectedAgentClients view={agentClients} now={now} />
       </div>
 
-      {/* Run history, runtime/security ledgers and logs. BI-D77BF495: the
-          primary "Upgrade now" trigger now lives above, co-located with the
+      {/* Run history, runtime/security ledgers and logs. The
+          primary "Install now" trigger lives above, co-located with the
           release status in OwnerReleaseCard — it is reachable on arrival in
           BOTH nav modes regardless of whether this section is expanded. That
-          lets this section go back to collapsing by default in Simple (worker)
-          nav mode: it holds only detail (history/ledgers/logs), not the
-          primary action, so hiding it there is the correct progressive
-          disclosure the owner-first redesign (BI-8D87084D) intended. */}
+          section stays collapsed on arrival in both modes: it holds detail,
+          not the primary action. */}
       <details
         className="mt-6 rounded-xl border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)]"
-        open={!simple}
       >
         <summary
           data-component="self-upgrade-advanced-toggle"
