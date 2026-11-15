@@ -12,6 +12,20 @@ status: draft
 - **Prototype:** [`2026-10-27-work-atlas-prototype.html`](../specs/assets/2026-10-27-work-atlas-prototype.html), with illustrative data
 - **Decision:** decomposed into eight independently shippable steps, A0–A6b
 
+**A3 corrective follow-up:** BI-47FA92E3 restores the existing inspector's
+recorded action actor and next step after A3 delivery. Its ordered fix,
+body-owned acceptance and atomic coverage artifact are in
+[design §3.6.1](../specs/2026-10-27-work-atlas-design.md#361-restore-the-recorded-action-in-the-inspector-bi-47fa92e3).
+It is a separate corrective delivery, not a replacement for the umbrella's
+decomposition or an amendment to its approved scope.
+
+The corrective item's atomic coverage receipt is
+`cmwgyl1ke0mry0el7dk6y8y34`, bound to the ordered fix design at
+`d9e20cd7587c640aa8d8d304bb5d53d6d3e5bd8b` (blob
+`6f0a44ab3fe5450ae62d4ffa577778f6b3a40cb9`). This is BI-47FA92E3's coverage,
+not a replacement for the umbrella's receipt below. Its projection, renderer,
+regressions and documentation are sequencing within one atomic delivery.
+
 ## Design grounding
 
 Each step extends existing substrate rather than adding a parallel one.
