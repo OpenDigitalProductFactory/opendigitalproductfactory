@@ -1,3 +1,4 @@
+vi.mock("@/lib/inference/codex-cli-catalog-auth", () => ({ discoverCodexCliModels: vi.fn(async () => [{ modelId: "account-default", rawMetadata: { isDefault: true } }]) }));
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const { mockPrisma, mockRefreshOAuthToken, mockGetProviderBearerToken, mockActivateProvider, mockClearCapacity } = vi.hoisted(() => ({
@@ -25,6 +26,7 @@ vi.mock("@/lib/ai-provider-internals", () => ({
   isAnthropicProvider: () => false,
   ANTHROPIC_OAUTH_BETA_HEADERS: "",
 }));
+import { discoverCodexCliModels } from "@/lib/inference/codex-cli-catalog-auth";
 import { testProviderAuthInternal as testProviderAuth } from "./provider-auth-test";
 
 describe("expired OAuth verification recovery", () => {
@@ -48,6 +50,32 @@ describe("expired OAuth verification recovery", () => {
     mockRefreshOAuthToken.mockReset().mockResolvedValue({ token: "renewed-token" });
     vi.mocked(fetch).mockResolvedValueOnce(new Response(JSON.stringify({ error: { code: "token_expired" } }), { status: 401 }));
   }
+
+  it("uses the account default instead of a reserved global profile", async () => {
+    expiredSubscription();
+    vi.mocked(fetch).mockReset().mockResolvedValue(new Response('data: {"type":"response.completed","response":{"status":"completed"}}\n'));
+    mockPrisma.modelProfile.findFirst.mockResolvedValue({ modelId: "chatgpt_alpha_model_external_access_reserved_gate_12" });
+    vi.mocked(discoverCodexCliModels).mockResolvedValueOnce([
+      { modelId: "other", rawMetadata: {} },
+      { modelId: "account-default", rawMetadata: { isDefault: true } },
+    ]);
+    expect(await testProviderAuth("chatgpt", false)).toMatchObject({ ok: true });
+    expect(discoverCodexCliModels).toHaveBeenCalledWith("chatgpt", undefined);
+    expect(JSON.parse(vi.mocked(fetch).mock.calls[0]![1]!.body as string).model).toBe("account-default");
+    expect(mockPrisma.modelProfile.findFirst).not.toHaveBeenCalled();
+  });
+  it("does not infer availability from shared profiles when discovery fails", async () => {
+    expiredSubscription();
+    vi.mocked(discoverCodexCliModels).mockRejectedValueOnce(new Error("Account catalog unavailable"));
+    expect(await testProviderAuth("chatgpt", false)).toMatchObject({ ok: false, message: expect.stringContaining("catalog unavailable") });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+  it("does not dispatch when the account advertises no models", async () => {
+    expiredSubscription();
+    vi.mocked(discoverCodexCliModels).mockResolvedValueOnce([]);
+    expect(await testProviderAuth("chatgpt", false)).toMatchObject({ ok: false });
+    expect(fetch).not.toHaveBeenCalled();
+  });
 
   it("renews a rejected default ChatGPT token through Codex and verifies the retry", async () => {
     expiredSubscription();

@@ -244,7 +244,10 @@ gate decision are:
 - **Material Backlinks** — the bounded neighborhood of a cited principle: related stances, heuristics,
   citations, and prior decisions (approved/promoted material only).
 - **Review queues** — unresolved `escalate`/`defer` decisions grouped by gap reason; founder-review
-  wording for WWMD, owner/operator wording for WWWD.
+  wording for WWMD, owner/operator wording for WWWD. Answer a review on its page, or tell your
+  coworker your ruling in chat. The coworker then proposes recording it in your words, and nothing is
+  recorded until you approve. Once approved, it is saved as your answer, exactly as if you had used
+  the page. A coworker never closes a review on its own judgement.
 - **Operations Map** — decision-pressure overlays, so a rising escalation rate on one profile is visible
   next to cost pressure.
 

@@ -30,8 +30,8 @@ export interface ImapClientPort {
   getMailboxLock(path: string): Promise<{ release(): void }>;
   /** imapflow exposes the selected mailbox's UIDVALIDITY / UIDNEXT here. */
   readonly mailbox: { uidValidity: bigint | number; uidNext?: number; exists?: number } | false;
-  /** `{ uid: "n:*" }` is UID SEARCH by range; `{ since }` is SEARCH SINCE (RFC 9051 §6.4.4). */
-  search(query: { uid: string } | { since: Date }, options: { uid: true }): Promise<number[] | false>;
+  /** `uid: "n:*"` is a UID range; `since` is SEARCH SINCE (RFC 9051 §6.4.4); both together AND. */
+  search(query: { uid?: string; since?: Date }, options: { uid: true }): Promise<number[] | false>;
   fetchOne(
     seq: string,
     query: { uid: true; source: true; internalDate: true },
@@ -197,9 +197,16 @@ export function createImapAdapter(deps: ImapAdapterDeps = {}): MailboxProviderAd
           const resuming = cursor !== null && cursor.uidValidity === uidValidity;
           let uids: number[];
           let lastUid: number;
+          let since: string | undefined;
           if (resuming) {
             const startUid = cursor.lastUid + 1;
-            const found = await client.search({ uid: `${startUid}:*` }, { uid: true });
+            since = cursor.since;
+            // Keep the first read's window floor: UIDs are not ordered by date, so a bare
+            // `UID n:*` after a truncated first read could reach old mail between window UIDs.
+            const found = await client.search(
+              since ? { uid: `${startUid}:*`, since: new Date(since) } : { uid: `${startUid}:*` },
+              { uid: true },
+            );
             // `UID n:*` on an empty range still returns the last message when n exceeds
             // UIDNEXT-1; filter to what is actually new.
             uids = (found || []).filter((uid) => uid >= startUid);
@@ -207,11 +214,21 @@ export function createImapAdapter(deps: ImapAdapterDeps = {}): MailboxProviderAd
           } else {
             // First read, or a changed UIDVALIDITY that invalidated every UID we
             // held: read only the lookback window (BI-D1D4FE9B), never the whole
-            // folder from UID 1. Mail older than the window is not routed, and the
-            // cursor starts just below the window so it is never reached later.
-            const found = await client.search({ since: mailroomFirstReadSince() }, { uid: true });
+            // folder from UID 1. Mail older than the window is not routed, now or later.
+            const floor = mailroomFirstReadSince();
+            since = floor.toISOString();
+            const found = await client.search({ since: floor }, { uid: true });
             uids = found || [];
-            lastUid = uids.length ? Math.min(...uids) - 1 : Math.max(0, (box.uidNext ?? 1) - 1);
+            if (uids.length) {
+              lastUid = uids.reduce((min, uid) => (uid < min ? uid : min), uids[0]!) - 1;
+            } else if (typeof box.uidNext === "number" && box.uidNext > 0) {
+              lastUid = box.uidNext - 1;
+            } else {
+              // No UIDNEXT from the server: fail closed on the newest UID, never 0, which
+              // would let the next poll read the whole folder (review finding 1).
+              const newest = await client.search({ uid: "*" }, { uid: true });
+              lastUid = (newest || []).reduce((max, uid) => (uid > max ? uid : max), 0);
+            }
           }
           uids = uids.sort((a, b) => a - b).slice(0, limit);
           const messages: NormalizedInboundMail[] = [];
@@ -222,7 +239,7 @@ export function createImapAdapter(deps: ImapAdapterDeps = {}): MailboxProviderAd
             messages.push(normalizeParsedMail(parsed, uid, raw.internalDate));
             lastUid = Math.max(lastUid, uid);
           }
-          return { messages, cursor: { uidValidity, lastUid } };
+          return { messages, cursor: since ? { uidValidity, lastUid, since } : { uidValidity, lastUid } };
         } finally {
           lock.release();
         }

@@ -1100,6 +1100,9 @@
     "apps/web/lib/inference/local-only.ts": [
       "docs/strategy/2026-09-cada-architects-forum-deck.md"
     ],
+    "apps/web/lib/inference/provider-auth-verification.ts": [
+      "docs/architecture/ai-agent-meta-model.md"
+    ],
     "apps/web/lib/inference/routed-inference.ts": [
       "docs/architecture/2026-06-14-odysseus-review-depth-pass.md",
       "docs/architecture/ai-routing-document-map.md",
@@ -3483,6 +3486,7 @@
       "apps/web/lib/gpp/binding-enforcement.ts",
       "apps/web/lib/identity/aidoc-resolver.ts",
       "apps/web/lib/identity/principal-linking.ts",
+      "apps/web/lib/inference/provider-auth-verification.ts",
       "apps/web/lib/mcp-governed-execute.ts",
       "packages/db/src/seed-ea-sysml-agent-authority.ts",
       "packages/validators/src/operating-composition/legacy-fingerprint.ts"

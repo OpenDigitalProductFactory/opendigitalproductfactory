@@ -589,7 +589,7 @@
           "level": 1,
           "directSkills": 0,
           "wildcardSkills": 10,
-          "reachableTools": 69,
+          "reachableTools": 70,
           "heldGrants": [
             "registry_read",
             "backlog_read",
@@ -600,7 +600,7 @@
           ],
           "services": 0,
           "unbackedSkillIds": [],
-          "detail": "no skill authored for it (10 wildcard only), 69 reachable tool(s)",
+          "detail": "no skill authored for it (10 wildcard only), 70 reachable tool(s)",
           "levelKey": "declared",
           "ceiling": 3,
           "atCeiling": false
@@ -636,7 +636,7 @@
           "plane": "toolsAndSkills",
           "level": 1,
           "ceiling": 3,
-          "detail": "no skill authored for it (10 wildcard only), 69 reachable tool(s)"
+          "detail": "no skill authored for it (10 wildcard only), 70 reachable tool(s)"
         },
         {
           "plane": "evidence",
@@ -862,7 +862,7 @@
           "level": 1,
           "directSkills": 0,
           "wildcardSkills": 10,
-          "reachableTools": 69,
+          "reachableTools": 70,
           "heldGrants": [
             "registry_read",
             "backlog_read",
@@ -873,7 +873,7 @@
           ],
           "services": 0,
           "unbackedSkillIds": [],
-          "detail": "no skill authored for it (10 wildcard only), 69 reachable tool(s)",
+          "detail": "no skill authored for it (10 wildcard only), 70 reachable tool(s)",
           "levelKey": "declared",
           "ceiling": 3,
           "atCeiling": false
@@ -909,7 +909,7 @@
           "plane": "toolsAndSkills",
           "level": 1,
           "ceiling": 3,
-          "detail": "no skill authored for it (10 wildcard only), 69 reachable tool(s)"
+          "detail": "no skill authored for it (10 wildcard only), 70 reachable tool(s)"
         },
         {
           "plane": "evidence",
@@ -1278,7 +1278,7 @@
           "level": 1,
           "directSkills": 0,
           "wildcardSkills": 10,
-          "reachableTools": 69,
+          "reachableTools": 70,
           "heldGrants": [
             "registry_read",
             "backlog_read",
@@ -1288,7 +1288,7 @@
           ],
           "services": 0,
           "unbackedSkillIds": [],
-          "detail": "no skill authored for it (10 wildcard only), 69 reachable tool(s)",
+          "detail": "no skill authored for it (10 wildcard only), 70 reachable tool(s)",
           "levelKey": "declared",
           "ceiling": 3,
           "atCeiling": false
@@ -1324,7 +1324,7 @@
           "plane": "toolsAndSkills",
           "level": 1,
           "ceiling": 3,
-          "detail": "no skill authored for it (10 wildcard only), 69 reachable tool(s)"
+          "detail": "no skill authored for it (10 wildcard only), 70 reachable tool(s)"
         },
         {
           "plane": "evidence",
@@ -1550,7 +1550,7 @@
           "level": 1,
           "directSkills": 0,
           "wildcardSkills": 10,
-          "reachableTools": 78,
+          "reachableTools": 79,
           "heldGrants": [
             "registry_read",
             "backlog_read",
@@ -1563,7 +1563,7 @@
           ],
           "services": 0,
           "unbackedSkillIds": [],
-          "detail": "no skill authored for it (10 wildcard only), 78 reachable tool(s)",
+          "detail": "no skill authored for it (10 wildcard only), 79 reachable tool(s)",
           "levelKey": "declared",
           "ceiling": 3,
           "atCeiling": false
@@ -1599,7 +1599,7 @@
           "plane": "toolsAndSkills",
           "level": 1,
           "ceiling": 3,
-          "detail": "no skill authored for it (10 wildcard only), 78 reachable tool(s)"
+          "detail": "no skill authored for it (10 wildcard only), 79 reachable tool(s)"
         },
         {
           "plane": "evidence",
@@ -1689,7 +1689,7 @@
           "level": 1,
           "directSkills": 0,
           "wildcardSkills": 10,
-          "reachableTools": 73,
+          "reachableTools": 74,
           "heldGrants": [
             "registry_read",
             "backlog_read",
@@ -1700,7 +1700,7 @@
           ],
           "services": 0,
           "unbackedSkillIds": [],
-          "detail": "no skill authored for it (10 wildcard only), 73 reachable tool(s)",
+          "detail": "no skill authored for it (10 wildcard only), 74 reachable tool(s)",
           "levelKey": "declared",
           "ceiling": 3,
           "atCeiling": false
@@ -1736,7 +1736,7 @@
           "plane": "toolsAndSkills",
           "level": 1,
           "ceiling": 3,
-          "detail": "no skill authored for it (10 wildcard only), 73 reachable tool(s)"
+          "detail": "no skill authored for it (10 wildcard only), 74 reachable tool(s)"
         },
         {
           "plane": "evidence",
@@ -2106,7 +2106,7 @@
           "level": 1,
           "directSkills": 0,
           "wildcardSkills": 10,
-          "reachableTools": 96,
+          "reachableTools": 97,
           "heldGrants": [
             "file_read",
             "initiative_design_review",
@@ -2120,7 +2120,7 @@
           ],
           "services": 0,
           "unbackedSkillIds": [],
-          "detail": "no skill authored for it (10 wildcard only), 96 reachable tool(s)",
+          "detail": "no skill authored for it (10 wildcard only), 97 reachable tool(s)",
           "levelKey": "declared",
           "ceiling": 3,
           "atCeiling": false
@@ -2156,7 +2156,7 @@
           "plane": "toolsAndSkills",
           "level": 1,
           "ceiling": 3,
-          "detail": "no skill authored for it (10 wildcard only), 96 reachable tool(s)"
+          "detail": "no skill authored for it (10 wildcard only), 97 reachable tool(s)"
         },
         {
           "plane": "evidence",
@@ -2246,7 +2246,7 @@
           "level": 1,
           "directSkills": 0,
           "wildcardSkills": 10,
-          "reachableTools": 71,
+          "reachableTools": 72,
           "heldGrants": [
             "registry_read",
             "backlog_read",
@@ -2257,7 +2257,7 @@
           ],
           "services": 0,
           "unbackedSkillIds": [],
-          "detail": "no skill authored for it (10 wildcard only), 71 reachable tool(s)",
+          "detail": "no skill authored for it (10 wildcard only), 72 reachable tool(s)",
           "levelKey": "declared",
           "ceiling": 3,
           "atCeiling": false
@@ -2293,7 +2293,7 @@
           "plane": "toolsAndSkills",
           "level": 1,
           "ceiling": 3,
-          "detail": "no skill authored for it (10 wildcard only), 71 reachable tool(s)"
+          "detail": "no skill authored for it (10 wildcard only), 72 reachable tool(s)"
         },
         {
           "plane": "evidence",
@@ -4020,7 +4020,7 @@
           "level": 1,
           "directSkills": 0,
           "wildcardSkills": 10,
-          "reachableTools": 70,
+          "reachableTools": 71,
           "heldGrants": [
             "registry_read",
             "backlog_read",
@@ -4033,7 +4033,7 @@
           ],
           "services": 0,
           "unbackedSkillIds": [],
-          "detail": "no skill authored for it (10 wildcard only), 70 reachable tool(s)",
+          "detail": "no skill authored for it (10 wildcard only), 71 reachable tool(s)",
           "levelKey": "declared",
           "ceiling": 3,
           "atCeiling": false
@@ -4069,7 +4069,7 @@
           "plane": "toolsAndSkills",
           "level": 1,
           "ceiling": 3,
-          "detail": "no skill authored for it (10 wildcard only), 70 reachable tool(s)"
+          "detail": "no skill authored for it (10 wildcard only), 71 reachable tool(s)"
         },
         {
           "plane": "evidence",
@@ -5677,7 +5677,7 @@
           "level": 3,
           "directSkills": 6,
           "wildcardSkills": 10,
-          "reachableTools": 198,
+          "reachableTools": 199,
           "heldGrants": [
             "architecture_read",
             "backlog_read",
@@ -5695,7 +5695,7 @@
           ],
           "services": 0,
           "unbackedSkillIds": [],
-          "detail": "6 skill(s), 198 tool(s), all service backings resolve",
+          "detail": "6 skill(s), 199 tool(s), all service backings resolve",
           "levelKey": "proven",
           "ceiling": 3,
           "atCeiling": true
@@ -6397,7 +6397,7 @@
           "level": 3,
           "directSkills": 1,
           "wildcardSkills": 10,
-          "reachableTools": 104,
+          "reachableTools": 105,
           "heldGrants": [
             "browser_read",
             "coworker_screen_read",
@@ -6414,7 +6414,7 @@
           ],
           "services": 1,
           "unbackedSkillIds": [],
-          "detail": "1 skill(s), 104 tool(s), all service backings resolve",
+          "detail": "1 skill(s), 105 tool(s), all service backings resolve",
           "levelKey": "proven",
           "ceiling": 3,
           "atCeiling": true
@@ -7197,7 +7197,7 @@
           "level": 3,
           "directSkills": 1,
           "wildcardSkills": 10,
-          "reachableTools": 229,
+          "reachableTools": 230,
           "heldGrants": [
             "file_read",
             "sandbox_execute",
@@ -7212,7 +7212,7 @@
           ],
           "services": 0,
           "unbackedSkillIds": [],
-          "detail": "1 skill(s), 229 tool(s), all service backings resolve",
+          "detail": "1 skill(s), 230 tool(s), all service backings resolve",
           "levelKey": "proven",
           "ceiling": 3,
           "atCeiling": true
@@ -7418,7 +7418,7 @@
           "level": 3,
           "directSkills": 1,
           "wildcardSkills": 10,
-          "reachableTools": 275,
+          "reachableTools": 276,
           "heldGrants": [
             "work_room_read",
             "work_room_write",
@@ -7443,7 +7443,7 @@
           ],
           "services": 0,
           "unbackedSkillIds": [],
-          "detail": "1 skill(s), 275 tool(s), all service backings resolve",
+          "detail": "1 skill(s), 276 tool(s), all service backings resolve",
           "levelKey": "proven",
           "ceiling": 3,
           "atCeiling": true
@@ -7538,7 +7538,7 @@
           "level": 3,
           "directSkills": 1,
           "wildcardSkills": 10,
-          "reachableTools": 275,
+          "reachableTools": 276,
           "heldGrants": [
             "work_room_read",
             "work_room_write",
@@ -7563,7 +7563,7 @@
           ],
           "services": 0,
           "unbackedSkillIds": [],
-          "detail": "1 skill(s), 275 tool(s), all service backings resolve",
+          "detail": "1 skill(s), 276 tool(s), all service backings resolve",
           "levelKey": "proven",
           "ceiling": 3,
           "atCeiling": true
@@ -7658,7 +7658,7 @@
           "level": 3,
           "directSkills": 1,
           "wildcardSkills": 10,
-          "reachableTools": 275,
+          "reachableTools": 276,
           "heldGrants": [
             "work_room_read",
             "work_room_write",
@@ -7683,7 +7683,7 @@
           ],
           "services": 0,
           "unbackedSkillIds": [],
-          "detail": "1 skill(s), 275 tool(s), all service backings resolve",
+          "detail": "1 skill(s), 276 tool(s), all service backings resolve",
           "levelKey": "proven",
           "ceiling": 3,
           "atCeiling": true
@@ -7778,7 +7778,7 @@
           "level": 3,
           "directSkills": 1,
           "wildcardSkills": 10,
-          "reachableTools": 91,
+          "reachableTools": 92,
           "heldGrants": [
             "registry_read",
             "backlog_read",
@@ -7789,7 +7789,7 @@
           ],
           "services": 0,
           "unbackedSkillIds": [],
-          "detail": "1 skill(s), 91 tool(s), all service backings resolve",
+          "detail": "1 skill(s), 92 tool(s), all service backings resolve",
           "levelKey": "proven",
           "ceiling": 3,
           "atCeiling": true
@@ -7884,7 +7884,7 @@
           "level": 3,
           "directSkills": 1,
           "wildcardSkills": 10,
-          "reachableTools": 177,
+          "reachableTools": 178,
           "heldGrants": [
             "registry_read",
             "backlog_read",
@@ -7900,7 +7900,7 @@
           ],
           "services": 0,
           "unbackedSkillIds": [],
-          "detail": "1 skill(s), 177 tool(s), all service backings resolve",
+          "detail": "1 skill(s), 178 tool(s), all service backings resolve",
           "levelKey": "proven",
           "ceiling": 3,
           "atCeiling": true
@@ -7995,7 +7995,7 @@
           "level": 3,
           "directSkills": 1,
           "wildcardSkills": 10,
-          "reachableTools": 180,
+          "reachableTools": 181,
           "heldGrants": [
             "registry_read",
             "backlog_read",
@@ -8012,7 +8012,7 @@
           ],
           "services": 0,
           "unbackedSkillIds": [],
-          "detail": "1 skill(s), 180 tool(s), all service backings resolve",
+          "detail": "1 skill(s), 181 tool(s), all service backings resolve",
           "levelKey": "proven",
           "ceiling": 3,
           "atCeiling": true
@@ -8107,7 +8107,7 @@
           "level": 3,
           "directSkills": 1,
           "wildcardSkills": 10,
-          "reachableTools": 95,
+          "reachableTools": 96,
           "heldGrants": [
             "registry_read",
             "backlog_read",
@@ -8120,7 +8120,7 @@
           ],
           "services": 0,
           "unbackedSkillIds": [],
-          "detail": "1 skill(s), 95 tool(s), all service backings resolve",
+          "detail": "1 skill(s), 96 tool(s), all service backings resolve",
           "levelKey": "proven",
           "ceiling": 3,
           "atCeiling": true
@@ -8215,7 +8215,7 @@
           "level": 3,
           "directSkills": 1,
           "wildcardSkills": 10,
-          "reachableTools": 91,
+          "reachableTools": 92,
           "heldGrants": [
             "registry_read",
             "backlog_read",
@@ -8226,7 +8226,7 @@
           ],
           "services": 0,
           "unbackedSkillIds": [],
-          "detail": "1 skill(s), 91 tool(s), all service backings resolve",
+          "detail": "1 skill(s), 92 tool(s), all service backings resolve",
           "levelKey": "proven",
           "ceiling": 3,
           "atCeiling": true
@@ -8321,7 +8321,7 @@
           "level": 3,
           "directSkills": 1,
           "wildcardSkills": 10,
-          "reachableTools": 91,
+          "reachableTools": 92,
           "heldGrants": [
             "registry_read",
             "backlog_read",
@@ -8332,7 +8332,7 @@
           ],
           "services": 0,
           "unbackedSkillIds": [],
-          "detail": "1 skill(s), 91 tool(s), all service backings resolve",
+          "detail": "1 skill(s), 92 tool(s), all service backings resolve",
           "levelKey": "proven",
           "ceiling": 3,
           "atCeiling": true
@@ -8427,7 +8427,7 @@
           "level": 3,
           "directSkills": 1,
           "wildcardSkills": 10,
-          "reachableTools": 92,
+          "reachableTools": 93,
           "heldGrants": [
             "registry_read",
             "backlog_read",
@@ -8439,7 +8439,7 @@
           ],
           "services": 0,
           "unbackedSkillIds": [],
-          "detail": "1 skill(s), 92 tool(s), all service backings resolve",
+          "detail": "1 skill(s), 93 tool(s), all service backings resolve",
           "levelKey": "proven",
           "ceiling": 3,
           "atCeiling": true
@@ -8534,7 +8534,7 @@
           "level": 3,
           "directSkills": 1,
           "wildcardSkills": 10,
-          "reachableTools": 91,
+          "reachableTools": 92,
           "heldGrants": [
             "registry_read",
             "backlog_read",
@@ -8545,7 +8545,7 @@
           ],
           "services": 0,
           "unbackedSkillIds": [],
-          "detail": "1 skill(s), 91 tool(s), all service backings resolve",
+          "detail": "1 skill(s), 92 tool(s), all service backings resolve",
           "levelKey": "proven",
           "ceiling": 3,
           "atCeiling": true

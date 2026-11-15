@@ -1,3 +1,4 @@
+vi.mock("@/lib/inference/codex-cli-catalog-auth", () => ({ discoverCodexCliModels: vi.fn(async () => [{ modelId: "account-default", rawMetadata: { isDefault: true } }]) }));
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
@@ -12,6 +13,7 @@ vi.mock("@/lib/govern/activate-provider", () => ({ activateProvider: mocks.activ
 vi.mock("@/lib/provider-oauth", () => ({ refreshOAuthToken: mocks.refresh, oauthTokenExpiryMs: () => null }));
 vi.mock("@/lib/credential-crypto", () => ({ decryptSecret: (value: string) => value.replace("enc:", "") }));
 vi.mock("@/lib/ai-provider-internals", () => ({ getProviderBearerToken: mocks.bearer, getDecryptedCredential: vi.fn(), getProviderExtraHeaders: () => ({}), isAnthropicProvider: () => false, ANTHROPIC_OAUTH_BETA_HEADERS: "" }));
+import { discoverCodexCliModels } from "@/lib/inference/codex-cli-catalog-auth";
 import { testProviderAuthInternal } from "./provider-auth-test";
 
 describe("verification-only subscription effects", () => {
@@ -91,17 +93,17 @@ describe("verification-only subscription effects", () => {
     expect(mocks.prisma.credentialEntry.update).not.toHaveBeenCalled();
   });
   it("cannot dispatch after Disable while resolving the model", async () => {
-    mocks.prisma.modelProfile.findFirst.mockImplementation(async () => {
+    vi.mocked(discoverCodexCliModels).mockImplementationOnce(async () => {
       mocks.prisma.aiProviderConnection.findUnique.mockResolvedValue({ ...account, status: "disabled" });
-      return { modelId: "current-model" };
+      return [{ modelId: "current-model", rawMetadata: {} }];
     });
     expect(await verify()).toMatchObject({ ok: false });
     expect(fetch).not.toHaveBeenCalled();
   });
   it("cannot dispatch after a same-row credential replacement during model selection", async () => {
-    mocks.prisma.modelProfile.findFirst.mockImplementation(async () => {
+    vi.mocked(discoverCodexCliModels).mockImplementationOnce(async () => {
       mocks.prisma.aiProviderConnection.findUnique.mockResolvedValue({ ...account, credentialEntry: { ...credential, cachedToken: "enc:replacement", updatedAt: new Date("2026-10-02") } });
-      return { modelId: "current-model" };
+      return [{ modelId: "current-model", rawMetadata: {} }];
     });
     expect(await verify()).toMatchObject({ ok: false });
     expect(fetch).not.toHaveBeenCalled();

@@ -35,6 +35,10 @@ export interface MailroomReason {
   /** When true, a message carrying this reason is stored and never routed or
    *  replied to (bounces, bulk mail, auto-responses). */
   noise?: boolean;
+  /** When true, the content is privileged (counsel correspondence): it still
+   *  routes and notifies, but no summary of its content leaves the item, and
+   *  the Mailroom never drafts a reply. The owner answers directly. */
+  privileged?: boolean;
 }
 
 /** A standing queue room and the role that answers for it. */
