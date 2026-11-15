@@ -32,6 +32,13 @@ export const POSTING_ACCOUNT_ROLES = [
   "accumulatedDepreciation", // contra-asset: total depreciation booked against fixed assets
   "retainedEarnings", // accumulated result
   "openingBalanceEquity", // opening-balance counterweight
+  // Payroll (BI-3B8FA6D8). Kept apart from the sales-tax and supplier-payable
+  // controls so a pay run never lands in Sales Tax Payable or Accounts Payable.
+  "wagesExpense", // gross earnings (P&L)
+  "payrollTaxExpense", // the employer's own payroll taxes (P&L)
+  "netPayPayable", // net pay owed to employees until it is paid
+  "payrollTaxPayable", // withholding and employer payroll taxes owed to authorities
+  "payrollDeductionsPayable", // other amounts withheld from pay (benefits, garnishments)
 ] as const;
 export type PostingAccountRole = (typeof POSTING_ACCOUNT_ROLES)[number];
 
@@ -80,6 +87,12 @@ export const BASE_CONTROL_ACCOUNTS: readonly ChartAccountSeed[] = [
   // this role.
   { code: "5000", name: "Operating Expenses", type: "expense", role: "operatingExpense" },
   { code: "5900", name: "Depreciation", type: "expense", role: "depreciationExpense" },
+  // Payroll (BI-3B8FA6D8). 23xx and 53xx are unused by every archetype seed.
+  { code: "2300", name: "Net Pay Payable", type: "liability", role: "netPayPayable", isControl: true },
+  { code: "2310", name: "Payroll Taxes Payable", type: "liability", role: "payrollTaxPayable", isControl: true },
+  { code: "2320", name: "Payroll Deductions Payable", type: "liability", role: "payrollDeductionsPayable", isControl: true },
+  { code: "5300", name: "Wages and Salaries", type: "expense", role: "wagesExpense" },
+  { code: "5310", name: "Employer Payroll Taxes", type: "expense", role: "payrollTaxExpense" },
 ] as const;
 
 // ─── Build the full org chart of accounts ────────────────────────────────────
@@ -153,6 +166,11 @@ const HEURISTICS: Record<PostingAccountRole, (a: DeterminableAccount) => boolean
     a.type === "asset" && (a.code === "1900" || /accumulated\s*deprecia/i.test(a.name)),
   retainedEarnings: (a) => a.type === "equity" && /retained|undivided|fund balance/i.test(a.name),
   openingBalanceEquity: (a) => a.type === "equity" && /opening/i.test(a.name),
+  wagesExpense: (a) => a.type === "expense" && (a.code === "5300" || /\b(wage|salar)/i.test(a.name)),
+  payrollTaxExpense: (a) => a.type === "expense" && (a.code === "5310" || /employer.*payroll|payroll tax/i.test(a.name)),
+  netPayPayable: (a) => a.type === "liability" && (a.code === "2300" || /net pay|wages payable/i.test(a.name)),
+  payrollTaxPayable: (a) => a.type === "liability" && (a.code === "2310" || /payroll tax/i.test(a.name)),
+  payrollDeductionsPayable: (a) => a.type === "liability" && (a.code === "2320" || /payroll deduction/i.test(a.name)),
 };
 
 /**

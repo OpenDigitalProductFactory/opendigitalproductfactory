@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/Button";
 import { Surface } from "@/components/ui/Surface";
 import { useT } from "@/lib/i18n/use-t";
 import type { ActionResult } from "@/lib/shared/action-result";
-import { computePayRunAction, recordW4Action } from "@/lib/actions/payroll";
+import { approvePayRunAction, computePayRunAction, recordPayRunPaidAction, recordW4Action } from "@/lib/actions/payroll";
 
 export interface StaffView {
   employeeProfileId: string;
@@ -25,6 +25,9 @@ export interface PayRunView {
   periodLabel: string;
   payDateLabel: string;
   status: string;
+  /** BI-3B8FA6D8: totals by tax, formatted by the page. */
+  taxesToRemit: LineView[];
+  netTotal: string;
   payslips: Array<{
     payslipId: string;
     name: string;
@@ -56,6 +59,43 @@ function Lines({ heading, rows }: { heading: string; rows: LineView[] }) {
           </div>
         ))}
       </dl>
+    </div>
+  );
+}
+
+// BI-3B8FA6D8: approve a draft (posts its journal), then record it paid once the
+// owner has sent the net pay from their bank. Neither control moves money.
+function RunActions({ run, today, onDone }: { run: PayRunView; today: string; onDone: (n: Notice) => void }) {
+  const t = useT("payroll");
+  const [pending, start] = useTransition();
+  const [paid, setPaid] = useState({ bankReference: "", paidOn: today });
+  const say = (res: ActionResult<unknown>, done: string) =>
+    onDone(res.ok ? { kind: "ok", text: done } : { kind: "error", text: res.error });
+
+  return (
+    <div className="space-y-3">
+      <Lines heading={t("books.netTotal")} rows={[{ label: t("books.netTotal"), amount: run.netTotal }]} />
+      <Lines heading={t("books.taxesToRemit")} rows={run.taxesToRemit} />
+      {run.status === "draft" ? (
+        <Button type="button" size="sm" disabled={pending}
+          onClick={() => start(async () => say(await approvePayRunAction(run.payRunId), t("books.approved")))}>
+          {t("books.approve")}
+        </Button>
+      ) : null}
+      {run.status === "approved" ? (
+        <form className="space-y-2" onSubmit={(e) => { e.preventDefault(); start(async () => say(await recordPayRunPaidAction({ payRunId: run.payRunId, ...paid }), t("books.paid"))); }}>
+          <p className="text-xs text-[var(--dpf-muted)]">{t("books.payHelp")}</p>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className={LABEL}>{t("books.paidOn")}
+              <input type="date" required value={paid.paidOn} onChange={(e) => setPaid({ ...paid, paidOn: e.target.value })} className={FIELD} />
+            </label>
+            <label className={LABEL}>{t("books.bankReference")}
+              <input required value={paid.bankReference} onChange={(e) => setPaid({ ...paid, bankReference: e.target.value })} className={FIELD} />
+            </label>
+          </div>
+          <Button type="submit" size="sm" variant="secondary" disabled={pending}>{t("books.recordPaid")}</Button>
+        </form>
+      ) : null}
     </div>
   );
 }
@@ -211,6 +251,7 @@ export function PayrollPanel({ staff, runs, today }: { staff: StaffView[]; runs:
                     {t("runs.summary", { period: r.periodLabel, payDate: r.payDateLabel, status: r.status })}
                   </summary>
                   <div className="mt-3 space-y-4">
+                    <RunActions run={r} today={today} onDone={setNotice} />
                     {r.payslips.map((p) => (
                       <div key={p.payslipId} className="space-y-2 border-t border-[var(--dpf-border)] pt-3">
                         <p className="text-sm font-semibold text-[var(--dpf-text)]">{p.name}</p>

@@ -7,8 +7,9 @@
 // functions only.
 //
 // SECURITY: the acting user comes from the session. Recording a W-4 or
-// computing a run both require manage_finance. Nothing here approves a run,
-// posts a journal or moves money.
+// computing a run both require manage_finance. Approving a run posts its
+// journal and recording it paid posts the payment; neither moves money, which
+// the owner sends from their own bank (BI-3B8FA6D8).
 
 import { prisma } from "@dpf/db";
 import { revalidatePath } from "next/cache";
@@ -16,6 +17,7 @@ import { requireCapabilityContext } from "@/lib/actions/shared/guards";
 import { err, ok, type ActionResult } from "@/lib/shared/action-result";
 import { parseRecordedW4, WITHHOLDING_EVENT_TYPE } from "@/lib/hr/federal-withholding";
 import { computeUsPayRun } from "@/lib/hr/us-pay-run.server";
+import { approvePayRun, recordPayRunPaid } from "@/lib/hr/pay-run-books.server";
 import { PERIODS_PER_YEAR, type PayFrequency } from "@/lib/hr/us-pay-run";
 import { recordAndActuateEmploymentEvent } from "@/lib/workforce/employment-event-actuator-runtime";
 
@@ -101,4 +103,26 @@ export async function computePayRunAction(input: {
     // reference for different dates; those are the operator's to see.
     return err(error instanceof Error ? error.message : "The pay run could not be computed.");
   }
+}
+
+/** A person approves a draft pay run; its journal is posted (BI-3B8FA6D8). */
+export async function approvePayRunAction(payRunId: string): Promise<ActionResult<{ journalEntryId: string }>> {
+  const { userId, email } = await requireCapabilityContext("manage_finance");
+  const result = await approvePayRun(payRunId, { userId, email });
+  if (result.ok) revalidatePath(PAYROLL_PATH);
+  return result;
+}
+
+/** A person records that an approved run's net pay left the bank (BI-3B8FA6D8). */
+export async function recordPayRunPaidAction(input: {
+  payRunId: string;
+  bankReference: string;
+  paidOn: string;
+}): Promise<ActionResult<{ journalEntryId: string; payslips: number }>> {
+  const { userId, email } = await requireCapabilityContext("manage_finance");
+  const paidOn = calendarDate(input.paidOn);
+  if (!paidOn) return err("Enter the date the payment left the bank.");
+  const result = await recordPayRunPaid(input.payRunId, { userId, email }, { bankReference: input.bankReference, paidOn });
+  if (result.ok) revalidatePath(PAYROLL_PATH);
+  return result;
 }
