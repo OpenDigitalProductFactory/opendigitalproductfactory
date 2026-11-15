@@ -2,7 +2,7 @@
   "version": 1,
   "owner": "platform-architecture",
   "expiry": "2026-11-16",
-  "note": "FK index-coverage ratchet baseline (BI-640B011D). Shrink-only: indexes are added per query path, never mechanically. CredentialEntry.providerWorkspaceId is Anthropic's external namespace, not a local FK (BI-FFC4C94D; platform data-architecture decision DI-24F7FF4EC4EA). Regenerate with: node scripts/check-fk-index-coverage.mjs --update BI-A009189A / DI-DF76FEA979F7: AgentMessage.responseAttemptId is an indexed semantic evidence pointer to asynchronously persisted, independently retained 180-day AdapterRunTelemetry. Missing or deleted telemetry makes feedback unavailable; it never prevents answer delivery. Exact producer/digest/owner/room/uniqueness checks gate use. One explicit soft-reference exception; existing owner, expiry, other exceptions and index requirements are preserved.",
+  "note": "FK index-coverage ratchet baseline (BI-640B011D). Shrink-only: indexes are added per query path, never mechanically. CredentialEntry.providerWorkspaceId is Anthropic's external namespace, not a local FK (BI-FFC4C94D; platform data-architecture decision DI-24F7FF4EC4EA). Regenerate with: node scripts/check-fk-index-coverage.mjs --update BI-A009189A / DI-DF76FEA979F7: AgentMessage.responseAttemptId is an indexed semantic evidence pointer to asynchronously persisted, independently retained 180-day AdapterRunTelemetry. Missing or deleted telemetry makes feedback unavailable; it never prevents answer delivery. Exact producer/digest/owner/room/uniqueness checks gate use. One explicit soft-reference exception; existing owner, expiry, other exceptions and index requirements are preserved. BI-31E0C874 / DI-D7C9B9DF3252: WorkItemPresence.readCursorMessageId is a positional soft reference: with readCursorAt it forms a (createdAt, messageId) read position compared by ordering, never joined, so it must survive deletion of the message it names (design 2026-11-11-room-read-cursor \u00a77). A relation would null one half of the pair or block message deletion.",
   "fkMissingIndex": [
     "AccountInvite.accountId",
     "Activity.createdById",
@@ -961,6 +961,7 @@
     "WorkItemMessage.senderAgentId",
     "WorkItemMessage.senderUserId",
     "WorkItemPresence.principalId",
+    "WorkItemPresence.readCursorMessageId",
     "WorkLocation.locationId",
     "WorkQueue.queueId",
     "WorkbookCell.referenceId",

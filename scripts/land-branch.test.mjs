@@ -13,7 +13,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import { buildGateContext } from "./lib/gate-context.mjs";
-import { STEPS, bodyRequiredTrailers, missingBodyAttestations, parseContext, syncAction, parseGateStatus, gateFailureSite, recordedPassAction, publish, localCiGateAction } from "./land-branch.mjs";
+import { run, STEPS, bodyRequiredTrailers, missingBodyAttestations, parseContext, syncAction, parseGateStatus, gateFailureSite, recordedPassAction, publish, localCiGateAction } from "./land-branch.mjs";
 import { parseArgs as gateLocalArgs } from "./gate-local.mjs";
 import { obligationLines } from "./pregate-preflight.mjs";
 
@@ -166,6 +166,34 @@ test("publish pushes exactly once, and a refused push is reported, never retried
   assert.equal(calls.filter((c) => c.startsWith("git push")).length, 1);
 });
 
+test("Windows landing invokes a real pnpm shim with literal argv and preserves child failure", { skip: process.platform !== "win32" }, async () => {
+  const { mkdtempSync, writeFileSync, rmSync } = await import("node:fs");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const dir = mkdtempSync(join(tmpdir(), "dpf land shim "));
+  try {
+    const command = join(dir, "pnpm.cmd");
+    writeFileSync(command, "@exit /b 99\r\n");
+    writeFileSync(join(dir, "pnpm.cjs"), "process.stdout.write(JSON.stringify(process.argv.slice(2))); process.exit(process.argv.includes('--fail') ? 7 : 0);");
+    const args = ["space value", "a&b", "%PATH%", 'quote"literal'];
+    const passed = run(command, args, { capture: true });
+    assert.equal(passed.ok, true, passed.out);
+    assert.deepEqual(JSON.parse(passed.out), args);
+    const failed = run(command, [...args, "--fail"], { capture: true, allowFail: true });
+    assert.equal(failed.ok, false);
+    assert.equal(failed.status, 7);
+    assert.deepEqual(JSON.parse(failed.out), [...args, "--fail"]);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("landing retains spawn errors when callers inspect failures", () => {
+  for (const allowFail of [false, true]) {
+    const result = run("dpf-nonexistent-executable-for-test-101b1d22", [], { capture: true, allowFail });
+    assert.equal(result.ok, false);
+    assert.equal(result.status, null);
+    assert.match(result.out, /ENOENT/);
+  }
+});
 // Real command shapes and API fields, with every external action intercepted.
 const PUBLISH_HEAD = 'a'.repeat(40);
 function publicationScenario(options = {}) {

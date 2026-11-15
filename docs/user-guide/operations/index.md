@@ -30,11 +30,18 @@ The map draws one square per room. Rooms group by portfolio (Manufacturing and D
 
 Select any square, or a room in the rows, to open the **room inspector** beside the map (below it on a phone). It shows the room's steps as a checklist: done, the current step, and still to do. The steps are the same ones the room's own page shows. Below the checklist are:
 - the latest thing recorded in the room;
-- who the room is waiting on, or, for a held room, the recorded cause and recovery condition;
+- the recorded action actor and next step, including the question and decision count when recorded;
+- for a held room, its recorded cause and recovery condition;
 - the accountable person and portfolio;
 - how long the room has been at this step against the usual time, once enough rooms have passed through it.
 
 **Open room** goes to the room's page, **Show in flow map** goes to the shape's map in the area's Work view, and **Close** returns to the map. The selected room is part of the address (`?room=WC-…`), so you can share it.
+
+The action may belong to a decision owner, assigned coworker, delivery coworker
+or requesting coworker. **Accountable** is a separate fact; it does not mean that
+person must take the next action. If decision details or an actor are missing,
+the inspector says so. A capacity wait does not claim progress, and missing
+owner setup takes priority over a secondary work action.
 
 Select a shape's name to open its rows. Each row shows the room, its stage rail (done, current, still to do) and what it is doing or why it is held, with its accountable person. A held room shows the drive's recorded cause and since when. Rows show eight at a time; filter by state to narrow the rest. **Not assigned** accountability means no person has been resolved; the page does not guess from who started the session.
 

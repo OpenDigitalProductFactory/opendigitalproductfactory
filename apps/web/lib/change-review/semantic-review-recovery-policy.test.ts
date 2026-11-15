@@ -86,3 +86,24 @@ describe("review recovery status", () => {
     expect(view.remainingAttempts).toBeNull();
   });
 });
+
+describe("BI-49AA6BE8: a spent review that never reached a provider", () => {
+  const past = "2026-09-12T23:00:00Z";
+  const digest = "a".repeat(64);
+  const marker = { schemaVersion: 1, requestDigest: digest, checks: 2, nextCheckAt: future, waitStartedAt: past };
+  it("reads as a server-owned capacity wait that ends in a successor, not a manual recovery", () => {
+    const view = semanticReviewRecoveryObservation("input-required", { semanticReview: { schemaVersion: 1, deadlineAt: past,
+      requestDigest: digest, reason: "review-capacity-deferred", successorOnCapacity: true, capacityRecovery: marker,
+      capacityWaitReason: "local-ci-active-capacity-reservation", recoveryAttempt: 3 } }, now);
+    expect(view).toMatchObject({ classification: "capacity-wait", manualRecoveryWait: false, pollUseful: true,
+      capacityRecovery: { nextCheckAt: future } });
+    expect(view.nextAction).toMatch(/successor/);
+    expect(view.nextAction).not.toMatch(/remediation evidence/);
+  });
+  it("does not claim the successor path without the server's marker", () => {
+    const view = semanticReviewRecoveryObservation("input-required", { semanticReview: { schemaVersion: 1, deadlineAt: past,
+      requestDigest: digest, reason: "review-capacity-deferred", capacityRecovery: marker } }, now);
+    expect(view.classification).toBe("infrastructure-inconclusive");
+    expect(view.manualRecoveryWait).toBe(true);
+  });
+});

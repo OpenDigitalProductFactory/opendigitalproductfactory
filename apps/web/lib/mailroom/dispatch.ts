@@ -8,10 +8,11 @@
 //      communication dispatcher (in-app floor). No owner → the chase surface
 //      still shows the item, so an unowned queue is visible, never silent.
 //
-// Nothing here executes a governed verb from message content.
+// Nothing here executes a governed verb from message content. A privileged
+// reason's content summary is never written outside the item (BI-757C961E).
 
 import type { MailroomProfile } from "@dpf/storefront-templates";
-import { mailroomAcknowledgeBy } from "@dpf/storefront-templates";
+import { isPrivilegedMailroomReason, mailroomAcknowledgeBy, mailroomReasonByKey } from "@dpf/storefront-templates";
 
 import type { NormalizedInboundRoomEvent } from "@/lib/work-management/room-channel-continuity";
 
@@ -73,7 +74,14 @@ export async function dispatchMailroomItem(input: {
   const acknowledgeBy = mailroomAcknowledgeBy(triage.urgency, item.receivedAt);
   const senderAddress = mail.from?.address ?? "";
   const senderLabel = mail.from?.name ? `${mail.from.name} <${senderAddress}>` : senderAddress || "unknown sender";
-  const eventBody = `${triage.summary}\n\nFrom: ${senderLabel}\nReason: ${triage.reasonKey} (${triage.urgency})` + (triage.subjectRef ? `\nAbout: ${triage.subjectRef}` : "");
+  // A privileged reason (counsel mail, BI-757C961E) still routes and notifies,
+  // but the model's summary of its content never leaves the item: rooms and
+  // notifications carry the reason label and the sender only.
+  const privileged = isPrivilegedMailroomReason(profile, triage.reasonKey);
+  const headline = privileged
+    ? `${mailroomReasonByKey(profile, triage.reasonKey)?.label ?? triage.reasonKey} (privileged; open the item to read it)`
+    : triage.summary;
+  const eventBody = `${headline}\n\nFrom: ${senderLabel}\nReason: ${triage.reasonKey} (${triage.urgency})` + (triage.subjectRef ? `\nAbout: ${triage.subjectRef}` : "");
 
   // 1. Known sender.
   if (input.knownSenderIngress && senderAddress) {
@@ -128,7 +136,7 @@ export async function dispatchMailroomItem(input: {
     await input.notify({
       recipientUserId: ownerUserId,
       workItemId: room.itemId,
-      title: `Mailroom: ${triage.summary}`,
+      title: `Mailroom: ${headline}`,
       body: `${senderLabel} · ${triage.reasonKey} · acknowledge by ${acknowledgeBy.toISOString()}`,
       urgency: notificationUrgency(triage.urgency),
       deepLink: `${origin}/workspace/mailroom/items/${item.inboundId}`,

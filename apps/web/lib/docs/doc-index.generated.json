@@ -5465,6 +5465,22 @@
         "related-principles"
       ]
     },
+    "docs/founder-kernel/wiki/principles/verify-the-platform-dont-stand-in-for-it.md": {
+      "publicHref": "/founder-kernel/wiki/principles/verify-the-platform-dont-stand-in-for-it/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "rule",
+        "applies-to",
+        "why",
+        "how-to-apply",
+        "decision-dimensions",
+        "examples",
+        "when-this-does-not-apply",
+        "see-also"
+      ]
+    },
     "docs/founder-kernel/wiki/principles/worktree-base-origin-main.md": {
       "publicHref": "/founder-kernel/wiki/principles/worktree-base-origin-main/",
       "portalHref": null,
@@ -13733,6 +13749,8 @@
         "overview",
         "before-you-decide",
         "connecting-business-mail",
+        "bills-that-arrive-by-email",
+        "mail-from-your-lawyers",
         "checking-an-approval-result",
         "operations-and-performance",
         "spatial-operations-for-tables-and-rooms",

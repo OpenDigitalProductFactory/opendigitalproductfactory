@@ -47,21 +47,26 @@ import { probeWorktreeReadiness } from "./lib/bootstrap-worktree-deps.mjs";
 import { fetchOriginMainSharedSafe } from "./lib/git-fetch-shared-safe.mjs";
 import { gitText } from "./lib/git.mjs";
 import { scriptArgv } from "./lib/script-argv.mjs";
+import { resolveHostCommandInvocation } from "./lib/host-command-invocation.mjs";
 import { repositorySlugFromRemote } from "./lib/documentation-evidence-lane.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
 /** Run a command, inheriting stdio so gate output stays visible to the operator. */
-function run(cmd, args, { capture = false, allowFail = false, cwd = ROOT } = {}) {
-  const r = spawnSync(cmd, args, {
+export function run(cmd, args, { capture = false, allowFail = false, cwd = ROOT } = {}) {
+  let invocation;
+  try { invocation = resolveHostCommandInvocation(cmd, args); }
+  catch (error) { return { ok: false, status: null, out: error.message }; }
+  const r = spawnSync(invocation.command, invocation.args, {
     cwd,
+    windowsHide: true,
     encoding: "utf8",
     stdio: capture ? "pipe" : "inherit",
   });
   if (!allowFail && r.status !== 0) {
-    return { ok: false, status: r.status, out: `${r.stdout ?? ""}${r.stderr ?? ""}` };
+    return { ok: false, status: r.status, out: `${r.stdout ?? ""}${r.stderr ?? ""}${r.error ? r.error.message : ""}` };
   }
-  return { ok: r.status === 0, status: r.status, out: `${r.stdout ?? ""}${r.stderr ?? ""}` };
+  return { ok: r.status === 0, status: r.status, out: `${r.stdout ?? ""}${r.stderr ?? ""}${r.error ? r.error.message : ""}` };
 }
 
 const git = (...args) => run("git", args, { capture: true, allowFail: true }).out.trim();
