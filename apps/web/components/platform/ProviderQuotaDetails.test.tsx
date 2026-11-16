@@ -18,6 +18,13 @@ const recovery: NonNullable<ProviderAccountOverviewRow["quotaRecovery"]> = {
 beforeEach(() => { vi.resetAllMocks(); mocks.recheck.mockResolvedValue({ ok: true, message: "Selected model check completed." }); });
 afterEach(cleanup);
 describe("provider capacity recovery disclosure", () => {
+  it("can open beside a routing hold without locking the disclosure open", () => {
+    render(<ProviderQuotaDetails connectionId="provider-default-chatgpt" recovery={recovery} canWrite copy={copy} defaultOpen />);
+    expect(screen.getByRole("button", { name: copy.capacityCheck })).toBeTruthy();
+    fireEvent.click(screen.getByText(copy.limitDetails));
+    expect(screen.queryByRole("button", { name: copy.capacityCheck })).toBeNull();
+    expect(mocks.recheck).not.toHaveBeenCalled();
+  });
   it("keeps expanded limited-account controls structurally accessible after a failed check", async () => {
     mocks.recheck.mockResolvedValue({ ok: false, message: "The check did not confirm capacity.", nextCheckAt: "2026-10-30T06:00:00Z" });
     const { container } = render(<ProviderQuotaDetails connectionId="provider-default-chatgpt" recovery={{ ...recovery, hourly: true }} canWrite copy={copy} />);

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import type { ReactNode } from "react";
 import { useT } from "@/lib/i18n/use-t";
 import type { ProviderWithCredential } from "@/lib/ai-provider-types";
 import type { ProviderRoutingControlView } from "@/lib/routing/provider-routing-control";
@@ -9,7 +10,7 @@ import { LocalTime } from "@/components/ui/LocalTime";
 import { Surface } from "@/components/ui/Surface";
 import { ProviderStatusToggle } from "./ProviderStatusToggle";
 
-export function ProviderRoutingControlPanel({ pw, view, canWrite }: { pw: ProviderWithCredential; view: ProviderRoutingControlView; canWrite: boolean }) {
+export function ProviderRoutingControlPanel({ pw, view, canWrite, recovery }: { pw: ProviderWithCredential; view: ProviderRoutingControlView; canWrite: boolean; recovery?: ReactNode }) {
   const p = pw.provider;
   const t = useT("setup");
   const operatorPaused = view.restrictions.some(r => r.key === "operator");
@@ -21,10 +22,12 @@ export function ProviderRoutingControlPanel({ pw, view, canWrite }: { pw: Provid
       <StatusBadge size="md" domain="routingEligibility" status={view.eligibility.state} label={view.eligibility.label} uppercase={false} />
     </div>
     {!operatorPaused && <p className="text-sm text-[var(--dpf-muted)]">{view.eligibility.reason}</p>}
+    {view.observedAt && <p className="mt-2 text-sm text-[var(--dpf-muted)]">{t("providerRouting.lastObserved")} <LocalTime value={view.observedAt} /></p>}
     <dl className="my-3 flex flex-wrap gap-x-2 text-sm"><dt className="font-medium text-[var(--dpf-text)]">{t("providerRouting.health")}</dt><dd className="text-[var(--dpf-muted)]">{view.healthSummary}</dd></dl>
     {restrictions.length > 0 && <ul className="my-3 space-y-2 text-sm text-[var(--dpf-text)]">{restrictions.map(r => <li key={r.key}>
       {r.summary} {r.until ? <><span className="text-[var(--dpf-muted)]">{r.key === "operator" ? t("providerRouting.pauseEnds") : t("providerRouting.nextAttempt")} </span><time dateTime={r.until}><LocalTime value={r.until} /></time></> : r.key === "operator" ? t("providerRouting.indefinite") : null}
     </li>)}</ul>}
+    {recovery}
     {canWrite && <div className="mt-4"><ProviderStatusToggle providerId={p.providerId} endpointType={p.endpointType} initialStatus={p.status} initialPause={p.operatorPause} initialConnectionStatus={p.defaultConnectionStatus} hideStatus /></div>}
     <p className="mt-3 text-xs text-[var(--dpf-muted)]">{t("providerRouting.pauseExplanation")}</p>
     {sibling && <p className="mt-3 text-sm text-[var(--dpf-muted)]">{t("providerRouting.sharedAuth")} <Link className="text-[var(--dpf-accent)] underline underline-offset-2" href={`/platform/ai/providers/${sibling}`}>{sibling === "codex" ? t("providerRouting.manageSignIn") : t("providerRouting.manageChatGPT")}</Link>.</p>}

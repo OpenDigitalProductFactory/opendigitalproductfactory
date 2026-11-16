@@ -1,0 +1,28 @@
+{
+  "version": "1",
+  "decidedOption": "contextual-recovery-disclosure",
+  "decisionInteractionId": "DI-295459E701E6",
+  "scope": {
+    "files": [
+      "apps/web/app/(shell)/platform/ai/providers/[providerId]/page.tsx",
+      "apps/web/components/platform/ProviderQuotaDetails.tsx",
+      "apps/web/components/platform/ProviderRoutingControlPanel.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "contextual-recovery-disclosure",
+      "provider-detail-recovery",
+      "visible-inline-recovery"
+    ]
+  },
+  "verification": {
+    "designDecision": "Extends the recorded contextual recovery pattern using the same component inside the existing provider routing card. Initial expansion is collapsible; no new route or navigation. The historical decision is design evidence, not a claim of new operator approval or measured UX.",
+    "sourceTruth": "Existing account and provider capacity projections, scoped current usage observation, and recorded operator intent remain separate. Recorded forecast cannot substitute for current observation.",
+    "sourceChecks": "Unit coverage exercises early reset, unknown usage, account and scope isolation, stopped jobs, conditional-write races, accessible collapse and provider route placement. Source checks are not runtime acceptance.",
+    "specialistReview": "CE-C5ACC1C0 requested through existing UX offer; completion is not yet claimed.",
+    "requiredBeforeMerge": "Protected exact-tree integration and served UX checks. No measured budget, theme/mobile screenshot, contrast pass or live provider acceptance is asserted by this manifest.",
+    "baseline": "Existing route budgets unchanged."
+  }
+}
