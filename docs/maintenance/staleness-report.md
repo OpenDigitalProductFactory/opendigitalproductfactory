@@ -29,7 +29,7 @@
 | `docs/install/edge-node-air-gapped-verification-report.md` | 104d | `docs/superpowers/specs/2026-05-09-dpf-edge-node-design.md` (+104d)<br>`scripts/verify-edge-node-air-gap.sh` (+82d) |
 | `docs/founder-kernel/raw-sources/articles/why-we-ended-up-proposing-two-standards-for-ai-agents.md` | 101d | `docs/architecture/trusted-ai-kernel.md` (+101d)<br>`docs/architecture/2026-04-18-trusted-ai-agent-governance-white-paper.md` (+96d)<br>`docs/architecture/GAID.md` (+96d) |
 | `docs/strategy/2026-09-cada-architects-forum-deck.md` | 101d | `docs/superpowers/specs/2026-05-09-deployment-contracts.md` (+101d)<br>`apps/web/lib/routing/pipeline-v2.ts` (+74d)<br>`apps/web/lib/inference/local-only.ts` (+73d)<br>…+3 more |
-| `docs/user-guide/operations/business-journeys.md` | 101d | `docs/user-guide/operations/index.md` (+101d)<br>`docs/user-guide/operations/self-upgrade.md` (+99d) |
+| `docs/user-guide/operations/business-journeys.md` | 101d | `docs/user-guide/operations/index.md` (+101d)<br>`docs/user-guide/operations/self-upgrade.md` (+101d) |
 | `docs/user-guide/finance/banking-and-reconciliation.md` | 96d | `docs/user-guide/finance/accounts-payable.md` (+96d)<br>`docs/user-guide/finance/reporting-and-close.md` (+96d)<br>`docs/user-guide/finance/accounts-receivable.md` (+61d) |
 | `docs/founder-kernel/wiki/principles/dco-sign-off-required.md` | 95d | `docs/architecture/build-gate-runbook.md` (+95d) |
 | `docs/founder-kernel/wiki/principles/never-ask-user-to-run-commands.md` | 95d | `docs/founder-kernel/wiki/principles/do-the-work-dont-task-the-operator.md` (+95d)<br>`docs/founder-kernel/wiki/principles/state-results-directly.md` (+42d)<br>`docs/founder-kernel/wiki/principles/autonomous-directives-are-blanket-approval.md` (+25d) |
@@ -53,7 +53,7 @@
 | `docs/founder-kernel/wiki/principles/make-silent-failures-observable.md` | 79d | `docs/founder-kernel/wiki/principles/fail-fast-explain-clearly.md` (+79d)<br>`docs/superpowers/specs/2026-05-24-founder-kernel-evolution-discipline-design.md` (+60d)<br>`docs/superpowers/plans/2026-05-23-governed-platform-upgrade-phase-0-and-1.md` (+53d)<br>…+3 more |
 | `docs/founder-kernel/wiki/principles/remove-avoidable-failure-opportunities.md` | 79d | `docs/founder-kernel/wiki/principles/architecture-over-shortcuts.md` (+79d)<br>`docs/founder-kernel/wiki/principles/structural-verification-is-not-functional.md` (+60d)<br>`docs/founder-kernel/wiki/principles/single-source-of-truth.md` (+18d) |
 | `docs/founder-kernel/wiki/principles/research-before-implementing.md` | 78d | `docs/founder-kernel/wiki/principles/research-and-use-standards.md` (+78d)<br>`docs/founder-kernel/wiki/principles/check-tool-signals-first.md` (+21d) |
-| `docs/architecture/2026-08-16-simplify-and-strengthen-architecture-pass.md` | 76d | `docs/architecture/workroom-vocabulary-boundary.md` (+76d)<br>`docs/superpowers/specs/2026-08-14-portfolio-shaped-information-architecture-design.md` (+76d)<br>`docs/architecture/platform-overview.md` (+73d)<br>…+3 more |
+| `docs/architecture/2026-08-16-simplify-and-strengthen-architecture-pass.md` | 77d | `docs/superpowers/specs/2026-08-11-a2a-coordination-layer-design.md` (+77d)<br>`docs/architecture/workroom-vocabulary-boundary.md` (+76d)<br>`docs/superpowers/specs/2026-08-14-portfolio-shaped-information-architecture-design.md` (+76d)<br>…+3 more |
 | `docs/founder-kernel/wiki/principles/runtime-gates-via-shared-lease.md` | 76d | `AGENTS.md` (+76d)<br>`docs/superpowers/specs/2026-06-05-unified-delivery-surfaces-execution-alignment-design.md` (+64d)<br>`docs/founder-kernel/wiki/principles/image-identity-equals-bytes.md` (+8d) |
 | `docs/edge-node/deployment-topology.md` | 75d | `docs/edge-node/fleet-operations.md` (+75d)<br>`docs/superpowers/specs/2026-05-09-deployment-contracts.md` (+73d)<br>`docker-compose.edge-standalone.yml` (+38d)<br>…+2 more |
 | `docs/marketing/dpf-market-vision.md` | 75d | `docs/index.html` (+75d) |
@@ -80,14 +80,14 @@
 | `docs/founder-kernel/wiki/principles/reporting-read-model-boundaries.md` | 49d | `docs/architecture/orientation.md` (+49d) |
 | `docs/founder-kernel/wiki/principles/sweep-main-before-trusting-worktree-specs.md` | 49d | `docs/founder-kernel/wiki/principles/verify-substrate-before-proposing-new.md` (+49d)<br>`docs/founder-kernel/wiki/principles/consult-specs-first.md` (+8d) |
 | `docs/strategy/2026-09-us-dependency-inventory-and-sovereign-channel.md` | 49d | `docs/install/platform-support-watchlist.md` (+49d)<br>`docs/superpowers/specs/2026-05-09-deployment-contracts.md` (+46d)<br>`docs/superpowers/specs/2026-03-19-mobile-companion-app-design.md` (+11d)<br>…+1 more |
+| `docs/user-guide/finance/accounts-receivable.md` | 49d | `docs/user-guide/finance/controls-and-automation.md` (+49d)<br>`docs/user-guide/finance/reporting-and-close.md` (+35d) |
 | `docs/maintenance/staleness-coverage.md` | 48d | `docs/founder-kernel/wiki/principles/gate-coverage-matches-blast-radius.md` (+48d) |
-| `docs/user-guide/finance/accounts-receivable.md` | 47d | `docs/user-guide/finance/controls-and-automation.md` (+47d)<br>`docs/user-guide/finance/reporting-and-close.md` (+35d) |
 | `docs/founder-kernel/RAW-SOURCES-LICENSE.md` | 46d | `docs/superpowers/specs/2026-05-09-platform-kernel-wiki-design.md` (+46d)<br>`docs/architecture/four-portfolio-archetype-ai-workforce-operating-standard.md` (+11d) |
+| `docs/user-guide/index.md` | 45d | `docs/user-guide/finance/index.md` (+45d)<br>`docs/user-guide/build-studio/index.md` (+44d)<br>`docs/user-guide/getting-started/ai-coworker.md` (+44d)<br>…+16 more |
 | `docs/runbooks/dependency-compromise.md` | 44d | `docs/architecture/dependency-reduction-routine.md` (+44d) |
-| `docs/user-guide/development-workspace.md` | 44d | `docs/user-guide/build-studio/index.md` (+44d)<br>`docs/user-guide/contributing/agent-dev-environments.md` (+44d)<br>`docs/user-guide/operations/self-upgrade.md` (+42d)<br>…+1 more |
-| `docs/user-guide/getting-started/index.md` | 44d | `docs/user-guide/build-studio/index.md` (+44d)<br>`docs/user-guide/workspace/index.md` (+44d)<br>`docs/user-guide/getting-started/roles-and-access.md` (+43d)<br>…+3 more |
-| `docs/user-guide/index.md` | 44d | `docs/user-guide/build-studio/index.md` (+44d)<br>`docs/user-guide/finance/index.md` (+44d)<br>`docs/user-guide/operations/index.md` (+44d)<br>…+16 more |
-| `docs/architecture/orientation.md` | 42d | `docs/architecture/architecture-counts.generated.md` (+42d)<br>`docs/architecture/delivery-surfaces-runbook.md` (+42d)<br>`docs/architecture/mcp-tool-authorization-runbook.md` (+42d)<br>…+8 more |
+| `docs/user-guide/development-workspace.md` | 44d | `docs/user-guide/build-studio/index.md` (+44d)<br>`docs/user-guide/contributing/agent-dev-environments.md` (+44d)<br>`docs/user-guide/operations/self-upgrade.md` (+44d)<br>…+1 more |
+| `docs/user-guide/getting-started/index.md` | 44d | `docs/user-guide/build-studio/index.md` (+44d)<br>`docs/user-guide/getting-started/ai-coworker.md` (+44d)<br>`docs/user-guide/workspace/index.md` (+44d)<br>…+3 more |
+| `docs/architecture/orientation.md` | 43d | `docs/architecture/architecture-counts.generated.md` (+43d)<br>`docs/architecture/ai-agent-meta-model.md` (+42d)<br>`docs/architecture/delivery-surfaces-runbook.md` (+42d)<br>…+8 more |
 | `docs/architecture/skill-surfaces-runbook.md` | 41d | `AGENTS.md` (+41d)<br>`docs/superpowers/specs/2026-07-03-harness-enforced-decision-routing-and-lease-punt-gates-design.md` (+41d)<br>`docs/founder-kernel/wiki/principles/consult-scopes-before-asking.md` (+38d) |
 | `docs/architecture/theme-aware-styling-runbook.md` | 41d | `AGENTS.md` (+41d) |
 | `docs/founder-kernel/wiki/principles/consult-specs-first.md` | 41d | `docs/founder-kernel/wiki/principles/verify-substrate-before-proposing-new.md` (+41d)<br>`docs/architecture/four-portfolio-archetype-ai-workforce-operating-standard.md` (+38d)<br>`docs/founder-kernel/wiki/principles/research-and-use-standards.md` (+9d) |
@@ -96,26 +96,26 @@
 | `docs/user-guide/market-archetypes.md` | 41d | `docs/user-guide/ai-workforce/decision-perspective.md` (+41d)<br>`docs/architecture/decision-vectors.md` (+27d)<br>`docs/marketing/archetype-owner-quick-guide.md` (+6d) |
 | `docs/operations/build-cost-flags-activation-runbook.md` | 37d | `docs/superpowers/specs/2026-07-12-dpf-development-model-and-frontier-harness-positioning-design.md` (+37d) |
 | `docs/architecture/four-portfolio-archetype-standard-profile-catalog.md` | 35d | `docs/superpowers/specs/2026-09-06-cross-workroom-learning-review-design.md` (+35d)<br>`docs/architecture/four-portfolio-archetype-ai-workforce-operating-standard.md` (+0d) |
+| `docs/README.md` | 33d | `docs/user-guide/contributing/dev-container.md` (+33d)<br>`docs/user-guide/contributing/agent-dev-environments.md` (+32d)<br>`docs/user-guide/getting-started/ai-coworker.md` (+32d)<br>…+17 more |
 | `docs/testing/portal-ux-scorecard-template.md` | 33d | `docs/architecture/portal-ux-evaluation-framework.md` (+33d) |
+| `README.md` | 33d | `docs/user-guide/contributing/dev-container.md` (+33d)<br>`AGENTS.md` (+30d)<br>`docs/install/macos.md` (+30d)<br>…+12 more |
 | `docs/install/linux.md` | 32d | `docs/architecture/mcp-tool-authorization-runbook.md` (+32d)<br>`docs/install/macos.md` (+30d)<br>`docs/install/verification-runbook.md` (+30d)<br>…+1 more |
-| `docs/README.md` | 32d | `docs/user-guide/contributing/agent-dev-environments.md` (+32d)<br>`docs/user-guide/getting-started/roles-and-access.md` (+31d)<br>`AGENTS.md` (+30d)<br>…+17 more |
 | `docs/architecture/design-research-runbook.md` | 31d | `AGENTS.md` (+31d)<br>`docs/superpowers/specs/2026-05-09-deployment-contracts.md` (+29d)<br>`docs/founder-kernel/wiki/principles/absorb-dont-adopt.md` (+15d) |
 | `docs/architecture/document-generation-facility.md` | 30d | `docs/install/platform-support-watchlist.md` (+30d) |
 | `docs/architecture/portal-ux-evaluation-framework.md` | 30d | `docs/platform-usability-standards.md` (+30d)<br>`docs/founder-kernel/wiki/principles/absorb-dont-adopt.md` (+15d) |
 | `docs/install/hardware.md` | 30d | `docs/install/macos.md` (+30d)<br>`docs/install/windows.md` (+14d) |
-| `README.md` | 30d | `AGENTS.md` (+30d)<br>`docs/install/macos.md` (+30d)<br>`docs/architecture/platform-overview.md` (+28d)<br>…+12 more |
+| `docs/architecture/2026-04-18-trusted-ai-agent-governance-white-paper.md` | 29d | `docs/architecture/gated-permissions-process.md` (+29d)<br>`docs/architecture/agent-standards-family.md` (+5d)<br>`docs/architecture/trusted-ai-kernel.md` (+5d) |
+| `docs/architecture/agent-governance-market-landscape-2026.md` | 29d | `docs/architecture/gated-permissions-process.md` (+29d)<br>`docs/architecture/agent-standards-family.md` (+5d) |
 | `docs/architecture/archetype-operating-model-audit.md` | 29d | `docs/architecture/archetypes/pet-rescue-operating-model.md` (+29d)<br>`docs/architecture/four-portfolio-archetype-ai-workforce-operating-standard.md` (+7d)<br>`docs/architecture/archetype-business-value-streams.md` (+4d) |
 | `docs/architecture/capability-driven-runtime-profiles.md` | 29d | `docs/superpowers/specs/2026-07-18-install-state-readiness-migration-design.md` (+29d)<br>`docs/superpowers/specs/2026-10-06-running-service-compose-convergence-design.md` (+29d) |
 | `docs/founder-kernel/wiki/principles/substrate-cleanup-before-substrate-addition.md` | 29d | `docs/user-guide/investment-allocation.md` (+29d)<br>`docs/founder-kernel/wiki/principles/absorb-dont-adopt.md` (+11d) |
+| `docs/publications/trusted-agent-engineering/chapter-01-engineering-the-working-system.md` | 29d | `docs/architecture/gated-permissions-process.md` (+29d)<br>`docs/architecture/agent-standards-external-alignment.md` (+5d)<br>`docs/architecture/agent-standards-family.md` (+5d)<br>…+3 more |
+| `docs/publications/trusted-agent-engineering/chapter-02-synthetic-expense-control-loop.md` | 29d | `docs/architecture/gated-permissions-process.md` (+29d)<br>`docs/architecture/trusted-agent-reference-contract.md` (+5d)<br>`docs/architecture/trusted-ai-kernel.md` (+5d)<br>…+2 more |
+| `docs/publications/trusted-agent-engineering/README.md` | 29d | `docs/architecture/gated-permissions-process.md` (+29d)<br>`docs/architecture/agent-standards-family.md` (+5d)<br>`docs/architecture/trusted-agent-reference-contract.md` (+5d)<br>…+5 more |
 | `docs/architecture/data-model-stewardship-runbook.md` | 27d | `apps/web/lib/shared/markdown.ts` (+27d)<br>`packages/db/scripts/schema-regression-guard.mjs` (+27d)<br>`AGENTS.md` (+26d)<br>…+2 more |
 | `docs/founder-kernel/wiki/principles/prose-is-not-a-control-gate.md` | 27d | `docs/founder-kernel/wiki/principles/structural-verification-is-not-functional.md` (+27d) |
 | `docs/user-guide/storefront/index.md` | 27d | `docs/user-guide/market-archetypes.md` (+27d) |
-| `docs/architecture/2026-04-18-trusted-ai-agent-governance-white-paper.md` | 26d | `docs/architecture/gated-permissions-process.md` (+26d)<br>`docs/architecture/agent-standards-family.md` (+5d)<br>`docs/architecture/trusted-ai-kernel.md` (+5d) |
-| `docs/architecture/agent-governance-market-landscape-2026.md` | 26d | `docs/architecture/gated-permissions-process.md` (+26d)<br>`docs/architecture/agent-standards-family.md` (+5d) |
 | `docs/founder-kernel/wiki/principles/validate-an-archetype-by-running-its-business.md` | 26d | `docs/founder-kernel/wiki/principles/structural-verification-is-not-functional.md` (+26d) |
-| `docs/publications/trusted-agent-engineering/chapter-01-engineering-the-working-system.md` | 26d | `docs/architecture/gated-permissions-process.md` (+26d)<br>`docs/architecture/agent-standards-external-alignment.md` (+5d)<br>`docs/architecture/agent-standards-family.md` (+5d)<br>…+3 more |
-| `docs/publications/trusted-agent-engineering/chapter-02-synthetic-expense-control-loop.md` | 26d | `docs/architecture/gated-permissions-process.md` (+26d)<br>`docs/architecture/trusted-agent-reference-contract.md` (+5d)<br>`docs/architecture/trusted-ai-kernel.md` (+5d)<br>…+2 more |
-| `docs/publications/trusted-agent-engineering/README.md` | 26d | `docs/architecture/gated-permissions-process.md` (+26d)<br>`docs/architecture/agent-standards-family.md` (+5d)<br>`docs/architecture/trusted-agent-reference-contract.md` (+5d)<br>…+5 more |
 | `docs/security/tool-evaluations/2026-09-29-cloudflare-tunnel.md` | 26d | `docs/founder-kernel/wiki/principles/absorb-dont-adopt.md` (+26d)<br>`docs/superpowers/specs/2026-09-02-install-public-reachability-design.md` (+18d) |
 | `docs/user-guide/compliance/regulatory-submissions.md` | 26d | `docs/user-guide/compliance/regulations-and-obligations.md` (+26d)<br>`docs/user-guide/compliance/controls-and-evidence.md` (+25d) |
 | `docs/founder-kernel/wiki/principles/destructive-actions-require-explicit-go.md` | 25d | `docs/founder-kernel/wiki/principles/autonomous-directives-are-blanket-approval.md` (+25d)<br>`docs/founder-kernel/wiki/principles/never-wipe-db-for-code-fixes.md` (+7d) |
@@ -123,26 +123,27 @@
 | `docs/founder-kernel/wiki/principles/outbound-actions-require-explicit-go.md` | 25d | `docs/founder-kernel/wiki/principles/autonomous-directives-are-blanket-approval.md` (+25d) |
 | `docs/user-guide/compliance/audits-and-corrective-actions.md` | 25d | `docs/user-guide/compliance/controls-and-evidence.md` (+25d)<br>`docs/user-guide/compliance/incidents-risks-and-response.md` (+16d)<br>`docs/user-guide/compliance/posture-and-gaps.md` (+8d) |
 | `docs/architecture/tak-conformance-tests.md` | 24d | `docs/architecture/trusted-ai-kernel.md` (+24d) |
+| `docs/architecture/agent-standards-external-alignment.md` | 23d | `docs/architecture/gated-permissions-process.md` (+23d) |
+| `docs/architecture/agent-standards-family.md` | 23d | `docs/architecture/gated-permissions-process.md` (+23d) |
+| `docs/architecture/trusted-agent-reference-contract.md` | 23d | `docs/architecture/gated-permissions-process.md` (+23d) |
 | `docs/architecture/2026-06-14-ai-cockpit-sysml-architecture-note.md` | 22d | `docs/architecture/2026-06-14-odysseus-review-depth-pass.md` (+22d)<br>`docs/architecture/2026-06-14-odysseus-ux-routing-model-review.md` (+19d)<br>`docs/superpowers/specs/2026-07-26-ai-routing-architecture-explainability-design.md` (+5d)<br>…+1 more |
 | `docs/operations/antigravity-cli-onboarding.md` | 22d | `AGENTS.md` (+22d)<br>`docs/user-guide/build-studio/sandbox.md` (+6d) |
 | `docs/user-guide/customers/customer-map.md` | 22d | `docs/user-guide/customers/index.md` (+22d) |
-| `docs/architecture/agent-standards-external-alignment.md` | 20d | `docs/architecture/gated-permissions-process.md` (+20d) |
-| `docs/architecture/agent-standards-family.md` | 20d | `docs/architecture/gated-permissions-process.md` (+20d) |
-| `docs/architecture/trusted-agent-reference-contract.md` | 20d | `docs/architecture/gated-permissions-process.md` (+20d) |
 | `docs/architecture/context-engineering-standards.md` | 19d | `docs/install/platform-support-watchlist.md` (+19d)<br>`docs/user-guide/ai-workforce/provider-account-routing.md` (+18d) |
 | `docs/architecture/contributor-procedure-runbook.md` | 19d | `docs/architecture/dependency-reduction-routine.md` (+19d)<br>`docs/founder-kernel/wiki/principles/escalation-is-a-gate-not-a-trust-tier.md` (+19d)<br>`docs/founder-kernel/wiki/principles/consult-scopes-before-asking.md` (+15d) |
 | `docs/architecture/mcp-tool-surface-ergonomics-audit.md` | 19d | `docs/architecture/mcp-tool-authorization-runbook.md` (+19d)<br>`docs/architecture/mcp-tool-packs.md` (+18d) |
 | `docs/audits/2026-10-22-review-reassessment-restore-availability.md` | 19d | `docs/architecture/build-gate-runbook.md` (+19d)<br>`docs/platform-usability-standards.md` (+15d) |
 | `docs/architecture/ai-coworker-development-principles.md` | 18d | `docs/architecture/2026-06-09-long-running-agentic-process-architecture.md` (+18d)<br>`docs/superpowers/specs/2026-09-03-coordinated-workrooms-design.md` (+2d) |
+| `docs/architecture/backlog-archetype-scope.md` | 18d | `docs/architecture/initiative-readiness-runbook.md` (+18d) |
 | `docs/founder-kernel/wiki/principles/optimize-for-the-whole.md` | 18d | `docs/founder-kernel/raw-sources/frameworks/csdm.md` (+18d) |
 | `docs/professions/frontend-engineer/wiki/compose-report-kit-for-reporting-ux.md` | 18d | `docs/founder-kernel/wiki/principles/no-hardcoded-colors.md` (+18d) |
 | `docs/user-guide/compliance/posture-and-gaps.md` | 18d | `docs/user-guide/compliance/regulations-and-obligations.md` (+18d)<br>`docs/user-guide/compliance/controls-and-evidence.md` (+17d) |
 | `docs/architecture/2026-08-20-recurring-obligation-work-shape-and-doc-robustness.md` | 17d | `docs/user-guide/ai-workforce/provider-ollama.md` (+17d)<br>`docs/architecture/2026-08-20-assurance-operating-loop-and-capability-completeness.md` (+9d) |
+| `docs/architecture/autonomy-and-wwmd.md` | 17d | `docs/architecture/gated-permissions-process.md` (+17d) |
 | `docs/founder-kernel/wiki/principles/schema-honesty-over-aspirational-naming.md` | 17d | `docs/founder-kernel/wiki/principles/single-source-of-truth.md` (+17d) |
 | `docs/install/windows.md` | 17d | `docs/install/platform-support-watchlist.md` (+17d)<br>`docs/install/macos.md` (+16d)<br>`docs/superpowers/specs/2026-05-09-deployment-contracts.md` (+13d) |
 | `docs/runbooks/bet5-windows-self-upgrade.md` | 17d | `docs/superpowers/specs/2026-07-18-install-state-readiness-migration-design.md` (+17d) |
 | `docs/user-guide/compliance/policies-and-acknowledgements.md` | 17d | `docs/user-guide/compliance/controls-and-evidence.md` (+17d)<br>`docs/user-guide/compliance/regulations-and-obligations.md` (+17d) |
-| `docs/architecture/backlog-archetype-scope.md` | 16d | `docs/architecture/initiative-readiness-runbook.md` (+16d) |
 | `docs/architecture/agent-client-governance.md` | 15d | `docs/architecture/failure-analysis-and-recovery.md` (+15d) |
 | `docs/architecture/review-reliability-recovery.md` | 15d | `docs/founder-kernel/wiki/principles/absorb-dont-adopt.md` (+15d)<br>`docs/architecture/contributor-procedure-runbook.md` (+13d) |
 | `docs/founder-kernel/wiki/principles/architecture-over-shortcuts.md` | 15d | `docs/founder-kernel/wiki/principles/absorb-dont-adopt.md` (+15d) |
@@ -151,27 +152,25 @@
 | `docs/professions/legal-compliance/wiki/ai-provider-account-and-sovereignty-review.md` | 14d | `docs/strategy/2026-10-11-rea-absorption-and-hardware-neutral-business-ai.md` (+14d) |
 | `docs/professions/software-engineer/wiki/tool-evaluation-pipeline.md` | 14d | `docs/strategy/2026-10-11-rea-absorption-and-hardware-neutral-business-ai.md` (+14d) |
 | `docs/testing/archetype-exercise-harness.md` | 14d | `docs/testing/archetype-job-validation.md` (+14d) |
+| `docs/user-guide/contributing/developer-setup.md` | 14d | `docs/user-guide/contributing/dev-container.md` (+14d)<br>`docs/user-guide/contributing/agent-dev-environments.md` (+13d) |
+| `docs/user-guide/finance/accounts-payable.md` | 14d | `docs/user-guide/finance/controls-and-automation.md` (+14d)<br>`docs/user-guide/finance/reporting-and-close.md` (+0d) |
+| `docs/user-guide/finance/reporting-and-close.md` | 14d | `docs/user-guide/finance/controls-and-automation.md` (+14d) |
 | `docs/architecture/ai-routing-document-map.md` | 13d | `docs/user-guide/ai-workforce/model-routing-lifecycle.md` (+13d)<br>`docs/user-guide/ai-workforce/provider-account-routing.md` (+12d) |
-| `docs/architecture/autonomy-and-wwmd.md` | 13d | `docs/architecture/gated-permissions-process.md` (+13d) |
 | `docs/design/golden-triangle-design.md` | 13d | `apps/web/lib/routing/cost-ranking.ts` (+13d)<br>`apps/web/lib/tak/agentic-loop.ts` (+13d)<br>`docs/user-guide/ai-workforce/model-routing-lifecycle.md` (+13d)<br>…+3 more |
 | `docs/user-guide/ai-workforce/priority-and-outcomes.md` | 13d | `docs/user-guide/ai-workforce/model-routing-lifecycle.md` (+13d)<br>`docs/user-guide/workspace/work-rooms.md` (+13d)<br>`docs/user-guide/platform/ai-operations.md` (+12d)<br>…+1 more |
-| `docs/user-guide/contributing/developer-setup.md` | 13d | `docs/user-guide/contributing/agent-dev-environments.md` (+13d) |
-| `docs/user-guide/finance/accounts-payable.md` | 12d | `docs/user-guide/finance/controls-and-automation.md` (+12d)<br>`docs/user-guide/finance/reporting-and-close.md` (+0d) |
-| `docs/user-guide/finance/reporting-and-close.md` | 12d | `docs/user-guide/finance/controls-and-automation.md` (+12d) |
 | `docs/architecture/2026-07-06-it4it-dppm-workforce-portfolio-white-paper.md` | 11d | `docs/architecture/four-portfolio-archetype-ai-workforce-operating-standard.md` (+11d) |
+| `docs/prompts/a2a-coworker-substrate-prompt.md` | 11d | `docs/superpowers/specs/2026-10-29-foreground-recovery-implementation.md` (+11d) |
 | `docs/Reference/operating-model-axes-additions.md` | 11d | `docs/architecture/four-portfolio-archetype-ai-workforce-operating-standard.md` (+11d) |
 | `docs/founder-kernel/wiki/principles/governance-approves-evidence-not-provenance.md` | 10d | `docs/founder-kernel/wiki/principles/structural-verification-is-not-functional.md` (+10d) |
 | `docs/operations/install.md` | 10d | `docs/superpowers/specs/2026-05-26-agent-toolchain-bootstrap-design.md` (+10d)<br>`packages/dpf-skill-pack/README.md` (+9d)<br>`docs/edge-node/fleet-operations.md` (+8d)<br>…+2 more |
-| `docs/prompts/a2a-coworker-substrate-prompt.md` | 10d | `docs/superpowers/specs/2026-10-29-foreground-recovery-implementation.md` (+10d) |
 | `docs/architecture/job-specific-intelligence.md` | 9d | `docs/architecture/agent-standards-dpf-conformance.md` (+9d)<br>`docs/architecture/agent-standards-external-alignment.md` (+5d)<br>`docs/architecture/trusted-ai-kernel.md` (+5d) |
 | `docs/founder-kernel/wiki/principles/claim-a-workroom-before-you-work.md` | 9d | `docs/founder-kernel/wiki/principles/worktree-selection-and-reaping.md` (+9d) |
 | `docs/founder-kernel/wiki/principles/responsible-capacity-utilization.md` | 9d | `docs/founder-kernel/wiki/principles/autonomous-directives-are-blanket-approval.md` (+9d) |
 | `docs/maintenance/README.md` | 9d | `docs/maintenance/staleness-report.md` (+9d) |
 | `docs/operations/dpf-production-runtime.md` | 9d | `docs/superpowers/specs/2026-05-09-deployment-contracts.md` (+9d) |
-| `docs/user-guide/ai-workforce/how-governed-work-runs.md` | 9d | `docs/user-guide/ai-workforce/coworker-proactivity.md` (+9d)<br>`docs/user-guide/contributing/agent-dev-environments.md` (+9d)<br>`docs/user-guide/workspace/work-rooms.md` (+9d)<br>…+5 more |
+| `docs/user-guide/ai-workforce/how-governed-work-runs.md` | 9d | `docs/architecture/gated-permissions-process.md` (+9d)<br>`docs/architecture/initiative-readiness-runbook.md` (+9d)<br>`docs/architecture/work-shapes-and-the-decision-gate.md` (+9d)<br>…+6 more |
 | `docs/user-guide/compliance/incidents-risks-and-response.md` | 9d | `docs/user-guide/compliance/controls-and-evidence.md` (+9d) |
 | `docs/operations/workroom-pagination.md` | 8d | `docs/superpowers/specs/2026-10-27-work-atlas-design.md` (+8d) |
-| `docs/user-guide/ai-workforce/decision-perspective-in-practice.md` | 8d | `docs/user-guide/ai-workforce/index.md` (+8d)<br>`docs/user-guide/platform/authority-and-audit.md` (+8d)<br>`docs/user-guide/ai-workforce/decision-perspective.md` (+6d)<br>…+1 more |
 | `docs/user-guide/build-studio/sandbox.md` | 8d | `docs/user-guide/build-studio/deployment.md` (+8d) |
 | `docs/architecture/archetypes/campground-operating-model.md` | 7d | `docs/architecture/archetype-operating-model-audit.md` (+7d) |
 | `docs/architecture/operational-precedent-corpus.md` | 7d | `apps/web/data/design-intelligence/operational-precedents.csv` (+7d) |
@@ -184,21 +183,20 @@
 | `docs/publications/trusted-agent-engineering/publisher-proposal.md` | 5d | `docs/architecture/agent-standards-family.md` (+5d) |
 | `docs/publications/trusted-agent-tbm/README.md` | 5d | `docs/architecture/agent-standards-external-alignment.md` (+5d)<br>`docs/architecture/agent-standards-family.md` (+5d) |
 | `docs/publications/trusted-agent-tbm/sources.md` | 5d | `docs/architecture/agent-standards-external-alignment.md` (+5d)<br>`docs/architecture/agent-standards-family.md` (+5d)<br>`docs/architecture/trusted-agent-reference-contract.md` (+5d) |
-| `docs/user-guide/contributing/dev-container.md` | 4d | `docs/user-guide/contributing/developer-setup.md` (+4d) |
 | `docs/user-guide/customers/marketing.md` | 4d | `docs/user-guide/customers/index.md` (+4d)<br>`docs/user-guide/storefront/setup-and-launch.md` (+2d) |
 | `docs/architecture/archetype-business-value-streams.md` | 3d | `docs/architecture/four-portfolio-archetype-ai-workforce-operating-standard.md` (+3d) |
 | `docs/architecture/workroom-cycle-continuity.md` | 3d | `docs/user-guide/workroom-approval-recovery.md` (+3d) |
 | `docs/install/serve-the-directory.md` | 3d | `docs/superpowers/specs/2026-08-23-directory-service-identity-absorption-design.md` (+3d) |
+| `docs/strategy/2026-10-11-company-led-capability-consolidation-handoff.md` | 3d | `docs/architecture/gated-permissions-process.md` (+3d)<br>`docs/architecture/workroom-vocabulary-boundary.md` (+2d) |
+| `docs/user-guide/ai-workforce/decision-perspective.md` | 3d | `docs/architecture/gated-permissions-process.md` (+3d)<br>`docs/user-guide/ai-workforce/decision-perspective-in-practice.md` (+2d) |
 | `docs/user-guide/platform/address-validation-providers.md` | 3d | `docs/user-guide/customers/customer-map.md` (+3d) |
-| `docs/architecture/gated-permissions-process.md` | 2d | `docs/architecture/mcp-tool-authorization-runbook.md` (+2d)<br>`apps/web/lib/tak/scheduled-task-runs.ts` (+1d) |
-| `docs/architecture/work-shapes-and-the-decision-gate.md` | 2d | `docs/architecture/workroom-vocabulary-boundary.md` (+2d)<br>`docs/user-guide/workspace/work-rooms.md` (+2d) |
 | `docs/platform-usability-standards.md` | 2d | `docs/user-guide/ai-workforce/provider-account-routing.md` (+2d) |
-| `docs/strategy/2026-10-11-company-led-capability-consolidation-handoff.md` | 2d | `docs/architecture/workroom-vocabulary-boundary.md` (+2d) |
 | `docs/strategy/2026-10-11-rea-absorption-and-hardware-neutral-business-ai.md` | 2d | `docs/superpowers/specs/2026-09-03-coordinated-workrooms-design.md` (+2d) |
 | `docs/user-guide/compliance/index.md` | 2d | `docs/user-guide/compliance/licensing-readiness.md` (+2d) |
-| `AGENTS.md` | 1d | `docs/architecture/backlog-and-planning-runbook.md` (+1d)<br>`docs/architecture/build-gate-runbook.md` (+1d)<br>`docs/architecture/delivery-surfaces-runbook.md` (+1d)<br>…+4 more |
-| `docs/architecture/2026-06-09-long-running-agentic-process-architecture.md` | 1d | `apps/web/instrumentation.ts` (+1d)<br>`apps/web/lib/coworker/authorized-surface-runtime.ts` (+1d)<br>`apps/web/lib/mcp/packs/surface-pack.ts` (+1d)<br>…+5 more |
-| `docs/architecture/initiative-readiness-runbook.md` | 1d | `apps/web/lib/mcp/packs/coworker-pack.ts` (+1d)<br>`docs/architecture/mcp-tool-authorization-runbook.md` (+1d)<br>`apps/web/lib/work-capsules/governed-work-claim.ts` (+0d) |
+| `AGENTS.md` | 1d | `docs/architecture/backlog-and-planning-runbook.md` (+1d)<br>`docs/architecture/branch-and-worktree-runbook.md` (+1d)<br>`docs/architecture/build-gate-runbook.md` (+1d)<br>…+4 more |
+| `docs/architecture/2026-06-09-long-running-agentic-process-architecture.md` | 1d | `apps/web/instrumentation.ts` (+1d)<br>`apps/web/lib/coworker/authorized-surface-runtime.ts` (+1d)<br>`apps/web/lib/mcp/packs/surface-pack.ts` (+1d)<br>…+6 more |
+| `docs/architecture/mcp-tool-packs.md` | 1d | `docs/architecture/initiative-readiness-runbook.md` (+1d)<br>`docs/architecture/work-shapes-and-the-decision-gate.md` (+1d)<br>`docs/user-guide/workspace/work-rooms.md` (+0d) |
+| `docs/operations/autonomous-build-completion.md` | 1d | `docs/user-guide/operations/self-upgrade.md` (+1d)<br>`docs/user-guide/build-studio/autonomous-builds.md` (+0d) |
 | `docs/Reference/html-living-standard.md` | 1d | `docs/Reference/sysml-v2.md` (+1d) |
 | `docs/security/README.md` | 1d | `docs/user-guide/operations/index.md` (+1d) |
 | `docs/security/secrets-scan.md` | 1d | `docs/user-guide/operations/index.md` (+1d) |
@@ -206,21 +204,23 @@
 | `docs/user-guide/admin/index.md` | 1d | `docs/user-guide/operations/index.md` (+1d)<br>`docs/operations/acceptance-sweep.md` (+0d)<br>`docs/user-guide/ai-workforce/index.md` (+0d) |
 | `docs/user-guide/customers/index.md` | 1d | `docs/user-guide/platform/map-packs.md` (+1d) |
 | `docs/user-guide/platform/tools-and-integrations.md` | 1d | `docs/user-guide/platform/address-validation-providers.md` (+1d) |
-| `docs/architecture/ai-agent-meta-model.md` | 0d | `docs/architecture/mcp-tool-authorization-runbook.md` (+0d) |
-| `docs/architecture/backlog-and-planning-runbook.md` | 0d | `docs/architecture/enforced-ci-gates.md` (+0d)<br>`docs/architecture/mcp-tool-authorization-runbook.md` (+0d) |
-| `docs/architecture/branch-and-worktree-runbook.md` | 0d | `docs/architecture/mcp-tool-authorization-runbook.md` (+0d) |
+| `docs/architecture/backlog-and-planning-runbook.md` | 0d | `docs/architecture/initiative-readiness-runbook.md` (+0d) |
 | `docs/architecture/dpf-patterns.md` | 0d | `docs/architecture/delivery-surfaces-runbook.md` (+0d)<br>`docs/founder-kernel/wiki/principles/do-the-work-dont-task-the-operator.md` (+0d)<br>`packages/db/prisma/schema/build-delivery.prisma` (+0d)<br>…+1 more |
-| `docs/architecture/enforced-ci-gates.md` | 0d | `docs/architecture/failure-analysis-and-recovery.md` (+0d) |
-| `docs/architecture/mcp-tool-authorization-runbook.md` | 0d | `docs/architecture/agent-client-capability-parity.md` (+0d)<br>`docs/superpowers/specs/2026-10-27-agent-dialog-broker-design.md` (+0d) |
-| `docs/architecture/mcp-tool-packs.md` | 0d | `docs/user-guide/workspace/work-rooms.md` (+0d) |
+| `docs/architecture/enforced-ci-gates.md` | 0d | `docs/architecture/backlog-and-planning-runbook.md` (+0d)<br>`docs/architecture/failure-analysis-and-recovery.md` (+0d) |
+| `docs/architecture/mcp-tool-authorization-runbook.md` | 0d | `docs/architecture/agent-client-capability-parity.md` (+0d)<br>`docs/architecture/initiative-readiness-runbook.md` (+0d)<br>`docs/superpowers/specs/2026-10-27-agent-dialog-broker-design.md` (+0d) |
+| `docs/architecture/workroom-vocabulary-boundary.md` | 0d | `docs/architecture/work-shapes-and-the-decision-gate.md` (+0d) |
 | `docs/install/platform-support-watchlist.md` | 0d | `docs/architecture/build-gate-runbook.md` (+0d) |
-| `docs/operations/autonomous-build-completion.md` | 0d | `docs/user-guide/build-studio/autonomous-builds.md` (+0d) |
 | `docs/security/2026-05-24-shift-left-rollout.md` | 0d | `docs/architecture/build-gate-runbook.md` (+0d)<br>`docs/testing/pre-pr-gate.md` (+0d) |
 | `docs/testing/pre-pr-gate.md` | 0d | `docs/architecture/build-gate-runbook.md` (+0d)<br>`docs/architecture/failure-analysis-and-recovery.md` (+0d)<br>`docs/install/platform-support-watchlist.md` (+0d) |
+| `docs/user-guide/ai-workforce/coworker-proactivity.md` | 0d | `docs/user-guide/workspace/attention-inbox.md` (+0d) |
+| `docs/user-guide/ai-workforce/decision-perspective-in-practice.md` | 0d | `docs/user-guide/platform/authority-and-audit.md` (+0d) |
 | `docs/user-guide/ai-workforce/index.md` | 0d | `docs/user-guide/build-studio/index.md` (+0d)<br>`docs/user-guide/contributing/agent-dev-environments.md` (+0d) |
 | `docs/user-guide/compliance/controls-and-evidence.md` | 0d | `docs/user-guide/compliance/regulations-and-obligations.md` (+0d) |
-| `docs/user-guide/contributing/agent-dev-environments.md` | 0d | `docs/architecture/mcp-tool-authorization-runbook.md` (+0d)<br>`docs/user-guide/build-studio/index.md` (+0d) |
+| `docs/user-guide/contributing/agent-dev-environments.md` | 0d | `docs/architecture/branch-and-worktree-runbook.md` (+0d)<br>`docs/architecture/mcp-tool-authorization-runbook.md` (+0d)<br>`docs/user-guide/build-studio/index.md` (+0d)<br>…+1 more |
 | `docs/user-guide/finance/expense-workflows.md` | 0d | `docs/user-guide/finance/reporting-and-close.md` (+0d) |
+| `docs/user-guide/operations/index.md` | 0d | `docs/user-guide/operations/self-upgrade.md` (+0d) |
 | `docs/user-guide/platform/ai-operations.md` | 0d | `docs/user-guide/ai-workforce/model-routing-lifecycle.md` (+0d) |
 | `docs/user-guide/platform/index.md` | 0d | `docs/user-guide/platform/ai-operations.md` (+0d) |
+| `docs/user-guide/workspace/index.md` | 0d | `docs/user-guide/operations/index.md` (+0d)<br>`docs/user-guide/platform/authority-and-audit.md` (+0d)<br>`docs/user-guide/workspace/attention-inbox.md` (+0d) |
+| `docs/user-guide/workspace/work-rooms.md` | 0d | `docs/architecture/gated-permissions-process.md` (+0d) |
 
