@@ -6,6 +6,30 @@ import { join, resolve } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import * as preview from './dev-preview-runtime.mjs';
 
+test('initializer refuses an old clone image before any runtime mutation', async () => {
+  const calls = [];
+  const expected = 'a'.repeat(64);
+  const runner = { run: async args => { calls.push(args); return 'b'.repeat(64); } };
+  await assert.rejects(preview.assertPreviewInitializerImage(runner, 'canonical-fixture', expected),
+    /preview_initializer_clone_source_mismatch/);
+  assert.ok(calls.every(args => args[0] === 'exec' && args[1] === 'canonical-fixture'));
+});
+
+test('initializer accepts matching clone bytes and refuses unavailable or malformed identity', async () => {
+  const expected = 'a'.repeat(64);
+  for (const actual of [expected, '', 'not-a-digest', expected + 'extra']) {
+    const runner = { run: async args => args[2] === 'node' ? actual : '' };
+    if (actual === expected) await preview.assertPreviewInitializerImage(runner, 'canonical-fixture', expected);
+    else await assert.rejects(preview.assertPreviewInitializerImage(runner, 'canonical-fixture', expected),
+      /preview_initializer_clone_source_mismatch/);
+  }
+  await assert.rejects(preview.assertPreviewInitializerImage({ run: async () => '' }, 'canonical-fixture'),
+    /preview_initializer_clone_source_unverified/);
+  await assert.rejects(preview.assertPreviewInitializerImage({ run: async args => {
+    if (args[2] === 'node') throw new Error('clone file unavailable');
+  } }, 'canonical-fixture', expected), /preview_initializer_clone_source_unavailable/);
+});
+
 // A real Compose parser is required: object-only tests miss the port uniqueness
 // key's host IP component and can incorrectly retain broad inherited bindings.
 test('real Compose merge replaces every inherited preview binding, preserving other services', async t => {

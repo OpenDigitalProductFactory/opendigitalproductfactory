@@ -119,18 +119,34 @@ async function main() {
 
   log("running prisma migrate deploy (contributor-preview)");
   let deploy = runPrisma(["migrate", "deploy"]);
-  if (deploy.ok) {
-    log("migrate deploy succeeded with no repair");
-    process.stdout.write(deploy.stdout);
-    return;
+  if (!deploy.ok) {
+    log("migrate deploy failed; evaluating disposable repair path");
+    process.stderr.write(deploy.combined.slice(0, 4000));
   }
-
-  log("migrate deploy failed; evaluating disposable repair path");
-  process.stderr.write(deploy.combined.slice(0, 4000));
 
   const client = new Client({ connectionString: databaseUrl });
   await client.connect();
+  const verifyCompletedRegistry = async () => {
+    const recovery = await recoverGraphRegistry({
+      query: async (sql, values) => (await client.query(sql, values)).rows,
+      readSql: readMigrationSql,
+      runPrisma,
+      context: { environment: process.env.DPF_ENVIRONMENT, databaseUrl },
+      recoveryMode: "completed",
+    });
+    if (["restored", "registry-current"].includes(recovery.action)) {
+      log(`migrate deploy succeeded; registry=${recovery.action}`);
+      process.stdout.write(deploy.stdout);
+    } else {
+      process.stderr.write(`${formatBlockedMessage(recovery)}\n`);
+      process.exitCode = BLOCKED_SANDBOX_DRIFT_EXIT;
+    }
+  };
   try {
+    if (deploy.ok) {
+      await verifyCompletedRegistry();
+      return;
+    }
     for (let round = 1; round <= MAX_REPAIR_ROUNDS; round += 1) {
       const failedRows = await loadFailedMigrationState(client);
       let migrationName =
@@ -227,8 +243,7 @@ async function main() {
         }
         deploy = runPrisma(["migrate", "deploy"]);
         if (deploy.ok) {
-          log("migrate deploy succeeded after repair");
-          process.stdout.write(deploy.stdout);
+          await verifyCompletedRegistry();
           return;
         }
         process.stderr.write(deploy.combined.slice(0, 4000));
