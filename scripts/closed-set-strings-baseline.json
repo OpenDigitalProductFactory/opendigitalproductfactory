@@ -1,7 +1,7 @@
 {
   "version": 1,
   "owner": "platform-architecture",
-  "expiry": "2026-11-16",
+  "expiry": "2027-02-16",
   "note": "Closed-set string ratchet baseline (BI-817ED2D4). Shrink-only: a closed-set column leaves this list by becoming an enum or gaining a *_closed_set CHECK, never by expanding the baseline. Regenerate with: node scripts/check-no-new-closed-set-strings.mjs --update",
   "entries": [
     "AbsorptionPosture.status",

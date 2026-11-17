@@ -1,5 +1,5 @@
 # owner: platform-architecture
-# expiry: 2026-11-16
+# expiry: 2027-02-16
 # Grandfathered source-string -> backlog-id citations (BI-38A353B2). One
 # <source-path>\t<id> pair per line. Regenerate with --update.
 apps/web/lib/operate/a2a-collaboration-health/analysis.ts	BI-9DB7C332
