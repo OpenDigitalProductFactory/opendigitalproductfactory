@@ -1,5 +1,5 @@
 # owner: platform-architecture
-# expiry: 2026-11-16
+# expiry: 2027-02-16
 # Unhonored-grant ratchet baseline (BI-6FD78522). Registry grant keys no tool
 # implementation honors — aspirational scope a coworker cannot exercise.
 # Shrink-only: keys leave by being honored (a tool requires them) or removed

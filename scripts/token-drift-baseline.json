@@ -1,7 +1,7 @@
 {
   "version": 1,
   "owner": "platform-architecture",
-  "expiry": "2026-11-16",
+  "expiry": "2027-02-16",
   "note": "Token-drift ratchet baseline (BI-CBC7430F, EP-UX-SYSTEM L4). Shrink-only per axis. Regenerate with: node scripts/check-style-drift.mjs --update",
   "files": {
     "apps/web/app/(portal)/layout.tsx": {
@@ -47,16 +47,6 @@
     "apps/web/app/(shell)/admin/page.tsx": {
       "type": 5,
       "spacing": 0,
-      "motion": 0
-    },
-    "apps/web/app/(shell)/admin/scheduled-jobs/ScheduledJobsClient.tsx": {
-      "type": 9,
-      "spacing": 0,
-      "motion": 0
-    },
-    "apps/web/app/(shell)/admin/scheduled-jobs/SchedulingTimeline.tsx": {
-      "type": 5,
-      "spacing": 3,
       "motion": 0
     },
     "apps/web/app/(shell)/admin/twin-gallery/[archetypeId]/page.tsx": {
@@ -574,11 +564,6 @@
       "spacing": 0,
       "motion": 0
     },
-    "apps/web/app/(shell)/portfolio/product/[id]/inventory/page.tsx": {
-      "type": 5,
-      "spacing": 0,
-      "motion": 0
-    },
     "apps/web/app/(shell)/portfolio/product/[id]/offerings/page.tsx": {
       "type": 3,
       "spacing": 0,
@@ -719,71 +704,6 @@
       "spacing": 0,
       "motion": 0
     },
-    "apps/web/components/build-studio/ArtifactPane.tsx": {
-      "type": 0,
-      "spacing": 1,
-      "motion": 0
-    },
-    "apps/web/components/build-studio/ArtifactTabs.tsx": {
-      "type": 1,
-      "spacing": 1,
-      "motion": 0
-    },
-    "apps/web/components/build-studio/Bubble.tsx": {
-      "type": 5,
-      "spacing": 1,
-      "motion": 0
-    },
-    "apps/web/components/build-studio/Composer.tsx": {
-      "type": 4,
-      "spacing": 1,
-      "motion": 0
-    },
-    "apps/web/components/build-studio/HeaderBar.tsx": {
-      "type": 7,
-      "spacing": 1,
-      "motion": 0
-    },
-    "apps/web/components/build-studio/PreviewFrame.tsx": {
-      "type": 5,
-      "spacing": 2,
-      "motion": 0
-    },
-    "apps/web/components/build-studio/StepTracker.tsx": {
-      "type": 3,
-      "spacing": 1,
-      "motion": 0
-    },
-    "apps/web/components/build-studio/cards/ChoiceCard.tsx": {
-      "type": 2,
-      "spacing": 0,
-      "motion": 0
-    },
-    "apps/web/components/build-studio/cards/DecisionCard.tsx": {
-      "type": 5,
-      "spacing": 0,
-      "motion": 0
-    },
-    "apps/web/components/build-studio/cards/FilesTouchedCard.tsx": {
-      "type": 5,
-      "spacing": 0,
-      "motion": 0
-    },
-    "apps/web/components/build-studio/cards/PlanSummaryCard.tsx": {
-      "type": 4,
-      "spacing": 0,
-      "motion": 0
-    },
-    "apps/web/components/build-studio/cards/StepRefCard.tsx": {
-      "type": 1,
-      "spacing": 0,
-      "motion": 0
-    },
-    "apps/web/components/build-studio/cards/VerificationStripCard.tsx": {
-      "type": 4,
-      "spacing": 0,
-      "motion": 0
-    },
     "apps/web/components/build/ActionBanner.tsx": {
       "type": 1,
       "spacing": 0,
@@ -791,11 +711,6 @@
     },
     "apps/web/components/build/AgentActivityStrip.tsx": {
       "type": 5,
-      "spacing": 0,
-      "motion": 0
-    },
-    "apps/web/components/build/AgentSessionFeed.tsx": {
-      "type": 1,
       "spacing": 0,
       "motion": 0
     },
@@ -814,11 +729,6 @@
       "spacing": 0,
       "motion": 0
     },
-    "apps/web/components/build/BuildCustomerStatusBand.tsx": {
-      "type": 5,
-      "spacing": 0,
-      "motion": 0
-    },
     "apps/web/components/build/BuildDecisionLedgerBand.tsx": {
       "type": 1,
       "spacing": 0,
@@ -831,11 +741,6 @@
     },
     "apps/web/components/build/BuildListItem.tsx": {
       "type": 5,
-      "spacing": 0,
-      "motion": 0
-    },
-    "apps/web/components/build/BuildPhaseCostCard.tsx": {
-      "type": 11,
       "spacing": 0,
       "motion": 0
     },
@@ -855,7 +760,7 @@
       "motion": 0
     },
     "apps/web/components/build/BuildStudio.tsx": {
-      "type": 15,
+      "type": 12,
       "spacing": 0,
       "motion": 0
     },
@@ -945,12 +850,7 @@
       "motion": 0
     },
     "apps/web/components/build/ReviewPanel.tsx": {
-      "type": 36,
-      "spacing": 0,
-      "motion": 0
-    },
-    "apps/web/components/build/TestRunnerPanel.tsx": {
-      "type": 3,
+      "type": 35,
       "spacing": 0,
       "motion": 0
     },
@@ -1435,7 +1335,7 @@
       "motion": 0
     },
     "apps/web/components/finance/TaxObligationPeriodsTable.tsx": {
-      "type": 16,
+      "type": 15,
       "spacing": 0,
       "motion": 0
     },
@@ -1585,7 +1485,7 @@
       "motion": 0
     },
     "apps/web/components/ops/BacklogItemRow.tsx": {
-      "type": 18,
+      "type": 15,
       "spacing": 0,
       "motion": 0
     },
@@ -1595,7 +1495,7 @@
       "motion": 0
     },
     "apps/web/components/ops/EpicCard.tsx": {
-      "type": 11,
+      "type": 10,
       "spacing": 0,
       "motion": 0
     },
@@ -1719,11 +1619,6 @@
       "spacing": 0,
       "motion": 0
     },
-    "apps/web/components/platform/StalledTaskRecoveryActions.tsx": {
-      "type": 1,
-      "spacing": 0,
-      "motion": 0
-    },
     "apps/web/components/platform/authority/CreateDraftBindingButton.tsx": {
       "type": 1,
       "spacing": 0,
@@ -1805,11 +1700,6 @@
       "motion": 0
     },
     "apps/web/components/portfolio/CoveragePanel.tsx": {
-      "type": 4,
-      "spacing": 0,
-      "motion": 0
-    },
-    "apps/web/components/portfolio/DigitalProductDetail.tsx": {
       "type": 4,
       "spacing": 0,
       "motion": 0

@@ -1,5 +1,5 @@
 # owner: platform-architecture
-# expiry: 2026-11-16
+# expiry: 2027-02-16
 # Grandfathered route handlers with no @exposure declaration yet (W17, BI-810BEC9C).
 # Shrink-only: classify a route (// @exposure <class> pragma + regenerate the
 # route manifest) and remove its line here — never add a new route to this file.

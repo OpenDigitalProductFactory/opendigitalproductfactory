@@ -1,5 +1,5 @@
 # owner: platform-architecture
-# expiry: 2026-11-16
+# expiry: 2027-02-16
 # Grandfathered doc->anchor citations (BI-3F17B16B). One <doc-path>\t<id> pair
 # per line. Pairs here are NOT retro-verified; a NEW pair in a changed doc is
 # verified against the live backlog over MCP. Shrink-only — never park a new

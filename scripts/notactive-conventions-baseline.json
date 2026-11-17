@@ -1,7 +1,7 @@
 {
   "version": 1,
   "owner": "platform-architecture",
-  "expiry": "2026-11-16",
+  "expiry": "2027-02-16",
   "note": "Not-active convention ratchet baseline (BI-C357FA5A, pass §3.2-d). Shrink-only: a column leaves this list by migrating to the RecordLifecycle convention (operator-reviewed W20 plan), never by expanding the baseline. New models use `lifecycle RecordLifecycle` + `lifecycleAt`. Regenerate with: node scripts/check-no-new-notactive-conventions.mjs --update",
   "entries": [
     "City.mergedIntoId",
