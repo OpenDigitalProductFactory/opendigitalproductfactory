@@ -32,6 +32,7 @@
 // Emergency bypass: prefix the command with DPF_ALLOW_ROOT_CLONE_MUTATION=1.
 
 import { lstatSync, statSync } from "node:fs";
+import { spawnSync } from "node:child_process";
 import { executableCommandText, shellCommandPayloads, stripHeredocBodies } from "./command-text.mjs";
 import {
   readHookPayload,
@@ -104,11 +105,59 @@ export function resolveAgainst(cwd, target) {
  *   - main clone (cwd has a real .git DIRECTORY) -> cwd itself
  *   - sibling worktree / unknown -> null (its .git is a FILE; rely on the junction rule)
  */
-export function deriveCloneRoot(cwd, isDir = () => false) {
+/**
+ * Ask git where the shared clone is. The parent of `--git-common-dir` IS the
+ * root clone, and git answers it from any worktree on any platform. Returns
+ * null on any failure so resolution degrades to the path-shape routes rather
+ * than throwing inside a PreToolUse hook.
+ */
+function defaultGitCommonDir(cwd) {
+  try {
+    const r = spawnSync("git", ["rev-parse", "--git-common-dir"], {
+      cwd,
+      encoding: "utf8",
+      windowsHide: true,
+      timeout: 5000,
+    });
+    if (r.status !== 0) return null;
+    const out = (r.stdout || "").trim();
+    if (!out) return null;
+    return out.startsWith("/") || /^[A-Za-z]:/.test(out) ? out : `${norm(cwd)}/${out}`;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Resolve the shared clone root behind `cwd`.
+ *
+ * BI-B49665EA: this resolved by PATH SHAPE alone — the `/.claude/worktrees/`
+ * marker, or `<cwd>/.git` being a directory. In the canonical sibling base
+ * (`~/dpf-worktrees/<slug>`) neither holds: `.git` is a FILE and there is no
+ * marker. It returned null, `isUnderRootSharedArea` short-circuited to false,
+ * and `rm -rf <root clone>` was PERMITTED from 138 of 148 live worktrees — the
+ * mechanism that wiped 730 tracked files on 2026-06-19. The guard covered the
+ * topology AGENTS.md §12 deprecated and not the one it mandates, and nothing
+ * noticed because guards are only ever checked for presence, never for whether
+ * they still deny.
+ *
+ * The git route runs last, so the two cheap string/stat routes still answer
+ * first. Callers memoise this behind a destructive-delete check, so the
+ * subprocess is only spawned for a command that could actually destroy the
+ * clone — never on the common non-delete path.
+ */
+export function deriveCloneRoot(cwd, isDir = () => false, gitCommonDir = defaultGitCommonDir) {
   const c = norm(cwd);
   const i = c.indexOf(WORKTREE_MARKER);
   if (i >= 0) return c.slice(0, i);
   if (isDir(`${c}/.git`)) return c;
+  const common = gitCommonDir ? gitCommonDir(c) : null;
+  if (common) {
+    const n = norm(common);
+    // ".../<root>/.git" -> "<root>". A common dir without the /.git suffix is a
+    // bare or unusual layout and is NOT treated as a clone root.
+    if (n.endsWith("/.git")) return n.slice(0, -"/.git".length);
+  }
   return null;
 }
 
@@ -301,14 +350,14 @@ function gitSubcommandTargetCwd(seg, cwd) {
   return { subcommand: lower[i] ?? "", targetCwd };
 }
 
-export function isRootCloneGitStateMutation(seg, cwd, isDir = () => false) {
+export function isRootCloneGitStateMutation(seg, cwd, isDir = () => false, gitCommonDir = defaultGitCommonDir) {
   const parsed = gitSubcommandTargetCwd(seg, cwd);
   if (!parsed) return false;
   if (!["switch", "checkout", "reset", "pull", "merge", "rebase"].includes(parsed.subcommand)) {
     return false;
   }
   const target = norm(parsed.targetCwd);
-  const cloneRoot = deriveCloneRoot(target, isDir);
+  const cloneRoot = deriveCloneRoot(target, isDir, gitCommonDir);
   return cloneRoot !== null && target === cloneRoot;
 }
 
@@ -381,7 +430,7 @@ const WRITE_INTENT = /(\bopen\s*\([^)]*,\s*(mode\s*=\s*)?["'][wax]|\bwriteFileSy
  * session is standing IN the clone root — the same precondition decideFileWrite
  * uses. A read-only one-liner is left alone.
  */
-export function isRootCloneInterpreterWrite(command, cwd, isDir = () => false) {
+export function isRootCloneInterpreterWrite(command, cwd, isDir = () => false, gitCommonDir = defaultGitCommonDir) {
   // Evaluated over the WHOLE command, not a segment: segments() splits on
   // newlines, and a heredoc body lives on the lines after its interpreter.
   const firstLine = String(command).split("\n")[0] ?? "";
@@ -392,7 +441,7 @@ export function isRootCloneInterpreterWrite(command, cwd, isDir = () => false) {
   const heredoc = /<<-?\s*['"]?\w+/.test(firstLine);
   if (!inlineCode && !heredoc) return false;
   if (!WRITE_INTENT.test(String(command))) return false;
-  const cloneRoot = deriveCloneRoot(cwd, isDir);
+  const cloneRoot = deriveCloneRoot(cwd, isDir, gitCommonDir);
   return cloneRoot !== null && norm(cwd) === cloneRoot;
 }
 
@@ -414,10 +463,10 @@ function fileWriteTargets(toolInput) {
   return targets;
 }
 
-export function decideFileWrite({ toolName, toolInput, cwd = "", env = {}, isDir = () => false }) {
+export function decideFileWrite({ toolName, toolInput, cwd = "", env = {}, isDir = () => false, gitCommonDir = defaultGitCommonDir }) {
   if (!isFileWriteTool(toolName)) return { block: false };
   if (env.DPF_ALLOW_ROOT_CLONE_MUTATION === "1") return { block: false };
-  const cloneRoot = deriveCloneRoot(cwd, isDir);
+  const cloneRoot = deriveCloneRoot(cwd, isDir, gitCommonDir);
   if (!cloneRoot || norm(cwd) !== cloneRoot) return { block: false };
   for (const target of fileWriteTargets(toolInput)) {
     if (isUnderRootSharedArea(resolveAgainst(cwd, target), cloneRoot)) {
@@ -439,7 +488,7 @@ export function decideFileWrite({ toolName, toolInput, cwd = "", env = {}, isDir
  * @param {(p:string)=>boolean} [args.isDir]      statSync().isDirectory() for a path
  * @returns {{ block: boolean, reason?: string }}
  */
-export function decide({ command, cwd = "", env = {}, isSymlink = () => false, isDir = () => false }) {
+export function decide({ command, cwd = "", env = {}, isSymlink = () => false, isDir = () => false, gitCommonDir = defaultGitCommonDir }) {
   if (typeof command !== "string" || command.trim() === "") return { block: false };
   if (env.DPF_ALLOW_ROOT_CLONE_MUTATION === "1") return { block: false };
   if (/\bDPF_ALLOW_ROOT_CLONE_MUTATION=1\b/.test(command)) return { block: false };
@@ -447,7 +496,7 @@ export function decide({ command, cwd = "", env = {}, isSymlink = () => false, i
   // Lazily resolve the clone root (one statSync of <cwd>/.git) only if we
   // actually hit a destructive delete — keeps the common non-delete path string-fast.
   let cloneRootMemo;
-  const cloneRoot = () => (cloneRootMemo !== undefined ? cloneRootMemo : (cloneRootMemo = deriveCloneRoot(cwd, isDir)));
+  const cloneRoot = () => (cloneRootMemo !== undefined ? cloneRootMemo : (cloneRootMemo = deriveCloneRoot(cwd, isDir, gitCommonDir)));
 
   for (const seg of segments(command)) {
     // BI-1C1483C6: the OTHER junction foot-gun. A recursive delete through a
@@ -465,7 +514,7 @@ export function decide({ command, cwd = "", env = {}, isSymlink = () => false, i
       return { block: true, reason: INSTALL_THROUGH_JUNCTION_GUIDANCE };
     }
 
-    if (isRootCloneGitStateMutation(seg, cwd, isDir)) {
+    if (isRootCloneGitStateMutation(seg, cwd, isDir, gitCommonDir)) {
       return { block: true, reason: ROOT_GIT_STATE_GUIDANCE };
     }
 
@@ -494,7 +543,7 @@ export function decide({ command, cwd = "", env = {}, isSymlink = () => false, i
     }
   }
 
-  if (isRootCloneInterpreterWrite(command, cwd, isDir)) {
+  if (isRootCloneInterpreterWrite(command, cwd, isDir, gitCommonDir)) {
     return { block: true, reason: ROOT_FILE_WRITE_GUIDANCE };
   }
 
