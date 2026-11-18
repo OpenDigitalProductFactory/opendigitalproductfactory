@@ -95,10 +95,12 @@ Open question for spec approval: the item is sized medium. PR 4 adds a third dri
 
 ## Acceptance (from the item)
 
-- **AC-1:** one driver per client implements thread, turn, steer, interrupt, runtime request and usage events; the four paths call it (PR 1 to PR 4).
-- **AC-2:** routing selects an instance (`AiProviderConnection`), not a client type; a missing capability is explicit and handled by policy (PR 3).
-- **AC-3:** the duplicated paths and parsers are deleted; the net line count falls (PR 2, PR 3).
-- **AC-4:** no proprietary SDK; the Claude driver uses the `claude` CLI stream-json interface (PR 1).
+The item's criteria, quoted as recorded:
+
+- **AC-1:** "One driver per client implements thread, turn, steer, interrupt, runtime request and usage events. The three paths call it." The item counts three paths; this plan found four (Ideate is the fourth), and all four call the driver (PR 1 to PR 4).
+- **AC-2:** "Routing selects an instance (account and configuration), not a client type. A missing capability is explicit and handled by policy." The instance is `AiProviderConnection` (PR 3).
+- **AC-3:** "The duplicated paths and parsers are deleted. The net line count falls." (PR 2, PR 3)
+- **AC-4:** "No proprietary SDK is bundled. The Claude driver uses the claude CLI stream-json interface." (PR 1)
 - **Room rows:** the broker's wake, push and supervised-turn tests pass after PR 1 (spec AC-5b).
 
 ## Backlog coverage
