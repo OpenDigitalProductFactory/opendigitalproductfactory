@@ -3,11 +3,11 @@ import { describe, expect, it, vi } from "vitest";
 // BI-05715F4C: the Codex app-server and Claude stream-json adapters, against a
 // fake CLI that plays the provider's side (frames as recorded by T3 Code).
 
-import { CLAUDE_SESSION_SCRIPT, claudeSessionFlags, createClaudeAdapter } from "./claude-stream-adapter";
+import { CLAUDE_SESSION_SCRIPT, claudeSessionFlags, createClaudeSessionDriver as createClaudeAdapter } from "@/lib/executor-drivers/claude/session";
 import { CODEX_SESSION_SCRIPT, codexApprovalResponse, createCodexAdapter } from "./codex-app-server-adapter";
 import { createJsonRpcPeer } from "./json-rpc-peer";
 import { autoRespond, fakeProcess } from "./__fixtures__/fake-process";
-import type { RuntimeEvent } from "./types";
+import type { RuntimeEvent } from "@/lib/executor-drivers/types";
 
 const CONFIG = { capsuleId: "WC-1", mcp: { url: "http://portal:3000/api/mcp/v1", bearerToken: "dpfroom_secret" }, cwd: "/workspace" };
 
@@ -243,6 +243,8 @@ describe("claude stream-json adapter", () => {
     expect(events).toEqual([
       { type: "turn-started", turnId: "turn-1" },
       { type: "message", turnId: "turn-1", text: "hi" },
+      // The result event carried no usage, so the turn's usage is unknown, not zero (BI-A01B06F6).
+      { type: "usage", turnId: "turn-1", usage: { reported: "unknown" } },
       { type: "turn-completed", turnId: "turn-1", status: "completed", error: null },
     ]);
   });

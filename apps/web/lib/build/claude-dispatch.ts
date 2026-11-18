@@ -22,9 +22,9 @@ import {
   runSandboxAgentCli,
   writeSandboxFile,
 } from "./sandbox/agent-cli-runtime";
-import { getDecryptedCredential, getProviderBearerToken } from "@/lib/inference/ai-provider-internals";
+import { claudeCredential, resolveClaudeAuth, type ClaudeAuth } from "@/lib/executor-drivers/claude/auth";
+import { claudeOneShotArgs, parseClaudeResult } from "@/lib/executor-drivers/claude/one-shot";
 import { resolveBuildWorkdir } from "./sandbox/build-branch";
-import { providerSetupLocation } from "@/lib/ai-provider-routes";
 
 // Timeout per task. Data-architect tasks need more time for schema design.
 const CLAUDE_TASK_TIMEOUT_MS = 900_000;        // 15 minutes default
@@ -44,44 +44,6 @@ export type ClaudeResult = {
   inputTokens?: number;
   outputTokens?: number;
 };
-
-/**
- * Auth credentials resolved from the credential store.
- *
- * OAuth mode (Max Plan): flat-rate subscription, ~20x cheaper than API keys
- *   for sustained build workloads. Injects CLAUDE_CODE_OAUTH_TOKEN env var.
- * API key mode: per-token billing via ANTHROPIC_API_KEY. Burns fast —
- *   $100 in a few hours vs. 5+ days on Max Plan.
- */
-type ClaudeAuth =
-  | { mode: "oauth"; tokenJson: string }  // raw access token string (sk-ant-oat01-...)
-  | { mode: "apikey"; apiKey: string };
-
-async function resolveClaudeAuth(providerId: string): Promise<ClaudeAuth> {
-  // Auth mode is implicit in the provider ID:
-  //   "anthropic-sub" → OAuth (Max Plan subscription, flat-rate)
-  //   "anthropic"     → API key (per-token billing)
-  const isOAuth = providerId === "anthropic-sub";
-
-  if (!isOAuth) {
-    const credential = await getDecryptedCredential(providerId);
-    const apiKey = credential?.secretRef ?? credential?.cachedToken;
-    if (!apiKey) {
-      throw new Error(`No Anthropic API key for provider "${providerId}". Configure via ${providerSetupLocation(providerId)}.`);
-    }
-    return { mode: "apikey", apiKey };
-  }
-
-  // OAuth: use getProviderBearerToken which checks tokenExpiresAt and refreshes
-  // automatically when the access token has expired. Access tokens expire every
-  // few hours; using getDecryptedCredential directly would send an expired token
-  // causing 401. CLAUDE_CODE_OAUTH_TOKEN takes the raw sk-ant-oat01-... string.
-  const result = await getProviderBearerToken(providerId);
-  if ("error" in result) {
-    throw new Error(`OAuth token refresh failed for "${providerId}": ${result.error}. Re-authenticate via ${providerSetupLocation(providerId)}.`);
-  }
-  return { mode: "oauth", tokenJson: result.token };
-}
 
 /**
  * Dispatch a single build task to Claude Code CLI inside the sandbox container.
@@ -154,15 +116,9 @@ export async function dispatchClaudeTask(params: {
     // runner and deleted before the CLI starts. The value is never inlined in
     // the runner script, which is world-readable, and never left in the shared
     // /tmp where a later build's agent could read it.
-    const credential = auth.mode === "oauth"
-      ? { envVar: "CLAUDE_CODE_OAUTH_TOKEN", value: auth.tokenJson }
-      : { envVar: "ANTHROPIC_API_KEY", value: auth.apiKey };
+    const credential = claudeCredential(auth);
     await writeSandboxFile({ containerId: SANDBOX_CONTAINER, path: tokenFile, content: credential.value, ownerOnly: true, chownNodeUser: true });
-    const useBareflag = auth.mode !== "oauth";  // --bare disables OAuth; safe with an API key
-
     const modeLabel = auth.mode === "oauth" ? "Max Plan (OAuth)" : "API key (per-token)";
-    const bareFlag = useBareflag ? "--bare " : "";
-    const sessionFlag = sessionId ? `--session-id ${sessionId} ` : "";
     const timeoutMs = role === "data-architect" ? CLAUDE_SCHEMA_TASK_TIMEOUT_MS : CLAUDE_TASK_TIMEOUT_MS;
 
     const runnerScript = `/tmp/claude-run-${taskSlug}.sh`;
@@ -172,7 +128,7 @@ export async function dispatchClaudeTask(params: {
       // The repo SessionStart hook would call the build clone a shared root clone.
       "export DPF_SKIP_CLONE_OCCUPANCY=1",
       ...credentialFileExports(credential.envVar, tokenFile),
-      `exec claude ${bareFlag}${sessionFlag}-p - --dangerously-skip-permissions --output-format json --model ${model} < ${promptFile}`,
+      `exec claude ${claudeOneShotArgs({ authMode: auth.mode, sessionId, model }).join(" ")} < ${promptFile}`,
     ].join("\n");
     await writeSandboxFile({ containerId: SANDBOX_CONTAINER, path: runnerScript, content: script, mode: "755" });
 
@@ -200,28 +156,14 @@ export async function dispatchClaudeTask(params: {
       },
     });
 
-    // Parse JSON output — Claude Code --output-format json returns
-    // { result, session_id, total_cost_usd, usage, ... }
-    let content: string;
-    let returnedSessionId: string | undefined;
-    let costUsd: number | undefined;
-    let inputTokens: number | undefined;
-    let outputTokens: number | undefined;
-    try {
-      const parsed = JSON.parse(stdout.trim());
-      content = typeof parsed.result === "string" ? parsed.result : JSON.stringify(parsed.result);
-      returnedSessionId = parsed.session_id ?? undefined;
-      // BI-89030C9B Phase 1 ($/build): keep the cost/usage fields the envelope
-      // already returns instead of discarding them.
-      costUsd = typeof parsed.total_cost_usd === "number" ? parsed.total_cost_usd : undefined;
-      const usage = parsed.usage as
-        | { input_tokens?: number; output_tokens?: number }
-        | undefined;
-      inputTokens = typeof usage?.input_tokens === "number" ? usage.input_tokens : undefined;
-      outputTokens = typeof usage?.output_tokens === "number" ? usage.output_tokens : undefined;
-    } catch {
-      content = stdout.trim();
-    }
+    // The driver reads the json result: answer, session, cost and usage (BI-89030C9B Phase 1 $/build).
+    const result = parseClaudeResult(stdout);
+    // A JSON result with no answer reports "no output" below, as before.
+    const content = result.json && !result.hasResult ? "" : result.text;
+    const returnedSessionId = result.sessionId;
+    const costUsd = result.costUsd;
+    const inputTokens = result.usageReported ? result.usage.inputTokens : undefined;
+    const outputTokens = result.usageReported ? result.usage.outputTokens : undefined;
 
     console.log(`[claude-dispatch] Task "${task.title}" completed in ${(elapsed / 1000).toFixed(1)}s (${content.length} chars)${returnedSessionId ? ` [session: ${returnedSessionId}]` : ""}${costUsd != null ? ` [cost: $${costUsd.toFixed(4)}, tokens ${inputTokens ?? "?"}in/${outputTokens ?? "?"}out]` : ""}`);
 

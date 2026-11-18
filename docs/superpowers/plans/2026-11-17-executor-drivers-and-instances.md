@@ -94,6 +94,13 @@ The item body (rewritten 2026-11-18 by the room's design-note stage) orders the 
 2. **PR 2 — Codex driver.** Codex on `codex app-server`. Workroom runtime, Build Studio `codex exec` dispatch (`codex-dispatch.ts`), the Codex branch of `ideate-dispatch.ts` and `codex-cli-adapter.ts` move onto it; the Codex-side duplicates and the second tool-trace pattern are deleted. Tests: the same conformance suite; the user/cwd/flags record for Codex (root today) matches main or the change is stated; a Build Studio fixture run per client producing the same result object as on main.
 3. **PR 3 — Instances and ACP.** An instance is an `AiProviderConnection` row (no new table); routing resolves a `connectionId`, then its driver, and applies policy when a capability is missing (`capability-unavailable`). Capability probes read driver flags. Two connections for one client route separately. The ACP driver over `@agentclientprotocol/sdk` serves Grok and Antigravity, and `build/grok-dispatch.ts` calls it; the same conformance suite runs against a recorded ACP transcript. The PR reports the net line count across the three PRs against main.
 
+## PR 1 as built (2026-11-18)
+
+- **Two faces, as T3 has.** Build Studio dispatch, Ideate and inference routing stay one-shot runs (`claude -p -`, json result) on the driver's one-shot face (`executor-drivers/claude/one-shot.ts`); only the Workroom runtime uses the session face (`executor-drivers/claude/session.ts`). Running them as a turn on a long-lived session would have dropped routing's owned runner, timeout reaping, uncertainty handling and neutral working directory. The driver owns auth, the command line, the result parser, usage and the tool-trace; each caller keeps its process envelope.
+- **Unchanged command lines.** `claudeOneShotArgs` emits the flags in the order all three callers already used, and `claude-driver.test.ts` pins each caller's exact command. User and working directory are untouched: Build Studio still runs as the node user in the build workdir, Ideate from its neutral directory, routing from its private auth home.
+- **Removed duplicates.** Three Claude auth resolvers (Build Studio, Ideate, routing) are now `executor-drivers/claude/auth.ts`; two json result readers and the unused `parseCliStreamOutput` are now `parseClaudeResult`; the tool-trace pattern held by both the Claude and Codex routing adapters is `executor-drivers/tool-trace.ts`. Production code under `apps/web/lib` falls by 88 lines.
+- **Usage.** Each session turn now reports a `usage` event before it completes; a turn whose result carries no usage reports `reported: "unknown"`, never zero. The room records it as an activity; S4 feeds it to the per-instance window store.
+
 ## Acceptance (from the item)
 
 The item's acceptance section, exactly as recorded on BI-A01B06F6 (2026-11-18):
@@ -116,7 +123,7 @@ How this plan meets each:
 
 - Decision: decomposed
 - Parent: BI-A01B06F6
-- Receipt: blocked-by: the coverage receipt binds this pushed plan blob, so it is recorded after this commit is pushed
+- Receipt: cmwmkc1y690b10ep5k442ifwh
 - Dependencies: S2 (BI-C64EDA33, done); PR 2 and PR 3 depend on PR 1
 - PR 1 — Driver contract and Claude driver -> BI-A01B06F6
 - PR 2 — Codex driver -> BI-A01B06F6

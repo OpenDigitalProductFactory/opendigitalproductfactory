@@ -76,13 +76,10 @@ vi.mock("@/lib/build/sandbox/agent-cli-runtime", () => ({
   writeSandboxFile: (...args: unknown[]) => mockWriteSandboxFile(...args),
 }));
 
-import {
-  cliAdapter,
-  CLAUDE_CODE_NATIVE_TOOLS_FLAG_VALUE,
-  extractMentionedPlatformToolNames,
-  parseCliJsonOutput,
-  parseCliStreamOutput,
-} from "./cli-adapter";
+import { cliAdapter } from "./cli-adapter";
+import { CLAUDE_CODE_NATIVE_TOOLS_FLAG_VALUE, parseClaudeResult } from "@/lib/executor-drivers/claude/one-shot";
+import { turnUsageFromResult } from "@/lib/executor-drivers/claude/session";
+import { extractMentionedPlatformToolNames } from "@/lib/executor-drivers/tool-trace";
 
 // The (path, content, mode, chownNodeUser) each writeSandboxFile call received.
 type SandboxWriteParams = { path: string; content: string; mode?: string; chownNodeUser?: boolean };
@@ -704,37 +701,7 @@ describe("cliAdapter", () => {
 // These tests pin the contract: cliPreExecutedNames is populated with the
 // stripped-prefix names so the trace can subtract them from "mentioned".
 
-describe("parseCliStreamOutput", () => {
-  it("captures mcp__dpf__ tool names as cliPreExecutedNames (stream)", () => {
-    const stream = [
-      '{"type":"assistant","content":"I will file a quality issue."}',
-      '{"type":"tool_use","id":"x1","name":"mcp__dpf__report_quality_issue","input":{"title":"t","type":"feedback"}}',
-      '{"type":"result","result":"done","usage":{"input_tokens":5,"output_tokens":10}}',
-    ].join("\n");
-
-    const parsed = parseCliStreamOutput(stream);
-
-    // The structured tool_use was an MCP-pre-executed call. It must NOT
-    // appear in toolCalls (no re-dispatch) but MUST appear in the
-    // pre-executed names list (so the trace can suppress ghosts).
-    expect(parsed.toolCalls).toEqual([]);
-    expect(parsed.cliPreExecutedNames).toEqual(["report_quality_issue"]);
-  });
-
-  it("keeps non-MCP tool calls in toolCalls (stream)", () => {
-    const stream = [
-      '{"type":"tool_use","id":"x2","name":"saveBuildEvidence","input":{"field":"buildPlan"}}',
-      '{"type":"result","result":"saved","usage":{}}',
-    ].join("\n");
-
-    const parsed = parseCliStreamOutput(stream);
-    expect(parsed.toolCalls).toHaveLength(1);
-    expect(parsed.toolCalls[0]?.name).toBe("saveBuildEvidence");
-    expect(parsed.cliPreExecutedNames).toEqual([]);
-  });
-});
-
-describe("parseCliJsonOutput", () => {
+describe("parseClaudeResult (the Claude driver's json reader)", () => {
   it("captures mcp__dpf__ tool names as cliPreExecutedNames (json)", () => {
     const output = JSON.stringify({
       result: "Filed the issue.",
@@ -749,7 +716,7 @@ describe("parseCliJsonOutput", () => {
       usage: { input_tokens: 5, output_tokens: 10 },
     });
 
-    const parsed = parseCliJsonOutput(output);
+    const parsed = parseClaudeResult(output);
     expect(parsed.toolCalls).toEqual([]);
     expect(parsed.cliPreExecutedNames).toEqual(["report_quality_issue"]);
   });
@@ -768,7 +735,7 @@ describe("parseCliJsonOutput", () => {
       usage: {},
     });
 
-    const parsed = parseCliJsonOutput(output);
+    const parsed = parseClaudeResult(output);
     expect(parsed.toolCalls).toHaveLength(1);
     expect(parsed.toolCalls[0]?.name).toBe("saveBuildEvidence");
     expect(parsed.cliPreExecutedNames).toEqual([]);
@@ -777,7 +744,7 @@ describe("parseCliJsonOutput", () => {
   it("returns empty cliPreExecutedNames on raw non-JSON output (json)", () => {
     // Non-JSON raw output (e.g. CLI printed an error string) should not
     // crash the new field — it must default to [].
-    const parsed = parseCliJsonOutput("plain error text, not JSON");
+    const parsed = parseClaudeResult("plain error text, not JSON");
     expect(parsed.cliPreExecutedNames).toEqual([]);
   });
 });
@@ -788,12 +755,11 @@ describe("CLI parsers keep prompt-cache usage (BI-CCF1ACBB)", () => {
   const usage = { input_tokens: 17, output_tokens: 900, cache_creation_input_tokens: 12000, cache_read_input_tokens: 30000 };
   const expected = { inputTokens: 17, outputTokens: 900, cacheCreationInputTokens: 12000, cacheReadInputTokens: 30000 };
 
-  it("from the stream result event", () => {
-    const stream = ['{"type":"assistant","content":"ok"}', JSON.stringify({ type: "result", result: "ok", usage })].join("\n");
-    expect(parseCliStreamOutput(stream).usage).toEqual(expected);
+  it("from the session's stream result event", () => {
+    expect(turnUsageFromResult({ type: "result", result: "ok", usage })).toEqual({ reported: "native", ...expected });
   });
 
   it("from the final JSON", () => {
-    expect(parseCliJsonOutput(JSON.stringify({ result: "ok", usage })).usage).toEqual(expected);
+    expect(parseClaudeResult(JSON.stringify({ result: "ok", usage })).usage).toEqual(expected);
   });
 });

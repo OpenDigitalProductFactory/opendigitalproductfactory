@@ -10,7 +10,7 @@ import type { Prisma } from "@dpf/db";
 import { DURABLE_APPROVAL_LIFETIME_MS } from "@/lib/coworker/approval-lifetime";
 
 import { providerClientAgentId, type SupervisionActor } from "./supervised-session";
-import type { RuntimeDecision, RuntimeProvider, RuntimeRequest } from "./types";
+import type { RuntimeDecision, RuntimeProvider, RuntimeRequest } from "@/lib/executor-drivers/types";
 
 export type HeldRuntimeRequest = RuntimeRequest & {
   /** Fingerprint of the call: an approved envelope with it lets the same call pass. */

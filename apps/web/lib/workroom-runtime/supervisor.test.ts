@@ -14,7 +14,7 @@ import { createMemoryRuntimeStore } from "./__fixtures__/memory-runtime-store";
 import { createRuntimeSupervisor } from "./supervisor";
 import { createCodexAdapter } from "./codex-app-server-adapter";
 import { autoRespond, fakeProcess } from "./__fixtures__/fake-process";
-import type { ExecutorAdapter, RuntimeEvent, RuntimeSession } from "./types";
+import type { ExecutorDriver, RuntimeEvent, RuntimeSession } from "@/lib/executor-drivers/types";
 
 const actor = { userId: "user-1", agentId: "agent-1", principalId: "prn-1" };
 let room: { id: string; status: string; archivedAt: Date | null; workspaceState: Record<string, unknown>; taskRunId: string | null };
@@ -34,8 +34,8 @@ function harness() {
     respondToRuntimeRequest: vi.fn(async () => {}),
     close: vi.fn(async () => {}),
   };
-  const adapter: ExecutorAdapter = {
-    provider: "codex", supportsSteer: true,
+  const adapter: ExecutorDriver = {
+    provider: "codex", capabilities: { steer: true, interrupt: true, runtimeRequests: "session", resumeThread: true, usage: false, oneShot: false },
     openSession: vi.fn(async (_config, onEvent) => { emit = onEvent; return session as unknown as RuntimeSession; }),
   };
   const issueToken = vi.fn(async () => ({ tokenId: "tok-1", plaintext: "dpfroom_x" }));

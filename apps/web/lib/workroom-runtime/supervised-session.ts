@@ -8,7 +8,7 @@
 
 import { addressingNamesSession } from "@/lib/work-management/room-message-addressing";
 
-import type { RuntimeProvider } from "./types";
+import type { RuntimeProvider } from "@/lib/executor-drivers/types";
 
 export const DEFAULT_RUNTIME_CWD = "/workspace";
 /** Room-wide messages folded into one turn, newest kept. */

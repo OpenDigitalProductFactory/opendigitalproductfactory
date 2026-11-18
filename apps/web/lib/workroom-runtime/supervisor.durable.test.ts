@@ -12,7 +12,7 @@ vi.mock("@dpf/db", () => ({ prisma: db }));
 import { createMemoryHeldRequestStore } from "./__fixtures__/memory-held-request-store";
 import { createMemoryRuntimeStore } from "./__fixtures__/memory-runtime-store";
 import { createRuntimeSupervisor, REATTACH_HORIZON_MS, type RuntimeSupervisorDeps } from "./supervisor";
-import type { ExecutorAdapter, RuntimeEvent, RuntimeSession } from "./types";
+import type { ExecutorDriver, RuntimeEvent, RuntimeSession } from "@/lib/executor-drivers/types";
 
 const NOW = new Date("2026-11-11T05:00:00.000Z");
 const actor = { userId: "user-1", agentId: "agent-1", principalId: "prn-1" };
@@ -34,8 +34,8 @@ function portal(held = createMemoryHeldRequestStore(), over: Partial<RuntimeSupe
     respondToRuntimeRequest: vi.fn(async () => {}),
     close: vi.fn(async () => {}),
   };
-  const adapter: ExecutorAdapter = {
-    provider: "codex", supportsSteer: false,
+  const adapter: ExecutorDriver = {
+    provider: "codex", capabilities: { steer: false, interrupt: true, runtimeRequests: "session", resumeThread: true, usage: false, oneShot: false },
     openSession: vi.fn(async (_config, onEvent) => { emit = onEvent; return session as unknown as RuntimeSession; }),
   };
   const onSupervisionLost = vi.fn(async () => {});

@@ -32,6 +32,7 @@ import { extractToolCalls as sharedExtractToolCalls } from "./extract-tool-calls
 import { recordCliRateLimit, clearCliRateLimit } from "./cli-pool-status";
 import { withCliSlot } from "./cli-concurrency";
 import { providerSetupLocation } from "@/lib/ai-provider-routes";
+import { extractMentionedPlatformToolNames } from "@/lib/executor-drivers/tool-trace";
 
 const SANDBOX_CONTAINER = process.env.SANDBOX_CONTAINER_ID ?? "dpf-sandbox-1";
 const CLI_TIMEOUT_MS = 600_000; // 10 minutes — accumulated Build Studio context (>100K chars) takes longer than 3 min to process
@@ -192,12 +193,6 @@ export async function writeContainerFileViaStdin(
       settle(() => reject(err));
     });
   });
-}
-
-export const TOOL_TRACE_KEYWORD_PATTERN = /\b(read_sandbox_file|write_sandbox_file|edit_sandbox_file|search_sandbox|list_sandbox_files|run_sandbox_command|check_sandbox|start_sandbox|saveBuildEvidence|save_build_notes|save_phase_handoff|reviewDesignDoc|reviewBuildPlan|search_project_files|read_project_file|list_project_directory|get_code_graph_freshness|inspect_build_code_impact|search_code_graph|trace_code_surface|find_related_tests|generate_design_system|search_design_intelligence|describe_model|deploy_feature|execute_promotion)\b/g;
-
-export function extractMentionedPlatformToolNames(text: string): string[] {
-  return Array.from(new Set(text.match(TOOL_TRACE_KEYWORD_PATTERN) ?? []));
 }
 
 // ─── Auth injection ────────────────────────────────────────────────────────
