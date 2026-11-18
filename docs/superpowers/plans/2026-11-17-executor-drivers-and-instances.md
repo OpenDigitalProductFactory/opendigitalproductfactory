@@ -10,7 +10,7 @@ Slice S3 of the T3 absorption ([spec](../specs/2026-11-13-t3-code-absorption-des
 
 Pattern source: T3 Code's `ProviderDriver` and `ProviderInstance` (`packages/provider-core/src/server/driver.ts`) and `ProviderInstanceRegistry` (`apps/server/src/provider/ProviderInstanceRegistry.ts`), read at pingdotgg/t3code@eb8185560f38 (MIT). DPF reproduces the design on its own substrate. No T3 code is copied.
 
-**Status: draft.** This record covers the research and design gates. Code starts only after independent spec approval and plan review.
+**Status: draft.** The item is bound to the delivery-medium shape: research is recorded, implementation is allowed, and completion owes delivery evidence plus an independent acceptance check on the live install.
 
 ## What this improves for Build Studio
 
@@ -76,49 +76,50 @@ An instance is a row of `AiProviderConnection` with a driver-capable `executionC
 
 ### What is measured, not assumed
 
-Build Studio today runs `codex exec` as root and `claude -p` as the node user. Running them as a session turn may change the user, working directory or sandbox flags. PR 2 records the effective user, cwd and flags before and after for each client in a test, and keeps the current values unless the change is stated in the PR.
+Build Studio today runs `codex exec` as root and `claude -p` as the node user. Running them as a session turn may change the user, working directory or sandbox flags. PR 1 (Claude) and PR 2 (Codex) each record the effective user, cwd and flags before and after in a test, and keep the current values unless the change is stated in the PR.
 
 ## Scope
 
-In S3: the Codex and Claude drivers and their four call paths (PR 1 to PR 3), then an ACP driver for Grok and Antigravity on the same contract (PR 4), as the spec's target architecture item 2 names.
+In S3: drivers for Codex, Claude, Grok and Antigravity, and all four call paths, in the item's order (below).
 
-Not in S3: OpenCode (`build/opencode-dispatch.ts`) and the native DPF runner. The item covers Codex, Claude, Grok and Antigravity only.
+Not in S3: OpenCode (`build/opencode-dispatch.ts`) and the native DPF runner.
 
-Open question for spec approval: the item is sized medium. PR 4 adds a third driver and a new protocol client. If the reviewer judges that too large for one medium slice, PR 4 moves to its own item and this plan's coverage is re-recorded.
+The item caps S3 at three PRs. If ACP does not fit in PR 3, work stops and the item is reshaped (ACP split to its own item) rather than opening a fourth PR.
 
-## Delivery (four PRs, each through the full gate)
+## Delivery (the item's ordered steps, each PR through the full gate)
 
-1. **PR 1, the drivers** (AC-1, AC-4). `executor-drivers/` with the contract, the Codex app-server driver and the Claude stream-json driver moved from `workroom-runtime/`, usage events, capabilities, one auth function and one failure classifier per driver. A conformance suite runs both drivers on the existing fake process (`workroom-runtime/__fixtures__/fake-process.ts`), fed with recorded CLI transcripts added in this PR, for thread, turn, steer, interrupt, runtime request, usage and each failure class. The workroom runtime switches to the registry; `adapters.test.ts`, `supervised-turn-delivery.test.ts` and `supervisor.durable.test.ts` stay green.
-2. **PR 2, Build Studio and Ideate on the drivers** (AC-1, AC-3). Agent runners and Ideate call the drivers; their CLI-specific code is deleted. Test: the user/cwd/flags record above, and a Build Studio fixture run per client producing the same result object as on main.
-3. **PR 3, routing by instance** (AC-2, AC-3). Routing resolves a `connectionId` and calls `generateText`. Two connections for one client route separately. A missing capability returns `capability-unavailable` and policy reroutes or holds. The duplicated tool-trace pattern and auth resolvers are deleted. The PR reports the net line count of `apps/web/lib/{routing,build,workroom-runtime,executor-drivers}` against main.
-4. **PR 4, the ACP driver** (AC-1). One driver over `@agentclientprotocol/sdk` (Apache-2.0, pinned) serves Grok and Antigravity: session, prompt, cancel, permission request, and usage where the agent reports it. `build/grok-dispatch.ts` and the Grok branch of `ideate-dispatch.ts` call it. The same conformance suite runs against a recorded ACP transcript. Capabilities the agent does not report are `false`, not assumed.
+The item body (rewritten 2026-11-18 by the room's design-note stage) orders the work by client. This plan follows that order and adds what the measurements above require.
+
+1. **PR 1 — Driver contract and Claude driver.** `executor-drivers/` holds the contract, capability flags, the usage event and one failure classifier. The Claude driver runs on stream-json with the single tool-trace parser. Workroom runtime, Build Studio `claude -p` dispatch, the Claude branch of Ideate and the routing `cli-adapter` move onto it; the Claude-side duplicates are deleted. Tests: a conformance suite on the existing fake process (`workroom-runtime/__fixtures__/fake-process.ts`) fed with recorded CLI transcripts; `adapters.test.ts`, `supervised-turn-delivery.test.ts` and `supervisor.durable.test.ts` stay green; the user/cwd/flags record for Claude (node user today) matches main.
+2. **PR 2 — Codex driver.** Codex on `codex app-server`. Workroom runtime, Build Studio `codex exec` dispatch (`codex-dispatch.ts`), the Codex branch of `ideate-dispatch.ts` and `codex-cli-adapter.ts` move onto it; the Codex-side duplicates and the second tool-trace pattern are deleted. Tests: the same conformance suite; the user/cwd/flags record for Codex (root today) matches main or the change is stated; a Build Studio fixture run per client producing the same result object as on main.
+3. **PR 3 — Instances and ACP.** An instance is an `AiProviderConnection` row (no new table); routing resolves a `connectionId`, then its driver, and applies policy when a capability is missing (`capability-unavailable`). Capability probes read driver flags. Two connections for one client route separately. The ACP driver over `@agentclientprotocol/sdk` serves Grok and Antigravity, and `build/grok-dispatch.ts` calls it; the same conformance suite runs against a recorded ACP transcript. The PR reports the net line count across the three PRs against main.
 
 ## Acceptance (from the item)
 
-The item's acceptance section, exactly as recorded on BI-A01B06F6:
+The item's acceptance section, exactly as recorded on BI-A01B06F6 (2026-11-18):
 
-> AC-1: One driver per client implements thread, turn, steer, interrupt, runtime request and usage events. The three paths call it.
+> AC-1: One driver per client (Codex, Claude, Grok, Antigravity) implements thread, turn, steer, interrupt, runtime request and usage events, or declares the missing capability explicitly. Workroom runtime, Build Studio dispatch and inference routing all call it.
 > AC-2: Routing selects an instance (account and configuration), not a client type. A missing capability is explicit and handled by policy.
 > AC-3: The duplicated paths and parsers are deleted. The net line count falls.
 > AC-4: No proprietary SDK is bundled. The Claude driver uses the claude CLI stream-json interface.
+> AC-5: Room delivery is unchanged in behaviour: a supervised turn is delivered at most once, `addressedAs`/`deliveredCursor` and the turn prompt are preserved, and instance ids never appear as a sender identity.
 
 How this plan meets each:
 
-- **AC-1:** "One driver per client implements thread, turn, steer, interrupt, runtime request and usage events. The three paths call it." The item counts three paths; this plan found four (Ideate is the fourth), and all four call the driver (PR 1 to PR 4).
-- **AC-2:** "Routing selects an instance (account and configuration), not a client type. A missing capability is explicit and handled by policy." The instance is `AiProviderConnection` (PR 3).
-- **AC-3:** "The duplicated paths and parsers are deleted. The net line count falls." (PR 2, PR 3)
-- **AC-4:** "No proprietary SDK is bundled. The Claude driver uses the claude CLI stream-json interface." (PR 1)
-- **Room rows:** the broker's wake, push and supervised-turn tests pass after PR 1 (spec AC-5b).
+- **AC-1:** PR 1 to PR 3. Ideate counts as part of Build Studio dispatch and moves with its client.
+- **AC-2:** PR 3, with `AiProviderConnection` as the instance.
+- **AC-3:** PR 1 and PR 2 delete the per-client duplicates; PR 3 reports the net line count.
+- **AC-4:** PR 1.
+- **AC-5:** every PR keeps `SupervisedSessionPort` and the broker's wake, push and supervised-turn tests green (spec AC-5b).
 
 ## Backlog coverage
 
 - Decision: decomposed
 - Parent: BI-A01B06F6
-- Receipt: blocked-by: the coverage receipt binds a pushed plan blob, and this branch cannot be pushed until local CI passes on it; record_plan_backlog_coverage runs on the first pushed head
-- Dependencies: S2 (BI-C64EDA33, done); PR 2, PR 3 and PR 4 depend on PR 1
-- PR 1, the drivers -> BI-A01B06F6
-- PR 2, Build Studio and Ideate on the drivers -> BI-A01B06F6
-- PR 3, routing by instance -> BI-A01B06F6
-- PR 4, the ACP driver -> BI-A01B06F6
+- Receipt: blocked-by: the coverage receipt binds this pushed plan blob, so it is recorded after this commit is pushed
+- Dependencies: S2 (BI-C64EDA33, done); PR 2 and PR 3 depend on PR 1
+- PR 1 — Driver contract and Claude driver -> BI-A01B06F6
+- PR 2 — Codex driver -> BI-A01B06F6
+- PR 3 — Instances and ACP -> BI-A01B06F6
 
 [verify substrate first]: ../../founder-kernel/wiki/principles/verify-substrate-before-proposing-new.md
