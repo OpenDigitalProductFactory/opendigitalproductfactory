@@ -1,7 +1,11 @@
 // The one Claude credential resolver (BI-A01B06F6). Build Studio dispatch,
 // Ideate, inference routing and the Workroom runtime each kept their own copy.
 //
-// The subscription provider ("anthropic-sub") uses the refreshing bearer token:
+// The subscription provider ("anthropic-sub", Max Plan OAuth) is the default:
+// flat-rate, where an API key ("anthropic") bills per token and burns $100 in a
+// few hours vs. 5+ days on Max Plan for sustained build workloads.
+//
+// The subscription provider uses the refreshing bearer token:
 // access tokens expire every few hours, and a cached one would be sent stale and
 // fail with 401. Any other provider uses its stored API key.
 

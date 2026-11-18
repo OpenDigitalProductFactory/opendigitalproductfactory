@@ -945,6 +945,12 @@
     "apps/web/lib/evidence/bounded-evidence-output.ts": [
       "docs/architecture/data-model-stewardship-runbook.md"
     ],
+    "apps/web/lib/executor-drivers/claude/auth.ts": [
+      "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md"
+    ],
+    "apps/web/lib/executor-drivers/tool-trace.ts": [
+      "docs/dogfood/2026-05-23-dale-hvac-build-studio.md"
+    ],
     "apps/web/lib/explore/backlog.ts": [
       "docs/architecture/backlog-archetype-scope.md"
     ],
@@ -3341,6 +3347,7 @@
       "apps/web/lib/coworker/authorized-surface-runtime.ts",
       "apps/web/lib/decision-perspective/build-studio-gate.ts",
       "apps/web/lib/decision-perspective/planned-file-paths.ts",
+      "apps/web/lib/executor-drivers/claude/auth.ts",
       "apps/web/lib/explore/feature-build-types.ts",
       "apps/web/lib/jobs/index.ts",
       "apps/web/lib/jobs/inngest-adapter.ts",
@@ -4099,6 +4106,7 @@
     ],
     "docs/dogfood/2026-05-23-dale-hvac-build-studio.md": [
       "apps/web/lib/build/ideate-build-resolution.ts",
+      "apps/web/lib/executor-drivers/tool-trace.ts",
       "apps/web/lib/routing/cli-adapter.ts",
       "packages/db/src/seed.ts"
     ],
