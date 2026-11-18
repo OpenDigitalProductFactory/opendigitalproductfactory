@@ -95,7 +95,14 @@ Open question for spec approval: the item is sized medium. PR 4 adds a third dri
 
 ## Acceptance (from the item)
 
-The item's criteria, quoted as recorded:
+The item's acceptance section, exactly as recorded on BI-A01B06F6:
+
+> AC-1: One driver per client implements thread, turn, steer, interrupt, runtime request and usage events. The three paths call it.
+> AC-2: Routing selects an instance (account and configuration), not a client type. A missing capability is explicit and handled by policy.
+> AC-3: The duplicated paths and parsers are deleted. The net line count falls.
+> AC-4: No proprietary SDK is bundled. The Claude driver uses the claude CLI stream-json interface.
+
+How this plan meets each:
 
 - **AC-1:** "One driver per client implements thread, turn, steer, interrupt, runtime request and usage events. The three paths call it." The item counts three paths; this plan found four (Ideate is the fourth), and all four call the driver (PR 1 to PR 4).
 - **AC-2:** "Routing selects an instance (account and configuration), not a client type. A missing capability is explicit and handled by policy." The instance is `AiProviderConnection` (PR 3).
