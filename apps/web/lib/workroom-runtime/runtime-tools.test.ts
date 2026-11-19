@@ -16,7 +16,7 @@ const { db, supervisor } = vi.hoisted(() => ({
 vi.mock("@dpf/db", () => ({ prisma: db }));
 vi.mock("./supervisor", () => ({ createRuntimeSupervisor: () => supervisor }));
 vi.mock("@/lib/work-capsules/handler-actor", () => ({ workCapsuleActor: async (userId: string) => ({ userId, agentId: null, principalId: null }) }));
-vi.mock("@/lib/inference/codex-cli-catalog-auth", () => ({ resolveCodexCatalogAuth: vi.fn() }));
+vi.mock("@/lib/executor-drivers/codex", () => ({ codexDriver: { provider: "codex" } }));
 vi.mock("@/lib/executor-drivers/claude", () => ({ claudeDriver: { provider: "claude" } }));
 
 import { approveRuntimePermissionTool, driveWorkroomRuntimeTool } from "./runtime-tools";

@@ -21,6 +21,9 @@ export type RuntimeRequest = {
 
 export type RuntimeDecision = "accept" | "decline" | "cancel";
 
+/** The account routing selected, when it named one; otherwise the provider's default credential. */
+export type AccountConnection = { connectionId: string; expectedExecutionVersion?: string };
+
 /**
  * What one turn cost, as the client reported it. `reported: "unknown"` means
  * the client said nothing; the token fields are then absent, never zero.

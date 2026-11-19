@@ -101,6 +101,14 @@ The item body (rewritten 2026-11-18 by the room's design-note stage) orders the 
 - **Removed duplicates.** Three Claude auth resolvers (Build Studio, Ideate, routing) are now `executor-drivers/claude/auth.ts`; two json result readers and the unused `parseCliStreamOutput` are now `parseClaudeResult`; the tool-trace pattern held by both the Claude and Codex routing adapters is `executor-drivers/tool-trace.ts`. Production code under `apps/web/lib` falls by 88 lines.
 - **Usage.** Each session turn now reports a `usage` event before it completes; a turn whose result carries no usage reports `reported: "unknown"`, never zero. The room records it as an activity; S4 feeds it to the per-instance window store.
 
+## PR 2 as built (2026-11-19)
+
+- **Same two faces for Codex.** Build Studio dispatch, Ideate and inference routing stay `codex exec` runs on the one-shot face (`executor-drivers/codex/exec.ts`, `codexExecArgs`); the Workroom runtime uses the session face over `codex app-server` (`executor-drivers/codex/session.ts`, moved from `workroom-runtime/codex-app-server-adapter.ts`). `codex-driver.test.ts` pins each caller's exact command line; Build Studio and Ideate still run Codex as root from the build workdir and the repository root, routing from its private `CODEX_HOME`.
+- **One credential resolver, with a stated change.** `executor-drivers/codex/auth.ts` (`resolveCodexAuth`, `codexAuthJson`) replaces Build Studio's `injectCodexAuth`, Ideate's copy of it and routing's `prepareCodexCliAuth`. It is routing's behaviour, so Build Studio and Ideate now get the refreshed OAuth token (they wrote the stored token as-is), the ChatGPT account id, and the API-key path. Build Studio and Ideate share one writer for `/root/.codex/auth.json`.
+- **Not folded yet.** The session logs in with model discovery's connection-checked login (`inference/codex-cli-catalog-auth.ts`), which app-server takes as an object, not a file. It joins `resolveCodexAuth` in PR 3, where instances select the connection.
+- **Usage.** Each Codex session turn reports a `usage` event from `thread/tokenUsage/updated`, read as T3 Code does: the turn's growth of the thread total, falling back to `last` when a total goes backwards. Codex counts cached input inside input, so the driver reports uncached input and `cacheReadInputTokens` apart, as Claude does. A turn with no update reports `reported: "unknown"`. Routing's `codex exec` still returns zero usage because `AdapterResult` has no unknown state; that belongs to S4.
+- **Lines.** Production code under `apps/web/lib` grows by 44 lines in this PR (198 removed, 242 added, of which the usage meter is about 45). With PR 1 the slice is 44 lines down so far; PR 3 reports the total for AC-3.
+
 ## Acceptance (from the item)
 
 The item's acceptance section, exactly as recorded on BI-A01B06F6 (2026-11-18):
@@ -123,7 +131,7 @@ How this plan meets each:
 
 - Decision: decomposed
 - Parent: BI-A01B06F6
-- Receipt: cmwmkc1y690b10ep5k442ifwh
+- Receipt: cmwmktan190qa0ep5mpbgfcmh
 - Dependencies: S2 (BI-C64EDA33, done); PR 2 and PR 3 depend on PR 1
 - PR 1 — Driver contract and Claude driver -> BI-A01B06F6
 - PR 2 — Codex driver -> BI-A01B06F6

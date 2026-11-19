@@ -5,9 +5,8 @@
 // Codex CLI handles everything internally: file reads, writes, edits, command execution.
 // We just pass it the task description and capture the result.
 //
-// Auth: uses the existing OAuth token from the ChatGPT provider (flat-rate subscription).
-// The token is fetched from the portal's credential store and injected into the docker exec
-// environment. No manual API key configuration needed.
+// Auth and the command line come from the Codex driver (executor-drivers/codex):
+// the ChatGPT subscription's refreshed OAuth token, or the account's API key.
 
 import type { AssignedTask } from "./task-dependency-graph";
 import {
@@ -17,10 +16,10 @@ import {
   runSandboxAgentCli,
   writeSandboxFile,
 } from "./sandbox/agent-cli-runtime";
-import { getDecryptedCredential } from "@/lib/inference/ai-provider-internals";
+import { codexAuthJson, resolveCodexAuth } from "@/lib/executor-drivers/codex/auth";
+import { codexExecArgs } from "@/lib/executor-drivers/codex/exec";
 import { recordBuildDispatchAttempt } from "@/lib/build/dispatch-attempts";
 import { resolveBuildWorkdir } from "./sandbox/build-branch";
-import { providerSetupLocation } from "@/lib/ai-provider-routes";
 
 // Timeout per task. Data-architect tasks (schema design) need more time because
 // Codex reads the full schema, plans multi-model changes, validates, and iterates.
@@ -35,61 +34,15 @@ export type CodexResult = {
 };
 
 /**
- * Write Codex CLI auth.json into the sandbox container.
- *
- * Codex CLI reads auth from ~/.codex/auth.json (source: codex-rs/login/src/auth/manager.rs).
- * The JSON structure (from AuthDotJson struct):
- *   { auth_mode, openai_api_key?, tokens?: { access_token, refresh_token, account_id? }, last_refresh? }
- *
- * We populate it with the OAuth tokens from the portal's credential store — the same tokens
- * used for ChatGPT Responses API calls (flat-rate subscription billing).
+ * Write the Codex driver's credentials where the CLI reads them, for Build
+ * Studio and Ideate. Codex runs as root, so ~/.codex is /root/.codex; 600 under umask 077 so no other user can
+ * read the tokens.
  */
-async function injectCodexAuth(providerId: string): Promise<void> {
-  const credential = await getDecryptedCredential(providerId);
-  if (!credential?.cachedToken) {
-    throw new Error(`No OAuth token for provider "${providerId}". Configure via ${providerSetupLocation(providerId)}.`);
-  }
-
-  // Auth.json format from openai/codex source (codex-rs/login/src/token_data.rs):
-  //   TokenData { id_token: IdTokenInfo, access_token, refresh_token, account_id? }
-  //   id_token serializes as a raw JWT string (custom serde: serialize_id_token)
-  //   On deserialization, id_token JWT is parsed for claims: email, chatgpt_plan_type, etc.
-  //
-  // AuthDotJson { auth_mode, tokens: TokenData, last_refresh? }
-  //
-  // auth_mode values (from binary): "chatgpt" | "chatgptAuthTokens" | "chatgptDeviceCode" | "apiKey"
-  //   - "chatgpt": browser-based login, expects refresh_token for token renewal
-  //   - "chatgptAuthTokens": externally-provided tokens, used as-is (what we need)
-  //   - "apiKey": OPENAI_API_KEY env var or auth.json OPENAI_API_KEY field
-  //
-  // The access_token from ChatGPT OAuth is a JWT with chatgpt_plan_type claim.
-  // Using "chatgptAuthTokens" tells Codex CLI to use the tokens directly without
-  // attempting refresh (which fails when refresh_token is empty).
-  const accessToken = credential.cachedToken;
-  const isJwt = accessToken.split(".").length === 3;
-  const idToken = isJwt
-    ? accessToken
-    : Buffer.from('{"alg":"none","typ":"JWT"}').toString("base64url")
-      + "." + Buffer.from('{"sub":"dpf"}').toString("base64url")
-      + ".";
-
-  const authJson = JSON.stringify({
-    auth_mode: "chatgptAuthTokens",
-    tokens: {
-      access_token: accessToken,
-      refresh_token: credential.refreshToken ?? "",
-      id_token: idToken,
-      account_id: null,
-    },
-    last_refresh: new Date().toISOString(),
-  });
-
-  // Write auth.json to ~/.codex/ in the sandbox container (root — codex runs as
-  // root), 600 under umask 077 so no other user can read the OAuth tokens.
+export async function writeCodexAuth(providerId: string): Promise<void> {
   await writeSandboxFile({
     containerId: SANDBOX_CONTAINER,
     path: "/root/.codex/auth.json",
-    content: authJson,
+    content: codexAuthJson(await resolveCodexAuth(providerId)),
     ownerOnly: true,
     mkdirParents: "/root/.codex",
   });
@@ -99,9 +52,9 @@ async function injectCodexAuth(providerId: string): Promise<void> {
  * Dispatch a single build task to Codex CLI inside the sandbox container.
  *
  * Flow:
- * 1. Get OAuth token from portal credential store
+ * 1. Write the Codex driver's credentials to the sandbox
  * 2. Write prompt to a temp file in the sandbox (avoids shell escaping issues)
- * 3. Run: OPENAI_API_KEY=<token> codex exec --full-auto -m <model> < /tmp/prompt.txt
+ * 3. Run the driver's `codex exec` command with the prompt on stdin
  * 4. Capture stdout as the result
  */
 export async function dispatchCodexTask(params: {
@@ -121,9 +74,8 @@ export async function dispatchCodexTask(params: {
   const role = task.specialist;
   const startedAt = new Date();
 
-  // Write OAuth tokens to ~/.codex/auth.json in the sandbox container
   try {
-    await injectCodexAuth(providerId);
+    await writeCodexAuth(providerId);
   } catch (err) {
     const completedAt = new Date();
     const content = `Auth error: ${(err as Error).message}`;
@@ -159,7 +111,6 @@ export async function dispatchCodexTask(params: {
     // No chmod (codex runs as root and reads its own file) — matches the original.
     await writeSandboxFile({ containerId: SANDBOX_CONTAINER, path: "/tmp/codex-prompt.txt", content: taskPrompt });
 
-    const modelFlag = model ? `-m ${model}` : "";
     const timeoutMs = role === "data-architect" ? CODEX_SCHEMA_TASK_TIMEOUT_MS : CODEX_TASK_TIMEOUT_MS;
     console.log(`[codex-dispatch] Starting task "${task.title}" with ${model || "ChatGPT default"} in ${SANDBOX_CONTAINER} (timeout: ${timeoutMs / 1000}s)`);
 
@@ -170,7 +121,7 @@ export async function dispatchCodexTask(params: {
       containerId: SANDBOX_CONTAINER,
       execArgs: [
         "exec", SANDBOX_CONTAINER, "sh", "-c",
-        `cd ${workdir} && codex exec --dangerously-bypass-approvals-and-sandbox --skip-git-repo-check ${modelFlag} < /tmp/codex-prompt.txt`,
+        `cd ${workdir} && codex ${codexExecArgs({ sandbox: "bypass", model }).join(" ")} < /tmp/codex-prompt.txt`,
       ],
       timeoutMs,
       resolveOnlyOnZeroExit: true,

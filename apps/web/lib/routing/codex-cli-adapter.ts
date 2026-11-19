@@ -25,14 +25,14 @@ import type { NativeCliDiagnostics } from "../shared/execution-uncertainty";
 import type { ToolCallEntry } from "./chat-message-types";
 import type { AdapterRequest, AdapterResult, ExecutionAdapterHandler } from "./adapter-types";
 import { InferenceError } from "./inference-error";
-import { getDecryptedCredential, getProviderBearerToken } from "@/lib/inference/ai-provider-internals";
 import { registerExecutionAdapter } from "./execution-adapter-registry";
 import { lazyChildProcess, lazyUtil } from "@/lib/shared/lazy-node";
 import { extractToolCalls as sharedExtractToolCalls } from "./extract-tool-calls";
 import { recordCliRateLimit, clearCliRateLimit } from "./cli-pool-status";
 import { withCliSlot } from "./cli-concurrency";
-import { providerSetupLocation } from "@/lib/ai-provider-routes";
 import { extractMentionedPlatformToolNames } from "@/lib/executor-drivers/tool-trace";
+import { codexAuthJson, resolveCodexAuth, type CodexAuth } from "@/lib/executor-drivers/codex/auth";
+import { codexExecArgs } from "@/lib/executor-drivers/codex/exec";
 
 const SANDBOX_CONTAINER = process.env.SANDBOX_CONTAINER_ID ?? "dpf-sandbox-1";
 const CLI_TIMEOUT_MS = 600_000; // 10 minutes — accumulated Build Studio context (>100K chars) takes longer than 3 min to process
@@ -195,93 +195,24 @@ export async function writeContainerFileViaStdin(
   });
 }
 
-// ─── Auth injection ────────────────────────────────────────────────────────
+// ─── Auth ──────────────────────────────────────────────────────────────────
 
 /**
- * Inject Codex CLI auth into the sandbox container.
- * Mirrors the auth injection from codex-dispatch.ts:injectCodexAuth.
- *
- * The Codex CLI expects ~/.codex/auth.json with:
- * - auth_mode: "chatgptAuthTokens" (use tokens as-is, no browser refresh)
- * - tokens.access_token: the OAuth access token
- * - tokens.id_token: a JWT (same as access_token if JWT, or synthetic)
+ * Stage the Codex driver's credentials in this call's private CODEX_HOME. A
+ * credential the driver cannot resolve is an auth failure the fallback chain
+ * moves past.
  */
-export async function prepareCodexCliAuth(providerId: string, authHome: string, connectionId?: string, expectedExecutionVersion?: string): Promise<{ mode: "oauth" } | { mode: "apikey" }> {
-  const credential = connectionId ? expectedExecutionVersion ? await getDecryptedCredential(providerId, connectionId, expectedExecutionVersion) : await getDecryptedCredential(providerId, connectionId) : await getDecryptedCredential(providerId);
-  if (!credential) {
-    throw new InferenceError(
-      `No credential for "${providerId}". Configure via ${providerSetupLocation(providerId)}.`,
-      "auth",
-      providerId,
-    );
-  }
-
-  // Force private file-based authentication for API and subscription accounts.
-  if (credential.secretRef && !credential.cachedToken) {
-    await writeContainerFileViaStdin(Buffer.from(JSON.stringify({ OPENAI_API_KEY: credential.secretRef })).toString("base64"), `${authHome}/auth.json`, "600");
-    return { mode: "apikey" };
-  }
-
-  // OAuth mode — inject auth.json
-  // Use getProviderBearerToken which handles token refresh automatically.
-  const tokenResult = connectionId ? expectedExecutionVersion ? await getProviderBearerToken(providerId, connectionId, expectedExecutionVersion) : await getProviderBearerToken(providerId, connectionId) : await getProviderBearerToken(providerId);
-  if ("error" in tokenResult) {
-    throw new InferenceError(
-      `OAuth token error for "${providerId}": ${tokenResult.error}. Re-authenticate via ${providerSetupLocation(providerId)}.`,
-      "auth",
-      providerId,
-    );
-  }
-
-  const accessToken = tokenResult.token;
-  const isJwt = accessToken.split(".").length === 3;
-  let accountId: string | null = null;
+async function stageCodexAuth(providerId: string, authHome: string, connectionId?: string, expectedExecutionVersion?: string): Promise<void> {
+  let auth: CodexAuth;
   try {
-    const claims = JSON.parse(Buffer.from(accessToken.split(".")[1] ?? "", "base64url").toString("utf8"));
-    const value = claims?.["https://api.openai.com/auth"]?.chatgpt_account_id;
-    if (typeof value === "string" && value.trim()) accountId = value;
-  } catch { /* Legacy credentials may predate a supported identity claim. */ }
-  if (connectionId && connectionId !== `provider-default-${providerId}` && !accountId) {
-    throw new InferenceError("Selected account has no supported ChatGPT identity; reconnect this account", "auth", providerId);
+    auth = await resolveCodexAuth(providerId, connectionId ? { connectionId, ...(expectedExecutionVersion ? { expectedExecutionVersion } : {}) } : undefined);
+  } catch (error) {
+    throw new InferenceError((error as Error).message, "auth", providerId);
   }
-  const idToken = isJwt
-    ? accessToken
-    : Buffer.from('{"alg":"none","typ":"JWT"}').toString("base64url")
-      + "." + Buffer.from('{"sub":"dpf"}').toString("base64url")
-      + ".";
-
-  const authJson = JSON.stringify({
-    auth_mode: "chatgptAuthTokens",
-    tokens: {
-      access_token: accessToken,
-      refresh_token: credential.refreshToken ?? "",
-      id_token: idToken,
-      account_id: accountId,
-    },
-    last_refresh: new Date().toISOString(),
-  });
-
-  const authB64 = Buffer.from(authJson).toString("base64");
-  await writeContainerFileViaStdin(authB64, `${authHome}/auth.json`, "600");
-
-  return { mode: "oauth" };
+  await writeContainerFileViaStdin(Buffer.from(codexAuthJson(auth)).toString("base64"), `${authHome}/auth.json`, "600");
 }
 
 // ─── Codex CLI adapter ─────────────────────────────────────────────────────
-
-/**
- * BI-F7D06E2D — `codex exec` is an agent with its own shell, apps, plugins,
- * browser and computer-use tools. When the platform's tools are described as
- * text, each of those is somewhere the model looks for them and does not find
- * them: TR-SCHED-AB4EF624 spent 120 s after one good call and ended "the
- * campaign action controls were unavailable". Text-tool mode switches them off,
- * as the bound read transport's config.toml does (codex-read-mcp.ts), so the
- * described JSON is the only way to act.
- */
-export const CODEX_INFERENCE_ONLY_ARGS: readonly string[] = [
-  "shell_tool", "unified_exec", "apps", "plugins", "browser_use", "computer_use",
-  "multi_agent", "goals", "hooks", "image_generation",
-].flatMap((feature) => ["-c", `features.${feature}=false`]).concat(["-c", 'web_search="disabled"']);
 
 export const CODEX_TEXT_TOOL_TURN =
   "The tools above are run by the platform when you output that JSON; they are not shell commands, apps or MCP tools in your workspace. " +
@@ -363,7 +294,7 @@ export const codexCliAdapter: ExecutionAdapterHandler = {
 
     try {
       await execAsync(`docker exec ${SANDBOX_CONTAINER} sh -c 'mkdir -p ${authHome} && chmod 700 ${authHome}'`, { timeout: 5_000 });
-      await prepareCodexCliAuth(providerId, authHome, request.plan.providerConnectionId, request.plan.providerConnectionVersion);
+      await stageCodexAuth(providerId, authHome, request.plan.providerConnectionId, request.plan.providerConnectionVersion);
       // Write prompt via stdin to avoid the POSIX ARG_MAX limit (BI-2685C1E5).
       // See writeContainerFileViaStdin for full rationale.
       const promptB64 = Buffer.from(prompt).toString("base64");
@@ -379,7 +310,7 @@ export const codexCliAdapter: ExecutionAdapterHandler = {
       // 4. Build runner script
 
       // The container supervisor owns the child handle through settlement and cleanup.
-      const script = renderOwnedCliRunner({ command: "codex", args: ["exec", "-c", 'cli_auth_credentials_store="file"', ...(nativeReads || textTools ? ["--sandbox", "read-only", "--ephemeral"] : ["--dangerously-bypass-approvals-and-sandbox"]), ...(textTools ? CODEX_INFERENCE_ONLY_ARGS : []), "--skip-git-repo-check", ...imageInput.args, ...(modelId ? ["-m", modelId] : [])],
+      const script = renderOwnedCliRunner({ command: "codex", args: codexExecArgs({ sandbox: nativeReads || textTools ? "read-only" : "bypass", fileCredentialStore: true, inferenceOnly: textTools, imageArgs: imageInput.args, model: modelId }),
         home: authHome, cwd: authHome, promptFile, timeoutMs: CLI_TIMEOUT_MS, env: { CODEX_HOME: authHome } });
 
       const scriptB64 = Buffer.from(script).toString("base64");

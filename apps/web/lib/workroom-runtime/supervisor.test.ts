@@ -12,7 +12,7 @@ import { decideClaudeToolCall, decideCodexRequest } from "./runtime-request-poli
 import { createMemoryHeldRequestStore } from "./__fixtures__/memory-held-request-store";
 import { createMemoryRuntimeStore } from "./__fixtures__/memory-runtime-store";
 import { createRuntimeSupervisor } from "./supervisor";
-import { createCodexAdapter } from "./codex-app-server-adapter";
+import { createCodexSessionDriver as createCodexAdapter } from "@/lib/executor-drivers/codex/session";
 import { autoRespond, fakeProcess } from "./__fixtures__/fake-process";
 import type { ExecutorDriver, RuntimeEvent, RuntimeSession } from "@/lib/executor-drivers/types";
 
