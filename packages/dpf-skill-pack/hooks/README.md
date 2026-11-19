@@ -22,7 +22,7 @@ A purpose in this file is not proof that an approval row displays it.
 - Hook 7 [Bash]: [pregate-evidence-guard.mjs](pregate-evidence-guard.mjs) — Check verification evidence before publishing code
 - Hook 8 [Bash]: [pregate-invocation-guard.mjs](pregate-invocation-guard.mjs) — Check the verification command can run and report its result
 - Hook 9 [Bash]: [workroom-claim-guard.mjs](workroom-claim-guard.mjs) — Check this source change belongs to a claimed Workroom
-- Hook 10 [AskUserQuestion]: [decision-routing-guard.mjs](decision-routing-guard.mjs) — Check platform guidance before asking for a decision
+- Hook 10 [AskUserQuestion\|request_user_input\|request_user_input_async]: [decision-routing-guard.mjs](decision-routing-guard.mjs) — Check platform guidance before asking for a decision
 - Hook 11 [Write\|Edit\|MultiEdit]: [root-clone-guard.mjs](root-clone-guard.mjs) — Protect the shared source checkout from unsafe changes
 - Hook 12 [Write\|Edit\|MultiEdit]: [plan-backlog-coverage-guard.mjs](plan-backlog-coverage-guard.mjs) — Check planned deliverables are tracked before source edits
 - Hook 13 [Write\|Edit\|MultiEdit]: [ux-fit-precheck.mjs](ux-fit-precheck.mjs) — Remind the author to review usability for UI changes
@@ -94,7 +94,7 @@ A count here is what DPF wires, not proof the client fired it; live probes are r
 | PreToolUse | Bash | [pregate-evidence-guard.mjs](pregate-evidence-guard.mjs) | yes | yes | yes | yes | no (1) | no (2) | no (3) | no (4) | no (5) |
 | PreToolUse | Bash | [pregate-invocation-guard.mjs](pregate-invocation-guard.mjs) | yes | yes | yes | yes | no (1) | no (2) | no (3) | no (4) | no (5) |
 | PreToolUse | Bash | [workroom-claim-guard.mjs](workroom-claim-guard.mjs) | yes | yes | yes | yes | no (1) | no (2) | no (3) | no (4) | no (5) |
-| PreToolUse | AskUserQuestion | [decision-routing-guard.mjs](decision-routing-guard.mjs) | yes | yes | yes | yes | no (1) | no (2) | no (3) | no (4) | no (5) |
+| PreToolUse | AskUserQuestion\|request_user_input\|request_user_input_async | [decision-routing-guard.mjs](decision-routing-guard.mjs) | yes | yes | yes | yes | no (1) | no (2) | no (3) | no (4) | no (5) |
 | PreToolUse | Write\|Edit\|MultiEdit | [root-clone-guard.mjs](root-clone-guard.mjs) | yes | yes | yes | yes | no (1) | no (2) | no (3) | no (4) | no (5) |
 | PreToolUse | Write\|Edit\|MultiEdit | [plan-backlog-coverage-guard.mjs](plan-backlog-coverage-guard.mjs) | yes | yes | yes | yes | no (1) | no (2) | no (3) | no (4) | no (5) |
 | PreToolUse | Write\|Edit\|MultiEdit | [ux-fit-precheck.mjs](ux-fit-precheck.mjs) | yes | yes | no (6) | no (6) | no (1) | no (2) | no (3) | no (4) | no (5) |

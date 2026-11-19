@@ -2378,6 +2378,9 @@ CODEX_BASH_GUARDS = (
     # BI-0B292D84 - also on CODEX_WRITE_GUARDS; hooks.json wires it on both matchers.
     "workroom-claim-guard.mjs",
 )
+# Must equal the decision-routing-guard matcher in hooks/hooks.json (BI-80B5E939): Codex/T3 names
+# its ask tool request_user_input[_async]; a test pins the two together.
+CODEX_ASK_MATCHER = "AskUserQuestion|request_user_input|request_user_input_async"
 CODEX_ASK_GUARDS = ("decision-routing-guard.mjs",)
 # Tool events whose DPF-owned entries the fallback copy writes and prunes.
 CODEX_DPF_TOOL_EVENTS = ("PreToolUse", "PostToolUse")
@@ -2417,7 +2420,7 @@ def _build_codex_pre_tool_use_groups(managed: Path, *, dry_run: bool) -> list[di
         if dry_run or (hooks_dir / guard).exists()
     ]
     if ask_entries:
-        groups.append({"matcher": "AskUserQuestion", "hooks": ask_entries})
+        groups.append({"matcher": CODEX_ASK_MATCHER, "hooks": ask_entries})
     write_entries = [
         _managed_hook_command(hooks_dir, guard)
         for guard in CODEX_WRITE_GUARDS
@@ -2549,7 +2552,7 @@ def codex_plugin_hooks_active(managed: Path, home: Path) -> bool:
                     names.add(base)
     required = {
         "Bash": CODEX_BASH_GUARDS,
-        "AskUserQuestion": CODEX_ASK_GUARDS,
+        CODEX_ASK_MATCHER: CODEX_ASK_GUARDS,
         "Write|Edit|MultiEdit": CODEX_WRITE_GUARDS,
     }
     return all(set(guards) <= wired.get(matcher, set()) for matcher, guards in required.items())
@@ -2586,7 +2589,7 @@ def install_codex_hooks(managed: Path, home: Path, dry_run: bool) -> str:
         return "skipped: no guard scripts found in managed copy"
     if dry_run:
         bash_count = sum(len(g.get("hooks", [])) for g in dpf_groups if g.get("matcher") == "Bash")
-        ask_count = sum(len(g.get("hooks", [])) for g in dpf_groups if g.get("matcher") == "AskUserQuestion")
+        ask_count = sum(len(g.get("hooks", [])) for g in dpf_groups if g.get("matcher") == CODEX_ASK_MATCHER)
         write_count = sum(len(g.get("hooks", [])) for g in dpf_groups if g.get("matcher") == "Write|Edit|MultiEdit")
         return f"dry-run: would merge {bash_count} Bash + {ask_count} AskUserQuestion + {write_count} Write/Edit guard(s) into {path}"
     changed = write_json(path, payload)
