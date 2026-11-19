@@ -34,6 +34,13 @@ describe("ci-policy-test-inventory", () => {
     assert.ok(
       inv.has("packages/dpf-skill-pack/hooks/pregate-invocation-guard.test.mjs"),
     );
+    // pki-contract.test.mjs is a conformance test in the release-asset-contract
+    // guard. It was previously allowlisted while two assertions were stale; this
+    // assertion prevents a silent re-allowlist from hiding the file from CI.
+    assert.ok(
+      inv.has("scripts/installer/pki-contract.test.mjs"),
+      "pki-contract.test.mjs must remain in the CI guard inventory (release-asset-contract guard)",
+    );
   });
 
   it("fails when a discovered test is neither inventory nor allowlist", () => {
