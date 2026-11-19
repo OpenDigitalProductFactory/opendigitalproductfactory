@@ -14,6 +14,7 @@ import { routeAndCall } from "@/lib/inference/routed-inference";
 import { buildEffectiveRequestContract, buildInitialRouteContext } from "@/lib/inference/route-contract-builder";
 import { inspectLocalProviderCapacity } from "@/lib/routing/local-provider-capacity";
 import { dispatchRoutedSemanticReview } from "./routed-semantic-review";
+import { resolveSemanticReviewRoute } from "./semantic-review-source-sensitivity";
 import { screenInferencePayload } from "@/lib/inference/data-screening/screen-inference-payload";
 
 beforeEach(() => {
@@ -320,5 +321,23 @@ describe("routed semantic review", () => {
 
     expect(result.decision).toBe("pass");
     expect(routeAndCall).toHaveBeenCalledOnce();
+  });
+
+  // BI-3D5AC133: a diff the server read from source is offered for publication proof.
+  it("hands a server-read diff to the route resolver and its published provenance to the screen", async () => {
+    const serverRead = { artifact: "diff --git a/x b/x", baseSha: "a".repeat(40), headSha: "b".repeat(40),
+      baseTreeHash: "c".repeat(40), headTreeHash: "d".repeat(40) };
+    const provenance = { repository: "OpenDigitalProductFactory/opendigitalproductfactory", visibility: "public" as const,
+      publishedText: [serverRead.artifact] };
+    vi.mocked(resolveSemanticReviewRoute).mockResolvedValueOnce({ sensitivity: "development", sourceCodeProvenance: provenance });
+    vi.mocked(routeAndCall).mockResolvedValue({
+      content: JSON.stringify({ decision: "pass", issues: [], summary: "Published diff." }),
+    } as never);
+    await dispatchRoutedSemanticReview(`CODE CHANGES:\n${serverRead.artifact}`, {
+      strategyProfile: "high-assurance", reviewerId: "change-reviewer", specialistIds: [], surface: "external",
+      capsuleId: "WC-1", serverRead,
+    });
+    expect(resolveSemanticReviewRoute).toHaveBeenCalledWith("WC-1", {}, serverRead);
+    expect(vi.mocked(routeAndCall).mock.calls[0]![3]).toMatchObject({ sourceCodeProvenance: provenance });
   });
 });

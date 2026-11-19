@@ -1,3 +1,4 @@
+import type { ServerReadReviewArtifact } from "./semantic-review-source-sensitivity";
 import {
   CHANGE_REVIEW_POLICY_VERSION,
   CHANGE_REVIEWER_VERSION,
@@ -33,6 +34,13 @@ export interface SemanticChangeReviewOperationInput {
   artifactType: DeliberationArtifactType;
   title: string;
   artifact: string;
+  /**
+   * The commit range the server itself read `artifact` from (BI-FC2AF393).
+   * Set only by the server after that read, never from caller input; absent
+   * for a pasted artifact. It lets routing prove the diff is published
+   * (BI-3D5AC133).
+   */
+  artifactSource?: { baseSha: string; headSha: string };
   verificationEvidence: string;
   failureAnalysis?: unknown;
   resolvedFailureEvidence?: FailureVerificationEvidence[];
@@ -53,6 +61,8 @@ export interface SemanticChangeReviewDispatchContext {
   surface: SemanticChangeReviewSurface;
   /** The reviewed Workroom; its own sensitivity sets the review's routing (BI-9F620FE1). */
   capsuleId?: string;
+  /** A diff the server read from source, offered for publication proof (BI-3D5AC133). */
+  serverRead?: ServerReadReviewArtifact;
 }
 
 export interface SemanticChangeReviewOperationDeps {
@@ -262,6 +272,8 @@ async function performReview(args: {
     specialistIds: args.identity.specialistIds,
     surface: args.input.surface,
     capsuleId: args.identity.capsuleId,
+    ...(args.input.artifactSource ? { serverRead: { artifact: args.input.artifact, ...args.input.artifactSource,
+      baseTreeHash: args.identity.baseTreeHash, headTreeHash: args.identity.headTreeHash } } : {}),
   });
   if (result.decision === "pass" && (!result.failureAnalysisReview?.adequate || result.failureAnalysisReview.rationale.trim().length < 20)) {
     result.decision = "fail";

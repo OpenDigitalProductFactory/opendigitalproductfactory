@@ -216,7 +216,7 @@ describe("change-review MCP pack", () => {
       expect(out).toMatchObject({ success: true, data: { disposition: "admitted" } });
       expect(mocks.readReviewArtifactFromSource).toHaveBeenCalledWith(expect.objectContaining({
         source: range, baseTreeHash: input.baseTreeHash, headTreeHash: input.headTreeHash, diffDigest: input.diffDigest }));
-      expect(taskRows[0]).toMatchObject({ artifacts: { create: { parts: [{ data: { input: { artifact: input.artifact } } }] } } });
+      expect(taskRows[0]).toMatchObject({ artifacts: { create: { parts: [{ data: { input: { artifact: input.artifact, artifactSource: range } } }] } } });
     });
     it("returns a source refusal before reserving review work, with the server digest", async () => {
       const { input } = validReviewInput();
