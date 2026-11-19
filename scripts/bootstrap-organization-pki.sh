@@ -81,7 +81,7 @@ valid_private_ca_url() {
 # NTFS reports chmod 0600 back as 666, so requiring it there hides every later
 # join check (BI-33D63506). Probe a scratch file; do not rewrite the package.
 filesystem_can_represent_mode_0600() {
-  probe="$(mktemp "${TMPDIR:-/tmp}/dpf-mode-probe.XXXXXX")" || return 0
+  probe="$(mktemp "${TEMP:-${TMP:-${TMPDIR:-/tmp}}}/dpf-mode-probe.XXXXXX")" || return 0
   chmod 600 "$probe" 2>/dev/null || { rm -f "$probe"; return 0; }
   probe_mode="$(stat -c '%a' "$probe" 2>/dev/null || stat -f '%Lp' "$probe" 2>/dev/null || echo unknown)"
   rm -f "$probe"
