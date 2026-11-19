@@ -161,6 +161,73 @@ test("ignores other tools and malformed payloads (fails open)", () => {
   assert.equal(decide("AskUserQuestion", { questions: "nope" }).block, false);
 });
 
+// ── BI-80B5E939: the question contracts current Codex/T3 hosts actually send ───
+// Reconstructed from the evidence recorded on BI-80B5E939 (the live T3/Codex
+// session that escaped this guard): tool `request_user_input_async`, a `title`
+// instead of `header`, and plain-string options instead of {label, description}.
+// Not a raw capture — a raw capture needs the host-delivery probe (AC-2).
+const ORIGINAL_QUESTION =
+  "Should I carry this through as a provider recovery fix, including a \u201cCheck again now\u201d action and clearer reset status?";
+const ORIGINAL_OPTIONS = ["Fix recovery and the settings design (Recommended)", "Investigate and propose the design first"];
+const modern = (question, title, options) => ({ questions: [{ id: "q1", title, question, options }] });
+
+test("BI-80B5E939: denies the exact escaped recovery/design question in the current host contract", () => {
+  const v = decide("request_user_input_async", modern(ORIGINAL_QUESTION, "Recovery path", ORIGINAL_OPTIONS));
+  assert.equal(v.block, true);
+  assert.match(v.reason, /principle_decide|dpf-decision-via-kernel/);
+});
+
+test("BI-80B5E939: the same question is denied under every legacy tool name and the legacy shape", () => {
+  const legacy = q(ORIGINAL_QUESTION, "Recovery path", ORIGINAL_OPTIONS);
+  for (const name of ["AskUserQuestion", "AskQuestion", "ask_user_question"]) {
+    assert.equal(decide(name, legacy).block, true, name);
+    assert.equal(decide(name, modern(ORIGINAL_QUESTION, "Recovery path", ORIGINAL_OPTIONS)).block, true, `${name}/modern`);
+  }
+});
+
+test("BI-80B5E939: namespaced and prefixed aliases of the ask tools are recognized", () => {
+  const input = modern("Which implementation approach should we use?", "Approach", ["A", "B"]);
+  for (const name of [
+    "request_user_input",
+    "request_user_input_async",
+    "functions.request_user_input_async",
+    "functions.request_user_input",
+    "mcp__t3-code__request_user_input_async",
+  ]) {
+    assert.equal(decide(name, input).block, true, name);
+  }
+});
+
+test("BI-80B5E939: a single question object (no questions[] wrapper) is read too", () => {
+  const flat = { title: "Approach", question: "Which implementation approach should we use?", options: ["A", "B"] };
+  assert.equal(decide("request_user_input_async", flat).block, true);
+});
+
+test("BI-80B5E939: object options keyed title/name/value are read, not just label", () => {
+  const input = {
+    questions: [{ title: "Approach", question: "Which implementation approach?", options: [{ title: "A" }, { name: "B" }] }],
+  };
+  assert.equal(decide("request_user_input_async", input).block, true);
+});
+
+test("BI-80B5E939: operator-owned and factual questions stay allowed in the current contract", () => {
+  assert.equal(decide("request_user_input_async", modern("What should we name the product?", "Name", ["Nova", "Atlas"])).block, false);
+  assert.equal(decide("request_user_input_async", modern("Which brand color do you prefer?", "Color", ["Blue", "Green"])).block, false);
+  assert.equal(decide("request_user_input_async", modern("Do we hire a second support rep this quarter?", "Hiring", ["Yes", "Not yet"])).block, false);
+  assert.equal(decide("request_user_input_async", modern("Which file did you mean — the schema?", "File", ["yes"])).block, false);
+});
+
+test("BI-80B5E939: a consulted escalation and the bypass tag still pass in the current contract", () => {
+  const consulted = modern("principle_decide returned low confidence (margin 0.05) on this architecture choice — you decide:", "Approach", ["A", "B"]);
+  assert.equal(decide("request_user_input_async", consulted).block, false);
+  assert.equal(decide("request_user_input_async", modern("Which implementation approach? [operator-owned]", "Approach", ["A", "B"])).block, false);
+});
+
+test("BI-80B5E939: unrelated tools named like questions are not captured", () => {
+  assert.equal(decide("mcp__plugin_dpf-platform_dpf__get_backlog_item", modern("Which implementation approach?", "x", ["A", "B"])).block, false);
+  assert.equal(decide("functions.exec_command", modern("Which implementation approach?", "x", ["A", "B"])).block, false);
+});
+
 // ── BI-310949BC: agent sessions run from the INSTALL folder, not a checkout ────
 // The founder's sessions start in the installed consumer runtime (D:/DPF), which
 // has no packages/dpf-skill-pack. The guard used to exit there, so the rule it

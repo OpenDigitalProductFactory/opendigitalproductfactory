@@ -52,7 +52,7 @@
         ]
       },
       {
-        "matcher": "AskUserQuestion",
+        "matcher": "AskUserQuestion|request_user_input|request_user_input_async",
         "hooks": [
           {
             "type": "command",

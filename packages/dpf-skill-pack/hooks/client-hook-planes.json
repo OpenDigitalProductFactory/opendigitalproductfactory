@@ -19,7 +19,7 @@
       "plane": "~/.grok/hooks/dpf-guards.json, generated from hooks.json (Grok ignores plugin-bundled hooks, BI-883FC2FC)",
       "matchers": {
         "Bash": "Shell|Bash|run_terminal_command|run_terminal_cmd",
-        "AskUserQuestion": "AskQuestion|AskUserQuestion|ask_user_question",
+        "AskUserQuestion|request_user_input|request_user_input_async": "AskQuestion|AskUserQuestion|ask_user_question",
         "Write|Edit|MultiEdit": "Write|Edit|MultiEdit|write|search_replace"
       },
       "timeouts": {

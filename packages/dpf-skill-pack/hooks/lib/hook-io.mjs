@@ -38,7 +38,14 @@ export const SHELL_TOOL_NAMES = new Set([
 
 // Operator-decision tool across surfaces. Claude: "AskUserQuestion"; older Grok:
 // "AskQuestion"; Grok 1.0.52: "ask_user_question" (live-probed 2026-10-14, BI-742D707B).
-export const DECISION_TOOL_NAMES = new Set(["AskUserQuestion", "AskQuestion", "ask_user_question"]);
+// Codex / T3 Code (BI-80B5E939): "request_user_input" and "request_user_input_async".
+export const DECISION_TOOL_NAMES = new Set([
+  "AskUserQuestion",
+  "AskQuestion",
+  "ask_user_question",
+  "request_user_input",
+  "request_user_input_async",
+]);
 
 // File-write tools across surfaces. Claude/Codex: Write, Edit, MultiEdit. Grok
 // 1.0.52: write, search_replace, both with a file_path input (live-probed
@@ -50,8 +57,47 @@ export function isShellTool(name) {
   return typeof name === "string" && SHELL_TOOL_NAMES.has(name);
 }
 
+/**
+ * A model-facing tool name is often namespaced by the host ("functions.x",
+ * "mcp__server__x"). The decision tool is the final segment, so match on that.
+ */
 export function isDecisionTool(name) {
-  return typeof name === "string" && DECISION_TOOL_NAMES.has(name);
+  if (typeof name !== "string") return false;
+  if (DECISION_TOOL_NAMES.has(name)) return true;
+  const last = name.split(/\.|\/|__/).pop() ?? "";
+  return DECISION_TOOL_NAMES.has(last);
+}
+
+const firstText = (...vals) => vals.find((v) => typeof v === "string" && v.trim() !== "") ?? "";
+
+/** One option's text across contracts: a plain string, or {label|title|name|value, description}. */
+function optionText(o) {
+  if (typeof o === "string") return o;
+  if (!o || typeof o !== "object") return "";
+  return `${firstText(o.label, o.title, o.name, o.value, o.text)} ${firstText(o.description, o.detail)}`.trim();
+}
+
+/**
+ * Read the operator question(s) from any known ask-tool input contract.
+ * Claude/Grok: { questions: [{ question, header, options: [{label, description}] }] }.
+ * Codex/T3: title + plain-string options, with or without a questions[] wrapper.
+ * @returns {Array<{ text: string, optionCount: number, header: string|undefined }>}
+ */
+export function readDecisionQuestions(toolInput) {
+  const input = toolInput && typeof toolInput === "object" ? toolInput : {};
+  const items = Array.isArray(input.questions) ? input.questions : [input];
+  const out = [];
+  for (const q of items) {
+    if (!q || typeof q !== "object") continue;
+    const rawOptions = q.options ?? q.choices ?? q.answers;
+    const options = Array.isArray(rawOptions) ? rawOptions : [];
+    const header = firstText(q.header, q.title);
+    const text = [q.question, q.prompt, q.header, q.title, q.message, ...options.map(optionText)]
+      .filter((v) => typeof v === "string" && v.trim() !== "")
+      .join(" ");
+    out.push({ text, optionCount: options.length, header: header || undefined });
+  }
+  return out;
 }
 
 export function isFileWriteTool(name) {
