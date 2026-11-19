@@ -203,6 +203,7 @@ const reviewSemanticChange: ToolPackHandler = async (params, userId, context): P
     artifactType,
     title,
     artifact,
+    ...(artifactSource ? { artifactSource } : {}),
     verificationEvidence,
     failureAnalysis: params.failureAnalysis,
     resolvedFailureEvidence: await resolveFailureAnalysisEvidence(params.failureAnalysis, capsule.id),

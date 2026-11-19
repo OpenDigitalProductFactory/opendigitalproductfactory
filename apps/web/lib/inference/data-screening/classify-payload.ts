@@ -12,7 +12,7 @@ import type {
   InferencePayloadMatch,
   InferencePayloadSensitivity,
 } from "./types";
-import { isPublicSourceOnlyEvidence, isPublicSourceProvenance, sourceCodeExemptFromConfidential } from "./source-code-provenance";
+import { carvePublishedText, isPublicSourceOnlyEvidence, isPublicSourceProvenance, isPublishedSourceMatch, sourceCodeExemptFromConfidential } from "./source-code-provenance";
 
 type TextProbe = {
   path: string;
@@ -452,7 +452,9 @@ function collectTextProbes(input: InferencePayloadClassificationInput): TextProb
     // declarations have their own provenance story (BI-40EF7C44).
     const origin = input.messageOrigins?.[index] ?? "turn";
     probes.push({ path: `messages[${index}].role`, text: message.role, origin });
-    collectMessageContent(message.content, `messages[${index}].content`, probes, origin);
+    const content = typeof message.content === "string" ? carvePublishedText(message.content, input.sourceCodeProvenance, // BI-3D5AC133
+      `messages[${index}].content`, (path, text) => probes.push({ path, text, origin })) : message.content;
+    collectMessageContent(content, `messages[${index}].content`, probes, origin);
     if (message.toolCallId) {
       probes.push({ path: `messages[${index}].toolCallId`, text: message.toolCallId, origin });
     }
@@ -674,7 +676,7 @@ function uniqueSorted<T extends string>(values: readonly T[]): T[] {
 const INSTRUCTION_PATH_PREFIX = "systemPrompt.instruction[";
 
 function isInstructionProvenance(match: InferencePayloadMatch): boolean {
-  return match.path.startsWith(INSTRUCTION_PATH_PREFIX);
+  return match.path.startsWith(INSTRUCTION_PATH_PREFIX) || isPublishedSourceMatch(match);
 }
 
 /**
