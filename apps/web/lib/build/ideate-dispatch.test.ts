@@ -219,6 +219,11 @@ describe("buildIdeateRunnerScript — where research runs, and what it can read"
     expect(buildIdeateRunnerScript("grok", {})).toContain(`cd ${IDEATE_SOURCE_DIR}`);
     expect(buildIdeateRunnerScript("codex", {})).toContain(`cd ${IDEATE_SOURCE_DIR}`);
   });
+
+  it("runs the Codex driver's command line, unchanged (BI-A01B06F6)", () => {
+    expect(buildIdeateRunnerScript("codex", { model: "gpt-5.5" }).split("\n").at(-1))
+      .toBe("exec codex exec --dangerously-bypass-approvals-and-sandbox --skip-git-repo-check -m gpt-5.5 < /tmp/ideate-prompt.txt 2>/dev/null");
+  });
 });
 
 describe("buildIdeateRunnerScript — the claude credential file", () => {

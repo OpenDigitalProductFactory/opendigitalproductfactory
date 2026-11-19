@@ -4,13 +4,11 @@
 import { prisma } from "@dpf/db";
 import type { ToolResult } from "@/lib/mcp-tool-types";
 import { issueWorkroomSessionToken, revokeWorkroomSessionTokens } from "@/lib/auth/workroom-session-token";
-import { resolveCodexCatalogAuth } from "@/lib/inference/codex-cli-catalog-auth";
 import { workCapsuleActor } from "@/lib/work-capsules/handler-actor";
 
 import { claudeDriver } from "@/lib/executor-drivers/claude";
-import { createCodexAdapter } from "./codex-app-server-adapter";
+import { codexDriver } from "@/lib/executor-drivers/codex";
 import { buildRuntimeHandoff } from "./runtime-handoff";
-import { sandboxRuntimeLauncher } from "./sandbox-launcher";
 import { createRuntimeSupervisor, type RuntimeSupervisor } from "./supervisor";
 import type { RuntimeDecision, RuntimeProvider } from "@/lib/executor-drivers/types";
 
@@ -28,7 +26,7 @@ export function workroomRuntimeSupervisor(): RuntimeSupervisor {
   globalRuntime.__dpfWorkroomRuntime ??= createRuntimeSupervisor({
     mcpUrl: MCP_URL,
     adapters: {
-      codex: createCodexAdapter({ launch: sandboxRuntimeLauncher, login: () => resolveCodexCatalogAuth("codex") }),
+      codex: codexDriver,
       claude: claudeDriver,
     },
     issueToken: issueWorkroomSessionToken,

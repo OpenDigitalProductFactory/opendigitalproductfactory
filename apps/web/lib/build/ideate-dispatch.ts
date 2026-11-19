@@ -14,6 +14,8 @@
 import { getDecryptedCredential } from "@/lib/inference/ai-provider-internals";
 import { claudeCredential as credentialForClaude, resolveClaudeAuth, type ClaudeAuth } from "@/lib/executor-drivers/claude/auth";
 import { claudeOneShotArgs, parseClaudeResult } from "@/lib/executor-drivers/claude/one-shot";
+import { codexExecArgs } from "@/lib/executor-drivers/codex/exec";
+import { writeCodexAuth } from "./codex-dispatch";
 import {
   SANDBOX_CONTAINER,
   credentialFileExports,
@@ -52,44 +54,6 @@ export type IdeateResult = {
    *  no design-repair round is consumed. */
   capacityDeferred?: boolean;
 };
-
-/**
- * Inject Codex CLI auth into the sandbox container.
- * Reuses the same logic as codex-dispatch.ts.
- */
-async function ensureCodexAuth(providerId: string): Promise<void> {
-  const credential = await getDecryptedCredential(providerId);
-  if (!credential?.cachedToken) {
-    throw new Error(`No OAuth token for provider "${providerId}".`);
-  }
-
-  const accessToken = credential.cachedToken;
-  const isJwt = accessToken.split(".").length === 3;
-  const idToken = isJwt
-    ? accessToken
-    : Buffer.from('{"alg":"none","typ":"JWT"}').toString("base64url")
-      + "." + Buffer.from('{"sub":"dpf"}').toString("base64url")
-      + ".";
-
-  const authJson = JSON.stringify({
-    auth_mode: "chatgptAuthTokens",
-    tokens: {
-      access_token: accessToken,
-      refresh_token: credential.refreshToken ?? "",
-      id_token: idToken,
-      account_id: null,
-    },
-    last_refresh: new Date().toISOString(),
-  });
-
-  await writeSandboxFile({
-    containerId: SANDBOX_CONTAINER,
-    path: "/root/.codex/auth.json",
-    content: authJson,
-    ownerOnly: true,
-    mkdirParents: "/root/.codex",
-  });
-}
 
 /**
  * Grok (xAI) specific auth injection for the sandbox.
@@ -467,11 +431,10 @@ export function buildIdeateRunnerScript(
       `grok ${modelFlag} --prompt-file /tmp/ideate-prompt.txt --always-approve`,
     ].join("\n");
   }
-  const modelFlag = opts.model ? `-m ${opts.model}` : "";
   return [
     "#!/bin/sh",
     `cd ${IDEATE_SOURCE_DIR}`,
-    `exec codex exec --dangerously-bypass-approvals-and-sandbox --skip-git-repo-check ${modelFlag} < /tmp/ideate-prompt.txt 2>/dev/null`,
+    `exec codex ${codexExecArgs({ sandbox: "bypass", model: opts.model }).join(" ")} < /tmp/ideate-prompt.txt 2>/dev/null`,
   ].join("\n");
 }
 
@@ -597,7 +560,7 @@ export async function dispatchIdeateResearch(params: {
     } else if (dispatchEngine === "grok") {
       await ensureGrokAuth(providerId);
     } else {
-      await ensureCodexAuth(providerId);
+      await writeCodexAuth(providerId);
     }
   } catch (err) {
     return {

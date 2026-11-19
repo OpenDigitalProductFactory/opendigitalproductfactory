@@ -11,11 +11,11 @@
 
 import { getDecryptedCredential, getProviderBearerToken } from "@/lib/inference/ai-provider-internals";
 import { providerSetupLocation } from "@/lib/ai-provider-routes";
+import type { AccountConnection } from "../types";
 
 export type ClaudeAuth = { mode: "oauth"; token: string } | { mode: "apikey"; apiKey: string };
 
-/** The account to use when routing names one; otherwise the provider's default credential. */
-export type ClaudeConnection = { connectionId: string; expectedExecutionVersion?: string };
+export type ClaudeConnection = AccountConnection;
 
 export async function resolveClaudeAuth(providerId: string, connection?: ClaudeConnection): Promise<ClaudeAuth> {
   if (providerId === "anthropic-sub") {
