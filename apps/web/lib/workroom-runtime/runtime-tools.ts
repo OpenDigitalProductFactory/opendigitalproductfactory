@@ -5,15 +5,14 @@ import { prisma } from "@dpf/db";
 import type { ToolResult } from "@/lib/mcp-tool-types";
 import { issueWorkroomSessionToken, revokeWorkroomSessionTokens } from "@/lib/auth/workroom-session-token";
 import { resolveCodexCatalogAuth } from "@/lib/inference/codex-cli-catalog-auth";
-import { resolveCliAuth } from "@/lib/routing/cli-adapter";
 import { workCapsuleActor } from "@/lib/work-capsules/handler-actor";
 
-import { createClaudeAdapter } from "./claude-stream-adapter";
+import { claudeDriver } from "@/lib/executor-drivers/claude";
 import { createCodexAdapter } from "./codex-app-server-adapter";
 import { buildRuntimeHandoff } from "./runtime-handoff";
 import { sandboxRuntimeLauncher } from "./sandbox-launcher";
 import { createRuntimeSupervisor, type RuntimeSupervisor } from "./supervisor";
-import type { RuntimeDecision, RuntimeProvider } from "./types";
+import type { RuntimeDecision, RuntimeProvider } from "@/lib/executor-drivers/types";
 
 type ToolContext = { agentId?: string; authSource?: string; apiTokenId?: string } | undefined;
 
@@ -30,7 +29,7 @@ export function workroomRuntimeSupervisor(): RuntimeSupervisor {
     mcpUrl: MCP_URL,
     adapters: {
       codex: createCodexAdapter({ launch: sandboxRuntimeLauncher, login: () => resolveCodexCatalogAuth("codex") }),
-      claude: createClaudeAdapter({ launch: sandboxRuntimeLauncher, auth: () => resolveCliAuth("anthropic-sub") }),
+      claude: claudeDriver,
     },
     issueToken: issueWorkroomSessionToken,
     revokeTokens: revokeWorkroomSessionTokens,

@@ -9,7 +9,7 @@
 
 import { prisma } from "@dpf/db";
 
-import type { RuntimeProvider } from "./types";
+import type { RuntimeProvider } from "@/lib/executor-drivers/types";
 
 export const HANDOFF_BUDGET_BYTES = 64 * 1024;
 /** The runtime's own entries in the room log (supervisor.ts runtimeActor). */

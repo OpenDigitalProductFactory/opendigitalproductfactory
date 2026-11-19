@@ -200,9 +200,9 @@ describe("buildIdeateRunnerScript — where research runs, and what it can read"
   });
 
   it("preserves the auth-mode flag from ensureClaudeAuth", () => {
-    // Regression guard for the extraction: dropping bareFlag would silently
+    // Regression guard for the extraction: dropping the auth mode would silently
     // change how the CLI authenticates.
-    expect(buildIdeateRunnerScript("claude", { claudeBareFlag: "--bare " })).toContain("claude --bare -p -");
+    expect(buildIdeateRunnerScript("claude", { claudeAuthMode: "apikey" })).toContain("claude --bare -p -");
     expect(buildIdeateRunnerScript("claude", {})).toContain("claude -p -");
   });
 

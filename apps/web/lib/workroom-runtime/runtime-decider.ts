@@ -17,7 +17,7 @@ import type { WorkCapsuleActivityKind } from "@/lib/work-capsules";
 
 import { decideCodexRequest } from "./runtime-request-policy";
 import type { QueuedInput, StoredRuntimeSession, SupervisionActor } from "./supervised-session";
-import type { RuntimeDecision, RuntimeEvent, RuntimeProvider, RuntimeRequest } from "./types";
+import type { RuntimeDecision, RuntimeEvent, RuntimeProvider, RuntimeRequest } from "@/lib/executor-drivers/types";
 
 export const EFFECT_KINDS = [
   "start-turn", "steer-turn", "interrupt-turn", "answer-request", "hold-request",
@@ -134,6 +134,11 @@ function decideEvent(s: StoredRuntimeSession, generation: string, event: Runtime
         session: { ...started(s, event.turnId), activeTurnId: event.turnId, lastHeartbeatAt: at }, effects: [], reply: {} };
     case "message":
       return { activities: [runtime("response", event.text, { turnId: event.turnId, provider })], effects: [], reply: {} };
+    case "usage":
+      // Recorded as the client reported it; unknown usage stays unknown (S4 feeds the per-instance window store).
+      return { activities: [runtime("action", event.usage.reported === "native"
+        ? `${provider} used ${event.usage.inputTokens} input and ${event.usage.outputTokens} output tokens`
+        : `${provider} did not report usage for this turn`, { turnId: event.turnId, provider, usage: event.usage })], effects: [], reply: {} };
     case "turn-completed": {
       const failed = event.status === "failed";
       const next = startNextQueued({ ...s, activeTurnId: null, lastHeartbeatAt: at });

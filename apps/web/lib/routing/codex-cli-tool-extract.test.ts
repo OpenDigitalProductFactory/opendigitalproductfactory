@@ -1,8 +1,6 @@
 import { describe, it, expect } from "vitest";
-import {
-  extractMentionedPlatformToolNames,
-  extractToolCalls,
-} from "./codex-cli-adapter";
+import { extractToolCalls } from "./codex-cli-adapter";
+import { extractMentionedPlatformToolNames } from "@/lib/executor-drivers/tool-trace";
 
 describe("codex-cli-adapter extractToolCalls — variant handling", () => {
   it("parses the canonical tool_use shape", () => {

@@ -14,13 +14,13 @@ import type { CodexCatalogLogin } from "@/lib/routing/codex-cli-model-catalog";
 import { createJsonRpcPeer, type JsonRpcPeer } from "./json-rpc-peer";
 import type { RuntimeLauncher } from "./sandbox-launcher";
 import type {
-  ExecutorAdapter,
+  ExecutorDriver,
   RuntimeDecision,
   RuntimeEventSink,
   RuntimeRequest,
   RuntimeSession,
   RuntimeSessionConfig,
-} from "./types";
+} from "@/lib/executor-drivers/types";
 
 /** Runs inside the sandbox. Credentials stay in memory (ephemeral store); threads persist in CODEX_HOME. */
 export const CODEX_SESSION_SCRIPT = [
@@ -59,10 +59,11 @@ export function codexApprovalResponse(method: string, params: Record<string, unk
 export function createCodexAdapter(deps: {
   launch: RuntimeLauncher;
   login: () => Promise<CodexCatalogLogin>;
-}): ExecutorAdapter {
+}): ExecutorDriver {
   return {
     provider: "codex",
-    supportsSteer: true,
+    // PR 2 of S3 moves this driver into executor-drivers/ and adds its usage events.
+    capabilities: { steer: true, interrupt: true, runtimeRequests: "session", resumeThread: true, usage: false, oneShot: false },
     async openSession(config: RuntimeSessionConfig, onEvent: RuntimeEventSink): Promise<RuntimeSession> {
       const login = await deps.login();
       const proc = deps.launch({

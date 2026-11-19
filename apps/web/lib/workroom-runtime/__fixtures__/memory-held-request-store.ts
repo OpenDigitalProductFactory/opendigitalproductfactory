@@ -2,7 +2,7 @@
 // instance outlives a supervisor, as the database does across a restart.
 
 import type { HeldRequestRecord, HeldRequestStore } from "../held-request-store";
-import type { RuntimeDecision } from "../types";
+import type { RuntimeDecision } from "@/lib/executor-drivers/types";
 
 const STATUS_FOR: Record<RuntimeDecision, string> = { accept: "approved", decline: "declined", cancel: "cancelled" };
 
