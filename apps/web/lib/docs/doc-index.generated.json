@@ -2329,6 +2329,7 @@
       "publishedPortal": false,
       "anchors": [
         "platform-overview",
+        "where-the-architecture-is-going",
         "current-runtime-core",
         "core-services",
         "runtime-characteristics",
