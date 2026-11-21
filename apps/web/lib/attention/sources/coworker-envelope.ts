@@ -204,6 +204,7 @@ export function coworkerEnvelopeToAttentionItem(
     actionable: row.status === DECIDABLE_STATUS && !expired,
     expiredUnanswered,
     decision,
+    irreversibleAction: row.consequence === "irreversible",
     ...(reviewBinding ? { reviewBinding } : {}),
     // BI-E5631708: offered only where the server would record it.
     ...(standingRulingEligibility({ envelope: { ...row, argsJson: row.argsJson ?? null }, decisionRationale: row.authorityDecision?.rationale ?? null, onBehalf: false }).eligible

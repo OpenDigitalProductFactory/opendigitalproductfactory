@@ -209,6 +209,8 @@ export type AttentionEnvelopeApproval = {
    * reached a person solely because nothing recorded could steer it.
    */
   standingRulingOffered?: boolean;
+  /** The action itself was classified as irreversible, independently of its audit receipt. */
+  irreversibleAction?: boolean;
   /** The authenticated envelope state-machine routes (lib/coworker/envelope-routes). */
   approveHref: string;
   declineHref: string;

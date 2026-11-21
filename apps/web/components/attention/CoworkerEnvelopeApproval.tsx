@@ -222,7 +222,7 @@ export function CoworkerEnvelopeApproval({
         {primary.target ? <p className="text-dpf-caption text-dpf-muted">{primary.target}</p> : null}
         <p>{primary.description}</p>
         <p>{primary.consequence}</p>
-        <p className="text-dpf-caption text-dpf-muted">{primary.recommendation}</p>
+        {primary.recommendation ? <p className="text-dpf-caption text-dpf-muted">{primary.recommendation}</p> : null}
         {primary.facts.length > 0 ? <dl className="grid gap-2 sm:grid-cols-2">
           {primary.facts.map((fact, index) => <Fact key={`${fact.label}-${index}`} label={fact.label} value={fact.value} wide />)}
         </dl> : null}
@@ -277,7 +277,7 @@ export function CoworkerEnvelopeApproval({
             />
             <span>
               {COPY.standingChoice}
-              <span className="block text-dpf-caption text-dpf-muted">{COPY.standingHint}</span>
+              <span className="block text-dpf-caption text-dpf-muted">{approval.manifestActionId === "manage_provider_account" ? COPY.providerStandingHint : COPY.standingHint}</span>
             </span>
           </label>
         ) : null}
