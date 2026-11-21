@@ -30,7 +30,7 @@ function deps(over: Partial<BuildDispatchExecutorDeps> = {}) {
     readRoom: async () => ROOM,
     userExists: async () => true,
     isRunning: () => false,
-    recentlyActive: async () => false,
+    runInFlight: async () => false,
     startRun,
     ...over,
   };
@@ -77,10 +77,10 @@ describe("dispatch-build effect: idempotent recovery of in-flight legacy runs", 
     expect(startRun).not.toHaveBeenCalled();
   });
 
-  it("adopts a run that recorded progress recently, even one started by a process that has since restarted", async () => {
-    const { d, startRun } = deps({ recentlyActive: async () => true });
+  it("adopts a run that recorded its own progress recently on any process (a pre-cutover dispatch, another portal)", async () => {
+    const { d, startRun } = deps({ runInFlight: async () => true });
     const out = await executeBuildDispatchEffect(effect(), d);
-    expect(out).toMatchObject({ outcome: "adopted", via: "recent-activity" });
+    expect(out).toMatchObject({ outcome: "adopted", via: "run-activity" });
     expect(startRun).not.toHaveBeenCalled();
   });
 

@@ -8,13 +8,19 @@
 // never by import, so neither the runtime nor the plan→build transition joins
 // the build/MCP import graph through it.
 
-import type { BuildDispatchExecutorDeps } from "./build-dispatch-effect";
+import { RUN_IN_FLIGHT_WINDOW_MS, RUN_PROGRESS_TOOLS, RUN_START_MARKER, type BuildDispatchExecutorDeps } from "./build-dispatch-effect";
 
 /** Boot: register the `dispatch-build` executor with the Workroom runtime's effect worker. */
 export async function registerBuildDispatchExecutor(): Promise<void> {
   const { registerEffectExecutor } = await import("@/lib/workroom-runtime/effect-executors");
+  const { RefuseEffectError } = await import("@/lib/workroom-runtime/effect-worker.server");
   const { executeBuildDispatchEffect } = await import("./build-dispatch-effect");
-  registerEffectExecutor("dispatch-build", async (effect) => ({ ...(await executeBuildDispatchEffect(effect, await productionBuildDispatchDeps())) }));
+  registerEffectExecutor("dispatch-build", async (effect) => {
+    const result = await executeBuildDispatchEffect(effect, await productionBuildDispatchDeps());
+    // A refusal settles the effect failed, for good, with its reason in the room log; it is never retried.
+    if (result.outcome === "refused") throw new RefuseEffectError(result.summary);
+    return { ...result };
+  });
 }
 
 /** The production dependencies: Prisma reads, the in-process run registry, and the approved-plan run. */
@@ -32,7 +38,21 @@ export async function productionBuildDispatchDeps(): Promise<BuildDispatchExecut
       }),
     userExists: async (userId) => Boolean(await prisma.user.findUnique({ where: { id: userId }, select: { id: true } })),
     isRunning: (buildId) => liveness.isOrchestrationRunning(buildId),
-    recentlyActive: async (buildId) => (await liveness.recentlyActiveBuildIds(prisma, [buildId], new Date())).has(buildId),
+    runInFlight: async (buildId) => {
+      const since = new Date(Date.now() - RUN_IN_FLIGHT_WINDOW_MS);
+      const row = await prisma.buildActivity.findFirst({
+        where: {
+          buildId,
+          createdAt: { gte: since },
+          OR: [
+            { tool: { in: [...RUN_PROGRESS_TOOLS] } },
+            { tool: "build_dispatch", summary: { startsWith: RUN_START_MARKER } },
+          ],
+        },
+        select: { id: true },
+      });
+      return Boolean(row);
+    },
     startRun: ({ buildId, userId }) => {
       // withOrchestrationRunning marks the build before its first await, so a
       // dispatch claimed right after this one adopts the run instead of doubling it.

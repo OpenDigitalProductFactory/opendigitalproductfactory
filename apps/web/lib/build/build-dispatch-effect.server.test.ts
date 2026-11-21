@@ -13,7 +13,7 @@ const m = vi.hoisted(() => ({
   user: vi.fn(),
   queryRaw: vi.fn(),
   running: new Set<string>(),
-  recent: vi.fn(),
+  activities: [] as Array<{ tool: string; summary: string; createdAt: Date }>,
   run: vi.fn(),
 }));
 
@@ -22,6 +22,13 @@ vi.mock("@dpf/db", () => {
     featureBuild: { findUnique: (...a: unknown[]) => m.build(...a) },
     workroom: { findUnique: (...a: unknown[]) => m.room(...a), findMany: (...a: unknown[]) => m.rooms(...a) },
     user: { findUnique: (...a: unknown[]) => m.user(...a) },
+    // Evaluates the run-in-flight query the way Postgres would, over in-memory rows.
+    buildActivity: {
+      findFirst: async ({ where }: { where: { createdAt: { gte: Date }; OR: Array<{ tool: string | { in: string[] }; summary?: { startsWith: string } }> } }) =>
+        m.activities.find((row) => row.createdAt >= where.createdAt.gte && where.OR.some((c) =>
+          (typeof c.tool === "string" ? row.tool === c.tool : c.tool.in.includes(row.tool))
+          && (!c.summary || row.summary.startsWith(c.summary.startsWith)))) ?? null,
+    },
     $queryRaw: (...a: unknown[]) => m.queryRaw(...a),
     $transaction: async (fn: (tx: unknown) => unknown) => fn(prisma),
   };
@@ -29,7 +36,6 @@ vi.mock("@dpf/db", () => {
 });
 vi.mock("@/lib/build/build-liveness", () => ({
   isOrchestrationRunning: (id: string) => m.running.has(id),
-  recentlyActiveBuildIds: async (_db: unknown, ids: string[]) => new Set((await m.recent(ids)) ? ids : []),
   withOrchestrationRunning: async (id: string, run: () => Promise<unknown>) => {
     m.running.add(id); // marked synchronously, before the run's first await
     try { return await run(); } finally { m.running.delete(id); }
@@ -41,6 +47,7 @@ vi.mock("@/lib/build/build-on-plan-approval", () => ({
 
 import { registerBuildDispatchExecutor, requestBuildDispatch } from "./build-dispatch-effect.server";
 import { registeredEffectExecutor } from "@/lib/workroom-runtime/effect-executors";
+import { RefuseEffectError } from "@/lib/workroom-runtime/effect-worker.server";
 import type { ClaimedEffect } from "@/lib/workroom-runtime/workroom-effect-store";
 
 const effect = {
@@ -56,7 +63,7 @@ beforeEach(() => {
   m.rooms.mockResolvedValue([{ id: "room-row-1", capsuleId: "WC-1" }]);
   m.user.mockResolvedValue({ id: "u1" });
   m.queryRaw.mockResolvedValue([{ id: "e1" }]);
-  m.recent.mockResolvedValue(false);
+  m.activities.length = 0;
   m.run.mockImplementation(() => new Promise(() => {})); // a long build: still running for the rest of the test
 });
 
@@ -71,13 +78,48 @@ describe("registered dispatch-build executor (production deps)", () => {
     expect(m.run).toHaveBeenCalledTimes(1);
   });
 
-  it("refuses another room's effect and a missing user against the real reads", async () => {
+  it("refuses another room's effect and a missing user: the effect fails for good with the reason (AC-3)", async () => {
     await registerBuildDispatchExecutor();
     const executor = registeredEffectExecutor("dispatch-build")!;
     m.room.mockResolvedValueOnce({ executorKind: "build-studio", executorRef: "FB-2", featureBuildId: "row-2" });
-    await expect(executor(effect)).resolves.toMatchObject({ outcome: "refused" });
+    await expect(executor(effect)).rejects.toThrow(new RefuseEffectError("Build dispatch refused: this room does not carry FB-1."));
     m.user.mockResolvedValueOnce(null);
-    await expect(executor(effect)).resolves.toMatchObject({ outcome: "refused" });
+    await expect(executor(effect)).rejects.toBeInstanceOf(RefuseEffectError);
+    expect(m.run).not.toHaveBeenCalled();
+  });
+
+  // Independent review, critical: the transition writes phase:advance and its own
+  // build_dispatch row seconds before this effect runs. Counting those as a live
+  // run "adopted" a run that never existed, and no orchestrator started.
+  it("starts the run although the transition and gates just wrote activity: only a run's own progress counts", async () => {
+    const now = new Date();
+    m.activities.push(
+      { tool: "phase:advance", summary: "Phase advanced: plan → build (buildBranch initialized)", createdAt: now },
+      { tool: "build_dispatch", summary: "Build dispatch committed on Workroom WC-1.", createdAt: now },
+      { tool: "phase:gate-blocked", summary: "plan → build transition failed (attempt 1): sandbox not running", createdAt: now },
+      { tool: "reviewBuildPlan", summary: "Plan review passed", createdAt: now },
+    );
+    await registerBuildDispatchExecutor();
+    await expect(registeredEffectExecutor("dispatch-build")!(effect)).resolves.toMatchObject({ outcome: "started" });
+    expect(m.run).toHaveBeenCalledTimes(1);
+  });
+
+  it("adopts a run that wrote its own progress recently, on any process; an old one does not count", async () => {
+    await registerBuildDispatchExecutor();
+    const executor = registeredEffectExecutor("dispatch-build")!;
+    m.activities.push({ tool: "specialist_dispatch", summary: "Started task \"t\" (Software Engineer).", createdAt: new Date(Date.now() - 20 * 60_000) });
+    await expect(executor(effect)).resolves.toMatchObject({ outcome: "started" });
+    m.running.clear();
+    m.run.mockClear();
+    for (const row of [
+      { tool: "build_dispatch", summary: "Dispatching build orchestrator: 1 tasks, parentThread=T1", createdAt: new Date() },
+      { tool: "engine_selection", summary: "selected codex", createdAt: new Date() },
+      { tool: "specialist_dispatch", summary: "Started task \"t\" (Software Engineer).", createdAt: new Date() },
+    ]) {
+      m.activities.length = 0;
+      m.activities.push(row);
+      await expect(executor(effect)).resolves.toMatchObject({ outcome: "adopted", via: "run-activity" });
+    }
     expect(m.run).not.toHaveBeenCalled();
   });
 });

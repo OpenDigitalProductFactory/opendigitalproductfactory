@@ -28,6 +28,13 @@ import type { EffectSqlDb } from "@/lib/workroom-runtime/workroom-effect-store";
 
 export const BUILD_DISPATCH_EFFECT_KIND = "dispatch-build" as const;
 
+/** How far back a run's own progress counts as in flight (the build-liveness window). */
+export const RUN_IN_FLIGHT_WINDOW_MS = 15 * 60 * 1000;
+/** The run body's start marker (runApprovedBuild); also written by pre-cutover dispatches. */
+export const RUN_START_MARKER = "Dispatching build orchestrator:";
+/** Activity only an orchestrator run writes. */
+export const RUN_PROGRESS_TOOLS = ["engine_selection", "specialist_dispatch"] as const;
+
 /** One dispatch per build: a replayed or concurrent request inserts nothing twice. */
 export const buildDispatchCommandId = (buildId: string) => `build-dispatch:${buildId}`;
 
@@ -108,8 +115,14 @@ export type BuildDispatchExecutorDeps = {
   userExists(userId: string): Promise<boolean>;
   /** A run of this build is live in this process. */
   isRunning(buildId: string): boolean;
-  /** The build recorded progress recently: a run (possibly on a process that has since died) is in flight. */
-  recentlyActive(buildId: string): Promise<boolean>;
+  /**
+   * A run of this build recorded its own progress recently (on any process):
+   * the run body's start marker, engine selection or a specialist dispatch.
+   * Gate, review and transition activity never counts here. The transition
+   * writes such rows just before this effect runs, and counting them would
+   * adopt a run that does not exist.
+   */
+  runInFlight(buildId: string): Promise<boolean>;
   /** Start the run detached. It must mark the build running before it returns. */
   startRun(input: { buildId: string; userId: string }): void;
 };
@@ -167,8 +180,8 @@ export async function executeBuildDispatchEffect(
   if (deps.isRunning(buildId)) {
     return { outcome: "adopted", via: "in-process", summary: `Build ${buildId} is already running here; adopted it instead of starting another run.` };
   }
-  if (await deps.recentlyActive(buildId)) {
-    return { outcome: "adopted", via: "recent-activity", summary: `Build ${buildId} recorded progress in the last 15 minutes; adopted that run instead of starting another.` };
+  if (await deps.runInFlight(buildId)) {
+    return { outcome: "adopted", via: "run-activity", summary: `A run of build ${buildId} recorded its own progress in the last 15 minutes; adopted it instead of starting another.` };
   }
   if (allPlannedTasksDone(build.buildPlan, build.taskResults)) {
     return { outcome: "skipped", summary: `Build dispatch for ${buildId} not needed: every task is already complete.` };

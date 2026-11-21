@@ -14,6 +14,7 @@ vi.mock("@dpf/db", () => ({ prisma: db }));
 import { createMemoryHeldRequestStore } from "./__fixtures__/memory-held-request-store";
 import { createMemoryRuntimeStore, type MemoryEffect } from "./__fixtures__/memory-runtime-store";
 import { registerEffectExecutor, registeredEffectExecutor, kickWorkroomEffects } from "./effect-executors";
+import { RefuseEffectError } from "./effect-worker.server";
 import { createRuntimeSupervisor } from "./supervisor";
 import type { ExecutorDriver } from "@/lib/executor-drivers/types";
 
@@ -96,12 +97,29 @@ describe("dispatch-build on the Workroom effect worker", () => {
     const restarted = portal();
     await restarted.reattachSupervised();
     expect(row.status).toBe("pending");
-    const executor = vi.fn(async () => ({ outcome: "adopted", via: "recent-activity", summary: "Build FB-1 recorded progress in the last 15 minutes; adopted that run instead of starting another." }));
+    const executor = vi.fn(async () => ({ outcome: "adopted", via: "run-activity", summary: "A run of build FB-1 recorded its own progress in the last 15 minutes; adopted it instead of starting another." }));
     registerEffectExecutor("dispatch-build", executor);
     await restarted.drainEffects();
     expect(executor).toHaveBeenCalledTimes(1);
     expect(row.status).toBe("succeeded");
     expect(store.activities[0]).toMatchObject({ kind: "action", payload: { outcome: "adopted" } });
+  });
+
+  it("a refused dispatch (authority) settles failed for good, with its reason in the room log, and is not retried", async () => {
+    const executor = vi.fn(async (): Promise<Record<string, unknown>> => {
+      throw new RefuseEffectError("Build dispatch refused: this room does not carry FB-1.");
+    });
+    registerEffectExecutor("dispatch-build", executor);
+    const row = oweDispatch();
+    const runtime = portal();
+    await runtime.drainEffects();
+    clock += 120_000;
+    await runtime.drainEffects();
+    expect(executor).toHaveBeenCalledTimes(1);
+    expect(row.status).toBe("failed");
+    expect(store.activities).toEqual([expect.objectContaining({
+      kind: "error", summary: "Runtime effect dispatch-build failed: Build dispatch refused: this room does not carry FB-1.",
+    })]);
   });
 
   it("a settled dispatch is never run again by a later sweep", async () => {

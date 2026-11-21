@@ -45,6 +45,7 @@ import type { AutonomousBuildExecutionProfileRefV1 } from "@/lib/build/autonomou
 import type { AutonomousPlaybookMode } from "@/lib/build/build-studio-config";
 import {
   PLAN_TO_BUILD_PASS,
+  PlanToBuildCommitError,
   refusePlanToBuild,
   transitionPlanToBuild,
 } from "@/lib/build/plan-to-build-transition-core";
@@ -624,6 +625,8 @@ export async function performPlanToBuildTransition(params: {
     },
   });
   } catch (commitErr) {
+    // Only a rolled-back commit is counted here; a gate step that throws propagates as before.
+    if (!(commitErr instanceof PlanToBuildCommitError)) throw commitErr;
     // The phase write and its owed dispatch rolled back together: the build is still in plan.
     return failTransition({
       buildId,

@@ -1,0 +1,43 @@
+{
+  "version": "1",
+  "accountableOwner": "platform-architecture",
+  "summary": "BI-EB4BB4A0 (owner direction 2026-11-20, WWMD DI-1F6CA0FA20D8). Migration 20261120180000_workroom_dispatch_build_effect adds the 'dispatch-build' value to WorkroomEffectKind. Build Studio's approved-plan dispatch, which used to be a fire-and-forget call after the plan→build write, is now owed as a WorkroomEffect committed in the same transaction as that write and run once by the Workroom effect worker. No new table or column.",
+  "affectedCopies": [
+    "WorkroomEffect rows of kind dispatch-build: inserted by apps/web/lib/build/build-dispatch-effect.ts inside the plan→build transaction (plan-to-build-transition-core.ts owedWithWrite) and by the admin dispatch test route; one per build (commandKey build-dispatch:<buildId>); run by the effect worker through the executor registered in build-dispatch-effect.server.ts; cascade with their Workroom."
+  ],
+  "privacyAssessment": {
+    "personalData": false,
+    "sensitivity": "internal: the build id and the dispatching user's id (an internal account reference already held on the build and the room).",
+    "dataSubjectRights": "No content about a person; the user id is a reference already present on FeatureBuild and the Workroom.",
+    "reviewDisposition": "Covered by the WorkroomEffect model's telemetry-bounded lifecycle (180 days on createdAt)."
+  },
+  "migration": {
+    "name": "20261120180000_workroom_dispatch_build_effect",
+    "backfill": "None. Builds already in build keep the runs they have; the existing build-phase reconcilers still cover them.",
+    "rollback": "Forward-only and additive; an enum value cannot be dropped without recreating the type, and nothing requires dropping it. Reverting the code leaves unused rows that settle or age out."
+  },
+  "tests": [
+    "apps/web/lib/build/build-dispatch-effect.test.ts",
+    "apps/web/lib/build/build-dispatch-effect.server.test.ts",
+    "apps/web/lib/workroom-runtime/dispatch-build-effect.supervisor.test.ts",
+    "apps/web/lib/workroom-runtime/workroom-effect-store.pg.test.ts",
+    "apps/web/lib/build/plan-to-build-transition.test.ts"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:workroom-effect",
+      "prismaModel": "WorkroomEffect",
+      "lifecycleDisposition": "Telemetry-bounded: settled rows are history of the room's runtime (180 days on createdAt); unsettled rows are live work. Cascades with its Workroom.",
+      "fields": [
+        {
+          "fieldId": "data:workroom-effect#kind",
+          "resolution": "not-applicable",
+          "reason": "Enum gains dispatch-build, an approved Build Studio plan's build dispatch.",
+          "provenance": "build-dispatch-effect.ts",
+          "flags": []
+        }
+      ]
+    }
+  ]
+}

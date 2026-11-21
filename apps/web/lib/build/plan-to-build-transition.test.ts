@@ -284,6 +284,15 @@ describe("performPlanToBuildTransition (BI-05208DE5)", () => {
     expect(logBuildActivityMock).toHaveBeenCalledWith("FB-X", "phase:needs-operator", expect.stringContaining("outbox unavailable"));
   });
 
+  it("a gate step that throws still propagates; it is not counted as a commit failure (independent review)", async () => {
+    deriveDependencyGateMock.mockImplementation(() => { throw new Error("dependency read failed"); });
+    await expect(performPlanToBuildTransition({ buildId: "FB-X", userId: "u1" })).rejects.toThrow("dependency read failed");
+    expect(updateMock).not.toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ buildExecState: expect.anything() }),
+    }));
+    expect(queryRawMock).not.toHaveBeenCalled();
+  });
+
   it("AC-6 retired path: the transition no longer runs the orchestrator itself", async () => {
     const orchestrator = await import("./build-on-plan-approval").catch(() => null);
     await performPlanToBuildTransition({ buildId: "FB-X", userId: "u1" });

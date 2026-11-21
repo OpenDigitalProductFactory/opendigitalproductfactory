@@ -12,6 +12,7 @@
 // performPlanToBuildTransition calls this function like every other path.
 
 import { prisma, type Prisma } from "@dpf/db";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 import {
   checkBuildPhaseInitiativeReadiness,
   enforceBuildInitiativeReadiness,
@@ -42,6 +43,17 @@ import {
 //
 // `lib/gpp/direct-phase-writes-ratchet.test.ts` fails if a new `phase: "build"`
 // write appears outside this file.
+
+/**
+ * BI-EB4BB4A0: the phase write and the work owed with it (`owedWithWrite`)
+ * rolled back together; the build is still in `plan`.
+ */
+export class PlanToBuildCommitError extends Error {
+  constructor(cause: unknown) {
+    super(getErrorMessage(cause), { cause });
+    this.name = "PlanToBuildCommitError";
+  }
+}
 
 /** The declared plan→build gate set (GPP C-8). Every path declares a mode for each. */
 export const PLAN_TO_BUILD_GATE_SET = [
@@ -327,10 +339,15 @@ export async function transitionPlanToBuild<P extends PlanToBuildPath, R = never
   const writePhase = (db: Pick<Prisma.TransactionClient, "featureBuild">) =>
     db.featureBuild.update({ where: { buildId }, data: { phase: "build" } });
   if (owedWithWrite) {
-    await prisma.$transaction(async (tx) => {
-      await writePhase(tx);
-      await owedWithWrite(tx);
-    });
+    try {
+      await prisma.$transaction(async (tx) => {
+        await writePhase(tx);
+        await owedWithWrite(tx);
+      });
+    } catch (error) {
+      // Tagged so the caller tells a rolled-back commit from a gate step that threw.
+      throw new PlanToBuildCommitError(error);
+    }
   } else {
     await writePhase(prisma);
   }
