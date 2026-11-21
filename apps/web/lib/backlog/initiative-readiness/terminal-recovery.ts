@@ -160,9 +160,11 @@ async function defaultLoadLiveRooms(args: {
   itemId: string;
   refusedWorkroomId: string | null;
 }): Promise<TerminalRecoveryRoom[]> {
+  // BI-05AFEB9A: a Build Studio room binds the item's row id, not its BI id.
+  const item = await prisma.backlogItem.findUnique({ where: { itemId: args.itemId }, select: { id: true } });
   const inventory = await loadCapsuleLivenessInventory(prisma as never, {
     where: {
-      backlogItemId: args.itemId,
+      backlogItemId: { in: item ? [args.itemId, item.id] : [args.itemId] },
       archivedAt: null,
       ...(args.refusedWorkroomId ? { capsuleId: args.refusedWorkroomId } : {}),
     },
@@ -554,9 +556,9 @@ export async function resolveTerminalInitiativeRecovery(args: {
     return escalation("workroom-ambiguous", "More than one live Workroom is bound to this item. Reconcile ownership before dispatching an acceptance reviewer.");
   }
   const room = rooms[0]!;
-  if (!room.repositoryFullName || !room.baseSha || !room.headBranch || !room.headSha) {
-    return escalation("workroom-identity-incomplete", "The Workroom lacks repository, branch, immutable base, or immutable head. Re-sync it with adopt_worktree, then retry.");
-  }
+  // BI-05AFEB9A: a Build Studio room records no immutable base; only the branches that compare against one need it.
+  const missingIdentity = () => escalation("workroom-identity-incomplete", "The Workroom lacks repository, branch, immutable base, or immutable head. Re-sync it with adopt_worktree, then retry.");
+  if (!room.repositoryFullName || !room.headBranch || !room.headSha) return missingIdentity();
   const dispatchContext = {
     workroomId: room.capsuleId,
     repositoryFullName: room.repositoryFullName,
@@ -568,6 +570,7 @@ export async function resolveTerminalInitiativeRecovery(args: {
   // create or reconcile an objective baseline. Resolve its exact source before
   // entering the baseline-owned acceptance path below (BI-594CF003).
   if (owesPir) {
+    if (!room.baseSha) return missingIdentity();
     // BI-CE661173 (BI-17238133): a room whose recorded base equals its head
     // compares an empty range, though its repair merged. Review the merged
     // squash commit instead, when the trunk proves this room's delivery.
@@ -596,7 +599,7 @@ export async function resolveTerminalInitiativeRecovery(args: {
   const designPhase = designPhaseReviewDecision(args.decision); // BI-817556D8: before acceptance lanes fail closed
   const payloads = bodyPayloads ?? await ports.loadBaselinePayloads(args.decision.subject.id);
   if (payloads.length === 0) {
-    if (designPhase) return routeDesignReviewsBeforeBaseline({ designPhase, currentAgentId: args.currentAgentId, baseSha: room.baseSha, dispatchContext, ports }); // BI-1D8E53D9
+    if (designPhase) return room.baseSha ? routeDesignReviewsBeforeBaseline({ designPhase, currentAgentId: args.currentAgentId, baseSha: room.baseSha, dispatchContext, ports }) : missingIdentity(); // BI-1D8E53D9
     const effective = args.decision.shapeDecision?.effective;
     if (effective === "small" || effective === "medium") return bodyBaselineEscalation(args.decision);
     return escalation("baseline-not-found", "No current objective baseline exists. Complete independent spec approval before acceptance mapping.");
@@ -667,9 +670,10 @@ export async function resolveTerminalInitiativeRecovery(args: {
   const documentArtifact = !readsHead && baseline.artifactRef?.kind === "document-version"
     && baseline.artifactRef.repositoryFullName.toLocaleLowerCase("en-US") === room.repositoryFullName.toLocaleLowerCase("en-US")
     ? { kind: "document-version" as const, versionId: baseline.artifactRef.versionId, valueDigest: baseline.artifactRef.valueDigest } : null;
+  if (!baselineArtifact && !documentArtifact && !room.baseSha) return missingIdentity();
   const discovered = baselineArtifact || documentArtifact ? null : await ports.discoverArtifact({
       repositoryFullName: room.repositoryFullName,
-      baseSha: room.baseSha,
+      baseSha: room.baseSha!,
       headSha: room.headSha,
       subjectItemId: args.decision.subject.id,
       headBranch: room.headBranch,
