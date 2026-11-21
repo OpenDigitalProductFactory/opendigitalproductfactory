@@ -589,7 +589,11 @@ checked earlier; `not-evaluated-recorded` is a recorded skip, never an approval.
 | `advance-phase-route` | not-evaluated | blocking | not-evaluated | blocking | build owner |
 | `perform-plan-to-build-transition` | blocking | blocking | blocking | autonomous-mode | build owner, Approve Start, canTransitionPhase |
 | `save-phase-handoff` | not-evaluated | blocking-soft | not-evaluated | not-evaluated-recorded | build owner |
-| `build-on-plan-approval` | upstream | not-evaluated | upstream | not-evaluated | build owner, Approve Start, canTransitionPhase |
+
+The fifth path, `build-on-plan-approval` (upstream readiness, no structural or WWMD gate), was retired
+by BI-EB4BB4A0. The approved-plan run no longer moves the phase. `perform-plan-to-build-transition`
+commits the phase write together with a `dispatch-build` Workroom effect, which the Workroom effect
+worker runs once.
 
 These are observed path differences, not new policy or proof that any alternate path is safe.
 The remaining `save-phase-handoff` WWMD gap is BI-5D59A982; its broader path contract is

@@ -93,7 +93,6 @@ export const KNOWN_UNMEDIATED_EXECUTE_SITES: Readonly<Record<string, number>> = 
   "lib/actions/demand-estimate.ts": 1,
   "lib/actions/request-brand-extraction.ts": 1,
   "lib/build/auto-open-build-pr.ts": 1,
-  "lib/build/build-on-plan-approval.ts": 1,
   "lib/build/build-orchestrator.ts": 2,
   "lib/build/ideate-on-approval.ts": 4,
   "lib/build/plan-on-approval.ts": 1,

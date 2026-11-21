@@ -31,9 +31,10 @@ export async function POST(req: Request) {
   }
 
   if (dispatchPhase === "build") {
-    const { dispatchBuildForApprovedPlan } = await import("@/lib/build/build-on-plan-approval");
-    const result = await dispatchBuildForApprovedPlan({ buildId, userId });
-    return NextResponse.json(result);
+    // BI-EB4BB4A0: the build is dispatched through its Workroom outbox, once, like every approved plan.
+    const { requestBuildDispatch } = await import("@/lib/build/build-dispatch-effect.server");
+    const result = await requestBuildDispatch({ buildId, userId });
+    return NextResponse.json(result, { status: result.kind === "owed" ? 202 : 409 });
   }
 
   // Default: dispatch plan generation
