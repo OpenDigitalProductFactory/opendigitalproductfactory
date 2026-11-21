@@ -16,6 +16,21 @@ const RESEARCH = {
 
 describe("primary decision disclosure", () => {
   it.each([
+    ["disable", "stop routing new model requests"],
+    ["enable", "can route new model requests"],
+  ])("explains the requested provider %s before authorization", (operation, effect) => {
+    const summarize = (proposedParameters: Record<string, unknown>) => envelopePrimaryDecision(
+      summarizeCoworkerEnvelopeDecision({ ...RESEARCH, toolName: "manage_provider_account", proposedParameters }),
+    );
+    const primary = summarize({ operation, connectionId: "provider-default-local" });
+    expect(primary.description).toContain(effect);
+    expect(primary.description).toContain("Docker Model Runner");
+    expect(primary.unresolved).toBe(false);
+    expect(summarize({ operation }).unresolved).toBe(true);
+    expect(summarize({ operation, connectionId: "provider-default-local", scope: "all" }).unresolved).toBe(true);
+  });
+
+  it.each([
     ["request_self_upgrade", { reason: "Approved release batch" }, "Request an update for this app?"],
     ["request_self_upgrade", {}, "Request an update for this app?"],
     ["merge_backlog_items", { canonicalItemId: "BI-KEEP", duplicateItemId: "BI-DUP" }, "Combine these duplicate work requests?"],

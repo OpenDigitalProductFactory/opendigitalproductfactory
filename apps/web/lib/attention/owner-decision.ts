@@ -172,7 +172,7 @@ function tagsFor(item: AttentionItem, nowMs: number): OwnerDecisionTag[] {
   if (item.source === "approval-outbound" || item.source === "compliance-submission") {
     tags.push({ label: "Goes public", kind: "public" });
   }
-  if (item.triage.irreversible) tags.push({ label: "Irreversible", kind: "reversible" });
+  if (item.source === "coworker-envelope" ? item.envelope?.irreversibleAction : item.triage.irreversible) tags.push({ label: "Irreversible", kind: "reversible" });
   const due = dueLabel(item.triage.deadlineIso, nowMs);
   if (due) tags.push({ label: due, kind: "deadline" });
   return tags;
