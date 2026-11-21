@@ -49,6 +49,7 @@ import {
   transitionPlanToBuild,
 } from "@/lib/build/plan-to-build-transition-core";
 import { closeOpenBuildPhaseRunsForTerminalBuild } from "@/lib/build/close-terminal-phase-runs";
+import { findBuildDispatchRoom, oweBuildDispatch, type BuildDispatchRoom } from "@/lib/build/build-dispatch-effect";
 
 // GPP C-8 (PR-F): the plan→build gate profiles and the one transition function
 // live in the dependency-leaf plan-to-build-transition-core.ts and are
@@ -273,9 +274,11 @@ async function abandonDeadlockedDependent(args: {
  * `build` — the ONE place the plan→build side-effect lives. Runs the structural
  * phase gate, the dependency gate, and the WWMD kernel gate (fail-OPEN on
  * evaluator error, block on a genuine principle conflict), then initializes the
- * build branch BEFORE flipping the phase and auto-dispatches the build
- * orchestrator. A branch-init / sandbox failure is counted and escalated past the
- * threshold rather than looped forever. Never throws.
+ * build branch BEFORE flipping the phase. The phase write and the build's
+ * `dispatch-build` Workroom effect commit in one transaction (BI-EB4BB4A0); the
+ * Workroom effect worker then starts the orchestrator once. A missing dispatch
+ * carrier, a branch-init / sandbox failure or a failed commit is counted and
+ * escalated past the threshold rather than looped forever. Never throws.
  */
 export async function performPlanToBuildTransition(params: {
   buildId: string;
@@ -335,12 +338,16 @@ export async function performPlanToBuildTransition(params: {
     await ensureBuildPlanCoverage(buildId);
   }
   let decisionOutcome: DecisionOutcomeType = "recommend";
+  // BI-EB4BB4A0: the build's own Workroom, which carries its dispatch effect.
+  let dispatchRoom: BuildDispatchRoom | null = null;
   let executionProfileRef: AutonomousBuildExecutionProfileRefV1 | null = null;
   let autonomousMode: AutonomousPlaybookMode = "off";
 
   // Gate order and the phase write live in transitionPlanToBuild; this path's
   // steps are declared in PLAN_TO_BUILD_GATE_PROFILES["perform-plan-to-build-transition"].
-  const transition = await transitionPlanToBuild<"perform-plan-to-build-transition", PlanToBuildTransitionOutcome>({
+  let transition: Awaited<ReturnType<typeof transitionPlanToBuild<"perform-plan-to-build-transition", PlanToBuildTransitionOutcome>>>;
+  try {
+  transition = await transitionPlanToBuild<"perform-plan-to-build-transition", PlanToBuildTransitionOutcome>({
     buildId,
     path: "perform-plan-to-build-transition",
     steps: {
@@ -538,6 +545,25 @@ export async function performPlanToBuildTransition(params: {
         return PLAN_TO_BUILD_PASS;
       },
 
+      // BI-EB4BB4A0: the dispatch is owed on the build's own Workroom, in the
+      // phase write's transaction. With no such room nothing could carry it, so
+      // nothing moves; that is counted and escalated like a branch-init failure,
+      // never dropped. Before the branch init, so a refused build makes no branch.
+      "build-dispatch-carrier": async () => {
+        dispatchRoom = await findBuildDispatchRoom(prisma, { id: build.id, buildId });
+        if (!dispatchRoom) {
+          return refusePlanToBuild(
+            await failTransition({
+              buildId,
+              parentEpicId: build.parentEpicId ?? null,
+              reason: "no single live Build Studio Workroom carries this build, so its dispatch cannot be committed",
+              prevTracker: tracker,
+            }),
+          );
+        }
+        return PLAN_TO_BUILD_PASS;
+      },
+
       // Initialize the build branch BEFORE flipping the phase so `buildBranch` is
       // always paired with `phase=build`. This is the step that was failing (sandbox
       // down / churning) and looping the whole fleet — count + escalate instead.
@@ -588,7 +614,24 @@ export async function performPlanToBuildTransition(params: {
         void persistPhaseHandoffSummary(context.threadId, "plan");
       }
     },
+
+    // BI-EB4BB4A0: the dispatch commits with the phase write, under the deterministic
+    // key build-dispatch:<buildId>, so a restart cannot lose it and a replay cannot double it.
+    owedWithWrite: async (tx) => {
+      // The build-dispatch-carrier step ran before this write and refuses without a room.
+      if (!dispatchRoom) throw new Error("no dispatch carrier was resolved for this build");
+      await oweBuildDispatch(tx, { roomRowId: dispatchRoom.id, buildId, userId });
+    },
   });
+  } catch (commitErr) {
+    // The phase write and its owed dispatch rolled back together: the build is still in plan.
+    return failTransition({
+      buildId,
+      parentEpicId: build.parentEpicId ?? null,
+      reason: `plan → build commit failed: ${excerptHeadAndTail((commitErr as Error)?.message ?? String(commitErr), 500)}`,
+      prevTracker: tracker,
+    });
+  }
   if (transition.kind === "readiness-refused") {
     logBuildActivity(buildId, "phase:gate-blocked", transition.message);
     return { kind: "gate-blocked", reason: transition.message };
@@ -602,13 +645,14 @@ export async function performPlanToBuildTransition(params: {
   logBuildActivity(buildId, "phase:advance", "Phase advanced: plan → build (buildBranch initialized)");
   await clearPlanAdvanceTracker(buildId, build.buildExecState);
 
-  // Auto-dispatch the build orchestrator (fire-and-forget) so specialist code
-  // generation runs immediately without waiting for an operator prompt.
-  void import("@/lib/build/build-on-plan-approval").then((m) =>
-    m
-      .dispatchBuildForApprovedPlan({ buildId, userId })
-      .catch((err) => console.error("[build-on-plan-approval] auto-dispatch failed:", err)),
-  );
+  // The dispatch is already committed on the build's Workroom (owedWithWrite above).
+  // Run it now rather than at the next effect sweep; a restart runs it after boot.
+  const owedOn = dispatchRoom as BuildDispatchRoom | null;
+  if (owedOn) {
+    const { kickWorkroomEffects } = await import("@/lib/workroom-runtime/effect-executors");
+    kickWorkroomEffects();
+    logBuildActivity(buildId, "build_dispatch", `Build dispatch committed on Workroom ${owedOn.capsuleId}.`);
+  }
 
   return { kind: "advanced" };
 }

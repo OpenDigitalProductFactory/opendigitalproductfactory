@@ -7,7 +7,8 @@
 //    the first refusal, writes the phase once, and records the gate skip only for
 //    `not-evaluated-recorded`.
 // 3. Every plan→build entry point calls transitionPlanToBuild with its declared
-//    path: all five are driven at runtime against a spy on the core module, and
+//    path (four since BI-EB4BB4A0 retired the ungated `build-on-plan-approval`
+//    write): all are driven at runtime against a spy on the core module, and
 //    every entry file is checked for exactly one call carrying its path literal.
 // The per-path behaviour itself is pinned by the *.characterization.test.ts files.
 import { readFileSync } from "node:fs";
@@ -84,7 +85,6 @@ import {
 import { advanceBuildPhase } from "@/lib/actions/build";
 import { POST as advancePhaseRoute } from "@/app/api/agent/build/advance-phase/route";
 import { buildEvidenceExtraPack } from "@/lib/mcp/packs/build-evidence-extra-pack";
-import { dispatchBuildForApprovedPlan } from "./build-on-plan-approval";
 import { performPlanToBuildTransition } from "./plan-to-build-transition";
 
 const actualTransition = (transitionModule as unknown as {
@@ -104,11 +104,10 @@ beforeEach(() => {
 });
 
 describe("PLAN_TO_BUILD_GATE_PROFILES are consistent", () => {
-  it("declares exactly the five plan→build paths", () => {
+  it("declares exactly the four plan→build paths (BI-EB4BB4A0 retired build-on-plan-approval)", () => {
     expect(PATHS.sort()).toEqual([
       "advance-build-phase",
       "advance-phase-route",
-      "build-on-plan-approval",
       "perform-plan-to-build-transition",
       "save-phase-handoff",
     ]);
@@ -182,7 +181,7 @@ describe("transitionPlanToBuild", () => {
       path: "perform-plan-to-build-transition",
       steps: {
         "escalation-tracker": pass, "structural-phase-gate": pass, "dependency-gate": pass,
-        "wwmd-plan-advancement": pass, "autonomous-eligibility": pass, "build-branch-init": pass,
+        "wwmd-plan-advancement": pass, "autonomous-eligibility": pass, "build-dispatch-carrier": pass, "build-branch-init": pass,
       },
     });
     expect(m.enforceReadiness).toHaveBeenCalledWith({ buildId: "FB-2", target: "implementation", targetPhase: "build", expectedPhase: "plan" });
@@ -197,7 +196,7 @@ describe("transitionPlanToBuild", () => {
       path: "perform-plan-to-build-transition",
       steps: {
         "escalation-tracker": later, "structural-phase-gate": later, "dependency-gate": later,
-        "wwmd-plan-advancement": later, "autonomous-eligibility": later, "build-branch-init": later,
+        "wwmd-plan-advancement": later, "autonomous-eligibility": later, "build-dispatch-carrier": later, "build-branch-init": later,
       },
     });
     expect(out).toEqual({ kind: "readiness-refused", message: "PLAN_COVERAGE_REQUIRED" });
@@ -209,7 +208,6 @@ describe("transitionPlanToBuild", () => {
     const pass = () => PLAN_TO_BUILD_PASS;
     await actualTransition({ buildId: "FB-1", path: "advance-phase-route", steps: { "structural-phase-gate": pass, "wwmd-plan-advancement": pass } });
     await actualTransition({ buildId: "FB-1", path: "save-phase-handoff", steps: { "structural-phase-gate": pass }, logActivity: () => {} });
-    await actualTransition({ buildId: "FB-1", path: "build-on-plan-approval", steps: {} });
     expect(m.checkReadiness).not.toHaveBeenCalled();
     expect(m.enforceReadiness).not.toHaveBeenCalled();
   });
@@ -251,7 +249,7 @@ describe("transitionPlanToBuild", () => {
       ["FB-1", PLAN_TO_BUILD_GATE_SKIPPED_EVENT, profiles["save-phase-handoff"].gateSkippedSummary],
     ]);
     m.activity.mockClear();
-    await actualTransition({ buildId: "FB-1", path: "build-on-plan-approval", steps: {} });
+    await actualTransition({ buildId: "FB-1", path: "advance-phase-route", steps: { "structural-phase-gate": () => PLAN_TO_BUILD_PASS, "wwmd-plan-advancement": () => PLAN_TO_BUILD_PASS } });
     expect(m.activity).not.toHaveBeenCalled();
     expect(m.update).toHaveBeenCalledTimes(2);
   });
@@ -264,7 +262,7 @@ describe("transitionPlanToBuild typing", () => {
       actualTransition({ buildId: "x", path: "save-phase-handoff", steps: { "structural-phase-gate": () => PLAN_TO_BUILD_PASS } });
     const extra = () =>
       // @ts-expect-error -- a path that records nothing may not take a logger
-      actualTransition({ buildId: "x", path: "build-on-plan-approval", steps: {}, logActivity: () => {} });
+      actualTransition({ buildId: "x", path: "advance-phase-route", steps: { "structural-phase-gate": () => PLAN_TO_BUILD_PASS, "wwmd-plan-advancement": () => PLAN_TO_BUILD_PASS }, logActivity: () => {} });
     expect([typeof missing, typeof extra]).toEqual(["function", "function"]);
   });
 });
@@ -318,14 +316,11 @@ describe("AC-SINGLE-TRANSITION: every plan→build path calls transitionPlanToBu
     expect(m.update).not.toHaveBeenCalled();
   });
 
-  it("dispatchBuildForApprovedPlan fallback write", async () => {
-    m.findUnique
-      .mockResolvedValueOnce({ phase: "plan", buildPlan: { tasks: [{ title: "t" }] }, taskResults: null, threadId: null, title: "T", kind: "feature" })
-      .mockResolvedValueOnce({ phase: "plan", buildBranch: "build/FB-1" });
-    await expect(dispatchBuildForApprovedPlan({ buildId: "FB-1", userId: "user-1" })).resolves.toMatchObject({ kind: "dispatched-success" });
-    const call = onlyCall();
-    expect(call).toEqual({ buildId: "FB-1", path: "build-on-plan-approval", steps: {} });
-    expect(m.update).not.toHaveBeenCalled();
+  it("the approved-plan run no longer moves the phase (BI-EB4BB4A0)", () => {
+    const source = readFileSync(resolve(__dirname, "./build-on-plan-approval.ts"), "utf8");
+    expect(source).not.toMatch(/transitionPlanToBuild\(/);
+    expect(source).not.toMatch(/executeTool\(/);
+    expect(source).not.toMatch(/phase:\s*"build"/);
   });
 
   it("performPlanToBuildTransition (plan review, pre-build resume)", async () => {
@@ -335,6 +330,8 @@ describe("AC-SINGLE-TRANSITION: every plan→build path calls transitionPlanToBu
     expect(call).toMatchObject({ buildId: "FB-1", path: "perform-plan-to-build-transition" });
     expectStepsMatchProfile(call);
     expect(typeof (call as unknown as { beforeWrite?: unknown }).beforeWrite).toBe("function");
+    // BI-EB4BB4A0: its dispatch is owed inside the phase write's transaction.
+    expect(typeof (call as unknown as { owedWithWrite?: unknown }).owedWithWrite).toBe("function");
     expect(m.update).not.toHaveBeenCalled();
   });
 
@@ -343,7 +340,6 @@ describe("AC-SINGLE-TRANSITION: every plan→build path calls transitionPlanToBu
     "advance-phase-route": "../../app/api/agent/build/advance-phase/route.ts",
     "perform-plan-to-build-transition": "./plan-to-build-transition.ts",
     "save-phase-handoff": "../mcp/packs/build-evidence-extra-pack.ts",
-    "build-on-plan-approval": "./build-on-plan-approval.ts",
   };
 
   it.each(PATHS)("%s: its entry file calls transitionPlanToBuild exactly once, with its path", (path) => {

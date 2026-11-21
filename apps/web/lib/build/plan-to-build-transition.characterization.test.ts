@@ -4,6 +4,12 @@
 // refactor and kept unchanged after it: it pins which gates run, in what order,
 // under which autonomous-playbook mode, and what is written and logged. Any edit
 // to an expectation here is a behaviour change, not a refactor.
+//
+// Deliberate behaviour change, BI-EB4BB4A0: the build's own Workroom is
+// resolved as the dispatch carrier before the branch init. The phase write
+// and the `dispatch-build` effect commit in one transaction. The
+// fire-and-forget dispatchBuildForApprovedPlan call is replaced by a kick of
+// the Workroom effect worker and a build_dispatch entry.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const trace = vi.hoisted(() => [] as string[]);
@@ -21,7 +27,9 @@ const m = vi.hoisted(() => ({
   activity: vi.fn(),
   emit: vi.fn(),
   handoffSummary: vi.fn(),
-  dispatch: vi.fn(),
+  rooms: vi.fn(),
+  queryRaw: vi.fn(),
+  kick: vi.fn(),
 }));
 
 vi.mock("@dpf/db", () => {
@@ -34,6 +42,8 @@ vi.mock("@dpf/db", () => {
       },
     },
     buildActivity: { create: (...a: unknown[]) => m.activityCreate(...a) },
+    workroom: { findMany: (...a: unknown[]) => { trace.push("dispatch-carrier"); return m.rooms(...a); } },
+    $queryRaw: (...a: unknown[]) => { trace.push("owe:dispatch-build"); return m.queryRaw(...a); },
     $transaction: (fn: (tx: unknown) => unknown) => fn(prisma),
   };
   return { prisma };
@@ -73,8 +83,8 @@ vi.mock("@/lib/agent-event-bus", () => ({
 vi.mock("@/lib/mcp/build-tool-helpers", () => ({
   logBuildActivity: (...a: unknown[]) => { trace.push(`activity:${String(a[1])}`); return m.activity(...a); },
 }));
-vi.mock("@/lib/build/build-on-plan-approval", () => ({
-  dispatchBuildForApprovedPlan: (...a: unknown[]) => m.dispatch(...a),
+vi.mock("@/lib/workroom-runtime/effect-executors", () => ({
+  kickWorkroomEffects: () => { trace.push("kick:effect-worker"); m.kick(); },
 }));
 
 import { performPlanToBuildTransition } from "./plan-to-build-transition";
@@ -104,12 +114,16 @@ const ADVANCED_TRACE = [
   "gate:wwmd-plan-advancement",
 ];
 const BRANCH_AND_WRITE = [
+  "dispatch-carrier",
   "sandbox-available?",
   "start-build-branch",
   "phase-run:complete-plan",
   "phase-run:start-build",
   'write:{"phase":"build"}',
+  "owe:dispatch-build",
   "activity:phase:advance",
+  "kick:effect-worker",
+  "activity:build_dispatch",
 ];
 
 function activities() {
@@ -133,7 +147,8 @@ beforeEach(() => {
   m.eligibility.mockResolvedValue({ mayAct: true, executionProfileRef: null, eligibility: { blockers: [] } });
   m.sandbox.mockResolvedValue(true);
   m.branch.mockResolvedValue(undefined);
-  m.dispatch.mockResolvedValue({ kind: "dispatched-success" });
+  m.rooms.mockResolvedValue([{ id: "room-row-1", capsuleId: "WC-ROOM1" }]);
+  m.queryRaw.mockResolvedValue([{ id: "effect-1" }]);
 });
 afterEach(() => vi.unstubAllEnvs());
 
@@ -144,10 +159,13 @@ describe("characterization: performPlanToBuildTransition (autonomous playbook of
     expect(trace).toEqual([...ADVANCED_TRACE, ...BRANCH_AND_WRITE]);
     expect(m.update).toHaveBeenCalledWith({ where: { buildId: "FB-X" }, data: { phase: "build" } });
     expect(phaseWrites()).toHaveLength(1);
-    expect(activities()).toEqual([["FB-X", "phase:advance", "Phase advanced: plan → build (buildBranch initialized)"]]);
+    expect(activities()).toEqual([
+      ["FB-X", "phase:advance", "Phase advanced: plan → build (buildBranch initialized)"],
+      ["FB-X", "build_dispatch", "Build dispatch committed on Workroom WC-ROOM1."],
+    ]);
     expect(m.initiative).toHaveBeenCalledWith({ buildId: "FB-X", target: "implementation", targetPhase: "build", expectedPhase: "plan" });
     expect(m.wwmd.mock.calls[0]![0]).not.toHaveProperty("riskTier");
-    await vi.waitFor(() => expect(m.dispatch).toHaveBeenCalledWith({ buildId: "FB-X", userId: "u1" }));
+    expect(m.kick).toHaveBeenCalledTimes(1);
   });
 
   it("with a thread: handoff summary before the write, phase-change event after it", async () => {
@@ -155,14 +173,18 @@ describe("characterization: performPlanToBuildTransition (autonomous playbook of
     expect(out).toEqual({ kind: "advanced" });
     expect(trace).toEqual([
       ...ADVANCED_TRACE,
+      "dispatch-carrier",
       "sandbox-available?",
       "start-build-branch",
       "phase-run:complete-plan",
       "phase-run:start-build",
       "handoff-summary",
       'write:{"phase":"build"}',
+      "owe:dispatch-build",
       "event:phase-change",
       "activity:phase:advance",
+      "kick:effect-worker",
+      "activity:build_dispatch",
     ]);
     expect(m.emit).toHaveBeenCalledWith("T1", { type: "phase:change", buildId: "FB-X", phase: "build" });
   });

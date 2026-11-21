@@ -211,6 +211,34 @@ Safety rails that make recursion safe:
 - **A kill switch.** One installation setting stops autonomous self-work dispatch without affecting human-started work.
 - **Measured weekly:** self-filed items merged, regressions caused, approvals reaching the owner, and spend.
 
+## Moving DPF's other dispatchers onto the core (owner direction 2026-11-20)
+
+Owner direction (Mark, 2026-11-20): "we want to migrate all other mechanisms into T3 … We need to close these gaps." On the DPF side, WWMD DI-1F6CA0FA20D8 reads "T3" as this document's absorbed core: the Workroom outbox and effect worker (S2) and the drivers (S3). It does not mean a call from production to the T3 Code desktop app, which has no route before S6 and would break "platform function never depends on a client".
+
+**Slice 1, built (BI-EB4BB4A0): Build Studio's approved-plan dispatch.**
+- `performPlanToBuildTransition` commits the plan→build write and one `dispatch-build` WorkroomEffect for the build's own Build Studio Workroom in one transaction, keyed `build-dispatch:<buildId>`.
+- The effect worker runs the dispatch. It does nothing for a build that has left `build`. It adopts a run that is already in flight, and it refuses another room's effect or a missing user. Otherwise it starts the orchestrator once.
+- The executor is registered at boot through `workroom-runtime/effect-executors.ts`, so the runtime never imports build code.
+- Retired:
+  - the fire-and-forget `dispatchBuildForApprovedPlan` call;
+  - its second `start_build`;
+  - the ungated `build-on-plan-approval` plan→build path.
+- The admin test route now owes its dispatch through the same outbox.
+
+**Still outside the core.** Traced on origin/main `35b96c4d`; each moves in its own slice.
+- The second build engine, `autoExecuteBuild` → `runBuildPipeline`, or the `build/execute.run` job when `DPF_BUILD_DURABLE_EXECUTION_ENABLED` is on. Its callers are:
+  - `advanceBuildPhase`;
+  - `resetBuildExecution`;
+  - `retryBuildExecution`;
+  - `resumeBuildImplementation`;
+  - the boot/10-minute `resumeStrandedBuildsOnBoot`.
+- `runGauntletRepairTask` (job `build/gauntlet.repair`).
+- `run_sandbox_tests` with `auto_fix`, which reaches `dispatchSpecialist` through `withSandboxRepairDispatch`.
+- The build-chat path in `agent-coworker.ts`, which the foreground guard leaves unreachable.
+- Plan→build without a dispatch: `advance-phase` route and `save_phase_handoff`. These builds start only when the stranded-build reconciler hands them to the pipeline engine.
+
+Until the pipeline engine moves, a build whose orchestrator dies can be restarted by that reconciler on the other engine.
+
 ## Delivery slices
 
 Each slice is its own backlog item, sized delivery-medium or smaller, in this order. The first four are the M2 pilot's foundation.

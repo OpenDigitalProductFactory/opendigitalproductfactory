@@ -24,6 +24,9 @@ export const EFFECT_KINDS = [
   "close-session", "revoke-token", "announce-supervision-lost", "record-plan-limit",
   // PR 3 (AC-5): a room's setup owed by its claim or adoption (room-setup-effects.server.ts).
   "ensure-workitem-anchor",
+  // BI-EB4BB4A0: an approved Build Studio plan's build dispatch, committed with its plan→build write
+  // (lib/build/build-dispatch-effect.ts). Not process-bound: it survives a restart and runs after boot.
+  "dispatch-build",
 ] as const;
 export type EffectKind = (typeof EFFECT_KINDS)[number];
 
@@ -197,6 +200,12 @@ function decideSucceeded(s: StoredRuntimeSession | null, c: Settled, base: Decis
         : runtime("question", `Held for a room decision: ${request.summary} (${String(c.payload["reason"] ?? "")}).`,
           { requestId: request.requestId, kind: request.kind, reason: c.payload["reason"] ?? null, decideWith: "drive_workroom_runtime action=decide" })] };
     }
+    case "dispatch-build":
+      // The room log reads the dispatch back: started, adopted, skipped or refused, with its reason.
+      return typeof result["summary"] === "string"
+        ? { ...base, activities: [runtime(result["outcome"] === "refused" ? "error" : "action", result["summary"],
+          { kind: "build-dispatch", buildId: c.payload["buildId"] ?? null, outcome: result["outcome"] ?? null })] }
+        : base;
     case "record-plan-limit":
       return typeof result["summary"] === "string"
         ? { ...base, activities: [runtime("error", result["summary"], { kind: "executor-plan-limit", provider: result["provider"] ?? null, resetAt: result["resetAt"] ?? null })] }

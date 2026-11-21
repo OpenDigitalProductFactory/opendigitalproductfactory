@@ -15,7 +15,9 @@ const startBuildBranchMock = vi.fn();
 const startBuildPhaseRunMock = vi.fn();
 const admitPhaseTransitionMock = vi.fn();
 const completeBuildPhaseRunMock = vi.fn();
-const dispatchBuildMock = vi.fn();
+const roomsMock = vi.fn();
+const queryRawMock = vi.fn();
+const kickMock = vi.fn();
 const enforceInitiativeReadinessMock = vi.fn();
 
 const ensureCoverageMock = vi.fn(async () => ({ recorded: false, reason: "already-covered" }));
@@ -34,9 +36,25 @@ vi.mock("@dpf/db", () => {
       update: (...a: unknown[]) => updateMock(...a),
     },
     buildActivity: { create: (...a: unknown[]) => activityCreateMock(...a) },
-    // abandonDeadlockedDependent runs its re-check + write in a $transaction;
-    // invoke the callback immediately with the same mocked delegates.
-    $transaction: (fn: (tx: unknown) => unknown) => fn(prisma),
+    workroom: { findMany: (...a: unknown[]) => roomsMock(...a) },
+    $queryRaw: (...a: unknown[]) => queryRawMock(...a),
+    // A transaction that behaves like one: its writes reach the delegates only
+    // when the callback resolves, so a throw inside it leaves nothing written
+    // (BI-EB4BB4A0: the phase write and the owed dispatch commit together).
+    $transaction: async (fn: (tx: unknown) => unknown) => {
+      const pending: Array<() => unknown> = [];
+      const tx = {
+        featureBuild: {
+          findUnique: (...a: unknown[]) => findUniqueMock(...a),
+          update: (...a: unknown[]) => { pending.push(() => updateMock(...a)); return Promise.resolve({}); },
+        },
+        buildActivity: { create: (...a: unknown[]) => { pending.push(() => activityCreateMock(...a)); return Promise.resolve({}); } },
+        $queryRaw: (...a: unknown[]) => queryRawMock(...a),
+      };
+      const result = await fn(tx);
+      for (const write of pending) await write();
+      return result;
+    },
   };
   return { prisma };
 });
@@ -64,8 +82,8 @@ vi.mock("@/lib/build/build-phase-run", () => ({
   startBuildPhaseRun: (...a: unknown[]) => startBuildPhaseRunMock(...a),
   completeBuildPhaseRun: (...a: unknown[]) => completeBuildPhaseRunMock(...a),
 }));
-vi.mock("@/lib/build/build-on-plan-approval", () => ({
-  dispatchBuildForApprovedPlan: (...a: unknown[]) => dispatchBuildMock(...a),
+vi.mock("@/lib/workroom-runtime/effect-executors", () => ({
+  kickWorkroomEffects: () => kickMock(),
 }));
 vi.mock("@/lib/build/build-entry-gate", () => ({
   enforceBuildInitiativeReadiness: (...a: unknown[]) => enforceInitiativeReadinessMock(...a),
@@ -157,7 +175,9 @@ describe("performPlanToBuildTransition (BI-05208DE5)", () => {
     startBuildPhaseRunMock.mockReset().mockResolvedValue(undefined);
     admitPhaseTransitionMock.mockReset().mockResolvedValue(true);
     completeBuildPhaseRunMock.mockReset().mockResolvedValue(undefined);
-    dispatchBuildMock.mockReset().mockResolvedValue({ kind: "dispatched" });
+    roomsMock.mockReset().mockResolvedValue([{ id: "room-row-1", capsuleId: "WC-ROOM1" }]);
+    queryRawMock.mockReset().mockResolvedValue([{ id: "effect-1" }]);
+    kickMock.mockReset();
     enforceInitiativeReadinessMock.mockReset().mockResolvedValue({ allowed: true, message: "allowed" });
   });
 
@@ -183,15 +203,91 @@ describe("performPlanToBuildTransition (BI-05208DE5)", () => {
     expect(updateMock).not.toHaveBeenCalled();
   });
 
-  it("advances a complete, reviewed, WWMD-recommended plan to build (initializes branch, flips phase, dispatches)", async () => {
+  it("advances a complete, reviewed, WWMD-recommended plan to build (initializes branch, flips phase, owes its dispatch)", async () => {
     const out = await performPlanToBuildTransition({ buildId: "FB-X", userId: "u1" });
     expect(out).toEqual({ kind: "advanced" });
     expect(startBuildBranchMock).toHaveBeenCalledWith("FB-X");
     // phase flipped to build
     expect(updateMock).toHaveBeenCalledWith(expect.objectContaining({ data: { phase: "build" } }));
-    // build orchestrator auto-dispatched (fire-and-forget dynamic import — flush)
-    await vi.waitFor(() => expect(dispatchBuildMock).toHaveBeenCalledWith({ buildId: "FB-X", userId: "u1" }));
+    // BI-EB4BB4A0: the dispatch is a committed Workroom effect, and the worker is kicked to run it.
+    expect(queryRawMock).toHaveBeenCalledTimes(1);
+    expect(kickMock).toHaveBeenCalledTimes(1);
     expect(logBuildActivityMock).toHaveBeenCalledWith("FB-X", "phase:advance", expect.stringContaining("plan → build"));
+  });
+
+  // ── BI-EB4BB4A0: dispatch through the absorbed T3 core (Workroom outbox) ──
+  /** The values bound into the one effect insert: [id, roomRowId, commandKey, ordinal, kind, processBound, generation, payload, ...]. */
+  function effectInsert() {
+    expect(queryRawMock).toHaveBeenCalledTimes(1);
+    const [strings, ...values] = queryRawMock.mock.calls[0]! as [TemplateStringsArray, ...unknown[]];
+    expect(strings.join("?")).toContain('INSERT INTO "WorkroomEffect"');
+    expect(strings.join("?")).toContain('ON CONFLICT ("workCapsuleId","commandKey","ordinal") DO NOTHING');
+    return { roomRowId: values[1], commandKey: values[2], kind: values[4], processBound: values[5], payload: JSON.parse(String(values[7])) };
+  }
+
+  it("AC-1 single dispatch: commits one dispatch-build effect on the build's own room, keyed build-dispatch:<buildId>", async () => {
+    const out = await performPlanToBuildTransition({ buildId: "FB-X", userId: "u1" });
+    expect(out).toEqual({ kind: "advanced" });
+    expect(effectInsert()).toEqual({
+      roomRowId: "room-row-1",
+      commandKey: "build-dispatch:FB-X",
+      kind: "dispatch-build",
+      processBound: false,
+      payload: { buildId: "FB-X", userId: "u1" },
+    });
+    // The carrier is the build's own live Build Studio room, never another executor's.
+    expect(roomsMock.mock.calls[0]![0]).toMatchObject({
+      where: { executorKind: "build-studio", executorRef: "FB-X", featureBuildId: "row-1", archivedAt: null },
+    });
+    expect(logBuildActivityMock).toHaveBeenCalledWith("FB-X", "build_dispatch", "Build dispatch committed on Workroom WC-ROOM1.");
+  });
+
+  it("AC-1 single dispatch: a replayed transition reuses the same deterministic key, so the insert is a no-op", async () => {
+    await performPlanToBuildTransition({ buildId: "FB-X", userId: "u1" });
+    const first = effectInsert().commandKey;
+    queryRawMock.mockClear().mockResolvedValue([]); // ON CONFLICT DO NOTHING returns no row
+    await performPlanToBuildTransition({ buildId: "FB-X", userId: "u2" });
+    expect(effectInsert().commandKey).toBe(first);
+  });
+
+  it("AC-4 absence: with no Build Studio room to carry the dispatch, nothing moves and the failure is counted", async () => {
+    roomsMock.mockResolvedValue([]);
+    const out = await performPlanToBuildTransition({ buildId: "FB-X", userId: "u1" });
+    expect(out).toMatchObject({ kind: "transition-failed", failures: 1, reason: expect.stringContaining("no single live Build Studio Workroom") });
+    expect(startBuildBranchMock).not.toHaveBeenCalled();
+    expect(updateMock).not.toHaveBeenCalledWith(expect.objectContaining({ data: { phase: "build" } }));
+    expect(queryRawMock).not.toHaveBeenCalled();
+    expect(kickMock).not.toHaveBeenCalled();
+  });
+
+  it("AC-4 absence: two candidate rooms are ambiguous and are never guessed between", async () => {
+    roomsMock.mockResolvedValue([{ id: "a", capsuleId: "WC-A" }, { id: "b", capsuleId: "WC-B" }]);
+    const out = await performPlanToBuildTransition({ buildId: "FB-X", userId: "u1" });
+    expect(out.kind).toBe("transition-failed");
+    expect(queryRawMock).not.toHaveBeenCalled();
+  });
+
+  it("AC-4 failure: when the outbox write fails, the phase write rolls back with it and the failure is counted", async () => {
+    queryRawMock.mockRejectedValue(new Error('type "WorkroomEffectKind" has no value dispatch-build'));
+    const out = await performPlanToBuildTransition({ buildId: "FB-X", userId: "u1" });
+    expect(out).toMatchObject({ kind: "transition-failed", failures: 1, reason: expect.stringContaining("plan → build commit failed") });
+    expect(updateMock).not.toHaveBeenCalledWith(expect.objectContaining({ data: { phase: "build" } }));
+    expect(kickMock).not.toHaveBeenCalled();
+    expect(logBuildActivityMock).not.toHaveBeenCalledWith("FB-X", "phase:advance", expect.anything());
+  });
+
+  it("AC-4 failure: repeated commit failures escalate to the operator instead of looping", async () => {
+    findUniqueMock.mockResolvedValue(planBuild({ buildExecState: { planAdvance: { failures: PLAN_ADVANCE_ESCALATE_AFTER - 1 } } }));
+    queryRawMock.mockRejectedValue(new Error("outbox unavailable"));
+    const out = await performPlanToBuildTransition({ buildId: "FB-X", userId: "u1" });
+    expect(out.kind).toBe("escalated");
+    expect(logBuildActivityMock).toHaveBeenCalledWith("FB-X", "phase:needs-operator", expect.stringContaining("outbox unavailable"));
+  });
+
+  it("AC-6 retired path: the transition no longer runs the orchestrator itself", async () => {
+    const orchestrator = await import("./build-on-plan-approval").catch(() => null);
+    await performPlanToBuildTransition({ buildId: "FB-X", userId: "u1" });
+    expect(orchestrator && "dispatchBuildForApprovedPlan" in orchestrator).toBe(false);
   });
 
   it("does NOT flip when the WWMD gate withholds advancement", async () => {

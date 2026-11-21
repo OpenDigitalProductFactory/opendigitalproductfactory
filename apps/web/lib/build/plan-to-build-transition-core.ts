@@ -11,7 +11,7 @@
 // transition: plan-to-build-transition.ts re-exports everything here and
 // performPlanToBuildTransition calls this function like every other path.
 
-import { prisma } from "@dpf/db";
+import { prisma, type Prisma } from "@dpf/db";
 import {
   checkBuildPhaseInitiativeReadiness,
   enforceBuildInitiativeReadiness,
@@ -19,7 +19,9 @@ import {
 
 // ── GPP C-8: one plan→build transition function (PR-F, BI-45F9CB7A) ─────────
 //
-// Five code paths move a build from `plan` to `build`. Before PR-F four of them
+// Four code paths move a build from `plan` to `build` (a fifth, the ungated
+// `build-on-plan-approval` fallback write, was retired by BI-EB4BB4A0: the
+// approved-plan run no longer moves the phase). Before PR-F four of them
 // wrote the phase themselves, each with its own gate set, so a missing gate
 // (the WWMD plan-advancement gate on `save_phase_handoff`) was invisible except
 // by reading every caller. Now every path calls `transitionPlanToBuild`, which
@@ -59,6 +61,7 @@ export type PlanToBuildPathCheck =
   | "escalation-tracker"
   | "build-studio-decision-record"
   | "autonomous-eligibility"
+  | "build-dispatch-carrier"
   | "build-branch-init";
 export type PlanToBuildStep = PlanToBuildGate | PlanToBuildPathCheck;
 
@@ -101,8 +104,7 @@ export type PlanToBuildPath =
   | "advance-build-phase"
   | "advance-phase-route"
   | "perform-plan-to-build-transition"
-  | "save-phase-handoff"
-  | "build-on-plan-approval";
+  | "save-phase-handoff";
 
 export type PlanToBuildGateProfile = {
   /** Where the path enters, for humans and the single-path test. */
@@ -200,17 +202,20 @@ export const PLAN_TO_BUILD_GATE_PROFILES = {
       "dependency-gate",
       "wwmd-plan-advancement",
       "autonomous-eligibility",
+      // BI-EB4BB4A0: the build's own Workroom must exist to carry its dispatch, or nothing moves.
+      "build-dispatch-carrier",
       "build-branch-init",
     ],
     callerChecksBefore: ["build exists and is in plan"],
     refusal:
       "Returns a PlanToBuildTransitionOutcome and never throws. An unsatisfiable dependency abandons the build; " +
-      "a branch-init failure is counted and escalates past the threshold.",
+      "a missing dispatch carrier, a branch-init failure or a failed dispatch commit is counted and escalates past the threshold.",
     callerEffectsAfter: [
       "phase:change event (with a thread)",
       "phase:advance activity",
       "clear the plan-advance tracker",
-      "dispatch the build orchestrator",
+      // The dispatch itself is owed inside the phase write's transaction (`owedWithWrite`), not after it.
+      "kick the Workroom effect worker",
     ],
   },
   "save-phase-handoff": {
@@ -232,23 +237,6 @@ export const PLAN_TO_BUILD_GATE_PROFILES = {
     callerEffectsAfter: ["phase:change event", "phase:advance activity"],
     gateSkippedSummary:
       "plan → build advanced by save_phase_handoff without the WWMD plan-advancement gate (shadow; not enforced)",
-  },
-  "build-on-plan-approval": {
-    entryPoint:
-      "lib/build/build-on-plan-approval.ts dispatchBuildForApprovedPlan (fallback write after start_build; admin dispatch test route)",
-    wwmdMode: "not-evaluated",
-    gates: {
-      // dispatchBuildForApprovedPlan checks readiness while the build is in plan,
-      // and start_build checks readiness and dependencies before setting buildBranch.
-      "initiative-readiness": "upstream",
-      "structural-phase-gate": "not-evaluated",
-      "dependency-gate": "upstream",
-      "wwmd-plan-advancement": "not-evaluated",
-    },
-    steps: [],
-    callerChecksBefore: ["initiative readiness", "start_build succeeded", "phase is plan and buildBranch is set"],
-    refusal: "None at the transition: the caller only calls it when start_build has set buildBranch.",
-    callerEffectsAfter: ["build_dispatch activity", "build orchestrator run"],
   },
 } as const satisfies Record<PlanToBuildPath, PlanToBuildGateProfile>;
 
@@ -317,8 +305,14 @@ export async function transitionPlanToBuild<P extends PlanToBuildPath, R = never
   path: P;
   steps: { readonly [K in PlanToBuildStepsOf<P>]: () => PlanToBuildStepResult<R> | Promise<PlanToBuildStepResult<R>> };
   beforeWrite?: () => void | Promise<void>;
+  /**
+   * BI-EB4BB4A0: work owed by this move, written in the same transaction as the
+   * phase write (the Workroom outbox's `dispatch-build` effect). Either both
+   * commit or neither does; a throw here leaves the build in `plan`.
+   */
+  owedWithWrite?: (tx: Prisma.TransactionClient) => Promise<void>;
 } & PlanToBuildLoggerArg<P>): Promise<PlanToBuildTransitionResult<P, R>> {
-  const { buildId, path, steps, beforeWrite } = args;
+  const { buildId, path, steps, beforeWrite, owedWithWrite } = args;
   const profile: PlanToBuildGateProfile = PLAN_TO_BUILD_GATE_PROFILES[path];
   for (const step of profile.steps as readonly PlanToBuildDeclaredStepsOf<P>[]) {
     if (step === "initiative-readiness") {
@@ -330,7 +324,16 @@ export async function transitionPlanToBuild<P extends PlanToBuildPath, R = never
     if (!result.pass) return { kind: "refused", step: step as PlanToBuildStepsOf<P>, refusal: result.refusal };
   }
   if (beforeWrite) await beforeWrite();
-  await prisma.featureBuild.update({ where: { buildId }, data: { phase: "build" } });
+  const writePhase = (db: Pick<Prisma.TransactionClient, "featureBuild">) =>
+    db.featureBuild.update({ where: { buildId }, data: { phase: "build" } });
+  if (owedWithWrite) {
+    await prisma.$transaction(async (tx) => {
+      await writePhase(tx);
+      await owedWithWrite(tx);
+    });
+  } else {
+    await writePhase(prisma);
+  }
   if (profile.wwmdMode === "not-evaluated-recorded" && profile.gateSkippedSummary) {
     (args as { logActivity: PlanToBuildActivityLogger }).logActivity(
       buildId,
