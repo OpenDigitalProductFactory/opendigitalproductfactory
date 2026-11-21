@@ -163,7 +163,8 @@ describe("completeFeatureBuildTransition — body baseline on proven delivery", 
 
   it("mints once delivery is proven, then re-projects on the new history", async () => {
     const { result, mintBodyBaseline, projectReadiness, fake } = await run({ deliveryProven: true, effective: "medium" });
-    expect(mintBodyBaseline).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ itemRowId: "row-1", effectiveShape: "medium" }));
+    expect(mintBodyBaseline).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+      itemRowId: "row-1", effectiveShape: "medium", build: { id: "build-row-1", buildId: "FB-1" } }));
     expect(projectReadiness).toHaveBeenCalledTimes(2);
     expect(result.ok).toBe(false);
     expect(fake.updateMany).not.toHaveBeenCalled();

@@ -3,7 +3,7 @@ import { selectLatestExactPullRequestObservation } from "@/lib/contributor-chang
 
 type AuthorRoomDb = Pick<Prisma.TransactionClient, "workroom" | "contributorInventorySnapshot">;
 const select = { id: true, capsuleId: true, backlogItemId: true, repositoryFullName: true,
-  baseSha: true, headBranch: true, headSha: true, createdByPrincipalId: true,
+  baseSha: true, headBranch: true, headSha: true, createdByPrincipalId: true, source: true,
   pullRequestNumber: true, status: true, archivedAt: true, createdAt: true } as const;
 
 /** The governed reaper sets status=archived without setting archivedAt. */
