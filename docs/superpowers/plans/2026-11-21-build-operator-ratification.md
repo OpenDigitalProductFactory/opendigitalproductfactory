@@ -28,3 +28,9 @@ Update the Build Studio user guide and review the cost flag activation runbook a
 ## Backlog coverage
 
 BI-7C83B088 is atomic. The operator form, governed writer and runtime readers must agree on the effective value before a change can be reported as ratified. There are no external item dependencies for this change.
+
+| Deliverable | Requirements | Contract | Flow | Verification |
+| --- | --- | --- | --- | --- |
+| Operator ratification | OBJ-1, OBJ-2 | Shared setting resolver and governed writer | /platform/ai/build-studio | AC-1, AC-2, AC-3, AC-4 |
+
+Coverage awaits the independent scope baseline for BI-7C83B088.
