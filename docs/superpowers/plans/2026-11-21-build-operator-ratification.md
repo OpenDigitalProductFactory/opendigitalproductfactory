@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Operator control of Build Studio autonomy
 
 BI-7C83B088 covers how an operator inspects a build policy, changes it and later identifies who authorized the change. This work belongs to Workroom WC-D904041D.
@@ -16,6 +20,8 @@ BI-7C83B088 covers how an operator inspects a build policy, changes it and later
 5. Run targeted tests for legacy settings, invalid values, environment precedence, denied writes, stale forms and transaction rollback. Verify that effective settings reach each consuming gate. Run web typecheck, prose and style guards. Exercise operator and viewer paths in a leased nonproduction environment. Do not ratify settings on the production install during verification.
 
 ## Documentation and rollback
+
+Compose supplies an implicit `off` for playbook mode. Preserve explicitly configured host overrides while allowing the database to distinguish an absent override. The one-shot switch currently has no runtime consumer. Display its status accurately and exclude activation until the delivery path actually consumes it.
 
 Update the Build Studio user guide and review the cost flag activation runbook and long-running agent architecture page for impact. Regenerate affected indexes. Reverting code must preserve prior audit records. Before rollback, account for any enforced policy that the older runtime reads only from the environment.
 
