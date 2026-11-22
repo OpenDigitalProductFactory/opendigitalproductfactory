@@ -326,8 +326,9 @@ test("a removed service cannot claim auto-converges: self-upgrade never stops a 
 
 test("the chain file list matches the installer's resolver and the activation table", () => {
   const chain = registry.composeConvergence.chainFiles;
+  const resolver = readFileSync(new URL("./installer/lib/compose.sh", import.meta.url), "utf8");
   for (const f of ["docker-compose.yml", "docker-compose.release.yml", "docker-compose.macos.yml", "docker-compose.linux.yml", "docker-compose.edge.yml"]) {
     assert.ok(chain.includes(f), f);
-    assert.match(readFileSync(new URL("./installer/lib/compose.sh", import.meta.url), "utf8"), new RegExp(f.replace(/\./g, "\\.")));
+    assert.ok(resolver.includes(f), f);
   }
 });
