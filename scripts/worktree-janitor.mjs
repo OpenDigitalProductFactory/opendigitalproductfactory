@@ -37,6 +37,7 @@
 
 import { existsSync, lstatSync, readdirSync, readFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
@@ -78,6 +79,7 @@ function parseArgs(argv) {
       "tier-a-only": { type: "boolean" },
       "prune-detached": { type: "boolean" },
       "detached-grace-days": { type: "string" },
+      "allow-fresh": { type: "boolean" },
       json: { type: "boolean" },
       "grace-days": { type: "string" },
       root: { type: "string" },
@@ -104,6 +106,7 @@ function parseArgs(argv) {
     dryRun: mode?.name !== "live",
     tierAOnly: values["tier-a-only"] === true,
     pruneDetached: values["prune-detached"] === true,
+    allowFresh: values["allow-fresh"] === true,
     graceDays,
     detachedGraceDays,
     json: values.json === true,
@@ -271,7 +274,60 @@ function pathHasLease(leasePayload, wtPath) {
   return leasePayload.includes(wtPath) || leasePayload.includes(norm);
 }
 
-function gatherFacts(root, entry, prIndex, leasePayload, ttlMs, claims) {
+const DEFAULT_FRESH_GRACE_MS = 60 * 60_000;
+
+/** One-shot active OS process CWDs so the reaper never deletes a tree with a live shell/agent inside it. */
+export function loadActiveProcessCwds(platform = process.platform) {
+  const cwds = new Set();
+  if (platform === "win32") return cwds;
+  const r = spawnSync("lsof", ["-d", "cwd", "-Fn"], {
+    encoding: "utf8",
+    windowsHide: true,
+    timeout: 10_000,
+    maxBuffer: 16 * 1024 * 1024,
+  });
+  if (r.status === 0 && r.stdout) {
+    for (const line of r.stdout.split(/\r?\n/)) {
+      if (line.startsWith("n/")) cwds.add(normalizePath(line.slice(1)));
+    }
+  }
+  return cwds;
+}
+
+/** True when any running process CWD equals or is nested inside `wtPath`. */
+export function pathHasActiveProcessCwd(activeCwds, wtPath) {
+  if (!(activeCwds instanceof Set) || activeCwds.size === 0) return false;
+  const norm = normalizePath(path.resolve(wtPath));
+  if (!norm) return false;
+  const prefix = `${norm}/`;
+  for (const cwd of activeCwds) {
+    if (cwd === norm || cwd.startsWith(prefix)) return true;
+  }
+  return false;
+}
+
+/**
+ * True when a linked worktree was created within `freshGraceMs` AND its HEAD
+ * still matches `origin/main` (the "brand-new T3/Codex checkout before first
+ * commit" window where `merge-base --is-ancestor` would otherwise call it Tier A).
+ */
+export function isFreshCheckoutAtOriginMain(root, wtPath, { nowMs = Date.now(), freshGraceMs = DEFAULT_FRESH_GRACE_MS, git = runGit } = {}) {
+  if (!Number.isFinite(freshGraceMs) || freshGraceMs <= 0) return false;
+  const gitMarker = path.join(wtPath, ".git");
+  let createdMs = null;
+  try {
+    const st = lstatSync(existsSync(gitMarker) ? gitMarker : wtPath);
+    createdMs = st.birthtimeMs > 0 ? Math.min(st.birthtimeMs, st.mtimeMs) : st.mtimeMs;
+  } catch {
+    return false;
+  }
+  if (!Number.isFinite(createdMs) || nowMs - createdMs > freshGraceMs) return false;
+  const head = git(["rev-parse", "HEAD"], wtPath);
+  const originMain = git(["rev-parse", "origin/main"], root);
+  return head.ok && originMain.ok && Boolean(head.stdout) && head.stdout === originMain.stdout;
+}
+
+function gatherFacts(root, entry, prIndex, leasePayload, ttlMs, claims, runtimeOpts = {}) {
   const wtPath = entry.path;
   const branch = entry.detached ? null : entry.branch;
   const isRoot = path.resolve(wtPath) === path.resolve(root);
@@ -291,6 +347,10 @@ function gatherFacts(root, entry, prIndex, leasePayload, ttlMs, claims) {
     // Liveness + abandoned-merge signals — checked for every linked worktree
     // (named branch OR detached HEAD), never on the root clone.
     hasLiveSession: !isRoot ? isWorktreeSessionLive(wtPath, { ttlMs }) : false,
+    hasActiveProcessCwd: !isRoot ? pathHasActiveProcessCwd(runtimeOpts.activeCwds, wtPath) : false,
+    isFreshCheckout: !isRoot && !runtimeOpts.allowFresh
+      ? isFreshCheckoutAtOriginMain(root, wtPath, { freshGraceMs: runtimeOpts.freshGraceMs })
+      : false,
     midMerge: !isRoot ? isMidMerge(wtPath) : false,
     // Platform-owned liveness. The heartbeat above only exists for Claude Code;
     // the Workroom claim is written by every surface, so it answers for all of
@@ -313,80 +373,89 @@ export function scanOrphanDirectories(root, entries, claims, options = {}) {
   const baseDir = options.worktreeBase
     ? path.resolve(options.worktreeBase)
     : resolveWorktreeBase({ rootClone: root, env: options.env ?? process.env }).base;
-  if (!existsSync(baseDir)) {
-    return { baseDir, orphans: [] };
+  const t3RepoBase = options.includeT3Base === false
+    ? null
+    : path.join(options.homeDir ?? os.homedir(), ".t3", "worktrees", path.basename(path.resolve(root)));
+  const candidateBases = [baseDir, ...(options.extraBases ?? []), ...(t3RepoBase ? [t3RepoBase] : [])]
+    .filter(Boolean)
+    .map((b) => path.resolve(b))
+    .filter((b, i, arr) => arr.indexOf(b) === i && existsSync(b));
+  if (candidateBases.length === 0) {
+    return { baseDir, scannedBases: [], orphans: [] };
   }
   const nowMs = options.nowMs ?? Date.now();
   const registered = new Set(entries.map((e) => normalizePath(path.resolve(e.path))));
   const orphans = [];
-  let dirEntries;
-  try {
-    dirEntries = readdirSync(baseDir, { withFileTypes: true });
-  } catch {
-    return { baseDir, orphans: [] };
-  }
-  for (const dirent of dirEntries) {
-    if (!dirent.isDirectory()) continue;
-    const full = path.join(baseDir, dirent.name);
-    if (registered.has(normalizePath(path.resolve(full)))) continue;
-
-    let ageDaysVal = 0;
+  for (const scanBase of candidateBases) {
+    let dirEntries;
     try {
-      const st = lstatSync(full);
-      ageDaysVal = Math.max(0, Math.floor((nowMs - st.mtimeMs) / 86400000));
+      dirEntries = readdirSync(scanBase, { withFileTypes: true });
     } catch {
-      // keep 0
+      continue;
     }
+    for (const dirent of dirEntries) {
+      if (!dirent.isDirectory()) continue;
+      const full = path.join(scanBase, dirent.name);
+      if (registered.has(normalizePath(path.resolve(full)))) continue;
 
-    let children = [];
-    try {
-      children = readdirSync(full);
-    } catch {
-      // unreadable
-    }
-    const empty = children.length === 0;
-    const pinned = existsSync(path.join(full, ".worktree-pinned"));
-    const hasActiveClaim = pathHasActiveClaim(claims?.activePaths, full);
-
-    let gitKind = "none";
-    let gitdirTarget = null;
-    let gitdirTargetExists = false;
-    const gitEntry = path.join(full, ".git");
-    if (existsSync(gitEntry)) {
+      let ageDaysVal = 0;
       try {
-        const gst = lstatSync(gitEntry);
-        if (gst.isDirectory()) {
-          gitKind = "dir";
-        } else if (gst.isFile()) {
-          gitKind = "file";
-          const raw = readFileSync(gitEntry, "utf8").trim();
-          const m = raw.match(/^gitdir:\s*(.+)$/m);
-          if (m) {
-            gitdirTarget = m[1].trim();
-            gitdirTargetExists = existsSync(path.isAbsolute(gitdirTarget) ? gitdirTarget : path.resolve(full, gitdirTarget));
-          }
-        }
+        const st = lstatSync(full);
+        ageDaysVal = Math.max(0, Math.floor((nowMs - st.mtimeMs) / 86400000));
       } catch {
-        // leave none
+        // keep 0
       }
-    }
 
-    const classified = classifyOrphanDirectory({
-      path: full,
-      name: dirent.name,
-      root,
-      ageDays: ageDaysVal,
-      empty,
-      pinned,
-      hasActiveClaim,
-      gitKind,
-      gitdirTarget,
-      gitdirTargetExists,
-    });
-    if (classified) orphans.push(classified);
+      let children = [];
+      try {
+        children = readdirSync(full);
+      } catch {
+        // unreadable
+      }
+      const empty = children.length === 0;
+      const pinned = existsSync(path.join(full, ".worktree-pinned"));
+      const hasActiveClaim = pathHasActiveClaim(claims?.activePaths, full);
+
+      let gitKind = "none";
+      let gitdirTarget = null;
+      let gitdirTargetExists = false;
+      const gitEntry = path.join(full, ".git");
+      if (existsSync(gitEntry)) {
+        try {
+          const gst = lstatSync(gitEntry);
+          if (gst.isDirectory()) {
+            gitKind = "dir";
+          } else if (gst.isFile()) {
+            gitKind = "file";
+            const raw = readFileSync(gitEntry, "utf8").trim();
+            const m = raw.match(/^gitdir:\s*(.+)$/m);
+            if (m) {
+              gitdirTarget = m[1].trim();
+              gitdirTargetExists = existsSync(path.isAbsolute(gitdirTarget) ? gitdirTarget : path.resolve(full, gitdirTarget));
+            }
+          }
+        } catch {
+          // leave none
+        }
+      }
+
+      const classified = classifyOrphanDirectory({
+        path: full,
+        name: dirent.name,
+        root,
+        ageDays: ageDaysVal,
+        empty,
+        pinned,
+        hasActiveClaim,
+        gitKind,
+        gitdirTarget,
+        gitdirTargetExists,
+      });
+      if (classified) orphans.push(classified);
+    }
   }
-  orphans.sort((a, b) => a.name.localeCompare(b.name));
-  return { baseDir, orphans };
+  orphans.sort((a, b) => a.path.localeCompare(b.path));
+  return { baseDir, scannedBases: candidateBases, orphans };
 }
 
 /**
@@ -482,6 +551,9 @@ async function main(argv = process.argv.slice(2)) {
     );
   }
   const ttlMs = heartbeatTtlMs(process.env);
+  const freshMins = Number(process.env.DPF_WORKTREE_FRESH_GRACE_MIN);
+  const freshGraceMs = Number.isFinite(freshMins) && freshMins >= 0 ? freshMins * 60_000 : DEFAULT_FRESH_GRACE_MS;
+  const activeCwds = loadActiveProcessCwds();
   const policy = args.tierAOnly ? "tier-a-only" : "all";
   const decisions = [];
   const removals = [];
@@ -507,7 +579,11 @@ async function main(argv = process.argv.slice(2)) {
   }
 
   for (const entry of scanned) {
-    const facts = gatherFacts(root, entry, prIndex, leasePayload, ttlMs, claims);
+    const facts = gatherFacts(root, entry, prIndex, leasePayload, ttlMs, claims, {
+      activeCwds,
+      allowFresh: args.allowFresh,
+      freshGraceMs,
+    });
     const { verdict, reason, tier } = classifyWorktree(facts, {
       graceDays: args.graceDays,
       pruneDetached: args.pruneDetached,

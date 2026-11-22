@@ -60,11 +60,12 @@ Direct CLI runs of `scripts/worktree-janitor.mjs` also support:
 
 | Flag | Meaning |
 | --- | --- |
-| `--prune-detached` | Opt-in age-bounded classification/cleanup of stale clean detached-HEAD scratch worktrees (fails closed when Workroom claims are unreadable; honors `.worktree-pinned`, active leases, heartbeats, claims, dirtiness, and mid-merge quarantine) |
+| `--prune-detached` | Opt-in age-bounded classification/cleanup of stale clean detached-HEAD scratch worktrees (fails closed when Workroom claims are unreadable; honors `.worktree-pinned`, active leases, heartbeats, active process CWDs, claims, dirtiness, and mid-merge quarantine) |
 | `--detached-grace-days N` | Age threshold for `--prune-detached` (defaults to `--grace-days`) |
+| `--allow-fresh` | Bypass the 60-minute fresh-checkout-at-`origin/main` startup grace window (used by explicit settle hooks such as `scripts/t3-worktree-bridge.mjs on-settle`) |
 | `--worktree-base PATH` | Override canonical sibling worktree directory scanned for unregistered orphan directories |
 
-Every non-branch-scoped scan also inspects the canonical sibling worktree base (e.g. `../dpf-worktrees`) and reports unregistered orphan directories (`orphanDirs`, `summary.orphanCount`) while excluding standalone clones and linked worktrees belonging to other repositories. Orphan directories are always reported and never auto-deleted.
+Every non-branch-scoped scan also inspects the canonical sibling worktree base (e.g. `../dpf-worktrees`) and `~/.t3/worktrees/<repo>` (when present) and reports unregistered orphan directories (`orphanDirs`, `summary.orphanCount`) while excluding standalone clones and linked worktrees belonging to other repositories. Orphan directories are always reported and never auto-deleted.
 
 Re-running the installer replaces the existing task rather than adding a second
 one, so it is safe to re-run to change flags.

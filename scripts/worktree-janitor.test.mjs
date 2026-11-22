@@ -7,7 +7,9 @@ import { describe, it } from "node:test";
 import {
   backupUnpushedBranch,
   backupUnpushedDetachedHead,
+  isFreshCheckoutAtOriginMain,
   loadLeasePaths,
+  pathHasActiveProcessCwd,
   pathHasLease,
   scanOrphanDirectories,
 } from "./worktree-janitor.mjs";
@@ -136,7 +138,7 @@ describe("worktree janitor orphan directory scanner", () => {
         root,
         [{ path: root }, { path: registeredWt }],
         { available: true, activePaths: new Set() },
-        { worktreeBase: base },
+        { worktreeBase: base, includeT3Base: false },
       );
 
       assert.equal(scan.baseDir, path.resolve(base));
@@ -147,6 +149,36 @@ describe("worktree janitor orphan directory scanner", () => {
           { name: "stale-orphan", kind: "broken-worktree", empty: false },
         ],
       );
+
+      // Also scans ~/.t3/worktrees/<repo> when present.
+      const fakeHome = path.join(tmp, "home");
+      const t3Orphan = path.join(fakeHome, ".t3", "worktrees", "dpf", "old-t3-backups");
+      mkdirSync(t3Orphan, { recursive: true });
+      const withT3 = scanOrphanDirectories(
+        root,
+        [{ path: root }, { path: registeredWt }],
+        { available: true, activePaths: new Set() },
+        { worktreeBase: base, homeDir: fakeHome },
+      );
+      assert.ok(withT3.orphans.some((o) => o.name === "old-t3-backups"));
+    } finally {
+      rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+
+  it("matches active process CWDs at or below a worktree path and protects fresh checkouts at origin/main", () => {
+    const cwds = new Set(["/users/x/dpf-worktrees/active/apps/web"]);
+    assert.equal(pathHasActiveProcessCwd(cwds, "/Users/x/dpf-worktrees/active"), true);
+    assert.equal(pathHasActiveProcessCwd(cwds, "/Users/x/dpf-worktrees/active-other"), false);
+
+    const tmp = mkdtempSync(path.join(os.tmpdir(), "dpf-janitor-fresh-"));
+    try {
+      writeFileSync(path.join(tmp, ".git"), "gitdir: /root/.git/worktrees/fresh\n");
+      const sameShaGit = () => ({ ok: true, stdout: "a".repeat(40) });
+      const movedShaGit = (args) => ({ ok: true, stdout: args[1] === "HEAD" ? "b".repeat(40) : "a".repeat(40) });
+      assert.equal(isFreshCheckoutAtOriginMain("/root", tmp, { git: sameShaGit }), true);
+      assert.equal(isFreshCheckoutAtOriginMain("/root", tmp, { git: movedShaGit }), false);
+      assert.equal(isFreshCheckoutAtOriginMain("/root", tmp, { git: sameShaGit, freshGraceMs: 0 }), false);
     } finally {
       rmSync(tmp, { recursive: true, force: true });
     }

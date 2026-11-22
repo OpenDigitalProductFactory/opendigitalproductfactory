@@ -147,6 +147,16 @@ describe("Workroom claims outrank a merged, clean tree", () => {
     const v = classifyWorktree(merged({ hasActiveClaim: true, hasLiveSession: false }));
     assert.equal(v.verdict, "KEEP");
   });
+
+  it("KEEPS a merged clean worktree with an active process CWD or fresh-checkout guard", () => {
+    const cwdHeld = classifyWorktree(merged({ hasActiveProcessCwd: true }));
+    assert.equal(cwdHeld.verdict, "KEEP");
+    assert.match(cwdHeld.reason, /active process CWD/);
+
+    const fresh = classifyWorktree(merged({ isFreshCheckout: true }));
+    assert.equal(fresh.verdict, "KEEP");
+    assert.match(fresh.reason, /freshly created checkout/);
+  });
 });
 
 describe("detached-HEAD age-bounded cleanup (--prune-detached)", () => {

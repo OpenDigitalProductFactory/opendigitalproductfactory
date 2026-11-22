@@ -33,6 +33,8 @@
  * @property {boolean} dirty         porcelain non-empty
  * @property {number} ageDays        days since last commit (0 if unknown)
  * @property {boolean} [hasLiveSession]  a fresh session heartbeat is present
+ * @property {boolean} [hasActiveProcessCwd]  a running host process currently has its CWD inside this worktree
+ * @property {boolean} [isFreshCheckout]  freshly created worktree still at origin/main within the startup grace window
  * @property {boolean} [hasActiveClaim]  an active Workroom claims this worktree
  * @property {boolean} [claimSourceUnavailable]  the claim record could not be read
  * @property {string}  [claimSourceReason]  why it could not be read
@@ -85,6 +87,20 @@ export function classifyWorktree(facts, opts = {}) {
       return {
         verdict: "KEEP",
         reason: "detached HEAD live session heartbeat — refuse to reap an in-use worktree",
+        tier: null,
+      };
+    }
+    if (facts.hasActiveProcessCwd) {
+      return {
+        verdict: "KEEP",
+        reason: "detached HEAD active process CWD — refuse to reap an in-use worktree",
+        tier: null,
+      };
+    }
+    if (facts.isFreshCheckout) {
+      return {
+        verdict: "KEEP",
+        reason: "detached HEAD freshly created checkout — refuse to reap within startup grace",
         tier: null,
       };
     }
@@ -164,6 +180,20 @@ export function classifyWorktree(facts, opts = {}) {
     return {
       verdict: "KEEP",
       reason: `branch=${facts.branch} live session heartbeat — refuse to reap an in-use worktree`,
+      tier: null,
+    };
+  }
+  if (facts.hasActiveProcessCwd) {
+    return {
+      verdict: "KEEP",
+      reason: `branch=${facts.branch} active process CWD — refuse to reap an in-use worktree`,
+      tier: null,
+    };
+  }
+  if (facts.isFreshCheckout) {
+    return {
+      verdict: "KEEP",
+      reason: `branch=${facts.branch} freshly created checkout at origin/main — refuse to reap before first commit/claim`,
       tier: null,
     };
   }

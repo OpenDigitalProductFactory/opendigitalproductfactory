@@ -3084,6 +3084,9 @@
       "docs/architecture/ui-token-styling.md",
       "docs/maintenance/staleness-report.md"
     ],
+    "scripts/t3-worktree-bridge.mjs": [
+      "docs/architecture/branch-and-worktree-runbook.md"
+    ],
     "scripts/tts/setup-chatterbox-tts-macos.sh": [
       "docs/install/macos.md",
       "docs/user-guide/operations/self-upgrade.md"
@@ -3567,6 +3570,7 @@
       "scripts/dpf-bootstrap-agent-toolchain.ps1",
       "scripts/hooks/session-reaper.sh",
       "scripts/lib/worktree-provision.mjs",
+      "scripts/t3-worktree-bridge.mjs",
       "scripts/worktree-janitor.mjs"
     ],
     "docs/architecture/build-gate-runbook.md": [
