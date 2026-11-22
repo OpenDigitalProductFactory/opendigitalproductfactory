@@ -20,6 +20,7 @@ import { bytesToHeader } from "pmtiles";
 
 import { resolveMapDataDir } from "../map-assets.server";
 import { validateMapPackManifest, type MapPackManifest } from "../map-pack-manifest";
+import { normalizePlan, trustedArchiveUrl, PROTOMAPS_PLAN_POLICY, type NormalizedPlanFile } from "./plan-policy.server";
 
 import {
   chooseMaxZoom,
@@ -38,8 +39,8 @@ import {
   type HeaderFields,
 } from "./pmtiles-v3";
 
-export const BUILDS_INDEX_URL = "https://build-metadata.protomaps.dev/builds.json";
-export const BUILDS_BASE_URL = "https://build.protomaps.com/";
+export const BUILDS_INDEX_URL = PROTOMAPS_PLAN_POLICY.buildIndexUrl;
+export const BUILDS_BASE_URL = `${PROTOMAPS_PLAN_POLICY.archiveOrigin}/`;
 export const SOURCE_NAME = "Protomaps Basemap (OpenStreetMap)";
 export const SOURCE_ATTRIBUTION =
   "© OpenStreetMap contributors · © ESA WorldCover project / Contains modified Copernicus Sentinel data (2020) processed by ESA WorldCover consortium";
@@ -54,18 +55,7 @@ export type InstallRequest = {
   locale: string;
 };
 
-type PlanFile = {
-  request: InstallRequest;
-  sourceUrl: string;
-  sourceEtag: string;
-  archiveVersion: string;
-  sourceTileDataOffset: number;
-  targetTileDataOffset: number;
-  totalBytes: number;
-  minZoom: number;
-  maxZoom: number;
-  chunks: Array<{ sourceStart: number; sourceEnd: number; first: number; count: number }>;
-};
+type PlanFile = NormalizedPlanFile;
 
 const SAFE_ID = /^[a-z0-9][a-z0-9-]{0,63}$/;
 
@@ -96,7 +86,7 @@ export function rangeReader(url: string, fetchImpl: FetchLike = fetch) {
     async read(offset: number, length: number): Promise<Uint8Array> {
       const headers: Record<string, string> = { Range: `bytes=${offset}-${offset + length - 1}` };
       if (etag) headers["If-Match"] = etag;
-      const res = await fetchImpl(url, { headers });
+      const res = await fetchImpl(url, { headers, redirect: "error" });
       if (res.status !== 206) throw new Error(`range read failed (${res.status}) at ${offset}`);
       const got = res.headers.get("etag");
       if (etag && got && got !== etag) throw new Error("source archive changed during install");
@@ -117,7 +107,7 @@ export async function planInstall(
   const build = deps.sourceUrl
     ? { url: deps.sourceUrl, version: deps.archiveVersion ?? "unknown" }
     : await latestBuild(fetchImpl).then((b) => ({ url: BUILDS_BASE_URL + b.key, version: b.version }));
-  const source = rangeReader(build.url, fetchImpl);
+  const source = rangeReader(trustedArchiveUrl(build.url, PROTOMAPS_PLAN_POLICY).url.href, fetchImpl);
 
   const head = await source.read(0, 16_384);
   const h = bytesToHeader(head.buffer.slice(head.byteOffset, head.byteOffset + head.byteLength) as ArrayBuffer);
@@ -183,7 +173,9 @@ export async function planInstall(
     sourceUrl: build.url,
     sourceEtag: source.etag() ?? "",
     archiveVersion: build.version,
+    pmtilesSpecVersion: 3,
     sourceTileDataOffset: h.tileDataOffset,
+    sourceTileDataLength: h.tileDataLength,
     targetTileDataOffset: dataOffset,
     totalBytes: dataOffset + layout.tileDataLength,
     minZoom,
@@ -193,8 +185,13 @@ export async function planInstall(
       first += c.contents.length;
       return row;
     }),
+    contents: layout.contents,
   };
-  await writeFile(join(dir, "plan.json"), JSON.stringify(plan));
+  // The binary index already stores the contents table. Keep the JSON plan bounded.
+  const { contents: _contents, ...planMetadata } = normalizePlan(plan);
+  const serialized = JSON.stringify(planMetadata);
+  if (Buffer.byteLength(serialized) > PROTOMAPS_PLAN_POLICY.maxPlanBytes) throw new Error("serialized plan exceeds policy");
+  await writeFile(join(dir, "plan.json"), serialized);
   return { chunkCount: plan.chunks.length, totalBytes: plan.totalBytes, maxZoom };
 }
 
@@ -204,21 +201,24 @@ export async function planInstall(
  * with a well-formed ETag.
  */
 export function assertPlanSource(plan: Pick<PlanFile, "sourceUrl" | "sourceEtag">): void {
-  const url = new URL(plan.sourceUrl);
-  if (url.protocol !== "https:" || url.origin !== new URL(BUILDS_BASE_URL).origin || url.search || url.hash) {
-    throw new Error("staged plan names an unexpected source");
-  }
-  if (plan.sourceEtag && !/^(W\/)?"[\x21\x23-\x7e]*"$/.test(plan.sourceEtag)) {
+  if (plan.sourceEtag && (plan.sourceEtag.length > PROTOMAPS_PLAN_POLICY.maxEtagLength || !/^(W\/)?"[\x21\x23-\x7e]*"$/.test(plan.sourceEtag))) {
     throw new Error("staged plan has a malformed source ETag");
   }
+  trustedArchiveUrl(plan.sourceUrl, PROTOMAPS_PLAN_POLICY);
 }
 
 async function readPlan(dir: string): Promise<{ plan: PlanFile; triples: Float64Array }> {
-  const plan = JSON.parse(await readFile(join(dir, "plan.json"), "utf8")) as PlanFile;
-  assertPlanSource(plan);
-  const raw = await readFile(join(dir, "contents.bin"));
-  const triples = new Float64Array(raw.buffer.slice(raw.byteOffset, raw.byteOffset + raw.byteLength));
-  return { plan, triples };
+  const planBytes = await readFile(join(dir, "plan.json"));
+  if (planBytes.byteLength > PROTOMAPS_PLAN_POLICY.maxPlanBytes) throw new Error("serialized plan exceeds policy");
+  const parsed: unknown = JSON.parse(planBytes.toString("utf8"));
+  const contentsBytes = await readFile(join(dir, "contents.bin"));
+  if (contentsBytes.byteLength % 24 !== 0) throw new Error("contents table is malformed");
+  const triples = new Float64Array(contentsBytes.buffer.slice(contentsBytes.byteOffset, contentsBytes.byteOffset + contentsBytes.byteLength));
+  const contents = Array.from({ length: triples.length / 3 }, (_, i) => ({ sourceOffset: triples[i * 3]!, length: triples[i * 3 + 1]!, targetOffset: triples[i * 3 + 2]! }));
+  const candidate = parsed && typeof parsed === "object" && !Array.isArray(parsed)
+    ? { ...parsed, contents, planBytes: planBytes.byteLength }
+    : parsed;
+  return { plan: normalizePlan(candidate as Parameters<typeof normalizePlan>[0]), triples };
 }
 
 /** Stage 2, for chunk `index`. Safe to repeat. */
@@ -231,13 +231,17 @@ export async function downloadChunk(
   const { plan, triples } = await readPlan(dir);
   const chunk = plan.chunks[index];
   if (!chunk) throw new Error(`no chunk ${index}`);
-  const res = await (deps.fetchImpl ?? fetch)(plan.sourceUrl, {
+  if (plan.request.packId !== packId) throw new Error("staged plan is for a different pack");
+  const archive = trustedArchiveUrl(plan.sourceUrl, PROTOMAPS_PLAN_POLICY);
+  const res = await (deps.fetchImpl ?? fetch)(archive.url.href, {
+    redirect: "error",
     headers: {
       Range: `bytes=${plan.sourceTileDataOffset + chunk.sourceStart}-${plan.sourceTileDataOffset + chunk.sourceEnd - 1}`,
       ...(plan.sourceEtag ? { "If-Match": plan.sourceEtag } : {}),
     },
   });
   if (res.status !== 206) throw new Error(`range read failed (${res.status}) for chunk ${index}`);
+  if (plan.sourceEtag && res.headers.get("etag") !== plan.sourceEtag) throw new Error("source archive changed during install");
   const bytes = new Uint8Array(await res.arrayBuffer());
   if (bytes.length !== chunk.sourceEnd - chunk.sourceStart) throw new Error(`short read for chunk ${index}`);
   const fh = await open(join(dir, "pack.pmtiles"), "r+");

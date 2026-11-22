@@ -1,4 +1,4 @@
-import { copyFile, mkdir, mkdtemp, readFile, readdir, rename, rm, stat } from "node:fs/promises";
+import { copyFile, mkdir, mkdtemp, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -19,6 +19,7 @@ import {
   type DirEntry,
 } from "./pmtiles-v3";
 import { assertPlanSource, discardStaging, downloadChunk, finalizeInstall, planInstall, stagingDir } from "./install.server";
+import { normalizePlan } from "./plan-policy.server";
 
 // A synthetic clustered "planet": every tile at z0-4, plus a dense block over
 // central Texas at z5-13, each tile's bytes naming its tile id. Ocean-like
@@ -206,5 +207,184 @@ describe("map pack install, end to end against a synthetic archive (BI-43BBCC26)
     expect(() => assertPlanSource({ sourceUrl: "https://example.com/planet.pmtiles", sourceEtag: "" })).toThrow(/unexpected source/);
     expect(() => assertPlanSource({ sourceUrl: "http://build.protomaps.com/20261007.pmtiles", sourceEtag: "" })).toThrow(/unexpected source/);
     expect(() => assertPlanSource({ sourceUrl: "https://build.protomaps.com/x.pmtiles", sourceEtag: 'a"\r\nX: y' })).toThrow(/ETag/);
+  });
+
+  it.each([
+    ["hostile archive", { sourceUrl: "https://build.protomaps.com/../../evil.pmtiles" }],
+    ["malformed ETag", { sourceEtag: '"unterminated' }],
+    ["invalid arithmetic", { sourceTileDataOffset: -1 }],
+    ["overlapping chunks", { chunks: [{ sourceStart: 0, sourceEnd: 2, first: 0, count: 1 }, { sourceStart: 1, sourceEnd: 3, first: 1, count: 1 }] }],
+  ] as const)("rejects %s before fetch or contents.bin mutation", async (_label, changes) => {
+    const packId = `tampered-${_label.replace(/[^a-z0-9]+/g, "-")}`;
+    const fetchImpl = rangeFetch(source);
+    await planInstall(
+      { packId, region: "Central Texas, United States", bounds: BOUNDS, locale: "en-US" },
+      { fetchImpl, root, sourceUrl: "https://build.protomaps.com/20261007.pmtiles", archiveVersion: "20261007" },
+    );
+    const dir = stagingDir(packId, root);
+    const planPath = join(dir, "plan.json");
+    const contentsPath = join(dir, "contents.bin");
+    const originalContents = await readFile(contentsPath);
+    const plan = JSON.parse(await readFile(planPath, "utf8")) as Record<string, unknown>;
+    await writeFile(planPath, JSON.stringify({ ...plan, ...changes }));
+    const injectedFetch = vi.fn(async () => new Response(new Uint8Array([1]), { status: 206, headers: { etag: source.etag } }));
+
+    await expect(downloadChunk(packId, 0, { fetchImpl: injectedFetch, root })).rejects.toThrow();
+    expect(injectedFetch).not.toHaveBeenCalled();
+    expect(await readFile(contentsPath)).toEqual(originalContents);
+  });
+});
+
+type PolicyPlan = Parameters<typeof normalizePlan>[0];
+
+const validPolicyPlan = (): PolicyPlan => ({
+  request: {
+    packId: "us-texas-test",
+    region: "Central Texas, United States",
+    bounds: BOUNDS,
+    locale: "en-US",
+  },
+  sourceUrl: "https://build.protomaps.com/20261007.pmtiles",
+  sourceEtag: '"synthetic-1"',
+  archiveVersion: "20261007",
+  pmtilesSpecVersion: 3,
+  sourceTileDataOffset: 1_024,
+  targetTileDataOffset: 4_096,
+  totalBytes: 8_192,
+  minZoom: 0,
+  maxZoom: 13,
+  chunks: [{ sourceStart: 0, sourceEnd: 128, first: 0, count: 1 }],
+  contents: [{ sourceOffset: 0, length: 32, targetOffset: 0 }],
+});
+
+describe("normalized map-pack plan policy boundary", () => {
+  it("accepts a production-shaped plan and preserves its normalized values", () => {
+    const plan = validPolicyPlan();
+    expect(normalizePlan(plan)).toMatchObject(plan);
+  });
+
+  it.each([
+    ["non-HTTPS source", { sourceUrl: "http://build.protomaps.com/20261007.pmtiles" }],
+    ["unapproved source origin", { sourceUrl: "https://example.com/20261007.pmtiles" }],
+    ["URL credentials", { sourceUrl: "https://user:pass@build.protomaps.com/20261007.pmtiles" }],
+    ["URL query", { sourceUrl: "https://build.protomaps.com/20261007.pmtiles?x=1" }],
+    ["URL fragment", { sourceUrl: "https://build.protomaps.com/20261007.pmtiles#x" }],
+    ["malformed ETag", { sourceEtag: '"unterminated' }],
+    ["overlong ETag", { sourceEtag: `"${"x".repeat(256)}"` }],
+    ["invalid pack identifier", { request: { ...validPolicyPlan().request, packId: "../escape" } }],
+    ["invalid archive build version", { archiveVersion: "not-a-build" }],
+    ["unsupported PMTiles version", { pmtilesSpecVersion: 2 }],
+    ["unsafe integer offset", { sourceTileDataOffset: Number.MAX_SAFE_INTEGER + 1 }],
+    ["negative integer offset", { targetTileDataOffset: -1 }],
+    ["excessive archive size", { totalBytes: 1_000_000_000_001 }],
+    ["excessive serialized plan size", { planBytes: 1_000_001 }],
+    ["inconsistent source and target offsets", { targetTileDataOffset: 1_000 }],
+    ["empty chunk coverage", { chunks: [] }],
+    [
+      "incomplete chunk coverage",
+      {
+        contents: [
+          { sourceOffset: 0, length: 32, targetOffset: 0 },
+          { sourceOffset: 64, length: 32, targetOffset: 32 },
+        ],
+        chunks: [{ sourceStart: 0, sourceEnd: 32, first: 0, count: 1 }],
+      },
+    ],
+    [
+      "overlapping chunk ranges",
+      {
+        contents: [
+          { sourceOffset: 0, length: 32, targetOffset: 0 },
+          { sourceOffset: 32, length: 32, targetOffset: 32 },
+        ],
+        chunks: [
+          { sourceStart: 0, sourceEnd: 48, first: 0, count: 1 },
+          { sourceStart: 32, sourceEnd: 64, first: 1, count: 1 },
+        ],
+      },
+    ],
+    [
+      "overlapping contents ranges",
+      {
+        contents: [
+          { sourceOffset: 0, length: 32, targetOffset: 0 },
+          { sourceOffset: 32, length: 32, targetOffset: 16 },
+        ],
+        chunks: [{ sourceStart: 0, sourceEnd: 48, first: 0, count: 2 }],
+      },
+    ],
+    [
+      "overlapping content source ranges",
+      {
+        contents: [
+          { sourceOffset: 0, length: 32, targetOffset: 0 },
+          { sourceOffset: 16, length: 32, targetOffset: 32 },
+        ],
+        chunks: [{ sourceStart: 0, sourceEnd: 48, first: 0, count: 2 }],
+      },
+    ],
+    [
+      "chunks omit contents entries",
+      {
+        contents: [
+          { sourceOffset: 0, length: 32, targetOffset: 0 },
+          { sourceOffset: 64, length: 32, targetOffset: 32 },
+        ],
+        chunks: [{ sourceStart: 0, sourceEnd: 32, first: 0, count: 1 }],
+      },
+    ],
+    ["chunk with reversed range", { chunks: [{ sourceStart: 128, sourceEnd: 0, first: 0, count: 1 }] }],
+    ["chunk outside archive", { chunks: [{ sourceStart: 8_000, sourceEnd: 8_300, first: 0, count: 1 }] }],
+    ["excessive chunk count", { chunks: Array.from({ length: 100_001 }, () => ({ sourceStart: 0, sourceEnd: 1, first: 0, count: 1 })) }],
+    ["contents reference outside source range", { contents: [{ sourceOffset: 128, length: 64, targetOffset: 0 }] }],
+    ["contents reference outside target range", { contents: [{ sourceOffset: 0, length: 32, targetOffset: 8_192 }] }],
+  ] as const)("rejects %s", (_label, change) => {
+    expect(() => normalizePlan({ ...validPolicyPlan(), ...change })).toThrow();
+  });
+
+  it("does not leave plan.json when planning is rejected", async () => {
+    const packId = "rejected-policy-plan";
+    const dir = stagingDir(packId, root);
+    await expect(
+      planInstall(
+        { packId, region: "Central Texas, United States", bounds: BOUNDS, locale: "en-US" },
+        { fetchImpl: rangeFetch(source), root, sourceUrl: "http://build.protomaps.com/20261007.pmtiles", archiveVersion: "20261007" },
+      ),
+    ).rejects.toThrow();
+    await expect(stat(join(dir, "plan.json"))).rejects.toThrow();
+  });
+
+  it("rejects a tampered staged plan before making requests or writes", async () => {
+    const packId = "tampered-policy-plan";
+    await planInstall(
+      { packId, region: "Central Texas, United States", bounds: BOUNDS, locale: "en-US" },
+      { fetchImpl: rangeFetch(source), root, sourceUrl: "https://build.protomaps.com/20261007.pmtiles", archiveVersion: "20261007" },
+    );
+    const dir = stagingDir(packId, root);
+    const plan = JSON.parse(await readFile(join(dir, "plan.json"), "utf8")) as Record<string, unknown>;
+    plan.sourceUrl = "https://example.com/20261007.pmtiles";
+    await writeFile(join(dir, "plan.json"), JSON.stringify(plan));
+
+    const fetchImpl = vi.fn<typeof fetch>();
+    await expect(downloadChunk(packId, 0, { fetchImpl, root })).rejects.toThrow(/source/);
+    expect(fetchImpl).not.toHaveBeenCalled();
+    await expect(stat(join(dir, "pack.pmtiles"))).resolves.toBeDefined();
+  });
+
+  it("rejects a chunk table that omits contents.bin entries before making requests", async () => {
+    const packId = "incomplete-chunk-table";
+    await planInstall(
+      { packId, region: "Central Texas, United States", bounds: BOUNDS, locale: "en-US" },
+      { fetchImpl: rangeFetch(source), root, sourceUrl: "https://build.protomaps.com/20261007.pmtiles", archiveVersion: "20261007" },
+    );
+    const dir = stagingDir(packId, root);
+    const plan = JSON.parse(await readFile(join(dir, "plan.json"), "utf8")) as { chunks: Array<Record<string, number>> };
+    expect((await stat(join(dir, "contents.bin"))).size).toBeGreaterThan(24);
+    plan.chunks = [{ ...plan.chunks[0]!, first: 0, count: 1 }];
+    await writeFile(join(dir, "plan.json"), JSON.stringify(plan));
+
+    const fetchImpl = vi.fn<typeof fetch>();
+    await expect(downloadChunk(packId, 0, { fetchImpl, root })).rejects.toThrow(/cover|contiguous/);
+    expect(fetchImpl).not.toHaveBeenCalled();
   });
 });

@@ -63,18 +63,16 @@ describe("computeBudgets", () => {
 });
 
 describe("validateBaseline", () => {
-  it("accepts a well-formed unexpired baseline", () => {
-    assert.deepEqual(validateBaseline(VALID_BASELINE, { today: "2026-08-21" }), []);
+  it("accepts a well-formed baseline", () => {
+    assert.deepEqual(validateBaseline(VALID_BASELINE), []);
   });
 
-  it("fails an expired baseline so deferred cleanup cannot become never", () => {
-    const failures = validateBaseline(VALID_BASELINE, { today: "2026-11-22" });
-    assert.equal(failures.length, 1);
-    assert.match(failures[0], /expired on 2026-11-21/);
+  it("requires a review date in YYYY-MM-DD form", () => {
+    assert.match(validateBaseline({ ...VALID_BASELINE, expiry: "later" })[0], /expiry/);
   });
 
   it("requires an owner", () => {
-    const failures = validateBaseline({ ...VALID_BASELINE, owner: "  " }, { today: "2026-08-21" });
+    const failures = validateBaseline({ ...VALID_BASELINE, owner: "  " });
     assert.ok(failures.some((f) => /requires an owner/.test(f)));
   });
 
@@ -82,7 +80,6 @@ describe("validateBaseline", () => {
     for (const key of BUDGET_KEYS) {
       const failures = validateBaseline(
         { ...VALID_BASELINE, [key]: "70" },
-        { today: "2026-08-21" },
       );
       assert.ok(failures.some((f) => f.includes(key)), `${key} must be validated`);
     }
@@ -110,9 +107,16 @@ describe("runCheck", () => {
     const result = runCheck({
       files: [file("a.tsx", 10), file("b.tsx", 5)],
       baseline,
-      today: "2026-08-21",
+      today: baseline.expiry,
     });
     assert.equal(result.ok, true);
+    assert.equal(result.reviewOverdue, false);
+  });
+
+  it("flags an overdue review when the surface still fits its budget", () => {
+    const result = runCheck({ files: [file("a.tsx", 10), file("b.tsx", 5)], baseline, today: "2026-11-22" });
+    assert.equal(result.ok, true);
+    assert.equal(result.reviewOverdue, true);
   });
 
   it("fails a new component even when total lines hold", () => {
@@ -121,7 +125,7 @@ describe("runCheck", () => {
     const result = runCheck({
       files: [file("a.tsx", 5), file("b.tsx", 5), file("c.tsx", 5)],
       baseline,
-      today: "2026-08-21",
+      today: "2026-11-22",
     });
     assert.equal(result.ok, false);
     assert.equal(result.evaluation.componentCount.growth, 1);
@@ -132,14 +136,14 @@ describe("runCheck", () => {
     const result = runCheck({
       files: [file("a.tsx", 20), file("b.tsx", 5)],
       baseline,
-      today: "2026-08-21",
+      today: "2026-11-22",
     });
     assert.equal(result.ok, false);
     assert.equal(result.evaluation.nonTestLoc.growth, 10);
   });
 
   it("passes a genuine removal and flags it for retightening", () => {
-    const result = runCheck({ files: [file("a.tsx", 10)], baseline, today: "2026-08-21" });
+    const result = runCheck({ files: [file("a.tsx", 10)], baseline, today: "2026-11-22" });
     assert.equal(result.ok, true);
     assert.equal(result.evaluation.componentCount.stale, 1);
     assert.equal(result.evaluation.nonTestLoc.stale, 5);
@@ -149,7 +153,7 @@ describe("runCheck", () => {
     const result = runCheck({
       files: [file("a.tsx", 10)],
       baseline: { version: 1, owner: "", expiry: "nope" },
-      today: "2026-08-21",
+      today: "2026-11-22",
     });
     assert.equal(result.ok, false);
     assert.ok(result.baselineFailures.length > 0);
