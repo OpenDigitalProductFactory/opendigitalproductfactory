@@ -1,11 +1,28 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { chmod, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { guardShellEnv, resolveGuardBash } from "../lib/guard-bash.mjs";
+
+const REQUIRED_JOIN_PACKAGE_MODE = 0o600;
+
+async function posixModeIsEnforceable() {
+  const dir = await mkdtemp(join(tmpdir(), 'pki-mode-probe-'));
+  const probe = join(dir, 'probe');
+  try {
+    await writeFile(probe, '');
+    await chmod(probe, REQUIRED_JOIN_PACKAGE_MODE);
+    const { mode } = await stat(probe);
+    return (mode & 0o777) === REQUIRED_JOIN_PACKAGE_MODE;
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}
+
+const posixModeSupported = await posixModeIsEnforceable().catch(() => false);
 
 const read = (path) => readFile(new URL(`../../${path}`, import.meta.url), "utf8");
 
@@ -161,7 +178,8 @@ test("join packages are short-lived, intended-peer-bound, and never require a CA
   }
 });
 
-test("Bash join rejects an expired package before Docker is invoked", async () => {
+test("Bash join rejects an expired package before Docker is invoked", async (context) => {
+  if (!posixModeSupported) { context.skip('POSIX mode 0600 is not representable on this filesystem — skipping mode-gated assertion'); return; }
   const directory = await mkdtemp(join(tmpdir(), "dpf-join-expired-"));
   const packagePath = join(directory, "expired.dpfjoin");
   const script = fileURLToPath(new URL("../bootstrap-organization-pki.sh", import.meta.url));
@@ -189,7 +207,8 @@ test("Bash join rejects an expired package before Docker is invoked", async () =
   }
 });
 
-test("Bash join rejects a package intended for a different installation", async () => {
+test("Bash join rejects a package intended for a different installation", async (context) => {
+  if (!posixModeSupported) { context.skip('POSIX mode 0600 is not representable on this filesystem — skipping mode-gated assertion'); return; }
   const directory = await mkdtemp(join(tmpdir(), "dpf-join-peer-"));
   const packagePath = join(directory, "wrong-peer.dpfjoin");
   const script = fileURLToPath(new URL("../bootstrap-organization-pki.sh", import.meta.url));
@@ -216,7 +235,8 @@ test("Bash join rejects a package intended for a different installation", async 
   }
 });
 
-test("Bash join rejects a public CA origin before Docker is invoked", async () => {
+test("Bash join rejects a public CA origin before Docker is invoked", async (context) => {
+  if (!posixModeSupported) { context.skip('POSIX mode 0600 is not representable on this filesystem — skipping mode-gated assertion'); return; }
   const directory = await mkdtemp(join(tmpdir(), "dpf-join-public-ca-"));
   const packagePath = join(directory, "public-ca.dpfjoin");
   const script = fileURLToPath(new URL("../bootstrap-organization-pki.sh", import.meta.url));
@@ -496,7 +516,7 @@ test('filesystem_can_represent_mode_0600 uses TEMP fallback when TMPDIR is unset
   }
 });
 
-test('Bash join skips the mode check when NTFS cannot represent POSIX permissions', { skip: process.platform !== 'win32' }, async () => {
+test('Bash join skips the mode check when NTFS cannot represent POSIX permissions', { skip: process.platform !== 'win32' || posixModeSupported }, async () => {
   const directory = await mkdtemp(join(tmpdir(), 'dpf-join-ntfs-'));
   const packagePath = join(directory, 'ntfs.dpfjoin');
   const script = fileURLToPath(new URL('../bootstrap-organization-pki.sh', import.meta.url));
@@ -509,15 +529,23 @@ test('Bash join skips the mode check when NTFS cannot represent POSIX permission
       `root_fingerprint=${'a'.repeat(64)}`,
       'intended_hostname=peer.local',
       'intended_sans=192.168.0.20',
-      `expires_at=${Math.floor(Date.now() / 1000) + 900}`,
+      `expires_at=${Math.floor(Date.now() / 1000) - 900}`,
       'enrollment_token=fixture-enrollment-token-ntfs-test',
       '',
     ].join('\n'), { mode: 0o644 });
 
     const result = spawnSync(resolveGuardBash(), [script, '--mode', 'join', '--hostname', 'peer.local', '--join-package', packagePath], { encoding: 'utf8', env: guardShellEnv({ ...process.env }) });
-    assert.doesNotMatch(`${result.stdout}\n${result.stderr}`, /mode 0600/i);
+    assert.equal(result.status, 77, result.stderr);
+    assert.match(result.stderr, /expired/i);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
 });
 
+test('posixModeIsEnforceable probes correctly and returns a boolean consistent with the module-level result', async () => {
+  // A fresh call must return a boolean — not throw, not return undefined — and
+  // must agree with the module-level posixModeSupported that the skip guards rely on.
+  const fresh = await posixModeIsEnforceable();
+  assert.equal(typeof fresh, 'boolean', 'posixModeIsEnforceable must return a boolean');
+  assert.equal(fresh, posixModeSupported, 'posixModeIsEnforceable must be deterministic across calls on the same host');
+});

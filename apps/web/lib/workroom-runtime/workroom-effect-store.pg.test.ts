@@ -15,6 +15,7 @@ import { claimEffects, insertEffects, recoverExpiredLeases, retireEffects, retir
 const DATABASE_URL = process.env.DPF_JOBS_TEST_DATABASE_URL?.trim() ?? "";
 const MIGRATION = join(__dirname, "../../../../packages/db/prisma/migrations/20261114060000_workroom_effect_outbox/migration.sql");
 const SETUP_MIGRATION = join(__dirname, "../../../../packages/db/prisma/migrations/20261114080000_workroom_room_setup_effect/migration.sql");
+const DISPATCH_MIGRATION = join(__dirname, "../../../../packages/db/prisma/migrations/20261120180000_workroom_dispatch_build_effect/migration.sql");
 const T0 = new Date("2026-11-14T05:00:00.000Z");
 const later = (ms: number) => new Date(T0.getTime() + ms);
 
@@ -39,6 +40,10 @@ describe.skipIf(!DATABASE_URL)("Workroom runtime outbox (real database)", () => 
     const setup = readFileSync(SETUP_MIGRATION, "utf8");
     await pool.query(setup);
     await pool.query(setup);
+    // BI-EB4BB4A0: the build-dispatch effect kind.
+    const dispatch = readFileSync(DISPATCH_MIGRATION, "utf8");
+    await pool.query(dispatch);
+    await pool.query(dispatch);
   });
 
   afterAll(async () => {
@@ -133,5 +138,15 @@ describe.skipIf(!DATABASE_URL)("Workroom runtime outbox (real database)", () => 
     // The portal dies before the worker runs it; the boot retirement leaves it, it needs no provider process.
     expect(await retireOrphanedEffects(run, T0)).toBe(0);
     expect((await claim([])).map((e) => [e.kind, e.processBound, e.commandKey])).toEqual([["ensure-workitem-anchor", false, "room-setup:claim:WC-1:BI-1"]]);
+  });
+
+  it("an approved plan's build dispatch is owed once per build, survives a crash and runs from any process (BI-EB4BB4A0)", async () => {
+    const { oweBuildDispatch } = await import("@/lib/build/build-dispatch-effect");
+    await oweBuildDispatch(run, { roomRowId: "row-1", buildId: "FB-1", userId: "u1", now: T0 });
+    await oweBuildDispatch(run, { roomRowId: "row-1", buildId: "FB-1", userId: "u2", now: T0 }); // replayed transition: no second dispatch
+    const rows = (await pool.query(`SELECT "kind"::text AS kind, "processBound", "commandKey", "payload" FROM "WorkroomEffect"`)).rows;
+    expect(rows).toEqual([{ kind: "dispatch-build", processBound: false, commandKey: "build-dispatch:FB-1", payload: { buildId: "FB-1", userId: "u1" } }]);
+    expect(await retireOrphanedEffects(run, T0)).toBe(0);
+    expect((await claim([])).map((e) => [e.kind, e.commandKey, e.payload])).toEqual([["dispatch-build", "build-dispatch:FB-1", { buildId: "FB-1", userId: "u1" }]]);
   });
 });

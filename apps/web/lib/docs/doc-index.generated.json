@@ -2329,6 +2329,7 @@
       "publishedPortal": false,
       "anchors": [
         "platform-overview",
+        "where-the-architecture-is-going",
         "current-runtime-core",
         "core-services",
         "runtime-characteristics",
@@ -12976,6 +12977,8 @@
         "activate-a-contract",
         "record-a-subscription-payment",
         "what-subscriptions-really-cost",
+        "what-a-plans-usage-is-worth",
+        "plans-shared-with-the-paired-install",
         "allowance-evaluation",
         "recovery-and-evidence",
         "related-routes",

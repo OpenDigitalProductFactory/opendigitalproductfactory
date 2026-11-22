@@ -276,6 +276,15 @@ export function createRuntimeSupervisor(deps: RuntimeSupervisorDeps) {
         const { executeRoomSetupEffect } = await import("./room-setup-effects.server");
         return executeRoomSetupEffect(effect);
       }
+      case "dispatch-build": {
+        // BI-EB4BB4A0: an approved plan's build dispatch, committed with its plan→build write; started at most once.
+        // Build Studio registers the executor at boot, so the runtime does not import build code.
+        const { registeredEffectExecutor } = await import("./effect-executors");
+        const executor = registeredEffectExecutor(effect.kind);
+        // Not registered yet: fail this attempt so the worker's backoff retries it; the effect stays owed.
+        if (!executor) throw new Error(`no ${effect.kind} executor is registered on this portal process yet`);
+        return executor(effect);
+      }
     }
   }
 

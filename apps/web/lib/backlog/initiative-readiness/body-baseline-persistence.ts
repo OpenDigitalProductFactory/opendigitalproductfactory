@@ -61,7 +61,10 @@ export async function ensureItemBodyBaseline(tx: Prisma.TransactionClient, args:
     where: { aliasType: "user", aliasValue: args.actor.humanContextRef, issuer: "" },
     select: { principalId: true }, take: 2,
   });
-  if (author.length !== 1 || !room.createdByPrincipalId) return;
+  // BI-05AFEB9A: Build Studio creates its rooms with no creator principal. The
+  // coworkers that delivered the source are excluded as acceptance reviewers by
+  // the delivery-actor set (delivery-actors.ts), so no source author is recorded.
+  if (author.length !== 1 || (!room.createdByPrincipalId && room.source !== "build-studio")) return;
   const organizationId = args.item.organizationId ?? (await tx.organization.findFirst({
     orderBy: { createdAt: "asc" }, select: { id: true },
   }))?.id;

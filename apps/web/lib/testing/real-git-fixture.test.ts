@@ -28,7 +28,17 @@ describe("real Git fixture lifecycle", () => {
         try { await fixture.command("blocked subprocess", process.execPath, ["-e", "setInterval(() => {}, 1000)"]); }
         catch (error) { pid = (error as { childPid?: number }).childPid; throw error; }
       }, { commandMs, setupMs });
-      await expect(attempt).rejects.toThrow(/blocked subprocess.*(bound 300ms|setup deadline 300ms)/);
+      // BI-16EA409B: the command is bounded by the setup budget LEFT when it starts
+      // (300 - elapsed), so under load it reads "bound 299ms". Assert the bound,
+      // not one exact millisecond.
+      const message = await attempt.then(() => "", (error: Error) => error.message);
+      const bound = /blocked subprocess.*bound (\d+)ms/.exec(message)?.[1];
+      if (bound === undefined) {
+        expect(message).toMatch(/blocked subprocess.*setup deadline 300ms/);
+      } else {
+        expect(Number(bound)).toBeGreaterThan(0);
+        expect(Number(bound)).toBeLessThanOrEqual(300);
+      }
       expect(pid).toBeTypeOf("number");
       stopped(pid!);
       await expect(access(allocated)).rejects.toMatchObject({ code: "ENOENT" });

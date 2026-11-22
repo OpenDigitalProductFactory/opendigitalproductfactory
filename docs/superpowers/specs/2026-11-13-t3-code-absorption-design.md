@@ -211,6 +211,53 @@ Safety rails that make recursion safe:
 - **A kill switch.** One installation setting stops autonomous self-work dispatch without affecting human-started work.
 - **Measured weekly:** self-filed items merged, regressions caused, approvals reaching the owner, and spend.
 
+## Moving DPF's other dispatchers onto the core (owner direction 2026-11-20)
+
+Owner direction (Mark, 2026-11-20): "we want to migrate all other mechanisms into T3 … We need to close these gaps." On the DPF side, WWMD DI-1F6CA0FA20D8 reads "T3" as this document's absorbed core: the Workroom outbox and effect worker (S2) and the drivers (S3). It does not mean a call from production to the T3 Code desktop app, which has no route before S6 and would break "platform function never depends on a client".
+
+**Slice 1, built (BI-EB4BB4A0): Build Studio's approved-plan dispatch.**
+- `performPlanToBuildTransition` commits the plan→build write and one `dispatch-build` WorkroomEffect for the build's own Build Studio Workroom in one transaction, keyed `build-dispatch:<buildId>`.
+- The effect worker runs the dispatch. It does nothing for a build that has left `build`. It adopts a run that is already in flight, and it refuses another room's effect or a missing user. Otherwise it starts the orchestrator once.
+- The executor is registered at boot through `workroom-runtime/effect-executors.ts`, so the runtime never imports build code.
+- Retired:
+  - the fire-and-forget `dispatchBuildForApprovedPlan` call;
+  - its second `start_build`;
+  - the ungated `build-on-plan-approval` plan→build path.
+- The admin test route now owes its dispatch through the same outbox.
+
+**What slice 1 did not move, corrected 2026-11-21.** Slice 1 made the dispatch durable and single. It did not move the coding engine. The trace on main `1036134`:
+1. `dispatch-build` calls `runApprovedBuild`.
+2. That calls `runBuildOrchestrator`, then `dispatchSpecialist`.
+3. `getBuildAgentRunner` picks the runner, which calls `dispatchClaudeTask` / `dispatchCodexTask`.
+4. `runSandboxAgentCli` runs `docker exec dpf-sandbox-1` with a one-shot `claude -p` or `codex exec`.
+
+DPF had **no adapter to T3 Code**, so no T3 thread or provider attempt was created, correlated or read back.
+
+The owner's integrator clarified that "T3" means T3 Code's coding orchestration, while DPF keeps authority and durable dispatch. WWMD DI-C19B8FEBCF0E (refining DI-1F6CA0FA20D8) chose a synthetic adapter seam first.
+
+**Slice 2, built as a synthetic seam (BI-4B4CF969).** `lib/build/t3-code/` adds `T3CodingSessionPort` and `createT3HarnessRunner`, at the `BuildAgentRunner` seam.
+- The port is shaped on T3's own thread and run read contract (`t3_thread_launch` / `delegate_task` / `t3_thread_read`).
+- There is one thread per build task, keyed `dpf-build:<buildId>:task:<taskIndex>`. A bound task is read back, never launched twice.
+- A run counts as correlated only when its `providerInstanceId` matches the requested client (`claudeAgent` | `codex`).
+- Failures are typed: `t3-unavailable`, `t3-timeout`, `t3-provider-mismatch`, `t3-run-failed`.
+- The runner keeps the model client's id, since the harness is not the client (BI-53BED66C D5).
+
+**It is not registered in production.** No route or credential to a T3 Code server exists. The live adapter depends on S6 execution hosts (BI-5A866218) or an owner-granted route. Its thread binding belongs on the build's Workroom log.
+
+**Still outside the core.** Traced on origin/main `35b96c4d`; each moves in its own slice.
+- The second build engine, `autoExecuteBuild` → `runBuildPipeline`, or the `build/execute.run` job when `DPF_BUILD_DURABLE_EXECUTION_ENABLED` is on. Its callers are:
+  - `advanceBuildPhase`;
+  - `resetBuildExecution`;
+  - `retryBuildExecution`;
+  - `resumeBuildImplementation`;
+  - the boot/10-minute `resumeStrandedBuildsOnBoot`.
+- `runGauntletRepairTask` (job `build/gauntlet.repair`).
+- `run_sandbox_tests` with `auto_fix`, which reaches `dispatchSpecialist` through `withSandboxRepairDispatch`.
+- The build-chat path in `agent-coworker.ts`, which the foreground guard leaves unreachable.
+- Plan→build without a dispatch: `advance-phase` route and `save_phase_handoff`. These builds start only when the stranded-build reconciler hands them to the pipeline engine.
+
+Until the pipeline engine moves, a build whose orchestrator dies can be restarted by that reconciler on the other engine.
+
 ## Delivery slices
 
 Each slice is its own backlog item, sized delivery-medium or smaller, in this order. The first four are the M2 pilot's foundation.
