@@ -56,6 +56,16 @@ clone is skipped, and removals go through the junction-safe helper.
 | `--status` | Report whether the task is registered |
 | `--uninstall` | Remove the task; leaves the janitor itself alone |
 
+Direct CLI runs of `scripts/worktree-janitor.mjs` also support:
+
+| Flag | Meaning |
+| --- | --- |
+| `--prune-detached` | Opt-in age-bounded classification/cleanup of stale clean detached-HEAD scratch worktrees (fails closed when Workroom claims are unreadable; honors `.worktree-pinned`, active leases, heartbeats, claims, dirtiness, and mid-merge quarantine) |
+| `--detached-grace-days N` | Age threshold for `--prune-detached` (defaults to `--grace-days`) |
+| `--worktree-base PATH` | Override canonical sibling worktree directory scanned for unregistered orphan directories |
+
+Every non-branch-scoped scan also inspects the canonical sibling worktree base (e.g. `../dpf-worktrees`) and reports unregistered orphan directories (`orphanDirs`, `summary.orphanCount`) while excluding standalone clones and linked worktrees belonging to other repositories. Orphan directories are always reported and never auto-deleted.
+
 Re-running the installer replaces the existing task rather than adding a second
 one, so it is safe to re-run to change flags.
 

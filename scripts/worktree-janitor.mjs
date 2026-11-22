@@ -6,31 +6,42 @@
 //
 // USAGE
 //   node scripts/worktree-janitor.mjs [--dry-run] [--live] [--tier-a-only]
-//                                     [--grace-days N] [--json] [--root PATH]
+//                                     [--grace-days N] [--prune-detached]
+//                                     [--detached-grace-days N] [--json]
+//                                     [--root PATH] [--worktree-base PATH]
 //
 // FLAGS
-//   --dry-run       (default) Classify only; never remove.
-//   --live          Remove eligible worktrees via junction-safe helper + branch -D.
-//                   A Tier B branch with commits on no remote is first saved at
-//                   refs/janitor-backup/<YYYY-MM-DD>/<branch>; if that fails it is kept.
-//   --tier-a-only   Live reaps ONLY Tier A (merged+clean). Tier B is always observe.
-//                   The Inngest schedule uses this for auto-reap.
-//   --grace-days N  Stale threshold for Tier B (default 14).
-//   --json          Machine-readable report on stdout.
-//   --root PATH     Git root clone (default: DPF_REPO_ROOT / git rev-parse).
+//   --dry-run                (default) Classify only; never remove.
+//   --live                   Remove eligible worktrees via junction-safe helper + branch -D.
+//                            A Tier B branch (or detached HEAD) with commits on no remote
+//                            is first saved at refs/janitor-backup/<YYYY-MM-DD>/<name>;
+//                            if that fails it is kept.
+//   --tier-a-only            Live reaps ONLY Tier A (merged+clean, or stale clean detached
+//                            HEAD with no unpushed commits when --prune-detached is set).
+//                            Tier B is always observe. The Inngest schedule uses this.
+//   --grace-days N           Stale threshold for Tier B (default 14).
+//   --prune-detached         Opt-in age-bounded classification/cleanup of stale clean
+//                            detached-HEAD scratch worktrees (fail-closed on unreadable
+//                            Workroom claims, active leases/heartbeats, pins, or dirtiness).
+//   --detached-grace-days N  Age threshold for --prune-detached (default: --grace-days).
+//   --json                   Machine-readable report on stdout (includes orphanDirs).
+//   --root PATH              Git root clone (default: DPF_REPO_ROOT / git rev-parse).
+//   --worktree-base PATH     Override canonical sibling worktree directory for orphan scan.
 //
 // SAFETY
 //   * Dry-run by default.
 //   * Tier A only for scheduled auto-reap (merged + clean + no open PR/lease + not pinned).
 //   * Removals go through junction-safe-worktree-remove.mjs (BI-F6AC1A56).
 //   * .worktree-pinned is always honored.
+//   * Unregistered orphan directories in the sibling worktree base are reported, never auto-deleted.
 
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, lstatSync, readdirSync, readFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 import {
+  classifyOrphanDirectory,
   classifyWorktree,
   isLiveReapEligible,
   summarizeDecisions,
@@ -42,8 +53,10 @@ import {
 import { sanitizeForLog } from "./lib/safe-log.mjs";
 import {
   loadActiveWorkroomPaths,
+  normalizePath,
   pathHasActiveClaim,
 } from "./lib/worktree-liveness.mjs";
+import { resolveWorktreeBase } from "./lib/worktree-base.mjs";
 import { runGit as runGitShared } from "./lib/git.mjs";
 import { mcpPost } from "./lib/mcp-client.mjs";
 import { parseArgs as utilParseArgs } from "node:util";
@@ -63,16 +76,19 @@ function parseArgs(argv) {
       "dry-run": { type: "boolean" },
       live: { type: "boolean" },
       "tier-a-only": { type: "boolean" },
+      "prune-detached": { type: "boolean" },
+      "detached-grace-days": { type: "string" },
       json: { type: "boolean" },
       "grace-days": { type: "string" },
       root: { type: "string" },
+      "worktree-base": { type: "string" },
       /** Scope the scan to ONE branch's worktree (BI-848360EF). Default: every worktree. */
       branch: { type: "string" },
       help: { type: "boolean", short: "h" },
     },
   });
   if (values.help) {
-    console.log(readFileSync(fileURLToPath(import.meta.url), "utf8").split("\n").slice(0, 35).join("\n"));
+    console.log(readFileSync(fileURLToPath(import.meta.url), "utf8").split("\n").slice(0, 42).join("\n"));
     process.exit(0);
   }
   const text = (value) => (typeof value === "string" ? value : undefined);
@@ -80,12 +96,19 @@ function parseArgs(argv) {
   const mode = tokens.findLast((token) => token.kind === "option" && (token.name === "dry-run" || token.name === "live"));
   let graceDays = values["grace-days"] === undefined ? DEFAULT_GRACE : Number(text(values["grace-days"]));
   if (!Number.isFinite(graceDays) || graceDays < 1) graceDays = DEFAULT_GRACE;
+  let detachedGraceDays = values["detached-grace-days"] === undefined
+    ? graceDays
+    : Number(text(values["detached-grace-days"]));
+  if (!Number.isFinite(detachedGraceDays) || detachedGraceDays < 1) detachedGraceDays = graceDays;
   return {
     dryRun: mode?.name !== "live",
     tierAOnly: values["tier-a-only"] === true,
+    pruneDetached: values["prune-detached"] === true,
     graceDays,
+    detachedGraceDays,
     json: values.json === true,
     root: values.root === undefined ? process.env.DPF_REPO_ROOT || process.env.PROJECT_ROOT || "" : text(values.root),
+    worktreeBase: values["worktree-base"] === undefined ? "" : text(values["worktree-base"]) || "",
     branch: values.branch === undefined ? null : text(values.branch),
   };
 }
@@ -181,6 +204,20 @@ function isMerged(root, branch, prIndex) {
   return prIndex.merged.has(branch);
 }
 
+function isDetachedHeadMerged(wtPath) {
+  const anc = runGit(["merge-base", "--is-ancestor", "HEAD", "origin/main"], wtPath);
+  return anc.ok;
+}
+
+function detachedHeadUnpushedStatus(wtPath) {
+  const count = runGit(["rev-list", "--count", "HEAD", "--not", "--remotes"], wtPath);
+  const unpushed = Number(count.stdout);
+  if (!count.ok || !Number.isInteger(unpushed)) {
+    return { hasUnpushedCommits: false, unpushedCommitsUnknown: true };
+  }
+  return { hasUnpushedCommits: unpushed > 0, unpushedCommitsUnknown: false };
+}
+
 function isDirty(wtPath) {
   const r = runGit(["status", "--porcelain"], wtPath);
   return r.ok && r.stdout.length > 0;
@@ -238,6 +275,9 @@ function gatherFacts(root, entry, prIndex, leasePayload, ttlMs, claims) {
   const wtPath = entry.path;
   const branch = entry.detached ? null : entry.branch;
   const isRoot = path.resolve(wtPath) === path.resolve(root);
+  const detachedUnpushed = !branch && !isRoot
+    ? detachedHeadUnpushedStatus(wtPath)
+    : { hasUnpushedCommits: false, unpushedCommitsUnknown: false };
   return {
     path: wtPath,
     branch,
@@ -245,19 +285,127 @@ function gatherFacts(root, entry, prIndex, leasePayload, ttlMs, claims) {
     pinned: existsSync(path.join(wtPath, ".worktree-pinned")),
     hasActiveLease: pathHasLease(leasePayload, wtPath),
     hasOpenPr: branch ? prIndex.open.has(branch) : false,
-    merged: branch ? isMerged(root, branch, prIndex) : false,
-    dirty: branch ? isDirty(wtPath) : false,
-    ageDays: branch ? ageDays(wtPath) : 0,
-    // Liveness + abandoned-merge signals — never checked on the root clone.
-    hasLiveSession: branch && !isRoot ? isWorktreeSessionLive(wtPath, { ttlMs }) : false,
-    midMerge: branch && !isRoot ? isMidMerge(wtPath) : false,
+    merged: branch ? isMerged(root, branch, prIndex) : (!isRoot ? isDetachedHeadMerged(wtPath) : false),
+    dirty: !isRoot ? isDirty(wtPath) : false,
+    ageDays: !isRoot ? ageDays(wtPath) : 0,
+    // Liveness + abandoned-merge signals — checked for every linked worktree
+    // (named branch OR detached HEAD), never on the root clone.
+    hasLiveSession: !isRoot ? isWorktreeSessionLive(wtPath, { ttlMs }) : false,
+    midMerge: !isRoot ? isMidMerge(wtPath) : false,
     // Platform-owned liveness. The heartbeat above only exists for Claude Code;
     // the Workroom claim is written by every surface, so it answers for all of
     // them — and when it cannot be read we refuse rather than guess.
-    hasActiveClaim: branch && !isRoot ? pathHasActiveClaim(claims.activePaths, wtPath) : false,
-    claimSourceUnavailable: branch && !isRoot ? !claims.available : false,
+    hasActiveClaim: !isRoot ? pathHasActiveClaim(claims.activePaths, wtPath) : false,
+    claimSourceUnavailable: !isRoot ? !claims.available : false,
     claimSourceReason: claims.reason,
+    hasUnpushedCommits: detachedUnpushed.hasUnpushedCommits,
+    unpushedCommitsUnknown: detachedUnpushed.unpushedCommitsUnknown,
   };
+}
+
+/**
+ * Scan the canonical sibling worktree directory (e.g. `../dpf-worktrees`) for
+ * unregistered orphan directories that git no longer tracks. Never mutates or
+ * deletes anything; foreign repositories and linked worktrees belonging to
+ * other repos are excluded by `classifyOrphanDirectory`.
+ */
+export function scanOrphanDirectories(root, entries, claims, options = {}) {
+  const baseDir = options.worktreeBase
+    ? path.resolve(options.worktreeBase)
+    : resolveWorktreeBase({ rootClone: root, env: options.env ?? process.env }).base;
+  if (!existsSync(baseDir)) {
+    return { baseDir, orphans: [] };
+  }
+  const nowMs = options.nowMs ?? Date.now();
+  const registered = new Set(entries.map((e) => normalizePath(path.resolve(e.path))));
+  const orphans = [];
+  let dirEntries;
+  try {
+    dirEntries = readdirSync(baseDir, { withFileTypes: true });
+  } catch {
+    return { baseDir, orphans: [] };
+  }
+  for (const dirent of dirEntries) {
+    if (!dirent.isDirectory()) continue;
+    const full = path.join(baseDir, dirent.name);
+    if (registered.has(normalizePath(path.resolve(full)))) continue;
+
+    let ageDaysVal = 0;
+    try {
+      const st = lstatSync(full);
+      ageDaysVal = Math.max(0, Math.floor((nowMs - st.mtimeMs) / 86400000));
+    } catch {
+      // keep 0
+    }
+
+    let children = [];
+    try {
+      children = readdirSync(full);
+    } catch {
+      // unreadable
+    }
+    const empty = children.length === 0;
+    const pinned = existsSync(path.join(full, ".worktree-pinned"));
+    const hasActiveClaim = pathHasActiveClaim(claims?.activePaths, full);
+
+    let gitKind = "none";
+    let gitdirTarget = null;
+    let gitdirTargetExists = false;
+    const gitEntry = path.join(full, ".git");
+    if (existsSync(gitEntry)) {
+      try {
+        const gst = lstatSync(gitEntry);
+        if (gst.isDirectory()) {
+          gitKind = "dir";
+        } else if (gst.isFile()) {
+          gitKind = "file";
+          const raw = readFileSync(gitEntry, "utf8").trim();
+          const m = raw.match(/^gitdir:\s*(.+)$/m);
+          if (m) {
+            gitdirTarget = m[1].trim();
+            gitdirTargetExists = existsSync(path.isAbsolute(gitdirTarget) ? gitdirTarget : path.resolve(full, gitdirTarget));
+          }
+        }
+      } catch {
+        // leave none
+      }
+    }
+
+    const classified = classifyOrphanDirectory({
+      path: full,
+      name: dirent.name,
+      root,
+      ageDays: ageDaysVal,
+      empty,
+      pinned,
+      hasActiveClaim,
+      gitKind,
+      gitdirTarget,
+      gitdirTargetExists,
+    });
+    if (classified) orphans.push(classified);
+  }
+  orphans.sort((a, b) => a.name.localeCompare(b.name));
+  return { baseDir, orphans };
+}
+
+/**
+ * Pin an unpushed detached HEAD commit under refs/janitor-backup/<date>/detached-<slug>
+ * before live Tier-B removal so no commit can be orphaned from the object store.
+ */
+export function backupUnpushedDetachedHead(root, wtPath, date = new Date().toISOString().slice(0, 10), git = runGit) {
+  const count = git(["rev-list", "--count", "HEAD", "--not", "--remotes"], wtPath);
+  const unpushed = Number(count.stdout);
+  if (!count.ok || !Number.isInteger(unpushed)) {
+    return { ok: false, ref: null, unpushed: null, reason: "cannot count unpushed detached commits" };
+  }
+  if (unpushed === 0) return { ok: true, ref: null, unpushed: 0 };
+  const slug = path.basename(wtPath).replace(/[^A-Za-z0-9._-]+/g, "-") || "detached";
+  const ref = `refs/janitor-backup/${date}/detached-${slug}`;
+  const tip = git(["rev-parse", "HEAD"], wtPath);
+  const write = tip.ok && tip.stdout ? git(["update-ref", ref, tip.stdout], root) : tip;
+  if (!write.ok) return { ok: false, ref, unpushed, reason: `could not write ${ref}` };
+  return { ok: true, ref, unpushed };
 }
 
 /**
@@ -360,7 +508,11 @@ async function main(argv = process.argv.slice(2)) {
 
   for (const entry of scanned) {
     const facts = gatherFacts(root, entry, prIndex, leasePayload, ttlMs, claims);
-    const { verdict, reason, tier } = classifyWorktree(facts, { graceDays: args.graceDays });
+    const { verdict, reason, tier } = classifyWorktree(facts, {
+      graceDays: args.graceDays,
+      pruneDetached: args.pruneDetached,
+      detachedGraceDays: args.detachedGraceDays,
+    });
     const row = {
       path: facts.path,
       branch: facts.branch,
@@ -376,17 +528,21 @@ async function main(argv = process.argv.slice(2)) {
     decisions.push(row);
 
     if (!args.dryRun && isLiveReapEligible(policy, verdict)) {
-      const backup = verdict === "PRUNE_TIER_B" && facts.branch ? backupUnpushedBranch(root, facts.branch) : null;
+      const backup = verdict === "PRUNE_TIER_B"
+        ? (facts.branch
+            ? backupUnpushedBranch(root, facts.branch)
+            : backupUnpushedDetachedHead(root, facts.path))
+        : null;
       if (backup && !backup.ok) {
         console.error(
-          `[worktree-janitor] KEEP ${sanitizeForLog(facts.path)}: ${sanitizeForLog(backup.reason)} for ${sanitizeForLog(facts.branch)}`,
+          `[worktree-janitor] KEEP ${sanitizeForLog(facts.path)}: ${sanitizeForLog(backup.reason)} for ${sanitizeForLog(facts.branch ?? "detached HEAD")}`,
         );
         removals.push({ path: facts.path, branch: facts.branch, worktreeRemoved: false, branchDeleted: false, backup });
         continue;
       }
       if (backup?.ref) {
         console.error(
-          `[worktree-janitor] backed up ${backup.unpushed} unpushed commit(s) of ${sanitizeForLog(facts.branch)} at ${backup.ref}`,
+          `[worktree-janitor] backed up ${backup.unpushed} unpushed commit(s) of ${sanitizeForLog(facts.branch ?? "detached HEAD")} at ${backup.ref}`,
         );
       }
       const result = removeWorktree(root, facts.path, facts.branch);
@@ -394,16 +550,23 @@ async function main(argv = process.argv.slice(2)) {
     }
   }
 
-  const summary = summarizeDecisions(decisions);
+  const orphanScan = args.branch
+    ? { baseDir: null, orphans: [] }
+    : scanOrphanDirectories(root, entries, claims, { worktreeBase: args.worktreeBase });
+  const summary = summarizeDecisions(decisions, orphanScan.orphans);
   const report = {
     mode: args.dryRun ? "dry-run" : "live",
     available: true,
     root,
+    worktreeBase: orphanScan.baseDir,
     graceDays: args.graceDays,
+    pruneDetached: args.pruneDetached,
+    detachedGraceDays: args.detachedGraceDays,
     policy,
     // Why every claim-dependent tree was kept, or how ownership was proven (BI-83345811).
     claims: { available: claims.available, reason: claims.reason },
     decisions,
+    orphanDirs: orphanScan.orphans,
     summary,
     removals: args.dryRun ? [] : removals,
   };
@@ -414,7 +577,7 @@ async function main(argv = process.argv.slice(2)) {
   }
 
   console.log(
-    `\nWorktree janitor — ${report.mode} (grace=${args.graceDays}d, policy=${policy})\n`,
+    `\nWorktree janitor — ${report.mode} (grace=${args.graceDays}d, policy=${policy}, pruneDetached=${args.pruneDetached})\n`,
   );
   for (const d of decisions) {
     console.log(`  ${d.verdict.padEnd(12)} ${sanitizeForLog(d.path)}  (${sanitizeForLog(d.reason)})`);
@@ -422,10 +585,18 @@ async function main(argv = process.argv.slice(2)) {
   for (const p of summary.flaggedPaths ?? []) {
     console.log(`  [flag]  abandoned mid-merge (MERGE_HEAD, no live session): ${p} — quarantined, never auto-reaped`);
   }
+  if (orphanScan.orphans.length > 0) {
+    console.log(`\nUnregistered orphan directories in ${sanitizeForLog(orphanScan.baseDir ?? "")} (${orphanScan.orphans.length}):`);
+    for (const o of orphanScan.orphans) {
+      const notes = [o.kind, `${o.ageDays}d`, ...(o.pinned ? ["pinned"] : []), ...(o.hasActiveClaim ? ["active-claim"] : [])];
+      console.log(`  ORPHAN       ${sanitizeForLog(o.path)}  (${notes.join(", ")})`);
+    }
+  }
   console.log(
     `\nSummary: TierA=${summary.counts.PRUNE_TIER_A} TierB=${summary.counts.PRUNE_TIER_B} ` +
       `KEEP=${summary.counts.KEEP} SKIP=${summary.counts.SKIP} PINNED=${summary.counts.PINNED} ` +
-      `FLAG_ABANDONED_MERGE=${summary.counts.FLAG_ABANDONED_MERGE ?? 0}`,
+      `FLAG_ABANDONED_MERGE=${summary.counts.FLAG_ABANDONED_MERGE ?? 0} ` +
+      `ORPHANS=${summary.orphanCount ?? 0}`,
   );
   if (args.dryRun) console.log("\n(Dry run — nothing removed. Pass --live to prune.)\n");
   process.exit(0);
