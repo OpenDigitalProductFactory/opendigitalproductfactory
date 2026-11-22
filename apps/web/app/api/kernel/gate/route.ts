@@ -67,17 +67,14 @@ export async function POST(req: Request): Promise<Response> {
     principle_slug: slug,
     session_class: parsed.data.sessionClass,
   });
-  // CodeQL js/log-injection: bound values are validated by Zod above + the
-  // enum'd verdict / session_class / attempt.kind. slug derives from
-  // operator-edited principle frontmatter and is user-influenced;
-  // JSON.stringify neutralises CR/LF.
+  // Encode each trace field at the log boundary while preserving the metric labels.
   // eslint-disable-next-line no-console
   console.log(
     "[kernel-gate-trace] verdict=%s slug=%s session=%s kind=%s",
-    decision.verdict,
+    JSON.stringify(decision.verdict),
     JSON.stringify(slug),
-    parsed.data.sessionClass,
-    parsed.data.attempt.kind,
+    JSON.stringify(parsed.data.sessionClass),
+    JSON.stringify(parsed.data.attempt.kind),
   );
 
   return Response.json(decision);
