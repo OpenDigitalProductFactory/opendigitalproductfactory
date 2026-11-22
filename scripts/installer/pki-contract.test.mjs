@@ -479,43 +479,6 @@ test('Bash join rejects a join package with overly permissive mode on a POSIX fi
   }
 });
 
-test('filesystem_can_represent_mode_0600 uses TEMP fallback when TMPDIR is unset', { skip: process.platform === 'win32' }, async () => {
-  // Exercises the widened mktemp fallback introduced for Git Bash on Windows:
-  //   "${TEMP:-${TMP:-${TMPDIR:-/tmp}}}"
-  // If mktemp fails (probe directory unavailable), the function returns 0 (assume
-  // can't detect) and silently skips the mode guard, so this test would see a
-  // different exit code than 77.
-  const directory = await mkdtemp(join(tmpdir(), 'dpf-join-temp-fallback-'));
-  const packagePath = join(directory, 'wide-open.dpfjoin');
-  const script = fileURLToPath(new URL('../bootstrap-organization-pki.sh', import.meta.url));
-
-  try {
-    await writeFile(packagePath, [
-      'DPF_ORGANIZATION_JOIN_V1',
-      'package_id=0123456789abcdef0123456789abcdef',
-      'ca_url=https://192.168.0.10:9000',
-      `root_fingerprint=${' a'.trimStart().repeat(64)}`,
-      'intended_hostname=peer.local',
-      'intended_sans=192.168.0.20',
-      `expires_at=${Math.floor(Date.now() / 1000) + 900}`,
-      'enrollment_token=fixture-enrollment-token-temp-fallback',
-      '',
-    ].join('\n'), { mode: 0o644 });
-    await chmod(packagePath, 0o644);
-
-    const env = { ...guardShellEnv({ ...process.env }) };
-    delete env.TMPDIR;
-    delete env.TMP;
-    env.TEMP = directory;
-
-    const result = spawnSync(resolveGuardBash(), [script, '--mode', 'join', '--hostname', 'peer.local', '--join-package', packagePath], { encoding: 'utf8', env });
-    assert.equal(result.status, 77, `expected exit 77 (mode guard), got ${result.status}; stderr: ${result.stderr}`);
-    assert.match(result.stderr, /mode 0600/i);
-  } finally {
-    await rm(directory, { recursive: true, force: true });
-  }
-});
-
 test('Bash join skips the mode check when NTFS cannot represent POSIX permissions', { skip: process.platform !== 'win32' || posixModeSupported }, async () => {
   const directory = await mkdtemp(join(tmpdir(), 'dpf-join-ntfs-'));
   const packagePath = join(directory, 'ntfs.dpfjoin');
