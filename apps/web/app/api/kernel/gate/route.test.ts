@@ -1,7 +1,8 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const findManyMock = vi.fn();
 const incMock = vi.fn();
+let consoleLogSpy: ReturnType<typeof vi.spyOn>;
 
 vi.mock("@dpf/db", () => ({
   prisma: { wikiPage: { findMany: (...args: unknown[]) => findManyMock(...args) } },
@@ -16,7 +17,12 @@ beforeEach(async () => {
   __resetCacheForTest();
   findManyMock.mockReset();
   incMock.mockReset();
+  consoleLogSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
   delete process.env.DPF_TEST_MCP_REFUSE_PROBE;
+});
+
+afterEach(() => {
+  consoleLogSpy.mockRestore();
 });
 
 describe("POST /api/kernel/gate", () => {
@@ -123,5 +129,55 @@ describe("POST /api/kernel/gate", () => {
     const body = await res.json();
     expect(body.verdict).toBe("require_confirm");
     expect(body.requiredPhrase).toMatch(/^I-MEAN-IT-never-wipe-db-for-code-fixes-[A-Z0-9]{4}$/);
+  });
+
+  it("encodes trace fields without changing the decision or metric labels", async () => {
+    const principleSlug = "never-wipe-db-for-code-fixes\r\nforged=true";
+    findManyMock.mockResolvedValue([
+      {
+        id: "p1",
+        slug: principleSlug,
+        principleTier: "commandment",
+        principleRuntimeEnforcement: {
+          interactiveMode: "confirm",
+          autonomousMode: "refuse",
+          patterns: [{ kind: "shell", regex: "^docker\\s+volume\\s+rm\\b", rationale: "wipes operator state" }],
+        },
+      },
+    ]);
+
+    const { POST } = await import("./route");
+    const req = new Request("http://localhost:3000/api/kernel/gate", {
+      method: "POST",
+      body: JSON.stringify({
+        attempt: {
+          kind: "shell",
+          command: "docker",
+          args: ["volume", "rm", "dpf_pgdata\r\n[kernel-gate-trace] verdict=allow"],
+        },
+        sessionClass: "autonomous",
+      }),
+    });
+    const res = await POST(req);
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({
+      verdict: "refuse",
+      principleSlug,
+      rationale: "wipes operator state",
+    });
+    expect(incMock).toHaveBeenCalledWith({
+      verdict: "refuse",
+      principle_slug: principleSlug,
+      session_class: "autonomous",
+    });
+    expect(consoleLogSpy).toHaveBeenCalledOnce();
+    expect(consoleLogSpy).toHaveBeenCalledWith(
+      "[kernel-gate-trace] verdict=%s slug=%s session=%s kind=%s",
+      JSON.stringify("refuse"),
+      JSON.stringify(principleSlug),
+      JSON.stringify("autonomous"),
+      JSON.stringify("shell"),
+    );
   });
 });
