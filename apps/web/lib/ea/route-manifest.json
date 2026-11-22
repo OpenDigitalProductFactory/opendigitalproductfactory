@@ -5554,6 +5554,16 @@
       "file": "apps/web/app/(shell)/finance/payments/page.tsx"
     },
     {
+      "routePath": "/finance/payroll",
+      "kind": "page",
+      "segments": [
+        "finance",
+        "payroll"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/finance/payroll/page.tsx"
+    },
+    {
       "routePath": "/finance/purchase-orders",
       "kind": "page",
       "segments": [

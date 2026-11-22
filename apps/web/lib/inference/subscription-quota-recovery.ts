@@ -83,34 +83,45 @@ export async function recheckSubscriptionQuota(connectionId: string, modelId: st
       || !currentExecutionProof(expected, current.binding, Date.now())) throw new Error("Capacity check ownership or restrictions changed");
   };
   let recovered = false;
+  let cliRecovered = false;
   try {
-    // Short Retry-After/reset windows stay authoritative; distant forecasts may be tested now.
-    if (captured.resetTimes.some(reset => reset && reset > now && reset.getTime() <= now.getTime() + QUOTA_PROOF_TTL_MS)) {
-      await prisma.scheduledJob.updateMany({ where: { jobId, runCursor }, data: { lastStatus: "waiting", lastRunSummary: "Waiting for the current short limit before checking again." } });
-      return { ok: false, message: "The provider requested a short wait. A check is scheduled after it.", nextCheckAt: nextRunAt.toISOString(), modelId };
-    }
     await assertCurrent();
-    await proofStore.invalidateExecutionProof(connectionId, captured.binding.credentialRevision);
-    const { testProviderAuthInternal } = await import("@/lib/inference/provider-auth-verification");
-    const result = await testProviderAuthInternal(captured.binding.providerId, false, connectionId, { verificationOnly: true,
-      observation: { modelId, beforeDispatch: assertCurrent, completed: async () => {
-        await assertCurrent();
-        recovered = await proofStore.persistExecutionProof(captured, Date.now(), { jobId, runCursor });
-        if (!recovered) throw new Error("Capacity evidence changed before persistence");
-      } } });
-    if (!result.ok) recovered = false;
-    if (recovered) {
-      const persisted = await prisma.providerCapacityStatus.findUnique({ where: { ownedAccountId: captured.accountId }, select: { executionProof: true } });
-      recovered = Boolean(persisted && await proofStore.readCurrentExecutionProof(connectionId, modelId, persisted.executionProof));
+    const { reconcileSubscriptionCliQuota } = await import("./subscription-cli-recovery");
+    try { cliRecovered = await reconcileSubscriptionCliQuota(connectionId, modelId, assertCurrent,
+      { jobId, runCursor, scheduled: options.scheduled === true }); }
+    catch { /* An unavailable usage read proves nothing about the independent Responses channel. */ }
+    if (!cliRecovered) {
+      // A read-only usage observation may detect an early reset even inside an
+      // old short window. Inference still honors the provider's short wait.
+      if (captured.resetTimes.some(reset => reset && reset > now && reset.getTime() <= now.getTime() + QUOTA_PROOF_TTL_MS)) {
+        await prisma.scheduledJob.updateMany({ where: { jobId, runCursor }, data: { lastStatus: "waiting", lastRunSummary: "Waiting for the current short limit before checking again." } });
+        return { ok: false, message: "The provider requested a short wait. A check is scheduled after it.", nextCheckAt: nextRunAt.toISOString(), modelId };
+      }
+      await assertCurrent();
+      await proofStore.invalidateExecutionProof(connectionId, captured.binding.credentialRevision);
+      const { testProviderAuthInternal } = await import("@/lib/inference/provider-auth-verification");
+      const result = await testProviderAuthInternal(captured.binding.providerId, false, connectionId, { verificationOnly: true,
+        observation: { modelId, beforeDispatch: assertCurrent, completed: async () => {
+          await assertCurrent();
+          recovered = await proofStore.persistExecutionProof(captured, Date.now(), { jobId, runCursor });
+          if (!recovered) throw new Error("Capacity evidence changed before persistence");
+        } } });
+      if (!result.ok) recovered = false;
+      if (recovered) {
+        const persisted = await prisma.providerCapacityStatus.findUnique({ where: { ownedAccountId: captured.accountId }, select: { executionProof: true } });
+        recovered = Boolean(persisted && await proofStore.readCurrentExecutionProof(connectionId, modelId, persisted.executionProof));
+      }
     }
   } catch { recovered = false; }
-  if (!recovered) await proofStore.invalidateExecutionProof(connectionId, captured.binding.credentialRevision);
-  const message = recovered
+  if (!recovered && !cliRecovered) await proofStore.invalidateExecutionProof(connectionId, captured.binding.credentialRevision);
+  const message = cliRecovered
+    ? "The coding-tool usage check confirms capacity is available. Matching old coding-tool limits were reconciled; account pauses and other restrictions remain in effect."
+    : recovered
     ? "The selected model completed a Responses capacity check. Other models, CLI limits and work permissions remain separate."
     : "This check did not confirm capacity. Existing restrictions remain; inspect the account and the recorded check before retrying.";
   const settled = await prisma.scheduledJob.updateMany({ where: { jobId, runCursor, enabled: true },
-    data: { lastStatus: recovered ? "recovered" : "unconfirmed", lastRunSummary: message, lastError: null } });
-  return { ok: recovered && settled.count === 1, observationCompleted: recovered, message, modelId, ...(commissioned ? { nextCheckAt: nextRunAt.toISOString() } : {}) };
+    data: { lastStatus: recovered || cliRecovered ? "recovered" : "unconfirmed", lastRunSummary: message, lastError: null } });
+  return { ok: (recovered || cliRecovered) && settled.count === 1, observationCompleted: recovered || cliRecovered, message, modelId, ...(commissioned ? { nextCheckAt: nextRunAt.toISOString() } : {}) };
 }
 
 /** Only persisted owner commissions wake; account discovery and page loads never opt in. */

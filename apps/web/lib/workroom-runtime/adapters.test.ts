@@ -3,11 +3,11 @@ import { describe, expect, it, vi } from "vitest";
 // BI-05715F4C: the Codex app-server and Claude stream-json adapters, against a
 // fake CLI that plays the provider's side (frames as recorded by T3 Code).
 
-import { CLAUDE_SESSION_SCRIPT, claudeSessionFlags, createClaudeAdapter } from "./claude-stream-adapter";
-import { CODEX_SESSION_SCRIPT, codexApprovalResponse, createCodexAdapter } from "./codex-app-server-adapter";
+import { CLAUDE_SESSION_SCRIPT, claudeSessionFlags, createClaudeSessionDriver as createClaudeAdapter } from "@/lib/executor-drivers/claude/session";
+import { CODEX_SESSION_SCRIPT, codexApprovalResponse, createCodexSessionDriver as createCodexAdapter } from "@/lib/executor-drivers/codex/session";
 import { createJsonRpcPeer } from "./json-rpc-peer";
 import { autoRespond, fakeProcess } from "./__fixtures__/fake-process";
-import type { RuntimeEvent } from "./types";
+import type { RuntimeEvent } from "@/lib/executor-drivers/types";
 
 const CONFIG = { capsuleId: "WC-1", mcp: { url: "http://portal:3000/api/mcp/v1", bearerToken: "dpfroom_secret" }, cwd: "/workspace" };
 
@@ -93,7 +93,10 @@ describe("codex app-server adapter", () => {
     proc.emit(terminal);
     proc.emit(terminal);
     expect(session.activeTurnId()).toBeNull();
-    expect(events).toEqual([{ type: "turn-completed", turnId: "turn-1", status, error: status === "failed" ? "provider failure" : null }]);
+    expect(events).toEqual([
+      { type: "usage", turnId: "turn-1", usage: { reported: "unknown" } },
+      { type: "turn-completed", turnId: "turn-1", status, error: status === "failed" ? "provider failure" : null },
+    ]);
   });
   it("ignores late root activity while a newer root turn runs", async () => {
     const { proc, events, session } = await open();
@@ -183,6 +186,7 @@ describe("codex app-server adapter", () => {
       { type: "turn-started", turnId: "turn-1" },
       expect.objectContaining({ type: "runtime-request", request: expect.objectContaining({ requestId: "exec-1", kind: "command", summary: "git push" }) }),
       { type: "message", turnId: "turn-1", text: "done" },
+      { type: "usage", turnId: "turn-1", usage: { reported: "unknown" } },
       { type: "turn-completed", turnId: "turn-1", status: "completed", error: null },
     ]);
     await session.respondToRuntimeRequest("exec-1", "decline");
@@ -243,6 +247,8 @@ describe("claude stream-json adapter", () => {
     expect(events).toEqual([
       { type: "turn-started", turnId: "turn-1" },
       { type: "message", turnId: "turn-1", text: "hi" },
+      // The result event carried no usage, so the turn's usage is unknown, not zero (BI-A01B06F6).
+      { type: "usage", turnId: "turn-1", usage: { reported: "unknown" } },
       { type: "turn-completed", turnId: "turn-1", status: "completed", error: null },
     ]);
   });

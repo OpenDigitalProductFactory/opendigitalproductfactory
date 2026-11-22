@@ -78,6 +78,22 @@ describe("body criteria capture in the authorized subject transaction", () => {
     await ensureItemBodyBaseline(tx as never, { ...args, authority: buildAuthority });
     expect(tx.documentVersion.create).toHaveBeenCalledOnce();
   });
+  // BI-05AFEB9A: every Build Studio room is created with no creator principal.
+  // Its delivering coworkers are excluded as reviewers by the delivery-actor set.
+  it("mints for a Build Studio room that records no creator principal", async () => {
+    tx.workroom.findMany.mockResolvedValue([{ capsuleId: "WC-8B8A9D6F", source: "build-studio",
+      repositoryFullName: "owner/repo", headSha: "a".repeat(40), createdByPrincipalId: null }]);
+    await ensureItemBodyBaseline(tx as never, { ...args, authority: buildAuthority });
+    expect(tx.documentVersion.create).toHaveBeenCalledOnce();
+    expect(tx.backlogItemActivity.create.mock.calls[0]![0].data.payload).toMatchObject({
+      bodyAuthorPrincipalId: "owner", sourceAuthorPrincipalId: null });
+  });
+  it("still requires a creator principal for any other room", async () => {
+    tx.workroom.findMany.mockResolvedValue([{ capsuleId: "WC-CASE", source: "external-adoption",
+      repositoryFullName: "owner/repo", headSha: "a".repeat(40), createdByPrincipalId: null }]);
+    await ensureItemBodyBaseline(tx as never, { ...args, authority: buildAuthority });
+    expect(tx.documentVersion.create).not.toHaveBeenCalled();
+  });
   it.each([
     { ...buildAuthority, actionKey: "advance_build_phase" },
     { ...buildAuthority, authoritySnapshot: { ...buildAuthority.authoritySnapshot, effectiveAgentGrant: "backlog_write" } },

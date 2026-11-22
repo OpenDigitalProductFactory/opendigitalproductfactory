@@ -384,3 +384,55 @@ test("the shell surface and the file surface agree — the bypass is what this c
   assert.equal(fileVerdict.block, shellVerdict.block);
   assert.equal(fileVerdict.block, true);
 });
+
+// ── BI-B49665EA: coverage from a canonical sibling-base worktree ─────────────
+//
+// deriveCloneRoot resolved the clone root by PATH SHAPE only — the
+// "/.claude/worktrees/" marker, or <cwd>/.git being a DIRECTORY. In the
+// canonical sibling base (~/dpf-worktrees/<slug>) neither holds: .git is a FILE
+// and there is no marker. It returned null, isUnderRootSharedArea
+// short-circuited to false, and `rm -rf <root clone>` was PERMITTED from 138 of
+// 148 live worktrees — the exact mechanism that wiped 730 tracked files on
+// 2026-06-19. The guard covered the topology AGENTS.md §12 deprecated and not
+// the one it mandates.
+//
+// Resolution now asks git: the parent of `--git-common-dir` IS the root clone,
+// which answers from any worktree on any platform. The gitCommonDir resolver is
+// injected so these stay pure unit tests.
+
+test("deriveCloneRoot resolves the root clone from a canonical sibling-base worktree", () => {
+  const gitCommonDir = () => "/Users/x/dpf/.git";
+  assert.equal(
+    deriveCloneRoot("/Users/x/dpf-worktrees/some-slug", () => false, gitCommonDir),
+    "/Users/x/dpf",
+    "a sibling-base worktree must still resolve the shared clone root",
+  );
+});
+
+test("a recursive delete aimed at the root clone is DENIED from a sibling-base worktree", () => {
+  const cwd = "/Users/x/dpf-worktrees/some-slug";
+  const gitCommonDir = () => "/Users/x/dpf/.git";
+  for (const command of ["rm -rf /Users/x/dpf", "rm -rf /Users/x/dpf/apps", "rm -rf /Users/x/dpf/packages"]) {
+    const verdict = decide({ command, cwd, env: {}, isDir: () => false, gitCommonDir });
+    assert.equal(verdict.block, true, `must block from a sibling worktree: ${command}`);
+  }
+});
+
+test("no over-blocking: a delete outside the clone's shared area still passes from a worktree", () => {
+  const cwd = "/Users/x/dpf-worktrees/some-slug";
+  const gitCommonDir = () => "/Users/x/dpf/.git";
+  for (const command of ["rm -rf ./build", "rm -rf /tmp/whatever", "rm -rf dist"]) {
+    const verdict = decide({ command, cwd, env: {}, isDir: () => false, gitCommonDir });
+    assert.equal(verdict.block, false, `must not block: ${command}`);
+  }
+});
+
+test("deriveCloneRoot keeps the nested-marker and root-clone routes when git cannot answer", () => {
+  assert.equal(deriveCloneRoot("/Users/x/dpf/.claude/worktrees/w", () => false, () => null), "/Users/x/dpf");
+  assert.equal(deriveCloneRoot("/Users/x/dpf", (p) => p === "/Users/x/dpf/.git", () => null), "/Users/x/dpf");
+  assert.equal(deriveCloneRoot("/tmp/not-a-clone", () => false, () => null), null);
+});
+
+test("a git common dir that is not a .git suffix is not mistaken for a clone root", () => {
+  assert.equal(deriveCloneRoot("/tmp/x", () => false, () => "/tmp/bare-repo"), null);
+});

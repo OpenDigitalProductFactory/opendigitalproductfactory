@@ -190,6 +190,17 @@ function humanizeKey(key: string): string {
   return spaced ? `${spaced.charAt(0).toUpperCase()}${spaced.slice(1)}` : key;
 }
 
+function materialFactLabel(path: string[]): string {
+  const labels = path.map(humanizeKey);
+  if (path[0]?.toLowerCase() === "payment" && path.length > 1) {
+    return labels.slice(1).join(" · ");
+  }
+  if (path[0]?.toLowerCase() === "permission" && path.length === 2) {
+    return labels[0] ?? "Permission";
+  }
+  return labels.join(" · ");
+}
+
 function displayValue(value: unknown): string {
   const text = typeof value === "string" && value !== "" ? value : JSON.stringify(value) ?? String(value);
   return text.length > MAX_VALUE_CHARS
@@ -509,6 +520,22 @@ export function envelopePrimaryDecision(decision: EnvelopeDecisionSummary, local
   // A registered operation can be named without establishing its effects.
   // Only a standard self-update request establishes the app as its target.
   const exact = (decision.kind === "exact" || decision.kind === "unknown") && hasOriginal;
+  // Only the captured account toggle has these effects. Other provider actions
+  // include credential and quota operations and must keep their own disclosure.
+  if (exact && decision.consequence.startsWith("None declared.") && decision.toolName === "manage_provider_account"
+    && (params.operation === "disable" || params.operation === "enable")
+    && Object.keys(params).every(key => ["operation", "connectionId"].includes(key))
+    && typeof params.connectionId === "string" && params.connectionId.trim()) {
+    const account = params.connectionId === "provider-default-local" ? "Docker Model Runner"
+      : params.connectionId === "provider-default-ollama" ? "Ollama" : params.connectionId;
+    const disable = params.operation === "disable";
+    return {
+      title: formatSource(locale, disable ? copy.providerDisableTitle : copy.providerEnableTitle, { account }),
+      description: formatSource(locale, disable ? copy.providerDisableDescription : copy.providerEnableDescription, { account }),
+      consequence: disable ? copy.providerEnableAgain : copy.providerDisableAgain,
+      facts: [], unresolved: false, target: "", recommendation: "",
+    };
+  }
   const appUpdate = exact && decision.toolName === "request_self_upgrade"
     && Object.keys(params).every(key => key === "reason")
     && (params.reason === undefined || typeof params.reason === "string");
@@ -561,7 +588,7 @@ export function envelopePrimaryDecision(decision: EnvelopeDecisionSummary, local
   function visit(value: unknown, path: string[], material: boolean) {
     const empty = Array.isArray(value) ? value.length === 0 : objectRecord(value) ? Object.keys(value as object).length === 0 : false;
     if (empty && material) {
-      facts.push({ label: path.map(humanizeKey).join(" · "), value: copy.notProvided });
+      facts.push({ label: materialFactLabel(path), value: copy.notProvided });
       return;
     }
     if (Array.isArray(value)) {
@@ -574,11 +601,11 @@ export function envelopePrimaryDecision(decision: EnvelopeDecisionSummary, local
         visit(child, [...path, key], material || materialKey.test(key) || (consequential && intentKey.test(key)));
       }
     } else if (material) {
-      facts.push({ label: path.map(humanizeKey).join(" · "), value: value === null || value === "" ? copy.notProvided : String(value) });
+      facts.push({ label: materialFactLabel(path), value: value === null || value === "" ? copy.notProvided : String(value) });
     }
   }
   if (unresolved) visit(params, [], false);
   return { title, description, consequence, facts, unresolved,
-    target: appUpdate ? copy.appScope : decision.toolName === "manage_coworker_tool_grant" ? copy.permissionScope : decision.targetLabel ?? copy.targetUnavailable, recommendation,
+    target: appUpdate ? copy.appScope : decision.toolName === "manage_coworker_tool_grant" ? copy.permissionScope : decision.targetLabel ?? "", recommendation,
   };
 }

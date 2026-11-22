@@ -2,7 +2,7 @@
 // 2026-10-07-durable-delegation-ledger-design.md §4.7).
 //
 // A room drives an agent CLI as a supervised runtime: the supervisor opens the
-// session through an ExecutorAdapter, gives it the room's own scoped MCP
+// session through an ExecutorDriver, gives it the room's own scoped MCP
 // credential, records everything the session does in the room's sequenced log,
 // answers its questions by the room's policy (escalating the ones that reach
 // past the sandbox to a room decision), and revokes the credential when the
@@ -36,7 +36,7 @@ import {
   type StoredRuntimeSession,
   type SupervisionActor,
 } from "./supervised-session";
-import type { ExecutorAdapter, RuntimeDecision, RuntimeEvent, RuntimeProvider, RuntimeRequest, RuntimeSession } from "./types";
+import type { ExecutorDriver, RuntimeDecision, RuntimeEvent, RuntimeProvider, RuntimeRequest, RuntimeSession } from "@/lib/executor-drivers/types";
 import { claimEffects, recoverExpiredLeases, retireOrphanedEffects, type ClaimedEffect, type EffectSqlDb } from "./workroom-effect-store";
 
 export { DEFAULT_RUNTIME_CWD, readStoredRuntimeSession, type StoredRuntimeSession };
@@ -78,7 +78,7 @@ export type EffectStorePort = {
 };
 
 export type RuntimeSupervisorDeps = {
-  adapters: Partial<Record<RuntimeProvider, ExecutorAdapter>>;
+  adapters: Partial<Record<RuntimeProvider, ExecutorDriver>>;
   mcpUrl: string;
   issueToken(input: { userId: string; agentId: string | null; capsuleId: string; runRef: string | null }): Promise<{ tokenId: string; plaintext: string }>;
   revokeTokens(input: { capsuleId: string; reason: string; tokenId?: string }): Promise<number>;
@@ -276,6 +276,15 @@ export function createRuntimeSupervisor(deps: RuntimeSupervisorDeps) {
         const { executeRoomSetupEffect } = await import("./room-setup-effects.server");
         return executeRoomSetupEffect(effect);
       }
+      case "dispatch-build": {
+        // BI-EB4BB4A0: an approved plan's build dispatch, committed with its plan→build write; started at most once.
+        // Build Studio registers the executor at boot, so the runtime does not import build code.
+        const { registeredEffectExecutor } = await import("./effect-executors");
+        const executor = registeredEffectExecutor(effect.kind);
+        // Not registered yet: fail this attempt so the worker's backoff retries it; the effect stays owed.
+        if (!executor) throw new Error(`no ${effect.kind} executor is registered on this portal process yet`);
+        return executor(effect);
+      }
     }
   }
 
@@ -373,7 +382,7 @@ export function createRuntimeSupervisor(deps: RuntimeSupervisorDeps) {
     start,
 
     turn(input: { capsuleId: string; prompt: string; steer?: boolean; commandId?: string }): Promise<RuntimeResult> {
-      const supportsSteer = deps.adapters[live.get(input.capsuleId)?.provider ?? "codex"]?.supportsSteer ?? false;
+      const supportsSteer = deps.adapters[live.get(input.capsuleId)?.provider ?? "codex"]?.capabilities.steer ?? false;
       return turnCommand(input.capsuleId, { type: "turn.request", prompt: input.prompt, steer: input.steer === true, supportsSteer }, input.commandId);
     },
 

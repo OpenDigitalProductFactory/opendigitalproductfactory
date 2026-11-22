@@ -104,6 +104,7 @@ const TERMINAL_BUILD_SELECT = {
  */
 async function mintBuildItemBodyBaseline(tx: unknown, args: {
   itemRowId: string;
+  build: { id: string; buildId: string };
   profile: import("./types").ReadinessProfile;
   effectiveShape: string;
   actor: TerminalActor;
@@ -120,7 +121,17 @@ async function mintBuildItemBodyBaseline(tx: unknown, args: {
   const count = () => client.backlogItemActivity.count({ where: { backlogItemId: args.itemRowId, kind: "initiative_scope_baseline" } });
   const before = await count();
   await ensureItemBodyBaseline(client, { item: item as never, profile: args.profile, effectiveShape: args.effectiveShape, actor: args.actor, authority: args.authority });
-  return (await count()) > before;
+  const minted = (await count()) > before;
+  // BI-05AFEB9A: the mapping cites the item's own evidence after the baseline.
+  const [{ recordBuildDeliveryEvidence }, { getDeployedSha }] = await Promise.all([
+    import("./build-delivery-evidence"),
+    import("@/lib/self-upgrade/completion"),
+  ]);
+  const recorded = await recordBuildDeliveryEvidence(client as never, {
+    itemRowId: args.itemRowId, buildRowId: args.build.id, buildId: args.build.buildId,
+    recordedById: args.actor.humanContextRef, deployedSha: await getDeployedSha(),
+  });
+  return minted || recorded;
 }
 
 type BuildReadinessFacts = Awaited<ReturnType<typeof import("@/lib/build/build-entry-gate").loadBuildReadinessFacts>>;
@@ -251,6 +262,7 @@ export async function completeFeatureBuildTransition(args: {
         && [...projected.decision.blockers, ...projected.decision.unmet].some((entry) => entry.code === "ACCEPTANCE_EVIDENCE_REQUIRED")) {
         const minted = await (args.dependencies?.mintBodyBaseline ?? mintBuildItemBodyBaseline)(genericTx, {
           itemRowId: originator.id,
+          build: { id: build.id, buildId: build.buildId },
           profile: projected.decision.profile,
           effectiveShape: "medium",
           actor,

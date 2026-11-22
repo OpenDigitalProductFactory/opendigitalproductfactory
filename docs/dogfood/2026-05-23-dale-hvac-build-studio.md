@@ -695,7 +695,7 @@ here so future troubleshooters can recognize the shape.
 
 ### D45 — TOOL_TRACE_KEYWORD_PATTERN false-positives on narration — S2 wrong
 
-`apps/web/lib/routing/cli-adapter.ts` defines a regex that matches any
+`apps/web/lib/routing/cli-adapter.ts` (since 2026-11-18 the regex lives in `apps/web/lib/executor-drivers/tool-trace.ts`, BI-A01B06F6) defines a regex that matches any
 mention of a known platform tool name in any text:
 
 ```

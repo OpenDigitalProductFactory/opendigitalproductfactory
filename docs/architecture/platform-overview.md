@@ -16,7 +16,15 @@ relatedCode:
 
 > **Which overview wins:** this page is the **canonical living overview** for runtime topology, deployment models, the sandbox/build workflow, and data architecture. [`orientation.md`](orientation.md) is the entry-point index and defers to this page for depth; where the two disagree, this page wins and orientation carries the bug.
 
-> **Scope:** this document describes the **current GA runtime** — the Single VM substrate served via Docker Desktop on Windows. Multi-platform (macOS Apple Silicon, native Linux), customer-cloud (AWS / GCP / Azure), Managed Kubernetes, and TAPPaaS deployment shapes are documented under the deployment doctrine at [`docs/superpowers/specs/2026-05-09-deployment-contracts.md`](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/docs/superpowers/specs/2026-05-09-deployment-contracts.md). Implementation status for each is tracked in the [umbrella branch plan](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/docs/superpowers/plans/2026-05-09-deployment-architecture-and-rollout.md).
+## Where the architecture is going
+
+DPF2 explores a new architecture for DPF's vision of helping a company run its business and improve how it works. A Workroom coordinates people and AI coworkers around a clear objective, within bounded authority, and records the result. The room and its coordinator own the outcome, and people decide when an action could cause significant harm or falls outside the room's authority.
+
+In this design, the business layer owns records such as customers and jobs. The coordination layer organizes work and applies the company's rules. The protected execution layer is designed to give authorized tools a controlled place to run. This architecture is in prototype development.
+
+The same approach is intended to govern changes to the platform itself, from a proposed improvement through verification and release. The sections below describe the existing DPF runtime.
+
+> **Scope:** The runtime sections describe the **current GA runtime** on the Single VM substrate via Docker Desktop on [Windows](../install/windows.md) and [Apple Silicon macOS](../install/macos.md). Native Linux, customer-cloud (AWS / GCP / Azure), Managed Kubernetes, and TAPPaaS deployment shapes are documented under the deployment doctrine at [`docs/superpowers/specs/2026-05-09-deployment-contracts.md`](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/docs/superpowers/specs/2026-05-09-deployment-contracts.md). Implementation status for each is tracked in the [umbrella branch plan](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/docs/superpowers/plans/2026-05-09-deployment-architecture-and-rollout.md).
 
 This document explains the main runtime pieces of Open Digital Product Factory, the two supported deployment models, the sandbox-based iterative workflow, and the practical hardware tiers for running the platform well.
 

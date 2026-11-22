@@ -19,25 +19,23 @@ export { isCliQuotaBanner, stripLeadingQuotaBanner } from "./cli-result-errors";
  * unchanged — this adapter is ONLY for `anthropic-sub`.
  */
 
-import type { ToolCallEntry } from "./chat-message-types";
 import type { AdapterRequest, AdapterResult, ExecutionAdapterHandler } from "./adapter-types";
 import { InferenceError } from "./inference-error";
-import { getDecryptedCredential, getProviderBearerToken } from "@/lib/inference/ai-provider-internals";
 import { registerExecutionAdapter } from "./execution-adapter-registry";
 import { lazyChildProcess, lazyUtil } from "@/lib/shared/lazy-node";
 import { writeSandboxFile } from "@/lib/build/sandbox/agent-cli-runtime";
-import { extractToolCalls as extractToolCallsFromText } from "./extract-tool-calls";
 import { createMcpSessionToken, type McpToolSurface } from "@/lib/mcp/session-token";
 import { getToolGrantMapping } from "@/lib/tak/agent-grants";
 import { recordCliRateLimit, clearCliRateLimit } from "./cli-pool-status";
 import { withCliSlot } from "./cli-concurrency";
 import { isSideEffectingGrant } from "./grant-capability";
-import { toCliParsedUsage, type CliParsedUsage, type CliUsagePayload } from "./cli-usage";
-import { providerSetupLocation } from "@/lib/ai-provider-routes";
 import { randomUUID } from "node:crypto";
 import { canonicalWorkroomToolName } from "@/lib/shared/workroom-tool-aliases";
 import { renderOwnedCliRunner, NativeCliExecutionUncertainError } from "./cli-owned-runner";
 import { observeCliProcess } from "./cli-process-observation";
+import { claudeCredential, resolveClaudeAuth } from "@/lib/executor-drivers/claude/auth";
+import { claudeOneShotArgs, parseClaudeResult } from "@/lib/executor-drivers/claude/one-shot";
+import { extractMentionedPlatformToolNames } from "@/lib/executor-drivers/tool-trace";
 import type { NativeCliDiagnostics } from "../shared/execution-uncertainty";
 
 
@@ -49,265 +47,6 @@ const CLI_TIMEOUT_MS = 600_000; // 10 minutes — accumulated Build Studio conte
  *  for non-standard layouts (e.g. host-network setups) via env. */
 const INTERNAL_PORTAL_URL = process.env.DPF_INTERNAL_PORTAL_URL ?? "http://portal:3000";
 
-/**
- * Claude Code CLI's built-in tools shadow the platform's MCP-style tools when
- * both are available — the model preferentially emits native `tool_use` for
- * its own tools (Read, Write, Bash, Agent, etc.) instead of using the
- * platform-tool descriptions injected into the system prompt. That looked
- * like "Build Studio tools aren't being called" (BI-931303FF).
- *
- * Until the proper fix lands (mount platform tools as a real MCP server via
- * `--mcp-config` per docs/superpowers/plans/2026-04-11-platform-mcp-tool-server-implementation.md),
- * we suppress Claude Code's native tools when this adapter dispatches
- * inference. The cli-adapter is only used as an inference backend (anthropic-sub
- * subscription), not as a coding assistant — sub-agent code execution flows
- * through claude-dispatch.ts on a different code path that intentionally
- * keeps native tools enabled.
- *
- * List sourced from Claude Code 1.x's documented built-in tool inventory.
- * If a future Claude Code release adds a new built-in, the platform tool
- * shadowing returns until this list is updated; the [tool-trace] log lines
- * in this file will surface the regression.
- */
-const CLAUDE_CODE_NATIVE_TOOLS = [
-  "Agent",
-  "Bash",
-  "Edit",
-  "Glob",
-  "Grep",
-  "MultiEdit",
-  "NotebookEdit",
-  "NotebookRead",
-  "Read",
-  "Skill",
-  "Task",
-  "TodoWrite",
-  "ToolSearch",
-  "WebFetch",
-  "WebSearch",
-  "Write",
-];
-
-/** Comma-separated form of {@link CLAUDE_CODE_NATIVE_TOOLS} for the `--disallowedTools` flag. */
-export const CLAUDE_CODE_NATIVE_TOOLS_FLAG_VALUE = CLAUDE_CODE_NATIVE_TOOLS.join(",");
-
-// ─── Auth Resolution ────────────────────────────────────────────────────────
-
-type CliAuth =
-  | { mode: "oauth"; token: string }
-  | { mode: "apikey"; apiKey: string };
-
-export async function resolveCliAuth(providerId: string, connectionId?: string, expectedExecutionVersion?: string): Promise<CliAuth> {
-  if (providerId === "anthropic-sub") {
-    // Use getProviderBearerToken which handles token refresh automatically.
-    // The raw getDecryptedCredential doesn't refresh expired tokens — it just
-    // reads whatever is cached. getProviderBearerToken checks expiry, refreshes
-    // if needed, and returns a valid token.
-    const tokenResult = connectionId ? expectedExecutionVersion ? await getProviderBearerToken(providerId, connectionId, expectedExecutionVersion) : await getProviderBearerToken(providerId, connectionId) : await getProviderBearerToken(providerId);
-    if ("error" in tokenResult) {
-      throw new InferenceError(
-        `OAuth token error for "${providerId}": ${tokenResult.error}. Configure via ${providerSetupLocation(providerId)}.`,
-        "auth",
-        providerId,
-      );
-    }
-    return { mode: "oauth", token: tokenResult.token };
-  }
-
-  // Fallback: API key mode (shouldn't normally reach here — anthropic uses chat adapter)
-  const credential = connectionId ? expectedExecutionVersion ? await getDecryptedCredential(providerId, connectionId, expectedExecutionVersion) : await getDecryptedCredential(providerId, connectionId) : await getDecryptedCredential(providerId);
-  const apiKey = credential?.secretRef ?? credential?.cachedToken;
-  if (!apiKey) {
-    throw new InferenceError(
-      `No API key for provider "${providerId}".`,
-      "auth",
-      providerId,
-    );
-  }
-  return { mode: "apikey", apiKey };
-}
-
-// ─── Claude CLI stream-json parsing ─────────────────────────────────────────
-
-interface CliStreamEvent {
-  type: string;
-  content?: string;
-  subtype?: string;
-  name?: string;
-  id?: string;
-  input?: Record<string, unknown>;
-  result?: string;
-  usage?: CliUsagePayload;
-  // tool_use events may have these at top level
-  tool_use_id?: string;
-}
-
-/**
- * Tool calls with this prefix are dispatched by the Claude CLI itself against
- * a `--mcp-config`-mounted server. They have already been executed by the CLI
- * by the time we see the output; the agentic loop must NOT re-execute them.
- * Filter them out at the parser level so even if a future CLI version surfaces
- * the unresolved tool_use in the final JSON, we won't double-dispatch.
- */
-const MCP_TOOL_NAME_PREFIX = "mcp__dpf__";
-
-export const TOOL_TRACE_KEYWORD_PATTERN = /\b(read_sandbox_file|write_sandbox_file|edit_sandbox_file|search_sandbox|list_sandbox_files|run_sandbox_command|check_sandbox|start_sandbox|saveBuildEvidence|save_build_notes|save_phase_handoff|reviewDesignDoc|reviewBuildPlan|search_project_files|read_project_file|list_project_directory|get_code_graph_freshness|inspect_build_code_impact|search_code_graph|trace_code_surface|find_related_tests|generate_design_system|search_design_intelligence|describe_model|deploy_feature|execute_promotion)\b/g;
-
-export function extractMentionedPlatformToolNames(text: string): string[] {
-  return Array.from(new Set(text.match(TOOL_TRACE_KEYWORD_PATTERN) ?? []));
-}
-
-/**
- * Parse Claude CLI `--output-format stream-json` output into AdapterResult.
- *
- * Each line is a JSON object. Key event types:
- * - {"type":"assistant","subtype":"text","content":"..."} — text chunk
- * - {"type":"tool_use","name":"...","input":{...}} — tool call
- * - {"type":"result","result":"...","usage":{...}} — completion
- */
-export function parseCliStreamOutput(output: string): {
-  text: string;
-  toolCalls: ToolCallEntry[];
-  usage: CliParsedUsage;
-  /**
-   * mcp__dpf__* tool calls that the CLI's MCP client already executed before
-   * we saw the output. Filtered out of `toolCalls` (so the agentic loop does
-   * NOT re-dispatch and double-execute side effects), but surfaced here so
-   * the diagnostic tracer can avoid logging NO-CALL-BUT-MENTIONED when the
-   * post-execution narration mentions a tool name the CLI already ran.
-   * Names have the `mcp__dpf__` prefix stripped for easier comparison
-   * against extractMentionedPlatformToolNames output.
-   */
-  cliPreExecutedNames: string[];
-} {
-  const textParts: string[] = [];
-  const toolCalls: ToolCallEntry[] = [];
-  const cliPreExecutedNames: string[] = [];
-  let usage: CliParsedUsage = { inputTokens: 0, outputTokens: 0 };
-
-  for (const line of output.split("\n")) {
-    const trimmed = line.trim();
-    if (!trimmed) continue;
-
-    let event: CliStreamEvent;
-    try {
-      event = JSON.parse(trimmed) as CliStreamEvent;
-    } catch {
-      continue; // Skip non-JSON lines (stderr leakage, progress messages)
-    }
-
-    if (event.type === "assistant" && event.content) {
-      textParts.push(event.content);
-    } else if (event.type === "tool_use" && event.name) {
-      if (event.name.startsWith(MCP_TOOL_NAME_PREFIX)) {
-        cliPreExecutedNames.push(event.name.slice(MCP_TOOL_NAME_PREFIX.length));
-      } else {
-        toolCalls.push({
-          id: event.id ?? event.tool_use_id ?? `cli_${Math.random().toString(36).slice(2, 9)}`,
-          name: event.name,
-          arguments: event.input ?? {},
-        });
-      }
-    } else if (event.type === "result") {
-      // Final event — contains aggregated result and usage
-      if (event.result && textParts.length === 0) {
-        textParts.push(event.result);
-      }
-      if (event.usage) {
-        usage = toCliParsedUsage(event.usage);
-      }
-    }
-  }
-
-  const finalText = textParts.join("");
-  // Rescue: if the model emitted tool_use JSON as assistant text instead of
-  // a structured tool_use event (observed on anthropic-sub CLI when Claude
-  // writes the canonical {"type":"tool_use",…} JSON in a chat turn),
-  // extract the tool calls from the text so the agentic loop dispatches.
-  if (toolCalls.length === 0 && finalText.includes('"tool_use"')) {
-    const rescued = extractToolCallsFromText(finalText);
-    if (rescued.length > 0) {
-      toolCalls.push(...rescued);
-    }
-  }
-
-  return {
-    text: finalText,
-    toolCalls,
-    usage,
-    cliPreExecutedNames,
-  };
-}
-
-/**
- * Fallback parser for `--output-format json` (non-streaming).
- * Returns { result: string, session_id?: string, ... }
- */
-export function parseCliJsonOutput(output: string): {
-  text: string;
-  toolCalls: ToolCallEntry[];
-  usage: CliParsedUsage;
-  /** See parseCliStreamOutput.cliPreExecutedNames for the contract. */
-  cliPreExecutedNames: string[];
-} {
-  try {
-    const parsed = JSON.parse(output.trim()) as Record<string, unknown>;
-    const text = typeof parsed.result === "string" ? parsed.result : JSON.stringify(parsed.result ?? "");
-
-    // Extract tool calls from content blocks if present. Skip mcp__dpf__*
-    // entries — those were already dispatched by the CLI's MCP client and
-    // re-running them in the agentic loop would double-execute side effects.
-    const toolCalls: ToolCallEntry[] = [];
-    const cliPreExecutedNames: string[] = [];
-    const content = parsed.content as Array<{ type?: string; id?: string; name?: string; input?: Record<string, unknown> }> | undefined;
-    if (Array.isArray(content)) {
-      for (const block of content) {
-        if (block.type === "tool_use" && block.name) {
-          if (block.name.startsWith(MCP_TOOL_NAME_PREFIX)) {
-            cliPreExecutedNames.push(block.name.slice(MCP_TOOL_NAME_PREFIX.length));
-          } else {
-            toolCalls.push({
-              id: block.id ?? `cli_${Math.random().toString(36).slice(2, 9)}`,
-              name: block.name,
-              arguments: block.input ?? {},
-            });
-          }
-        }
-      }
-    }
-
-    const usage = parsed.usage as CliUsagePayload | undefined;
-
-    // Same rescue as parseCliStreamOutput: tool_use may appear in the text
-    // instead of in a content-block tool_use entry.
-    if (toolCalls.length === 0 && text.includes('"tool_use"')) {
-      const rescued = extractToolCallsFromText(text);
-      if (rescued.length > 0) {
-        toolCalls.push(...rescued);
-      }
-    }
-
-    return {
-      text,
-      toolCalls,
-      usage: toCliParsedUsage(usage),
-      cliPreExecutedNames,
-    };
-  } catch {
-    // Not JSON — return raw text. Try to extract tool calls from the raw
-    // text before giving up; the CLI occasionally prints a single JSON
-    // tool_use block with no wrapper.
-    const raw = output.trim();
-    const rescued = raw.includes('"tool_use"') ? extractToolCallsFromText(raw) : [];
-    return {
-      text: raw,
-      toolCalls: rescued,
-      usage: { inputTokens: 0, outputTokens: 0 },
-      cliPreExecutedNames: [],
-    };
-  }
-}
-
 // ─── CLI Adapter ────────────────────────────────────────────────────────────
 
 export const cliAdapter: ExecutionAdapterHandler = {
@@ -318,8 +57,13 @@ export const cliAdapter: ExecutionAdapterHandler = {
     const poolIdentity = request.plan.providerConnectionId ? { providerId, providerConnectionId: request.plan.providerConnectionId } : undefined;
     const startMs = Date.now();
 
-    // 1. Resolve auth
-    const auth = await resolveCliAuth(providerId, request.plan.providerConnectionId, request.plan.providerConnectionVersion);
+    // 1. Resolve auth through the Claude driver (one resolver for every Claude path).
+    const connectionId = request.plan.providerConnectionId;
+    const auth = await resolveClaudeAuth(providerId, connectionId
+      ? { connectionId, ...(request.plan.providerConnectionVersion ? { expectedExecutionVersion: request.plan.providerConnectionVersion } : {}) }
+      : undefined).catch((error: unknown) => {
+      throw new InferenceError(error instanceof Error ? error.message : "Claude credentials could not be resolved.", "auth", providerId);
+    });
 
     // 2. Build the prompt from messages
     // Claude CLI's `-p` flag takes a single prompt string. We concatenate
@@ -500,9 +244,10 @@ export const cliAdapter: ExecutionAdapterHandler = {
       await Promise.all(writes);
 
       // 5. Build auth env and runner script
+      const credential = claudeCredential(auth);
       if (auth.mode === "oauth") {
         try {
-          await writeSandboxFile({ containerId: SANDBOX_CONTAINER, path: tokenFile, content: auth.token, chownNodeUser: true, mode: "600", timeoutMs: 5_000 });
+          await writeSandboxFile({ containerId: SANDBOX_CONTAINER, path: tokenFile, content: credential.value, chownNodeUser: true, mode: "600", timeoutMs: 5_000 });
         } catch {
           // BI-1291B677 / BI-AFEF038A: the token now streams via stdin so it no
           // longer enters the command surface, but keep this belt-and-suspenders
@@ -512,7 +257,7 @@ export const cliAdapter: ExecutionAdapterHandler = {
           throw new Error("Failed to stage the CLI OAuth token into the sandbox.");
         }
       } else {
-        await writeSandboxFile({ containerId: SANDBOX_CONTAINER, path: tokenFile, content: auth.apiKey, chownNodeUser: true, mode: "600", timeoutMs: 5_000 });
+        await writeSandboxFile({ containerId: SANDBOX_CONTAINER, path: tokenFile, content: credential.value, chownNodeUser: true, mode: "600", timeoutMs: 5_000 });
       }
 
       // Build the CLI command.
@@ -527,7 +272,6 @@ export const cliAdapter: ExecutionAdapterHandler = {
       // --disallowedTools. The agentic loop's tool_use extractor parses the
       // model's structured-JSON output as before.
       const cliModel = modelId || "sonnet";
-      const mcpFlags = mcpJwt ? ["--mcp-config", mcpConfigFile, "--strict-mcp-config"] : [];
       // NOTE: claude is backgrounded (NOT `exec`ed) so the runner sh stays the
       // parent and records claude's PID to pidFile. This lets the timeout path
       // reap the real in-container process tree (BI-F36E7510); `exec` would
@@ -544,10 +288,10 @@ export const cliAdapter: ExecutionAdapterHandler = {
       // by leaving: every native filesystem tool is already disallowed here
       // (CLAUDE_CODE_NATIVE_TOOLS_FLAG_VALUE), so that context could never be
       // acted on, only paid for. Measurements are in the BI and commit message.
-      const script = renderOwnedCliRunner({ command: "claude", args: [...(auth.mode === "apikey" ? ["--bare"] : []), "-p", "-", "--dangerously-skip-permissions", ...mcpFlags,
-        "--disallowedTools", CLAUDE_CODE_NATIVE_TOOLS_FLAG_VALUE, "--output-format", "json", "--model", cliModel],
+      const script = renderOwnedCliRunner({ command: "claude", args: claudeOneShotArgs({ authMode: auth.mode, ...(mcpJwt ? { mcpConfigFile } : {}),
+        disallowNativeTools: true, model: cliModel }),
         home: authHome, cwd: authHome, promptFile, systemPromptFile: systemFile, timeoutMs: CLI_TIMEOUT_MS,
-        env: { CLAUDE_CONFIG_DIR: authHome }, secretFile: { path: tokenFile, variable: auth.mode === "oauth" ? "CLAUDE_CODE_OAUTH_TOKEN" : "ANTHROPIC_API_KEY" } });
+        env: { CLAUDE_CONFIG_DIR: authHome }, secretFile: { path: tokenFile, variable: credential.envVar } });
 
       await writeSandboxFile({ containerId: SANDBOX_CONTAINER, path: runnerScript, content: script, mode: "755", timeoutMs: 5_000 });
 
@@ -627,7 +371,7 @@ export const cliAdapter: ExecutionAdapterHandler = {
 
       // 7. Parse the output
       if (mcpJwt && diagnostics.terminalResult?.status !== "success") throw new NativeCliExecutionUncertainError(providerId, diagnostics);
-      const parsed = parseCliJsonOutput(stdout);
+      const parsed = parseClaudeResult(stdout);
       const inferenceMs = Date.now() - startMs;
 
       try {

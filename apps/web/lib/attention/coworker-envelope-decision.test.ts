@@ -16,6 +16,21 @@ const RESEARCH = {
 
 describe("primary decision disclosure", () => {
   it.each([
+    ["disable", "stop routing new model requests"],
+    ["enable", "can route new model requests"],
+  ])("explains the requested provider %s before authorization", (operation, effect) => {
+    const summarize = (proposedParameters: Record<string, unknown>) => envelopePrimaryDecision(
+      summarizeCoworkerEnvelopeDecision({ ...RESEARCH, toolName: "manage_provider_account", proposedParameters }),
+    );
+    const primary = summarize({ operation, connectionId: "provider-default-local" });
+    expect(primary.description).toContain(effect);
+    expect(primary.description).toContain("Docker Model Runner");
+    expect(primary.unresolved).toBe(false);
+    expect(summarize({ operation }).unresolved).toBe(true);
+    expect(summarize({ operation, connectionId: "provider-default-local", scope: "all" }).unresolved).toBe(true);
+  });
+
+  it.each([
     ["request_self_upgrade", { reason: "Approved release batch" }, "Request an update for this app?"],
     ["request_self_upgrade", {}, "Request an update for this app?"],
     ["merge_backlog_items", { canonicalItemId: "BI-KEEP", duplicateItemId: "BI-DUP" }, "Combine these duplicate work requests?"],
@@ -27,7 +42,7 @@ describe("primary decision disclosure", () => {
     expect(primary.unresolved).toBe(true);
     expect(primary.recommendation).toBe("Keep this on hold until its effect is clear.");
     expect(primary.consequence).toContain("Cannot be undone");
-    expect(primary.target).toBe(toolName === "request_self_upgrade" ? "This app" : "Work name unavailable");
+    expect(primary.target).toBe(toolName === "request_self_upgrade" ? "This app" : "");
     expect(JSON.parse(decision.completeProposedContent!)).toEqual(proposedParameters);
   });
 
@@ -49,8 +64,8 @@ describe("primary decision disclosure", () => {
     const primary = envelopePrimaryDecision(decision);
     expect(primary.title).toBe("Combine these duplicate work requests?");
     expect(primary.facts).toEqual(expect.arrayContaining([
-      { label: "Payment · Amount", value: "125" }, { label: "Payment · Currency", value: "USD" },
-      { label: "Payment · Recipient", value: "review@example.test" }, { label: "Access", value: "false" },
+      { label: "Amount", value: "125" }, { label: "Currency", value: "USD" },
+      { label: "Recipient", value: "review@example.test" }, { label: "Access", value: "false" },
     ]));
   });
 
@@ -100,6 +115,8 @@ describe("primary decision disclosure", () => {
       routingId: "internal-only", recipients: [], payment: { amount: 1250, currency: "USD", recipient },
     } });
     const primary = envelopePrimaryDecision(decision);
+    expect(primary.description).toBe("Unresolved; review before authorizing.");
+    expect(primary.target).toBe("");
     expect(primary.facts.some(fact => fact.value === recipient)).toBe(true);
     expect(primary.facts.some(fact => /recipients/i.test(fact.label) && fact.value === "Not provided")).toBe(true);
     expect(primary.facts.some(fact => fact.value === "internal-only")).toBe(false);

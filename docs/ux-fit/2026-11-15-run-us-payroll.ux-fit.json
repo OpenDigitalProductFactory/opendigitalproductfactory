@@ -1,0 +1,42 @@
+{
+  "version": "1",
+  "decidedOption": "blockers-first-with-collapsed-w4-and-run-forms",
+  "scope": {
+    "files": [
+      "apps/web/app/(shell)/finance/payroll/PayrollPanel.tsx",
+      "apps/web/app/(shell)/finance/payroll/page.tsx",
+      "apps/web/app/(shell)/finance/settings/statutory-rates/StatutoryRatesPanel.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "sweep-measurement",
+    "baselineComparison": "new-route",
+    "measured": {
+      "/finance/payroll": {
+        "defaultVisibleWords": 236,
+        "leadBandWords": 9,
+        "primaryActions": 1,
+        "visibleFields": 0,
+        "maxChoicesPerControl": 0,
+        "subLegibleControls": 0,
+        "buriedPrimaryAction": 0,
+        "axeViolations": 2
+      },
+      "/finance/settings/statutory-rates": {
+        "defaultVisibleWords": 240,
+        "leadBandWords": 9,
+        "primaryActions": 1,
+        "visibleFields": 0,
+        "maxChoicesPerControl": 0,
+        "subLegibleControls": 0,
+        "buriedPrimaryAction": 0,
+        "axeViolations": 2
+      }
+    },
+    "sourceSha": "4627e6414312bc98423a7109d5a3ee91789a507b",
+    "workflowRun": 43663481116,
+    "artifactId": 14141955741,
+    "artifactSha256": "a0e63613583bef4668ff1ba66f9259d84bd0f16edfb74d59c05b7e7aea9ad26b",
+    "rationale": "Measured by this PR's cloud UX route sweep: both routes pass every net-new budget. /finance/payroll leads with named blockers and one next step; the W-4 form, the run form and each run's payslip lines are collapsed, so no field is visible on arrival. On /finance/settings/statutory-rates the new withholding-table form sits inside the already-collapsed manual entry disclosure; the missing-figure list now names every figure payroll needs, which raised words on arrival to 240, still under the 400 budget. The two axe findings on each route match the shared Finance shell's count on the same run."
+  }
+}

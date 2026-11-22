@@ -5,7 +5,7 @@ export const REQUIRED_PREVIEW_DELIVERY_TOOLS = DELIVERY_WORKFLOW_TOOLS;
 import { gitText } from './git.mjs';
 import { spawn } from 'node:child_process';
 import { readFile, writeFile, rm, realpath } from 'node:fs/promises';
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { homedir } from 'node:os';
 import { dirname, resolve, isAbsolute } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -341,12 +341,19 @@ export async function runPreviewLifecycle({ compose, inspect, verifySource, stop
   } finally { await stopOwned(); }
 }
 
-export async function assertPreviewInitializerImage(runner, containerId) {
+export async function assertPreviewInitializerImage(runner, containerId, expectedCloneDigest) {
   await runner.run(['exec', containerId, 'test', '-f', '/app/packages/db/src/sanitized-clone-batches.ts']);
   for (const file of ['dev-preview-init-runner.mjs', 'dev-preview-init-diagnostics.mjs']) {
     await runner.run(['exec', containerId, 'test', '-f', `/app/scripts/lib/${file}`])
       .catch(() => { throw new Error('preview_initializer_diagnostics_unavailable'); });
   }
+  if (typeof expectedCloneDigest !== 'string' || !/^[a-f0-9]{64}$/.test(expectedCloneDigest)) {
+    throw new Error('preview_initializer_clone_source_unverified');
+  }
+  const actual = await runner.run(['exec', containerId, 'node', '-e',
+    'const fs=require("fs"),c=require("crypto");process.stdout.write(c.createHash("sha256").update(fs.readFileSync("/app/packages/db/src/sanitized-clone.ts")).digest("hex"));'])
+    .catch(() => { throw new Error('preview_initializer_clone_source_unavailable'); });
+  if (actual !== expectedCloneDigest) throw new Error('preview_initializer_clone_source_mismatch');
 }
 
 async function runAdmittedPreview(env, cleanupState) {
@@ -381,7 +388,8 @@ async function runAdmittedPreview(env, cleanupState) {
   const [canonical] = JSON.parse(await runner.run(['inspect', portals[0]]));
   if (!canonical.State?.Running || !/^sha256:[a-f0-9]{64}$/.test(canonical.Image)) throw new Error('preview_canonical_image_unverified');
   // An install predating this repair is not ready to initialize an old feature.
-  await assertPreviewInitializerImage(runner, portals[0]);
+  const cloneDigest = createHash('sha256').update(await readFile(resolve(worktree, 'packages/db/src/sanitized-clone.ts'))).digest('hex');
+  await assertPreviewInitializerImage(runner, portals[0], cloneDigest);
   const declaration = await createPreviewDeclaration({ worktree, stateDirectory: dirname(statePath) });
   const identity = { worktree, sha, leaseId, cloneImage: canonical.Image, declarationPath: declaration.path };
   const overridePath = resolve(dirname(statePath), `preview-${randomBytes(12).toString('hex')}.yaml`);

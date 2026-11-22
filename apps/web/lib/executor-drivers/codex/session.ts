@@ -11,16 +11,18 @@
 
 import type { CodexCatalogLogin } from "@/lib/routing/codex-cli-model-catalog";
 
-import { createJsonRpcPeer, type JsonRpcPeer } from "./json-rpc-peer";
-import type { RuntimeLauncher } from "./sandbox-launcher";
+import { createJsonRpcPeer, type JsonRpcPeer } from "@/lib/workroom-runtime/json-rpc-peer";
+import type { RuntimeLauncher } from "@/lib/workroom-runtime/sandbox-launcher";
 import type {
-  ExecutorAdapter,
+  DriverCapabilities,
+  ExecutorDriver,
   RuntimeDecision,
   RuntimeEventSink,
   RuntimeRequest,
   RuntimeSession,
   RuntimeSessionConfig,
-} from "./types";
+  TurnUsage,
+} from "../types";
 
 /** Runs inside the sandbox. Credentials stay in memory (ephemeral store); threads persist in CODEX_HOME. */
 export const CODEX_SESSION_SCRIPT = [
@@ -39,6 +41,55 @@ const APPROVAL_METHODS: Record<string, RuntimeRequest["kind"]> = {
 
 type PendingRequest = { rpcId: string | number; method: string; params: Record<string, unknown> };
 
+/** Codex runs one-shot as `codex exec` (exec.ts) and as a session over app-server. */
+export const CODEX_CAPABILITIES: DriverCapabilities = {
+  steer: true, interrupt: true, runtimeRequests: "session", resumeThread: true, usage: true, oneShot: true,
+};
+
+type TokenCounts = { input: number; cached: number; output: number };
+
+function tokenCounts(value: unknown): TokenCounts | null {
+  const v = value as { inputTokens?: unknown; cachedInputTokens?: unknown; outputTokens?: unknown } | undefined;
+  const n = (x: unknown) => (typeof x === "number" && Number.isFinite(x) && x >= 0 ? x : null);
+  const input = n(v?.inputTokens), cached = n(v?.cachedInputTokens), output = n(v?.outputTokens);
+  return input === null || cached === null || output === null ? null : { input, cached, output };
+}
+
+/**
+ * Per-turn usage from `thread/tokenUsage/updated` (as T3 Code reads it). `total`
+ * is thread-wide, so a turn costs the growth of `total` while it is active; a
+ * total that went backwards (a resumed or compacted thread) falls back to
+ * `last`, the newest single response. Totals seen between turns move the
+ * baseline only.
+ */
+function createUsageMeter() {
+  let baseline: TokenCounts | null = null;
+  const turns = new Map<string, TokenCounts>();
+  return {
+    observe(turnId: string | null, activeTurnId: string | null, tokenUsage: Record<string, unknown> | undefined) {
+      const total = tokenCounts(tokenUsage?.["total"]);
+      if (!total) return;
+      const previous = baseline;
+      baseline = total;
+      if (!turnId || turnId !== activeTurnId) return;
+      const grew = previous && total.input >= previous.input && total.cached >= previous.cached && total.output >= previous.output;
+      const delta = grew
+        ? { input: total.input - previous.input, cached: total.cached - previous.cached, output: total.output - previous.output }
+        : tokenCounts(tokenUsage?.["last"]);
+      if (!delta) return;
+      const sum = turns.get(turnId) ?? { input: 0, cached: 0, output: 0 };
+      turns.set(turnId, { input: sum.input + delta.input, cached: sum.cached + delta.cached, output: sum.output + delta.output });
+    },
+    /** Codex counts cached input inside input; DPF reports it apart, as Claude does. */
+    settle(turnId: string): TurnUsage {
+      const sum = turns.get(turnId);
+      turns.delete(turnId);
+      if (!sum || sum.input + sum.output === 0) return { reported: "unknown" };
+      return { reported: "native", inputTokens: Math.max(0, sum.input - sum.cached), cacheReadInputTokens: sum.cached, outputTokens: sum.output };
+    },
+  };
+}
+
 function text(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value : null;
 }
@@ -56,13 +107,13 @@ export function codexApprovalResponse(method: string, params: Record<string, unk
   return { decision };
 }
 
-export function createCodexAdapter(deps: {
+export function createCodexSessionDriver(deps: {
   launch: RuntimeLauncher;
   login: () => Promise<CodexCatalogLogin>;
-}): ExecutorAdapter {
+}): ExecutorDriver {
   return {
     provider: "codex",
-    supportsSteer: true,
+    capabilities: CODEX_CAPABILITIES,
     async openSession(config: RuntimeSessionConfig, onEvent: RuntimeEventSink): Promise<RuntimeSession> {
       const login = await deps.login();
       const proc = deps.launch({
@@ -77,6 +128,7 @@ export function createCodexAdapter(deps: {
       // notifications can arrive after more than one later turn has finished.
       const settledTurnIds = new Set<string>();
       const pending = new Map<string, PendingRequest>();
+      const usage = createUsageMeter();
 
       const peer: JsonRpcPeer = createJsonRpcPeer(proc, {
         onNotification(method, params) {
@@ -84,6 +136,10 @@ export function createCodexAdapter(deps: {
           // thread and turn can drive its supervisor's next queued input.
           if (!threadId || text(params["threadId"]) !== threadId) return;
           const turnId = turnIdOf(params);
+          if (method === "thread/tokenUsage/updated") {
+            usage.observe(turnId, activeTurnId, params["tokenUsage"] as Record<string, unknown> | undefined);
+            return;
+          }
           if (!turnId) return;
           if (method === "turn/started") {
             if (settledTurnIds.has(turnId) || (activeTurnId && activeTurnId !== turnId)) return;
@@ -101,6 +157,8 @@ export function createCodexAdapter(deps: {
             if (status !== "completed" && status !== "interrupted" && status !== "failed") return;
             activeTurnId = null;
             settledTurnIds.add(turnId);
+            // Usage is reported before the turn is closed, so it belongs to that turn.
+            onEvent({ type: "usage", turnId, usage: usage.settle(turnId) });
             onEvent({ type: "turn-completed", turnId, status, error: text(turn.error?.message) });
           }
         },

@@ -98,11 +98,22 @@ open-source platform code, that code is already published. Sending it to a
 provider discloses nothing new, so DPF treats it as public data and every
 provider approved for public data can take the work.
 
-This applies only to the code itself. If a public diff also contains a key,
-password or token, a customer's email address or phone number, or any other
-sensitive detail in the table above, that detail is still caught and handled
-exactly as it would be anywhere else. A key or token keeps the request on this
-installation.
+In general this applies only to the code itself. If a request also contains a
+key, password or token, a customer's email address or phone number, or any
+other sensitive detail in the table above, that detail is still caught and
+handled exactly as it would be anywhere else. A key or token keeps the request
+on this installation.
+
+There is one exception: a change review of a diff that is already published.
+When DPF reads the diff from its own copy of the source, and GitHub serves both
+of its commits to anyone without signing in, every line of that diff can
+already be downloaded by anyone. Nothing in it is kept on this installation,
+including test keys and words such as "payroll" in file names, because keeping
+it local hides nothing. A real secret in a public commit is a leak to rotate,
+and the repository's secret scanning reports it. Everything the author wrote
+around the diff, such as the failure analysis and test notes, is still checked
+as usual. A diff pasted into the request, or one whose commits GitHub does not
+serve publicly, gets no exception.
 
 Code from a private repository keeps the source-code boundary in the table.
 So does code whose repository is unknown or could not be checked: DPF never

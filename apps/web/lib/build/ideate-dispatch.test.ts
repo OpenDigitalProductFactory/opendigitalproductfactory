@@ -200,9 +200,9 @@ describe("buildIdeateRunnerScript — where research runs, and what it can read"
   });
 
   it("preserves the auth-mode flag from ensureClaudeAuth", () => {
-    // Regression guard for the extraction: dropping bareFlag would silently
+    // Regression guard for the extraction: dropping the auth mode would silently
     // change how the CLI authenticates.
-    expect(buildIdeateRunnerScript("claude", { claudeBareFlag: "--bare " })).toContain("claude --bare -p -");
+    expect(buildIdeateRunnerScript("claude", { claudeAuthMode: "apikey" })).toContain("claude --bare -p -");
     expect(buildIdeateRunnerScript("claude", {})).toContain("claude -p -");
   });
 
@@ -218,6 +218,11 @@ describe("buildIdeateRunnerScript — where research runs, and what it can read"
     // current state honestly rather than asserting it is correct.
     expect(buildIdeateRunnerScript("grok", {})).toContain(`cd ${IDEATE_SOURCE_DIR}`);
     expect(buildIdeateRunnerScript("codex", {})).toContain(`cd ${IDEATE_SOURCE_DIR}`);
+  });
+
+  it("runs the Codex driver's command line, unchanged (BI-A01B06F6)", () => {
+    expect(buildIdeateRunnerScript("codex", { model: "gpt-5.5" }).split("\n").at(-1))
+      .toBe("exec codex exec --dangerously-bypass-approvals-and-sandbox --skip-git-repo-check -m gpt-5.5 < /tmp/ideate-prompt.txt 2>/dev/null");
   });
 });
 

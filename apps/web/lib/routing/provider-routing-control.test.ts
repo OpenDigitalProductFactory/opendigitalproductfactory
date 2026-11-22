@@ -6,6 +6,13 @@ function input() {
   return { pw: { provider: { providerId: "chatgpt", status: "active", endpointType: "responses", category: "direct", authMethod: "oauth2_authorization_code", defaultConnectionStatus: "active", operatorPause: null }, credential: { hasUsableMaterial: true, tokenExpiresAt: null } } as unknown as ProviderWithCredential, modelCount: 8, now, localOnly: false };
 }
 describe("provider routing controls", () => {
+  it("labels a held reset as recorded evidence without erasing billing restrictions", () => {
+    const result = projectProviderRoutingControl({ ...input(), capacity: { state: "quota_resets_at", retryAtMs: now + 60_000,
+      observedAtMs: now - 60_000, safeSummary: "Recorded quota" }, health: { status: "billing", remediationKind: "provider_settings", safeSummary: "Payment required", cooldownUntil: now + 60_000 } });
+    expect(result.restrictions.some(r => r.summary === "Payment required")).toBe(true);
+    expect(result.eligibility.label).not.toBe("Usage limit recorded");
+    expect(result.observedAt).toBe(new Date(now - 60_000).toISOString());
+  });
   beforeEach(() => { vi.useFakeTimers(); vi.setSystemTime(now); });
   afterEach(() => { vi.useRealTimers(); });
   it("shows simultaneous operator, quota and policy restrictions", () => {

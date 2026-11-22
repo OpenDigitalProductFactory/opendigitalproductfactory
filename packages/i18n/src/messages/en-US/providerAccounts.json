@@ -11,7 +11,7 @@
   "capacityModelSearch": "Search models",
   "capacityAvailableModels": "Available models",
   "capacityNoMatchingModels": "No matching models",
-  "capacityCheckPreview": "Sends one short test to this model. Other models and coding-tool limits stay separate.",
+  "capacityCheckPreview": "Checks current coding-tool usage. If unavailable, sends one short test to this model. Pauses and work permissions stay in effect.",
   "capacityHourly": "Recheck hourly while limited",
   "capacityObserved": "Limit observed",
   "capacitySource": "Reported by",
@@ -170,5 +170,6 @@
   "managedEngineRestore": "Restore Docker",
   "managedEngineUse": "Use tested engine",
   "managedEngineCheckOriginal": "Check original request",
-  "managedEngineRefresh": "Refresh status"
+  "managedEngineRefresh": "Refresh status",
+  "capacityCheckAgain": "Check again now"
 }

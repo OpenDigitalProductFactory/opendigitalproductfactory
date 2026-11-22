@@ -20,7 +20,7 @@ deployment windows.
 For a consumer install, the page compares the running container's image-config
 digest with the verified platform-specific config digest behind the registry
 channel. A matching digest means the installed bytes are current. A different
-digest exposes the immutable target version and **Upgrade now**. If registry or
+digest exposes the immutable target version and **Install now**. If registry or
 running-image identity cannot be verified, the page reports that update status
 is unavailable and does not offer or queue an upgrade.
 
@@ -37,7 +37,7 @@ is unavailable and does not offer or queue an upgrade.
    drain had already ended, the card checks that the failed attempt's target
    is actually running before disregarding that specific reporting error.
    Other failures remain visible, even when the install is current.
-2. Review the pending upgrade and what it will change before triggering anything.
+2. Review the pending update and what it will change before triggering anything.
    **What's in this update?** compares the running build with the resolved
    update. Consumer installs read published source changes without needing a
    local source checkout; source-backed installs read their configured clone.
@@ -45,10 +45,13 @@ is unavailable and does not offer or queue an upgrade.
    does not mean the known update target is missing and does not apply an update.
    Published comparisons use commit descriptions and available PR details;
    they do not attribute the comparison's combined file list to individual changes.
-3. Trigger the upgrade inside an approved deployment window when you can. The
+3. Press **Install now** when you are ready. The portal then confirms the real
+   consequence, expected duration, recovery path, and reversibility before it
+   admits the request. These details are shown at the decision point instead of
+   filling the arrival screen with possible failure scenarios. The
    server durably admits the request and assigns its `SUR-*` run identity before
    queue dispatch begins. Normal changes respect the window; pressing
-   **Upgrade now** outside it is an operator override, and the run records it
+   **Install now** outside it is an operator override, and the run records it
    (see below).
 4. Watch the deployment status — the page distinguishes a request waiting for
    dispatch, active dispatch, indeterminate dispatch reconciliation, and a
@@ -63,19 +66,21 @@ Upgrades are meant to run in the nightly maintenance window. Each one pauses
 new work and builds, so the portal does not let AI coworkers or agents start
 one whenever they like:
 
-- **You, pressing Upgrade now**, run immediately, even outside the window.
+- **You, pressing Install now and confirming**, run immediately, even outside the window.
   That is a deliberate operator choice. The run history records it: the run's
   trigger ends in `+outside-window`, and so does the change record.
 - **An agent or coworker asking for an upgrade** does not run outside the
   window. The request is held for the next window instead, and the answer says
   when the scheduled upgrade will pick it up. This applies to the
   `request_self_upgrade` tool and to a browser signed in as the platform
-  automation persona that presses **Upgrade now**. Agent requests also wait
+  automation persona that presses **Install now**. Agent requests also wait
   for the release batch and respect operator blackouts. A held request shows as
   `deferredRequest` in `get_self_upgrade_queue_status` until it has run.
-- **An urgent or security release** is deployed by you. Press **Upgrade now**,
-  and tick **Emergency override** if it must not wait for running work. Releases
-  carry no urgency flag that would let an agent skip the window for you.
+- **An urgent or security release** is deployed by you. Press **Install now**
+  and confirm it. If running work does not finish during the drain, the active
+  update then offers **Force now** as a state-specific operator choice. Releases
+  carry no urgency flag that would let an agent skip the window or interrupt
+  work for you.
 
 ### When the scheduled upgrade runs
 
@@ -84,7 +89,7 @@ maintenance window. Each time the window opens, the portal makes one check, and
 it does not count the hours since your last upgrade before that check:
 
 - **Upgrading by hand during the day does not skip that night.** If you press
-  **Upgrade now** in the afternoon, the scheduled check still runs when the
+  **Install now** in the afternoon, the scheduled check still runs when the
   window opens that night.
 - **The nightly time does not drift.** A check that ran at 23:02 last night does
   not delay tonight's 23:00 check.
@@ -125,7 +130,7 @@ returns to normal.
 ### When work is still running
 
 An upgrade no longer gives up because work is in progress. When you press
-**Upgrade now**, or the hourly check starts one, the portal stops accepting
+**Install now**, confirm it, or the hourly check starts one, the portal stops accepting
 new work and waits for builds and coworker tasks that are already running to
 finish. It does not interrupt them. The upgrade installs as soon as they are
 done. The wait lasts up to 60 minutes by default (`drainWaitBudgetMs` in the

@@ -109,7 +109,7 @@ A merged pull request does not make the build complete. Completion waits for the
 governed release and live-version evidence. Build Studio does not directly
 merge, force-push, or silently edit a true conflict.
 
-Once the release is live, the backlog item behind the build moves to **Awaiting acceptance**. A coworker who did not work on the build is routed to it straight away to check its acceptance criteria on the live system; it does not wait for the usual 14-day aged-item review. Once that check is recorded, the build is marked complete.
+Once the release is live, the backlog item behind the build moves to **Awaiting acceptance**. A coworker who did not work on the build is routed to it straight away to check its acceptance criteria on the live system; it does not wait for the usual 14-day aged-item review. The check happens in the item's own acceptance workroom, with no person needed. Build Studio records the build's delivery on the item (verification passed, pull request merged, release live) so the coworker can cite it, and the coworkers who built the change are never the ones who accept it. Once that check is recorded, the build is marked complete.
 
 ### Configuration
 

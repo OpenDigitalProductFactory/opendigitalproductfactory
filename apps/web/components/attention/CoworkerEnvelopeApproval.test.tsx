@@ -19,7 +19,7 @@ import { summarizeCoworkerEnvelopeDecision } from "@/lib/attention/coworker-enve
 import { buildOwnerAttentionProjection } from "@/lib/attention/owner-projection";
 import type { AttentionEnvelopeApproval } from "@/lib/attention/types";
 import { defaultVisibleHtml } from "@/lib/ux-budget/scope";
-import { visibleUtterances } from "@/lib/owner-first/ux-audit";
+import { countWords, visibleUtterances } from "@/lib/owner-first/ux-audit";
 
 const NOW = Date.parse("2026-08-25T20:00:00.000Z");
 
@@ -77,6 +77,22 @@ afterEach(() => {
 });
 
 describe("CoworkerEnvelopeApproval", () => {
+  it("keeps a material-fact-heavy unresolved request no denser than the admitted app-update scenario", () => {
+    const appUpdate = summarizeCoworkerEnvelopeDecision({ toolName: "request_self_upgrade",
+      proposedParameters: { reason: "Ready release batch" }, recommenderAgentId: "AGT-WS-PORTFOLIO", authorizerUserId: "user-1" });
+    const app = render(<CoworkerEnvelopeApproval approval={approval({ manifestActionId: "request_self_upgrade", decision: appUpdate })} />);
+    const appWords = countWords(defaultVisibleHtml(app.container.innerHTML));
+    cleanup();
+
+    const unknown = summarizeCoworkerEnvelopeDecision({ toolName: "unsupported_internal_operation", proposedParameters: {
+      payment: { amount: 1250, currency: "USD", recurrence: "monthly", recipient: { email: "supplier@example.test" } },
+      permission: { grant: "admin_write" }, deadline: "2026-11-01", emptyRecipients: [],
+    }, recommenderAgentId: "AGT-WS-PORTFOLIO", authorizerUserId: "user-1" });
+    const dense = render(<CoworkerEnvelopeApproval approval={approval({ manifestActionId: "unsupported_internal_operation", decision: unknown })} />);
+
+    expect(countWords(defaultVisibleHtml(dense.container.innerHTML))).toBeLessThanOrEqual(appWords);
+  });
+
   it("retains an empty original behind disclosure while recommending that its unknown effect stay on hold", () => {
     const decision = summarizeCoworkerEnvelopeDecision({ toolName: "record_workroom_evidence",
       proposedParameters: undefined, argsJson: {}, recommenderAgentId: "AGT-WS-PORTFOLIO", authorizerUserId: "user-1" });
@@ -147,6 +163,7 @@ describe("CoworkerEnvelopeApproval", () => {
   it("states the AI recommendation versus human authorization, not identity plumbing", () => {
     render(<CoworkerEnvelopeApproval approval={approval()} />);
 
+    expect(screen.queryByText(/^AI recommendation:/)).toBeNull();
     expect(screen.getByText("Human authorization needed")).toBeTruthy();
     expect(
       screen.getByText("record that receipt so implementation planning may continue."),
@@ -718,6 +735,7 @@ describe("CoworkerEnvelopeApproval — expired unanswered", () => {
     expect(screen.queryByRole("button", { name: "Authorize" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Decline" })).toBeNull();
     expect(screen.getAllByText(/Expired unanswered/).length).toBeGreaterThan(0);
+    expect(screen.getByText("No decision was made. Ask again if needed.")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Ask again" })).toBeTruthy();
   });
 

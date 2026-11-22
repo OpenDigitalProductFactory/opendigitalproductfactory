@@ -29,7 +29,7 @@
 //
 // Decision protocol mirrors lease-guard.mjs (deny + reason, exit 0).
 
-import { readHookPayload, isDecisionTool, emitDeny, inDpfAgentHost } from "./lib/hook-io.mjs";
+import { readHookPayload, isDecisionTool, readDecisionQuestions, emitDeny, inDpfAgentHost } from "./lib/hook-io.mjs";
 // The vocabulary is shared with the prose-channel Stop guard (BI-E4DE3825) so
 // the two channels cannot drift apart: lib/decision-signals.mjs is its home.
 import { ALL_SIGNALS, BYPASS_TOKEN, LEDGER_MARKERS } from "./lib/decision-signals.mjs";
@@ -41,30 +41,23 @@ const GUIDANCE =
   "For a genuinely operator-owned call (naming, branding, business strategy), bypass with DPF_ALLOW_DIRECT_ASK=1 or a `[operator-owned]` tag in the question.";
 
 /**
- * Pure decision: should this AskUserQuestion be blocked? Exported for tests.
+ * Pure decision: should this operator question be blocked? Exported for tests.
+ * Reads every known ask-tool contract (hook-io readDecisionQuestions, BI-80B5E939).
  * @param {string} toolName
- * @param {{ questions?: Array<{question?:string, header?:string, options?:Array<{label?:string,description?:string}>}> }} toolInput
+ * @param {Record<string, any>} toolInput
  * @param {Record<string,string|undefined>} env
  * @returns {{ block: boolean, reason?: string, header?: string }}
  */
 export function decide(toolName, toolInput = {}, env = {}) {
   if (!isDecisionTool(toolName)) return { block: false };
   if (env.DPF_ALLOW_DIRECT_ASK === "1") return { block: false };
-  const questions = Array.isArray(toolInput?.questions) ? toolInput.questions : [];
-  for (const q of questions) {
-    const options = Array.isArray(q?.options) ? q.options : [];
-    if (options.length < 2) continue; // single-path / factual clarification
-    const text = [
-      q?.question,
-      q?.header,
-      ...options.map((o) => `${o?.label ?? ""} ${o?.description ?? ""}`),
-    ]
-      .filter(Boolean)
-      .join(" ");
+  for (const q of readDecisionQuestions(toolInput)) {
+    if (q.optionCount < 2) continue; // single-path / factual clarification
+    const text = q.text;
     if (BYPASS_TOKEN.test(text)) continue;
     if (LEDGER_MARKERS.some((re) => re.test(text))) continue; // consulted → surfacing
     if (ALL_SIGNALS.some((re) => re.test(text))) {
-      return { block: true, reason: GUIDANCE, header: q?.header };
+      return { block: true, reason: GUIDANCE, header: q.header };
     }
   }
   return { block: false };
@@ -76,7 +69,7 @@ function main() {
   // A checkout OR an install folder: sessions start in the install (BI-310949BC).
   if (!inDpfAgentHost(payload.cwd)) process.exit(0);
 
-  // Operator-decision tool across surfaces (AskUserQuestion / AskQuestion).
+  // Operator-decision tool across surfaces (AskUserQuestion / AskQuestion / request_user_input[_async]).
   if (!isDecisionTool(payload.toolName)) process.exit(0);
   const verdict = decide(payload.toolName, payload.toolInput ?? {}, process.env);
   if (!verdict.block) process.exit(0);

@@ -35,4 +35,16 @@ describe("CoworkerPostureControl (EP-WORK-POSTURE 8.2)", () => {
     fireEvent.click(screen.getAllByText("Act")[0]);
     expect(onToggleCoworkerMode).toHaveBeenCalledTimes(1);
   });
+
+  it("dismisses conversation controls with Escape and returns focus to the trigger", () => {
+    render(<CoworkerPostureControl useUnified coworkerMode="advise" onToggleCoworkerMode={() => {}} />);
+    const trigger = screen.getByRole("button", { name: /conversation controls/i });
+    fireEvent.click(trigger);
+    expect(screen.getByRole("dialog", { name: "Conversation controls" })).toBeTruthy();
+
+    fireEvent.keyDown(document, { key: "Escape" });
+
+    expect(screen.queryByRole("dialog", { name: "Conversation controls" })).toBeNull();
+    expect(document.activeElement).toBe(trigger);
+  });
 });

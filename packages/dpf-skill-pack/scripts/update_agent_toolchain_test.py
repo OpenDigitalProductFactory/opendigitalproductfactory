@@ -1675,8 +1675,8 @@ class GrokCodexGuardSyncTest(unittest.TestCase):
         )
         self.assertEqual(
             set(updater.CODEX_ASK_GUARDS),
-            blocking_for("AskUserQuestion"),
-            "CODEX_ASK_GUARDS has drifted from hooks.json's blocking AskUserQuestion-matcher guards.",
+            blocking_for(updater.CODEX_ASK_MATCHER),
+            "CODEX_ASK_GUARDS has drifted from hooks.json's blocking ask-tool-matcher guards.",
         )
         self.assertEqual(
             set(updater.CODEX_WRITE_GUARDS),

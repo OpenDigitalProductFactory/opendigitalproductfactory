@@ -238,7 +238,7 @@
             "status": "unproven",
             "verifiedAt": null,
             "verifiedVersion": null,
-            "evidence": "No probe recorded for the Codex desktop host.",
+            "evidence": "No probe recorded for the Codex desktop host. BI-80B5E939 (2026-11-19): the T3 Code / Codex host names its ask tool request_user_input_async (title + plain-string options), now covered by the AskUserQuestion|request_user_input|request_user_input_async matcher and the shared question reader. Delivery to that host stays unproven: a live T3 probe (2026-11-15) ran a harmless docker compose command with no compose-guard denial, and Codex hooks/list reported every DPF plugin hook trustStatus=modified (skipped until the operator reviews trust). Direct unit calls and an installed hooks file are not live proof; the closed prior items BI-383668B9, BI-271B8EEC and BI-B22DE548 do not cover this host.",
             "delivery": "plugin hooks/hooks.json from the plugin cache",
             "denyEnvelope": "hookSpecificOutput",
             "permissionModes": [],

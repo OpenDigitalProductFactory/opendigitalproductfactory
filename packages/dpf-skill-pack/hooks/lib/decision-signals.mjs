@@ -44,6 +44,13 @@ export const DELIVERY_LANGUAGE = [
   /\bfold(?:ed|ing)?\s+into\b/i,
   /\b(?:build|ship)\s+(?:it\s+)?(?:first|now|later|order)\b/i,
   /\bfirst\s+pass\b/i,
+  // BI-80B5E939: the recorded Codex/T3 escape — an implementation-vs-design fork
+  // phrased as "carry this through" / "investigate and propose the design first".
+  /\b(?:carry|take|see)\s+(?:this|it|that)\s+through\b/i,
+  /\b(?:investigate|research)\s+and\s+propose\b/i,
+  /\b(?:propose|write|draft)\s+(?:the|a)\s+design\b/i,
+  /\bdesign\s+first\b/i,
+  /\bshould\s+I\s+(?:fix|build|implement|carry|proceed|continue)\b/i,
   /\bfinishing\s+(?:task|work|pass)\b/i,
   /\bif\s+you\s+(?:say|want)\b.{0,80}\b(?:create|continue|proceed|finish|complete)\b/i,
   /\bhow\s+(?:should\s+I|do\s+I)\s+(?:proceed|continue|finish|complete)\b/i,

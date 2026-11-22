@@ -208,6 +208,21 @@ describe("usStatutory adapter", () => {
     expect(slip.totalEmployerCost).toBeCloseTo(5_000 + direct.totalEmployer, 2);
   });
 
+  it("puts US lines on the payslip, never UK labels (BI-099EAE30)", () => {
+    const slip = computePayslip({ baseSalary: 5_000, statutory: usStatutory(RULES) });
+    const labels = [...slip.employeeDeductions, ...slip.employerCosts].map((l) => l.label);
+    expect(labels).not.toContain("National insurance");
+    expect(labels).not.toContain("Employer NI");
+    expect(slip.employeeDeductions.map((l) => l.code)).toEqual(["US_FWT", "US_SS_EE", "US_MED_EE", "US_SWT"]);
+    expect(slip.employerCosts.map((l) => l.code)).toEqual(["US_SS_ER", "US_MED_ER", "US_FUTA", "US_SUTA"]);
+
+    // The itemized lines carry the same money as the totals.
+    const direct = computeUsStatutory({ taxablePay: 5_000, ficaWages: 5_000 }, RULES);
+    const total = (ls: { amount: number }[]) => Math.round(ls.reduce((t, l) => t + l.amount, 0) * 100) / 100;
+    expect(total(slip.employeeDeductions)).toBe(direct.totalEmployee);
+    expect(total(slip.employerCosts)).toBe(direct.totalEmployer);
+  });
+
   it("keeps a prior period reproducible when a later rule set changes", () => {
     const oldRules = RULES;
     const newRules: UsPayrollTaxRuleSet = {

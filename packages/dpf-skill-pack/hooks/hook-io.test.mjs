@@ -72,6 +72,20 @@ test("isDecisionTool spans Claude and Grok decision tools", () => {
   assert.ok(!isDecisionTool("Bash"));
 });
 
+test("isDecisionTool recognizes the Codex/T3 ask tools and their namespaced aliases (BI-80B5E939)", () => {
+  for (const name of [
+    "request_user_input",
+    "request_user_input_async",
+    "functions.request_user_input_async",
+    "mcp__t3-code__request_user_input_async",
+  ]) {
+    assert.ok(isDecisionTool(name), name);
+  }
+  for (const name of ["request_user_input_async_cancel", "get_user_input_history", "functions.exec_command", undefined]) {
+    assert.ok(!isDecisionTool(name), String(name));
+  }
+});
+
 test("isFileWriteTool spans Claude and Grok file-write tools (BI-742D707B)", () => {
   // Grok 1.0.52 names its tools write / search_replace; a Claude-only set let
   // every write guard fail open there, probed live 2026-10-14.

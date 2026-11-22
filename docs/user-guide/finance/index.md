@@ -207,6 +207,67 @@ taxed because it repays money you already spent.
 Mileage appears in the mobile app only on installs that use it. A business whose
 staff do not drive to customers will not see it.
 
+## Payroll
+
+`/finance/payroll` runs US payroll. It opens with what still blocks a pay run,
+each item named, so a missing figure is never mistaken for nothing being owed.
+
+**What payroll needs first.**
+
+- **The federal and state tax figures, confirmed on Statutory Rates.** That covers
+  Social Security, Medicare, Additional Medicare and FUTA, plus the IRS withholding
+  tables. For each state where someone works, it covers that state's income tax
+  rate (enter 0 if the state does not tax wages) and the unemployment (SUTA) rate
+  and wage base assigned to your business.
+- **A pay rate on each employee who is paid.** Someone with no pay rate is listed as
+  not on this payroll rather than blocking it.
+- **A W-4 for each paid employee.** Record it under **Record a W-4**: filing status,
+  the Step 2 box, the Step 3 to 4(c) amounts, exempt, the state where they work,
+  and the first pay date it applies to. A new W-4 applies from that date and never
+  changes an earlier run.
+
+**Entering the withholding tables.** On Statutory Rates, open **Enter a figure you
+have read yourself**, then **Enter a federal withholding table**. Choose the filing
+status and whether it is the standard table or the Step 2 checkbox table. Paste the
+rows from Publication 15-T as printed, one per line, such as `7,500 10%`. Add the
+line 1g amount with the standard table, then add the source and the quoted table.
+All the rows are confirmed together, or none are. There are six tables: three
+filing statuses, each with a standard and a Step 2 table.
+
+**Running it.** Under **Run payroll for a period**, give the first and last day, the
+pay date and how often you pay. DPF computes a draft run: salaried staff from their
+salary, hourly staff from approved timesheets in the period. Federal income tax
+follows the IRS percentage method for automated payroll systems (Publication 15-T,
+Worksheet 1A), from each employee's own W-4. Social Security, FUTA and SUTA stop at
+their wage bases, using what each person has already been paid this year.
+
+**Reviewing it.** Open a run to see every payslip line: earnings, federal and state
+income tax, Social Security, Medicare, net pay, and the employer's own taxes. A
+draft can be computed again for the same period until it is approved.
+
+**Approving and paying.** Each run shows the net pay to send and the taxes it
+leaves to remit, tax by tax. **Approve and post to the books** locks the run, so it
+can no longer be recomputed. It also records wages and the employer's taxes as
+expenses, the net pay owed, and the taxes owed in Payroll Taxes Payable. Then send
+each person's net pay from your bank. DPF does not move money. Back on the run,
+enter the date and the bank's reference under **Record as paid**. The payslips are
+marked paid and the books show the net pay leaving your bank account. The taxes
+stay in Payroll Taxes Payable until you remit them. An automated session cannot
+approve a run or record it paid.
+
+**Accounts payroll posts to.** If your chart of accounts does not have them yet,
+DPF adds them the first time you approve a run:
+
+- 5300 Wages and Salaries
+- 5310 Employer Payroll Taxes
+- 2300 Net Pay Payable
+- 2310 Payroll Taxes Payable
+- 2320 Payroll Deductions Payable
+
+**States DPF can compute.** A state with no wage income tax, such as Texas, or one
+with a single flat rate. A state that withholds with allowances or several brackets
+is refused by name rather than computed approximately.
+
 ## Reporting And Close Boundaries
 
 Current profit-and-loss and finance-period summaries are cash-basis: paid
@@ -225,6 +286,7 @@ authoritative accounting close and retain its reviewer evidence separately.
 - `/finance/invoices` and `/finance/payments` — customer billing and recorded receipts
 - `/finance/suppliers`, `/finance/purchase-orders`, and `/finance/bills` — supplier commitments and payables
 - `/finance/expense-claims` and `/finance/my-expenses` — reviewer and employee expense workflows
+- `/finance/payroll` — what blocks payroll, W-4s, and computing and reviewing pay runs
 - `/finance/mileage` — your drives, the company rate per mile, and claiming a period
 - `/finance/banking` — statement import, rules, and reconciliation
 - `/finance/reports` and `/finance/close` — reporting and close-readiness

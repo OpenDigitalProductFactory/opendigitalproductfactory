@@ -312,6 +312,16 @@ from these writers ends with `Retry: <tool>({...})`, the caller's own call corre
 3. **Dispatch each packet** with `request_coworker` (or `summon_coworker`), passing the `targetAgent`, `objective`, `requestKey`, **and** the packet's `requiredToolNames` + `initiativeReviewBinding` verbatim. The two travel together or not at all; the adapter refuses a binding without its required tools, and refuses any tool outside the bound writer + `read_source_at_version`. The dispatched coworker reads the pinned artifact and records the gate receipt **only if the gate passes** — it cannot invent or reshape the identity.
 4. **Re-attempt the claim / transition.** Passing receipts satisfy their gates; `spec-approval` mints the baseline, which unblocks `record_plan_backlog_coverage`; the item advances.
 
+**Failed plan review (BI-6C6CEDCA).** A `REVIEW_FAILED`, `REVIEW_REQUIRED` or
+`BLOCKING_FINDINGS_OPEN` assigned to `plan-reviewer` resolves to `plan-review`,
+even though the design-review writer also owns design-spec and spec-approval.
+The issued packet uses the current covered plan and the same request identity
+as its ordinary plan-review requirement. A missing plan never substitutes the
+design; ambiguous checklist-review failures remain unroutable. Issuing a route
+does not clear a finding, approve a plan, dispatch inference or settle an
+uncertain original task. Correct the actual findings and follow the issued
+recovery without resetting its original identity, authority or allowance.
+
 **Claim identity, when a room was owned by a prior session.** The claim matches the Workroom's recorded executor identity and lease-holder. A room left by a dead session (idle-stale, no live signal) can refuse a fresh claim with `capsule_identity_mismatch` even after `adopt_worktree`, and `force` does **not** override an identity mismatch (only live-ownership conflict). Take the room over with `reassign_workroom_executor(capsuleId, toExecutorKind, toExecutorRef, reason)` — it transfers the lease to the caller and sets the executor — then re-claim. Renew a still-owned but expiring lease with `heartbeat_workroom`; do not thrash heartbeat on an already-expired lease.
 
 ## 4. The reviewer roster (who holds which grant)

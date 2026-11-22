@@ -23,6 +23,8 @@ const inputSchema = z.object({
   surface: z.enum(["external", "build-studio"]), authorSurface: ref,
   artifactType: artifactTypeSchema, title: z.string().min(1).max(2_000),
   artifact: z.string().min(1), verificationEvidence: z.string().min(1),
+  // BI-3D5AC133: the range the server read the artifact from; absent for a paste.
+  artifactSource: z.object({ baseSha: z.string().regex(/^[a-f0-9]{40}$/), headSha: z.string().regex(/^[a-f0-9]{40}$/) }).strict().optional(),
   failureAnalysis: failureAnalysisSchema.optional(),
   resolvedFailureEvidence: z.array(z.object({ id: ref, capsuleId: ref, headTreeHash: ref, diffDigest: sha256,
     status: ref, expected: z.string(), observed: z.string(), completedAt: ref,

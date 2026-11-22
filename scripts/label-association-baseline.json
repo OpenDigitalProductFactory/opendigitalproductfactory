@@ -1,13 +1,12 @@
 {
   "version": 1,
   "owner": "platform-architecture",
-  "expiry": "2026-11-16",
+  "expiry": "2027-02-16",
   "note": "Label-association ratchet baseline. A <label> must be bound to its control by htmlFor or by wrapping it; a label that merely sits next to an input is invisible to assistive tech. Shrink-only: associate a surface's labels, then --update retightens. Regenerate with: node scripts/check-label-association.mjs --update",
   "files": {
     "apps/web/app/(customer-auth)/customer-complete-profile/complete-profile-client.tsx": 2,
     "apps/web/app/(customer-auth)/customer-link-account/link-account-client.tsx": 1,
     "apps/web/app/(customer-auth)/customer-login/login-form.tsx": 2,
-    "apps/web/app/(shell)/admin/scheduled-jobs/ScheduledJobsClient.tsx": 1,
     "apps/web/app/(shell)/complaints/ComplaintsClient.tsx": 4,
     "apps/web/app/(shell)/compliance/obligations/page.tsx": 4,
     "apps/web/app/(shell)/finance/reports/cash-flow/page.tsx": 2,

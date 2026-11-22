@@ -22,21 +22,9 @@ import { getLocaleContext } from "@/lib/i18n/locale-context.server";
 import { getT } from "@/lib/i18n/t.server";
 import { formatMoney } from "@/lib/org-locale/org-locale";
 import { can } from "@/lib/permissions";
-import { missingRatifiedRules, type StatutoryRuleKind } from "@/lib/finance/statutory-rules";
+import type { StatutoryRuleKind } from "@/lib/finance/statutory-rules";
+import { buildFederalPayrollRules } from "@/lib/hr/us-payroll-rules";
 import { StatutoryRatesPanel, type JurisdictionOption, type StatutoryRuleView } from "./StatutoryRatesPanel";
-
-/**
- * The figures a US employer needs before federal payroll can compute at all.
- * Shown as a checklist so an install with none of them says so out loud — an
- * empty table and a complete one must never look the same.
- */
-const US_FEDERAL_REQUIRED = [
-  { taxType: "social_security", ruleKind: "rate", side: "employee_withheld", labelKey: "required.socialSecurityEmployee" },
-  { taxType: "social_security", ruleKind: "rate", side: "employer_contribution", labelKey: "required.socialSecurityEmployer" },
-  { taxType: "social_security", ruleKind: "wage_base", side: null, labelKey: "required.socialSecurityWageBase" },
-  { taxType: "medicare", ruleKind: "rate", side: "employee_withheld", labelKey: "required.medicareEmployee" },
-  { taxType: "medicare", ruleKind: "rate", side: "employer_contribution", labelKey: "required.medicareEmployer" },
-] as const satisfies readonly { taxType: string; ruleKind: StatutoryRuleKind; side: string | null; labelKey: string }[];
 
 const PAYROLL_TAX_TYPES = ["fica", "futa", "payroll_withholding", "suta"];
 const FEDERAL = "TAX-JUR-US-FEDERAL";
@@ -78,35 +66,42 @@ export default async function StatutoryRatesPage() {
       select: {
         payrollTaxRuleId: true, jurisdictionRefId: true, taxType: true, ruleKind: true, side: true,
         taxYear: true, value: true, currency: true, status: true, effectiveFrom: true, effectiveTo: true,
+        qualifiers: true, qualifierKey: true,
         sourceUrl: true, sourceExcerpt: true, retrievedAt: true, proposedByAgentId: true, rejectedReason: true,
       },
     }),
     prisma.taxJurisdictionReference.findMany({
       where: { taxTypes: { hasSome: PAYROLL_TAX_TYPES } },
       orderBy: [{ countryCode: "asc" }, { stateProvinceCode: "asc" }],
-      select: { jurisdictionRefId: true, authorityName: true, countryCode: true, stateProvinceCode: true },
+      select: { id: true, jurisdictionRefId: true, authorityName: true, countryCode: true, stateProvinceCode: true },
     }),
   ]);
 
+  // PayrollTaxRule.jurisdictionRefId is a foreign key to the reference row's
+  // internal id, not its "TAX-JUR-..." name. Comparing or submitting the name
+  // matched nothing and failed the foreign key (fixed in BI-099EAE30).
+  const federalId = jurisdictions.find((j) => j.jurisdictionRefId === FEDERAL)?.id ?? null;
   const jurisdictionOptions: JurisdictionOption[] = jurisdictions.map((j) => ({
-    jurisdictionRefId: j.jurisdictionRefId,
+    jurisdictionRefId: j.id,
+    isDefault: j.jurisdictionRefId === FEDERAL,
     label: j.stateProvinceCode ? `${j.authorityName} (${j.countryCode}-${j.stateProvinceCode})` : j.authorityName,
   }));
   const jurisdictionLabel = new Map(jurisdictionOptions.map((j) => [j.jurisdictionRefId, j.label]));
 
+  // BI-099EAE30: the same builder payroll runs on decides what is missing, so
+  // this page can never call payroll ready while a withholding table is absent.
   const now = new Date();
   const federal = rules
-    .filter((r) => r.jurisdictionRefId === FEDERAL)
+    .filter((r) => r.jurisdictionRefId === federalId)
     .map((r) => ({
       id: r.payrollTaxRuleId, taxType: r.taxType, ruleKind: r.ruleKind as StatutoryRuleKind, side: r.side,
       taxYear: r.taxYear, value: Number(r.value.toString()), status: r.status,
       effectiveFrom: r.effectiveFrom, effectiveTo: r.effectiveTo, sourceUrl: r.sourceUrl,
+      qualifierKey: r.qualifierKey,
+      qualifiers: r.qualifiers && typeof r.qualifiers === "object" ? (r.qualifiers as Record<string, unknown>) : {},
     }));
-  const missing = missingRatifiedRules(federal, now, US_FEDERAL_REQUIRED);
-  const missingLabels = US_FEDERAL_REQUIRED
-    .filter((req) => missing.some((m) =>
-      m.taxType === req.taxType && m.ruleKind === req.ruleKind && (m.side ?? null) === req.side))
-    .map((req) => t(req.labelKey));
+  const built = buildFederalPayrollRules(federal, now);
+  const missingLabels = built.ready ? [] : built.missing;
 
   // A rate is stored as a fraction (0.062). Intl's percent style multiplies by
   // 100 itself, so the stored value goes in unchanged and reads as 6.2%.

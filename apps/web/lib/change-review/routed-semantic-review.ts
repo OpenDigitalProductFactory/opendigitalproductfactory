@@ -3,7 +3,7 @@ import { CHANGE_REVIEWER_ROUTE_AGENT } from "@/lib/tak/change-reviewer-route";
 import { parseSemanticReviewResponse, type SemanticReviewResult } from "./semantic-change-review";
 import { semanticReviewMinimumContextTokens, SEMANTIC_REVIEW_RESPONSE_RESERVE_TOKENS } from "./semantic-review-context-floor";
 import type { SemanticChangeReviewDispatchContext } from "./semantic-change-review-operation";
-import { resolveSemanticReviewRoute, type SemanticReviewRoute } from "./semantic-review-source-sensitivity";
+import { resolveSemanticReviewRoute, type SemanticReviewRoute, type ServerReadReviewArtifact } from "./semantic-review-source-sensitivity";
 import {
   describeSpecialistCraftContexts,
   layerCraftOntoSpecialistPrompt,
@@ -52,8 +52,8 @@ export async function dispatchRoutedSemanticReview(
   // client inside the function, not here, so importing this module does not
   // pull in the database client.
   craftDb?: SpecialistCraftClient,
-  resolveRoute: (capsuleId: string | undefined) => Promise<SemanticReviewRoute>
-    = resolveSemanticReviewRoute,
+  resolveRoute: (capsuleId: string | undefined, serverRead?: ServerReadReviewArtifact) => Promise<SemanticReviewRoute>
+    = (capsuleId, serverRead) => resolveSemanticReviewRoute(capsuleId, {}, serverRead),
 ): Promise<SemanticReviewResult> {
   if (context.specialistIds.some((id) => !Object.hasOwn(SPECIALIST_SYSTEM_PROMPTS, id))) {
     return { decision: "inconclusive", issues: [],
@@ -80,7 +80,8 @@ export async function dispatchRoutedSemanticReview(
   // keeps "internal", and a confidential room stays confidential.
   // BI-FC94F754: the room's repository record travels with the review, so the
   // payload screen classifies the diff by that repository's visibility.
-  const route = await resolveRoute(context.capsuleId)
+  // BI-3D5AC133: a diff the server read is published text when the public forge serves it.
+  const route = await resolveRoute(context.capsuleId, context.serverRead)
     .catch((): SemanticReviewRoute => ({ sensitivity: "internal" }));
   const roomSensitivity = route.sensitivity;
 
