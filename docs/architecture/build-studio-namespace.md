@@ -38,7 +38,8 @@ production namespace singular and enforcing it.
   stay empty. New Build Studio UI must land in `components/build`.
 - **Surface ratchet.** [`scripts/check-build-studio-surface-budget.mjs`](../../scripts/check-build-studio-surface-budget.mjs)
   (CI job `Build Studio Surface Guard`, BI-101C107C) holds `components/build` to a
-  shrink-only component-count and non-test-LOC budget against an owned, expiring baseline.
+  shrink-only component-count and non-test-LOC budget against an owned baseline. After its review date, the guard reminds the owner
+  to review the budget. Both limits remain enforced.
   Between 2026-04 and 2026-08 that surface grew 8 -> 74 components across 39 specs and 28
   plans with exactly one deletion, because every UX gate was a presence check. A
   "simplification" that adds net lines now fails.
