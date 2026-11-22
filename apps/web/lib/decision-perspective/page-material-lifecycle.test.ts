@@ -2,6 +2,8 @@ import { format } from "node:util";
 
 import { describe, expect, it } from "vitest";
 
+import { sanitizeForLog } from "@/lib/security/safe-log";
+
 import {
   planPageMaterialRevocations,
   promotionForPageStatus,
@@ -211,25 +213,33 @@ describe("syncPageMaterialAfterTransition", () => {
 
   it("cannot be made to forge a log line by the values it reports", async () => {
     const warnings: string[] = [];
+    const origin = "wiki-edit\r\n\u2028\u2029";
+    const pageId = "page-1\r\n\u2028\u2029";
+    const pageStatus = "archived\r\n\u2028\u2029";
+    const errorMessage = "db down\r\n\u2028\u2029[forged]";
     const db = {
       perspectiveMaterial: {
         findMany: async () => [],
         updateMany: async () => {
-          throw new Error("db down\n[wiki-edit] forged: sync ok");
+          throw new Error(errorMessage);
         },
       },
     };
 
-    await syncPageMaterialAfterTransition({
+    const result = await syncPageMaterialAfterTransition({
       db,
-      pageId: "page-1\r\n[page-material] forged entry",
-      pageStatus: "archived\nforged",
-      origin: "wiki-edit",
+      pageId,
+      pageStatus,
+      origin,
       logger: { warn: (...args: unknown[]) => warnings.push(format(...args)) },
     });
 
+    expect(result).toBeNull();
     expect(warnings).toHaveLength(1);
-    expect(warnings[0]).not.toMatch(/[\r\n]/);
-    expect(warnings[0]).toContain("page-1");
+    expect(warnings[0]).not.toMatch(/[\r\n\u2028\u2029]/);
+    expect(warnings[0]).toContain(JSON.stringify(sanitizeForLog(origin)));
+    expect(warnings[0]).toContain(JSON.stringify(sanitizeForLog(pageId)));
+    expect(warnings[0]).toContain(JSON.stringify(sanitizeForLog(pageStatus)));
+    expect(warnings[0]).toContain(JSON.stringify(sanitizeForLog(errorMessage)));
   });
 });

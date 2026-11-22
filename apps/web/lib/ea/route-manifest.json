@@ -1,6 +1,6 @@
 {
   "generator": "apps/web/scripts/build-route-manifest.ts",
-  "routeCount": 690,
+  "routeCount": 691,
   "routes": [
     {
       "routePath": "/",
@@ -2957,6 +2957,19 @@
       ],
       "dynamicParams": [],
       "file": "apps/web/app/api/v1/federation/a2a/route.ts",
+      "exposure": "private-mesh"
+    },
+    {
+      "routePath": "/api/v1/federation/ai-usage",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "federation",
+        "ai-usage"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/v1/federation/ai-usage/route.ts",
       "exposure": "private-mesh"
     },
     {
