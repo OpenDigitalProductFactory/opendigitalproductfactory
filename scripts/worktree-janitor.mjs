@@ -35,7 +35,7 @@
 //   * .worktree-pinned is always honored.
 //   * Unregistered orphan directories in the sibling worktree base are reported, never auto-deleted.
 
-import { existsSync, lstatSync, readdirSync, readFileSync } from "node:fs";
+import { closeSync, constants as fsConstants, existsSync, fstatSync, lstatSync, openSync, readdirSync, readFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import os from "node:os";
 import path from "node:path";
@@ -315,11 +315,16 @@ export function isFreshCheckoutAtOriginMain(root, wtPath, { nowMs = Date.now(), 
   if (!Number.isFinite(freshGraceMs) || freshGraceMs <= 0) return false;
   const gitMarker = path.join(wtPath, ".git");
   let createdMs = null;
+  const birthMs = (st) => (st.birthtimeMs > 0 ? Math.min(st.birthtimeMs, st.mtimeMs) : st.mtimeMs);
   try {
-    const st = lstatSync(existsSync(gitMarker) ? gitMarker : wtPath);
-    createdMs = st.birthtimeMs > 0 ? Math.min(st.birthtimeMs, st.mtimeMs) : st.mtimeMs;
-  } catch {
-    return false;
+    createdMs = birthMs(lstatSync(gitMarker));
+  } catch (err) {
+    if (!err || err.code !== "ENOENT") return false;
+    try {
+      createdMs = birthMs(lstatSync(wtPath));
+    } catch {
+      return false;
+    }
   }
   if (!Number.isFinite(createdMs) || nowMs - createdMs > freshGraceMs) return false;
   const head = git(["rev-parse", "HEAD"], wtPath);
@@ -364,11 +369,57 @@ function gatherFacts(root, entry, prIndex, leasePayload, ttlMs, claims, runtimeO
 }
 
 /**
+ * Classify a directory's `.git` entry without exists-then-open.
+ * A file is opened once (O_NOFOLLOW where the platform has it) and read
+ * through that descriptor. A directory open fails on Windows, so a failed
+ * open is confirmed with one lstat and never followed by a read of the path.
+ */
+function inspectGitEntry(gitEntry) {
+  const empty = { gitKind: "none", gitdirTarget: null, gitdirTargetExists: false };
+  const nofollow = fsConstants.O_NOFOLLOW;
+  let fd;
+  try {
+    fd = openSync(gitEntry, nofollow ? (fsConstants.O_RDONLY | nofollow) : "r");
+  } catch (err) {
+    const code = err && err.code;
+    if (code === "EISDIR" || code === "EPERM" || code === "EACCES") {
+      try {
+        if (lstatSync(gitEntry).isDirectory()) return { ...empty, gitKind: "dir" };
+      } catch {
+        // The entry disappeared between the failed open and the lstat.
+      }
+    }
+    return empty;
+  }
+  try {
+    const st = fstatSync(fd);
+    if (st.isDirectory()) return { ...empty, gitKind: "dir" };
+    if (!st.isFile()) return empty;
+    const raw = readFileSync(fd, "utf8").trim();
+    const match = raw.match(/^gitdir:\s*(.+)$/m);
+    if (!match) return { ...empty, gitKind: "file" };
+    const gitdirTarget = match[1].trim();
+    const targetPath = path.isAbsolute(gitdirTarget) ? gitdirTarget : path.resolve(path.dirname(gitEntry), gitdirTarget);
+    let gitdirTargetExists = false;
+    try {
+      lstatSync(targetPath);
+      gitdirTargetExists = true;
+    } catch {
+      gitdirTargetExists = false;
+    }
+    return { gitKind: "file", gitdirTarget, gitdirTargetExists };
+  } finally {
+    closeSync(fd);
+  }
+}
+
+/**
  * Scan the canonical sibling worktree directory (e.g. `../dpf-worktrees`) for
  * unregistered orphan directories that git no longer tracks. Never mutates or
  * deletes anything; foreign repositories and linked worktrees belonging to
  * other repos are excluded by `classifyOrphanDirectory`.
  */
+
 export function scanOrphanDirectories(root, entries, claims, options = {}) {
   const baseDir = options.worktreeBase
     ? path.resolve(options.worktreeBase)
@@ -379,10 +430,11 @@ export function scanOrphanDirectories(root, entries, claims, options = {}) {
   const candidateBases = [baseDir, ...(options.extraBases ?? []), ...(t3RepoBase ? [t3RepoBase] : [])]
     .filter(Boolean)
     .map((b) => path.resolve(b))
-    .filter((b, i, arr) => arr.indexOf(b) === i && existsSync(b));
+    .filter((b, i, arr) => arr.indexOf(b) === i);
   if (candidateBases.length === 0) {
     return { baseDir, scannedBases: [], orphans: [] };
   }
+  const scannedBases = [];
   const nowMs = options.nowMs ?? Date.now();
   const registered = new Set(entries.map((e) => normalizePath(path.resolve(e.path))));
   const orphans = [];
@@ -390,9 +442,11 @@ export function scanOrphanDirectories(root, entries, claims, options = {}) {
     let dirEntries;
     try {
       dirEntries = readdirSync(scanBase, { withFileTypes: true });
-    } catch {
+    } catch (err) {
+      if (err && err.code !== "ENOENT") scannedBases.push(scanBase);
       continue;
     }
+    scannedBases.push(scanBase);
     for (const dirent of dirEntries) {
       if (!dirent.isDirectory()) continue;
       const full = path.join(scanBase, dirent.name);
@@ -416,28 +470,11 @@ export function scanOrphanDirectories(root, entries, claims, options = {}) {
       const pinned = existsSync(path.join(full, ".worktree-pinned"));
       const hasActiveClaim = pathHasActiveClaim(claims?.activePaths, full);
 
-      let gitKind = "none";
-      let gitdirTarget = null;
-      let gitdirTargetExists = false;
       const gitEntry = path.join(full, ".git");
-      if (existsSync(gitEntry)) {
-        try {
-          const gst = lstatSync(gitEntry);
-          if (gst.isDirectory()) {
-            gitKind = "dir";
-          } else if (gst.isFile()) {
-            gitKind = "file";
-            const raw = readFileSync(gitEntry, "utf8").trim();
-            const m = raw.match(/^gitdir:\s*(.+)$/m);
-            if (m) {
-              gitdirTarget = m[1].trim();
-              gitdirTargetExists = existsSync(path.isAbsolute(gitdirTarget) ? gitdirTarget : path.resolve(full, gitdirTarget));
-            }
-          }
-        } catch {
-          // leave none
-        }
-      }
+      const inspected = inspectGitEntry(gitEntry);
+      const gitKind = inspected.gitKind;
+      const gitdirTarget = inspected.gitdirTarget;
+      const gitdirTargetExists = inspected.gitdirTargetExists;
 
       const classified = classifyOrphanDirectory({
         path: full,
@@ -455,7 +492,7 @@ export function scanOrphanDirectories(root, entries, claims, options = {}) {
     }
   }
   orphans.sort((a, b) => a.path.localeCompare(b.path));
-  return { baseDir, scannedBases: candidateBases, orphans };
+  return { baseDir, scannedBases, orphans };
 }
 
 /**
