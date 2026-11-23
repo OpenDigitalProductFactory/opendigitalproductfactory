@@ -164,3 +164,205 @@ export function mergeWindowObservations(
   for (const row of hits) at(row.window).limitHits += row.hits;
   return [...byWindow.values()];
 }
+
+// ── Token-equivalent value and usage shared across installs (BI-6361A930) ──
+//
+// A plan's usage has a dollar value: what the same tokens would have cost at
+// the provider's pay-per-token list price (T3 Code, ccusage and LiteLLM spend
+// tracking price usage the same way). Savings = that value minus the fee.
+//
+// A plan belongs to a person, not an install. The owner's production and
+// paired Dev installs share each plan, so usage from every install is combined
+// and attributed to the install it ran on; the fee comes from this install's
+// contract only, so it is counted once. The peer's usage arrives over the
+// federation work-sync channel (lib/federation/ai-usage-exchange.ts); when it
+// is missing or stale the estimate says so and its confidence drops.
+
+/** Install key for this installation's own usage. Peers are keyed by their installation id. */
+export const LOCAL_INSTALL = "local";
+/** A peer pull older than this is reported as stale. */
+export const PEER_USAGE_STALE_AFTER_MS = 60 * 60_000;
+
+/**
+ * A subscription provider recorded at a $0 token price is valued at its
+ * pay-per-token sibling's list price. The prices themselves live on the
+ * ModelProvider rows; this only says which row prices which plan.
+ */
+export const LIST_PRICE_SIBLING: Readonly<Record<string, string>> = {
+  "anthropic-sub": "anthropic",
+  chatgpt: "openai",
+};
+
+export type ProviderTokenPrice = { inputPerMToken: number | null; outputPerMToken: number | null };
+export type ListPrice = { inputPerMToken: number; outputPerMToken: number; sourceProviderId: string };
+
+function usablePrice(price: ProviderTokenPrice | undefined): price is { inputPerMToken: number; outputPerMToken: number } {
+  if (!price) return false;
+  const { inputPerMToken: i, outputPerMToken: o } = price;
+  return i != null && o != null && Number.isFinite(i) && Number.isFinite(o) && i >= 0 && o >= 0 && i + o > 0;
+}
+
+/** The provider's own non-zero list price, else its declared sibling's, else null (unpriced). */
+export function listPriceFor(providerId: string, prices: ReadonlyMap<string, ProviderTokenPrice>): ListPrice | null {
+  for (const source of [providerId, LIST_PRICE_SIBLING[providerId]]) {
+    if (!source) continue;
+    const price = prices.get(source);
+    if (usablePrice(price)) return { inputPerMToken: price.inputPerMToken, outputPerMToken: price.outputPerMToken, sourceProviderId: source };
+  }
+  return null;
+}
+
+/** Usage of one provider on one install in one clock hour (hour = floor(epoch seconds / 3600)). */
+export type UsageBucket = {
+  install: string;
+  providerId: string;
+  hour: number;
+  inputTokens: number;
+  outputTokens: number;
+  limitHits: number;
+};
+
+/** Pool hourly buckets into reset windows aligned to the epoch, as the local loader always has. */
+export function windowsFromHourlyBuckets(
+  buckets: ReadonlyArray<Pick<UsageBucket, "hour" | "inputTokens" | "outputTokens" | "limitHits">>,
+  windowHours: number,
+): WindowObservation[] {
+  const hours = windowHours > 0 ? windowHours : DEFAULT_RESET_WINDOW_HOURS;
+  return mergeWindowObservations(
+    buckets.map((b) => ({ window: Math.floor(b.hour / hours), tokens: b.inputTokens + b.outputTokens })),
+    buckets.filter((b) => b.limitHits > 0).map((b) => ({ window: Math.floor(b.hour / hours), hits: b.limitHits })),
+  );
+}
+
+export type PeerUsageState = "current" | "stale" | "missing";
+export type PeerUsageReason = "never-pulled" | "unreachable" | "peer-outdated" | "refused" | "invalid";
+
+/** What this install knows about one paired install's usage. */
+export type PeerUsageStatus = {
+  linkId: string;
+  /** The peer's installation id, or the link id while the peer has never answered. */
+  install: string;
+  state: PeerUsageState;
+  /** Why the last pull failed; null when it landed. */
+  reason: PeerUsageReason | null;
+  lastSuccessAt: string | null;
+};
+
+export type UsageCoverage = "complete" | "peer-stale" | "peer-missing";
+
+export type InstallUsage = {
+  install: string;
+  tokens: number;
+  inputTokens: number;
+  outputTokens: number;
+  /** List-price value of this install's priced tokens over the observed period. */
+  periodValueUsd: number;
+};
+
+export type UsageValuation = {
+  /** priced: every token had a list price. partial: some did not, so the value is a floor. none: no usage or no price at all. */
+  status: "priced" | "partial" | "none";
+  periodValueUsd: number;
+  monthlyValueUsd: number | null;
+  /** Value minus fee, per month. Null without a fee or a value. A floor when the value is partial. */
+  monthlySavingsUsd: number | null;
+  unpricedProviderIds: string[];
+  /** Provider whose list price valued each covered provider. */
+  priceSources: Record<string, string>;
+};
+
+export type SubscriptionPlanValuation = {
+  estimate: SubscriptionCostEstimate;
+  value: UsageValuation;
+  installs: InstallUsage[];
+  peers: PeerUsageStatus[];
+  usageCoverage: UsageCoverage;
+};
+
+const LOWER: Record<EstimateConfidence, EstimateConfidence> = { high: "medium", medium: "low", low: "low" };
+
+function coverageOf(peers: readonly PeerUsageStatus[]): UsageCoverage {
+  if (peers.some((p) => p.state === "missing")) return "peer-missing";
+  if (peers.some((p) => p.state === "stale")) return "peer-stale";
+  return "complete";
+}
+
+/**
+ * Value, savings and effective cost of one plan from the usage of every
+ * install that shares it. Pure: the loader supplies buckets, prices and the
+ * peer status.
+ */
+export function estimateSubscriptionPlan(input: {
+  monthlyFeeUsd: number | null;
+  currency?: string | null;
+  coveredProviderIds: readonly string[];
+  buckets: readonly UsageBucket[];
+  listPrices: ReadonlyMap<string, ProviderTokenPrice>;
+  peers: readonly PeerUsageStatus[];
+  now: Date;
+}): SubscriptionPlanValuation {
+  const covered = new Set(input.coveredProviderIds);
+  const lookbackFromHour = Math.floor((input.now.getTime() - ESTIMATE_LOOKBACK_DAYS * 86_400_000) / 3_600_000);
+  const buckets = input.buckets.filter((b) => covered.has(b.providerId) && b.hour >= lookbackFromHour);
+
+  const windowHours = resetWindowHoursFor(input.coveredProviderIds);
+  const firstHour = buckets.length ? Math.min(...buckets.map((b) => b.hour)) : null;
+  const observedDays = firstHour == null ? 0 : (input.now.getTime() - firstHour * 3_600_000) / 86_400_000;
+
+  const base = estimateSubscriptionUnitCost({
+    monthlyFeeUsd: input.monthlyFeeUsd,
+    currency: input.currency,
+    windowHours,
+    observedDays,
+    windows: windowsFromHourlyBuckets(buckets, windowHours),
+  });
+  const usageCoverage = coverageOf(input.peers);
+  const confidence: EstimateConfidence = usageCoverage === "peer-missing" ? "low"
+    : usageCoverage === "peer-stale" ? LOWER[base.confidence] : base.confidence;
+  const estimate = { ...base, confidence };
+
+  const priceSources: Record<string, string> = {};
+  const unpriced = new Set<string>();
+  const installs = new Map<string, InstallUsage>();
+  let periodValueUsd = 0;
+  let pricedTokens = 0;
+  for (const b of buckets) {
+    const price = listPriceFor(b.providerId, input.listPrices);
+    const value = price ? (b.inputTokens * price.inputPerMToken + b.outputTokens * price.outputPerMToken) / 1_000_000 : 0;
+    const tokens = b.inputTokens + b.outputTokens;
+    if (price) {
+      priceSources[b.providerId] = price.sourceProviderId;
+      pricedTokens += tokens;
+    } else if (tokens > 0) {
+      unpriced.add(b.providerId);
+    }
+    periodValueUsd += value;
+    const row = installs.get(b.install) ?? { install: b.install, tokens: 0, inputTokens: 0, outputTokens: 0, periodValueUsd: 0 };
+    row.tokens += tokens;
+    row.inputTokens += b.inputTokens;
+    row.outputTokens += b.outputTokens;
+    row.periodValueUsd += value;
+    installs.set(b.install, row);
+  }
+
+  const status: UsageValuation["status"] = pricedTokens <= 0 ? "none" : unpriced.size > 0 ? "partial" : "priced";
+  const toMonth = DAYS_PER_MONTH / Math.max(1, Math.min(observedDays, ESTIMATE_LOOKBACK_DAYS));
+  const monthlyValueUsd = status === "none" ? null : periodValueUsd * toMonth;
+  const fee = estimate.status === "currency-unsupported" ? null : input.monthlyFeeUsd;
+  const ordered = [...installs.values()].sort((a, b) =>
+    a.install === LOCAL_INSTALL ? -1 : b.install === LOCAL_INSTALL ? 1 : 0);
+  return {
+    estimate,
+    value: {
+      status,
+      periodValueUsd,
+      monthlyValueUsd,
+      monthlySavingsUsd: monthlyValueUsd != null && fee != null && fee > 0 ? monthlyValueUsd - fee : null,
+      unpricedProviderIds: [...unpriced].sort(),
+      priceSources,
+    },
+    installs: ordered,
+    peers: [...input.peers],
+    usageCoverage,
+  };
+}

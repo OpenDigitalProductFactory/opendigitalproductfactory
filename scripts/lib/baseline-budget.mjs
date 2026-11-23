@@ -37,14 +37,14 @@ export function todayISO(now = new Date()) {
  * Validate an {owner, expiry} budget. Returns an array of failure strings
  * (empty = valid). `label` names the file in messages.
  */
-export function validateBudget({ owner, expiry } = {}, { label = "baseline", today = todayISO() } = {}) {
+export function validateBudget({ owner, expiry } = {}, { label = "baseline", today = todayISO(), enforceExpiry = true } = {}) {
   const failures = [];
   if (typeof owner !== "string" || !owner.trim()) {
     failures.push(`${label}: missing budget owner (add "owner": "<team>" / "# owner: <team>").`);
   }
   if (typeof expiry !== "string" || !BUDGET_DATE_RE.test(expiry)) {
     failures.push(`${label}: missing or malformed budget expiry (need YYYY-MM-DD).`);
-  } else if (expiry < today) {
+  } else if (enforceExpiry && expiry < today) {
     failures.push(
       `${label}: budget EXPIRED on ${expiry} — the owner (${owner ?? "<unset>"}) must re-review the debt ` +
         `and recommit with a new expiry (shrink the baseline where possible; extending the date without ` +

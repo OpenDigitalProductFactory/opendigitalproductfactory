@@ -50,6 +50,7 @@ export type RuntimeEvent =
 
 export type RuntimeSessionConfig = {
   capsuleId: string;
+  account?: AccountConnection & { providerId: string };
   /** The room's MCP endpoint and the session's own room-scoped bearer token. */
   mcp: { url: string; bearerToken: string };
   /** Working directory inside the sandbox. */

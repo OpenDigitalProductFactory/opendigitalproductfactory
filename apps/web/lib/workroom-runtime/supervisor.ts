@@ -1,3 +1,4 @@
+import { accountExecutionVersion } from "@/lib/routing/provider-account-candidates";
 // The Workroom runtime supervisor (BI-05715F4C, design
 // 2026-10-07-durable-delegation-ledger-design.md §4.7).
 //
@@ -36,7 +37,7 @@ import {
   type StoredRuntimeSession,
   type SupervisionActor,
 } from "./supervised-session";
-import type { ExecutorDriver, RuntimeDecision, RuntimeEvent, RuntimeProvider, RuntimeRequest, RuntimeSession } from "@/lib/executor-drivers/types";
+import type { DriverCapabilities, ExecutorDriver, RuntimeDecision, RuntimeEvent, RuntimeProvider, RuntimeRequest, RuntimeSession } from "@/lib/executor-drivers/types";
 import { claimEffects, recoverExpiredLeases, retireOrphanedEffects, type ClaimedEffect, type EffectSqlDb } from "./workroom-effect-store";
 
 export { DEFAULT_RUNTIME_CWD, readStoredRuntimeSession, type StoredRuntimeSession };
@@ -49,6 +50,7 @@ type LiveSession = {
   capsuleId: string;
   provider: RuntimeProvider;
   session: RuntimeSession;
+  capabilities: DriverCapabilities;
   tokenId: string;
   cwd: string;
   actor: WorkCapsuleActor;
@@ -145,6 +147,12 @@ function defaultEffectStore(clock: () => Date): EffectStorePort {
 const DECISION_FOR_STATUS: Partial<Record<string, RuntimeDecision>> = { approved: "accept", declined: "decline", cancelled: "cancel" };
 
 const supervisionActor = (actor: WorkCapsuleActor): SupervisionActor => ({ userId: actor.userId, agentId: actor.agentId, principalId: actor.principalId });
+
+export function defaultRuntimeConnection(provider: RuntimeProvider): string {
+  return provider === "codex" ? "provider-default-codex" : "provider-default-anthropic-sub";
+}
+
+const ACCOUNT_DRIVERS = new Map<string, RuntimeProvider>([["codex", "codex"], ["chatgpt", "codex"], ["anthropic-sub", "claude"]]);
 
 const TURN_MESSAGES: Record<string, string> = {
   started: "Turn requested.",
@@ -306,9 +314,7 @@ export function createRuntimeSupervisor(deps: RuntimeSupervisorDeps) {
     report,
   });
 
-  async function start(input: { capsuleId: string; provider: RuntimeProvider; actor: WorkCapsuleActor; prompt?: string; model?: string | null; cwd?: string; reattach?: boolean }): Promise<RuntimeResult> {
-    const adapter = deps.adapters[input.provider];
-    if (!adapter) return refuse("provider_unavailable", `No ${input.provider} runtime is configured on this install.`);
+  async function start(input: { capsuleId: string; provider?: RuntimeProvider; connectionId?: string; actor: WorkCapsuleActor; prompt?: string; model?: string | null; cwd?: string; reattach?: boolean }): Promise<RuntimeResult> {
     if (live.has(input.capsuleId)) return refuse("already_running", `${input.capsuleId} already has a live runtime session; stop it first.`);
     const room = await loadRoom(input.capsuleId);
     if (!room) return refuse("not_found", `Workroom ${input.capsuleId} not found.`);
@@ -316,6 +322,20 @@ export function createRuntimeSupervisor(deps: RuntimeSupervisorDeps) {
       return refuse("room_terminal", `Workroom ${input.capsuleId} is ${room.status}; it cannot open a runtime.`);
     }
     const stored = readStoredRuntimeSession(room.workspaceState);
+    const connectionId = input.connectionId;
+    const account = connectionId ? await prisma.aiProviderConnection.findUnique({
+      where: { connectionId }, include: { credentialEntry: { select: { status: true, updatedAt: true } } },
+    }) : null;
+    if (connectionId && (!account || account.status === "disabled" || !account.credentialEntryId)) {
+      return refuse("provider_unavailable", "Selected provider account is unavailable.");
+    }
+    const provider = account ? ACCOUNT_DRIVERS.get(account.providerId) : input.provider;
+    const adapter = provider && deps.adapters[provider];
+    if (!adapter || !provider || input.provider && input.provider !== provider
+      || account && account.executionChannel !== "subscription-cli" && !(provider === "codex" && account.executionChannel === "direct-api" && account.authMethod === "api-key")) {
+      return refuse("capability-unavailable", account ? "Selected provider account has no supervised session driver." : `No ${provider} runtime is configured on this install.`);
+    }
+    const sameInstance = stored?.provider === provider && (stored.connectionId ?? defaultRuntimeConnection(provider)) === (connectionId ?? defaultRuntimeConnection(provider));
     const cwd = input.cwd ?? stored?.cwd ?? DEFAULT_RUNTIME_CWD;
     const token = await deps.issueToken({ userId: input.actor.userId, agentId: input.actor.agentId, capsuleId: input.capsuleId, runRef: room.taskRunId ?? null });
     const generation = randomUUID();
@@ -325,16 +345,17 @@ export function createRuntimeSupervisor(deps: RuntimeSupervisorDeps) {
     try {
       session = await adapter.openSession({
         capsuleId: input.capsuleId, mcp: { url: deps.mcpUrl, bearerToken: token.plaintext }, cwd, model: input.model ?? null,
-        resumeThreadId: stored?.provider === input.provider ? stored.threadId : null,
+        resumeThreadId: sameInstance && adapter.capabilities.resumeThread ? stored?.threadId ?? null : null,
+        ...(account ? { account: { providerId: account.providerId, connectionId: account.connectionId, expectedExecutionVersion: accountExecutionVersion(account) } } : {}),
       }, (event) => (entryRef.current ? onEvent(entryRef.current, event) : pendingEvents.push(event)));
     } catch (error) {
       await deps.revokeTokens({ capsuleId: input.capsuleId, reason: "session failed to open", tokenId: token.tokenId });
-      return refuse("runtime_unavailable", `The ${input.provider} runtime could not start: ${describe(error)}`);
+      return refuse("runtime_unavailable", `The ${provider} runtime could not start: ${describe(error)}`);
     }
     // Events wait until the session record names this generation; otherwise they would read as stale.
     let releaseEvents: () => void = () => {};
     const entry: LiveSession = {
-      capsuleId: input.capsuleId, provider: input.provider, session, tokenId: token.tokenId, cwd, actor: input.actor, generation,
+      capsuleId: input.capsuleId, provider, session, tokenId: token.tokenId, cwd, actor: input.actor, generation, capabilities: adapter.capabilities,
       providerPending: new Set(), eventSeq: 0, commits: new Promise<void>((resolve) => { releaseEvents = resolve; }),
     };
     live.set(input.capsuleId, entry);
@@ -342,25 +363,25 @@ export function createRuntimeSupervisor(deps: RuntimeSupervisorDeps) {
     for (const event of pendingEvents) onEvent(entry, event);
     try {
       const threadId = await session.ensureThread();
-      const addressedAs = sessionQualifier(await clientGaid(input.provider).catch(() => null), threadId);
+      const addressedAs = sessionQualifier(await clientGaid(provider).catch(() => null), threadId);
       // BI-1687CCD2: a thread only resumes in its own CLI; the other one starts from the room's log.
-      const built = stored && stored.provider !== input.provider && deps.buildHandoff
-        ? await deps.buildHandoff({ roomId: room.id, fromProvider: stored.provider, toProvider: input.provider, since: stored.openedAt || null })
+      const built = stored && stored.provider !== provider && deps.buildHandoff
+        ? await deps.buildHandoff({ roomId: room.id, fromProvider: stored.provider, toProvider: provider, since: stored.openedAt || null })
         : null;
       const handoff = built && stored ? { ...built, fromProvider: stored.provider, fromThreadId: stored.threadId } : null;
       const reply = await commit(input.capsuleId, `session-open:${generation}`, {
-        type: "session.open", provider: input.provider, threadId, tokenId: token.tokenId, cwd, actor: supervisionActor(input.actor),
+        type: "session.open", provider, connectionId, threadId, tokenId: token.tokenId, cwd, actor: supervisionActor(input.actor),
         addressedAs, generation, hostId, reattach: input.reattach === true, prompt: input.prompt?.trim() || null, handoff, at: at(),
       }, input.actor);
       if (!reply) throw new Error(`Workroom ${input.capsuleId} not found`);
       releaseEvents();
-      return { success: true, message: `${input.provider} runtime open on ${input.capsuleId}.`, data: { capsuleId: input.capsuleId, provider: input.provider, threadId, addressedAs } };
+      return { success: true, message: `${provider} runtime open on ${input.capsuleId}.`, data: { capsuleId: input.capsuleId, provider, threadId, addressedAs } };
     } catch (error) {
       releaseEvents();
       live.delete(input.capsuleId);
       await session.close().catch(() => {});
       await deps.revokeTokens({ capsuleId: input.capsuleId, reason: "session failed to start", tokenId: token.tokenId });
-      return refuse("runtime_unavailable", `The ${input.provider} runtime could not open its thread: ${describe(error)}`);
+      return refuse("runtime_unavailable", `The ${provider} runtime could not open its thread: ${describe(error)}`);
     }
   }
 
@@ -382,7 +403,7 @@ export function createRuntimeSupervisor(deps: RuntimeSupervisorDeps) {
     start,
 
     turn(input: { capsuleId: string; prompt: string; steer?: boolean; commandId?: string }): Promise<RuntimeResult> {
-      const supportsSteer = deps.adapters[live.get(input.capsuleId)?.provider ?? "codex"]?.capabilities.steer ?? false;
+      const supportsSteer = live.get(input.capsuleId)?.capabilities.steer ?? false;
       return turnCommand(input.capsuleId, { type: "turn.request", prompt: input.prompt, steer: input.steer === true, supportsSteer }, input.commandId);
     },
 
@@ -398,6 +419,7 @@ export function createRuntimeSupervisor(deps: RuntimeSupervisorDeps) {
     },
 
     async interrupt(capsuleId: string): Promise<RuntimeResult> {
+      if (live.get(capsuleId)?.capabilities.interrupt === false) return refuse("capability-unavailable", "This driver cannot interrupt a turn.");
       const result = await turnCommand(capsuleId, { type: "turn.interrupt" });
       return result.success ? { ...result, message: "Interrupt sent; the turn reports interrupted when it stops." } : result;
     },
@@ -455,7 +477,7 @@ export function createRuntimeSupervisor(deps: RuntimeSupervisorDeps) {
       const stored = readStoredRuntimeSession((await loadRoom(capsuleId))?.workspaceState);
       const queued = stored?.queuedInputs?.length ?? 0;
       if (entry) {
-        return { live: true, provider: entry.provider, threadId: entry.session.threadId(), activeTurnId: entry.session.activeTurnId(), held: heldRequests, queued };
+        return { live: true, provider: entry.provider, capabilities: entry.capabilities, threadId: entry.session.threadId(), activeTurnId: entry.session.activeTurnId(), held: heldRequests, queued };
       }
       return {
         live: false,
@@ -500,7 +522,7 @@ export function createRuntimeSupervisor(deps: RuntimeSupervisorDeps) {
             outcome.lost.push(room.capsuleId);
             continue;
           }
-          const result = await start({ capsuleId: room.capsuleId, provider: stored.provider, actor: { ...stored.actor }, cwd: stored.cwd, reattach: true });
+          const result = await start({ capsuleId: room.capsuleId, provider: stored.provider, connectionId: stored.connectionId ?? undefined, actor: { ...stored.actor }, cwd: stored.cwd, reattach: true });
           if (result.success) {
             outcome.reattached.push(room.capsuleId);
           } else if (result.error === "room_terminal" || result.error === "not_found") {

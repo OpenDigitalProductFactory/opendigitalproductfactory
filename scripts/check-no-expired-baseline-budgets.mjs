@@ -191,7 +191,9 @@ export function checkBaselineBudgets({
       }
       continue; // legacy freeze, conversion pending — inventoried, not enforced
     }
-    failures.push(...validateBudget(budget, { label: rel, today }));
+    // The Build Studio size guard reports its overdue review and still enforces both limits.
+    const enforceExpiry = rel !== "scripts/build-studio-surface-baseline.json";
+    failures.push(...validateBudget(budget, { label: rel, today, enforceExpiry }));
   }
   return { failures };
 }

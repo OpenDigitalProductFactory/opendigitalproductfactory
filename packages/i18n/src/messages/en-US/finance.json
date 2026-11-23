@@ -19,6 +19,26 @@
     "basisCeiling": "Its limits were not reached in {$days} days of use, so this is the most it costs; the real figure is probably lower.",
     "feeMissing": "Record the plan's payment to estimate its cost.",
     "noUsage": "No use recorded in the last 30 days, so there is nothing to divide the fee by yet.",
-    "currencyUnsupported": "The fee is in {$currency}; only USD fees are estimated so far."
+    "currencyUnsupported": "The fee is in {$currency}; only USD fees are estimated so far.",
+    "value": "Usage worth {$value} a month at pay-per-token prices",
+    "valuePartial": "Usage worth at least {$value} a month at pay-per-token prices. No list price is on record for {$providers}.",
+    "valueNone": "No list price is on record for {$providers}, so its usage has no pay-per-token value yet.",
+    "savings": "Saving {$amount} a month against the fee",
+    "savingsFloor": "Saving at least {$amount} a month against the fee",
+    "overspend": "The fee is {$amount} a month more than pay-per-token use would cost",
+    "overspendCeiling": "The fee is at most {$amount} a month more than pay-per-token use would cost",
+    "installLocal": "This install",
+    "installPeer": "Paired install {$id}",
+    "installUsage": "{$install}: {$tokens} tokens, worth {$value}",
+    "peerMissing": "Usage from the paired install is missing: {$reason}. The fee is spread over this install's usage only, so the cost per unit is overstated.",
+    "peerStale": "Usage from the paired install is as of {$time}: {$reason}.",
+    "peerReason": {
+      "never-pulled": "it has not been asked yet",
+      "unreachable": "it could not be reached",
+      "peer-outdated": "it has not been updated to share AI usage yet",
+      "refused": "it refused the request",
+      "invalid": "its answer could not be read"
+    },
+    "priceBasis": "Each provider is priced at its recorded input and output token prices; the model used on each call is not recorded."
   }
 }

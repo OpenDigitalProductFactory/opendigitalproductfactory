@@ -70,7 +70,7 @@ An instance is a row of `AiProviderConnection` with a driver-capable `executionC
 
 ### Callers
 
-- **Workroom runtime:** `runtime-tools.ts` gets its drivers from `executor-drivers/registry.ts`. The supervised-session port (`SupervisedSessionPort`: `isLive`, `deliver`), `addressedAs`, `deliveredCursor` and the turn prompt are unchanged; each driver still implements the port through its session (spec, "Rooms and agent dialog", row S3).
+- **Workroom runtime:** `runtime-tools.ts` supplies the drivers to the supervisor, which resolves a provider connection before opening one. The supervised-session port (`SupervisedSessionPort`: `isLive`, `deliver`), `addressedAs`, `deliveredCursor` and the turn prompt are unchanged; each driver still implements the port through its session (spec, "Rooms and agent dialog", row S3).
 - **Build Studio and Ideate:** `codex-agent-runner.ts` and `claude-agent-runner.ts` call `driver.openSession` and run one turn. Their CLI flags, credential files and stdout parsing are deleted from `codex-dispatch.ts`, `claude-dispatch.ts` and the Codex/Claude branches of `ideate-dispatch.ts`. Ideate's progress lines come from driver `message` events instead of stderr patterns.
 - **Inference routing:** `routing/cli-adapter.ts` and `routing/codex-cli-adapter.ts` become thin `ExecutionAdapterHandler`s over `driver.generateText`. The duplicated tool-trace pattern is deleted from one of them.
 
@@ -80,11 +80,11 @@ Build Studio today runs `codex exec` as root and `claude -p` as the node user. R
 
 ## Scope
 
-In S3: drivers for Codex, Claude, Grok and Antigravity, and all four call paths, in the item's order (below).
+S3 delivers the Claude and Codex drivers and routes supervised sessions by provider connection. PR 3 is scoped to AC-2.
 
 Not in S3: OpenCode (`build/opencode-dispatch.ts`) and the native DPF runner.
 
-The item caps S3 at three PRs. If ACP does not fit in PR 3, work stops and the item is reshaped (ACP split to its own item) rather than opening a fourth PR.
+ACP for Grok and Antigravity is follow-on work. Antigravity needs a DPF sandbox runner, provider-account setup and a Workroom sender identity. Grok Build needs account isolation for its shared sandbox OAuth file. This session recorded the follow-on here and skipped the Workroom claim and follow-on filing because the attached MCP identified itself as a production installation.
 
 ## Delivery (the item's ordered steps, each PR through the full gate)
 
@@ -92,13 +92,13 @@ The item body (rewritten 2026-11-18 by the room's design-note stage) orders the 
 
 1. **PR 1 — Driver contract and Claude driver.** `executor-drivers/` holds the contract, capability flags, the usage event and one failure classifier. The Claude driver runs on stream-json with the single tool-trace parser. Workroom runtime, Build Studio `claude -p` dispatch, the Claude branch of Ideate and the routing `cli-adapter` move onto it; the Claude-side duplicates are deleted. Tests: a conformance suite on the existing fake process (`workroom-runtime/__fixtures__/fake-process.ts`) fed with recorded CLI transcripts; `adapters.test.ts`, `supervised-turn-delivery.test.ts` and `supervisor.durable.test.ts` stay green; the user/cwd/flags record for Claude (node user today) matches main.
 2. **PR 2 — Codex driver.** Codex on `codex app-server`. Workroom runtime, Build Studio `codex exec` dispatch (`codex-dispatch.ts`), the Codex branch of `ideate-dispatch.ts` and `codex-cli-adapter.ts` move onto it; the Codex-side duplicates and the second tool-trace pattern are deleted. Tests: the same conformance suite; the user/cwd/flags record for Codex (root today) matches main or the change is stated; a Build Studio fixture run per client producing the same result object as on main.
-3. **PR 3 — Instances and ACP.** An instance is an `AiProviderConnection` row (no new table); routing resolves a `connectionId`, then its driver, and applies policy when a capability is missing (`capability-unavailable`). Capability probes read driver flags. Two connections for one client route separately. The ACP driver over `@agentclientprotocol/sdk` serves Grok and Antigravity, and `build/grok-dispatch.ts` calls it; the same conformance suite runs against a recorded ACP transcript. The PR reports the net line count across the three PRs against main.
+3. **PR 3 — Instance routing (AC-2).** Use the existing `AiProviderConnection` as the instance. Select its `connectionId` before selecting the driver. Keep the connection with the supervised thread so reattach uses the same account. Two connections for one client use their own credentials and threads. Capability probes read the driver flags. An unsupported steer reports `capability-unavailable` and queues the input for the next turn. Codex app-server receives an account-bound login object from `resolveCodexAuth`. Report the net production line count across all three PRs.
 
 ## PR 1 as built (2026-11-18)
 
 - **Two faces, as T3 has.** Build Studio dispatch, Ideate and inference routing stay one-shot runs (`claude -p -`, json result) on the driver's one-shot face (`executor-drivers/claude/one-shot.ts`); only the Workroom runtime uses the session face (`executor-drivers/claude/session.ts`). Running them as a turn on a long-lived session would have dropped routing's owned runner, timeout reaping, uncertainty handling and neutral working directory. The driver owns auth, the command line, the result parser, usage and the tool-trace; each caller keeps its process envelope.
 - **Unchanged command lines.** `claudeOneShotArgs` emits the flags in the order all three callers already used, and `claude-driver.test.ts` pins each caller's exact command. User and working directory are untouched: Build Studio still runs as the node user in the build workdir, Ideate from its neutral directory, routing from its private auth home.
-- **Removed duplicates.** Three Claude auth resolvers (Build Studio, Ideate, routing) are now `executor-drivers/claude/auth.ts`; two json result readers and the unused `parseCliStreamOutput` are now `parseClaudeResult`; the tool-trace pattern held by both the Claude and Codex routing adapters is `executor-drivers/tool-trace.ts`. Production code under `apps/web/lib` falls by 88 lines.
+- **Removed duplicates.** Three Claude auth resolvers (Build Studio, Ideate, routing) are now `executor-drivers/claude/auth.ts`; two json result readers and the unused `parseCliStreamOutput` are now `parseClaudeResult`; the tool-trace pattern held by both the Claude and Codex routing adapters is `executor-drivers/tool-trace.ts`. Production code under `apps/web/lib` falls by 84 lines in the merged PR.
 - **Usage.** Each session turn now reports a `usage` event before it completes; a turn whose result carries no usage reports `reported: "unknown"`, never zero. The room records it as an activity; S4 feeds it to the per-instance window store.
 
 ## PR 2 as built (2026-11-19)
@@ -107,7 +107,7 @@ The item body (rewritten 2026-11-18 by the room's design-note stage) orders the 
 - **One credential resolver, with a stated change.** `executor-drivers/codex/auth.ts` (`resolveCodexAuth`, `codexAuthJson`) replaces Build Studio's `injectCodexAuth`, Ideate's copy of it and routing's `prepareCodexCliAuth`. It is routing's behaviour, so Build Studio and Ideate now get the refreshed OAuth token (they wrote the stored token as-is), the ChatGPT account id, and the API-key path. Build Studio and Ideate share one writer for `/root/.codex/auth.json`.
 - **Not folded yet.** The session logs in with model discovery's connection-checked login (`inference/codex-cli-catalog-auth.ts`), which app-server takes as an object, not a file. It joins `resolveCodexAuth` in PR 3, where instances select the connection.
 - **Usage.** Each Codex session turn reports a `usage` event from `thread/tokenUsage/updated`, read as T3 Code does: the turn's growth of the thread total, falling back to `last` when a total goes backwards. Codex counts cached input inside input, so the driver reports uncached input and `cacheReadInputTokens` apart, as Claude does. A turn with no update reports `reported: "unknown"`. Routing's `codex exec` still returns zero usage because `AdapterResult` has no unknown state; that belongs to S4.
-- **Lines.** Production code under `apps/web/lib` grows by 44 lines in this PR (198 removed, 242 added, of which the usage meter is about 45). With PR 1 the slice is 44 lines down so far; PR 3 reports the total for AC-3.
+- **Lines.** Production code under `apps/web/lib` grows by 44 lines in this PR (198 removed, 242 added, of which the usage meter is about 45). With PR 1 the slice is 40 lines down so far; PR 3 reports the total for AC-3.
 
 ## Acceptance (from the item)
 
@@ -121,7 +121,7 @@ The item's acceptance section, exactly as recorded on BI-A01B06F6 (2026-11-18):
 
 How this plan meets each:
 
-- **AC-1:** PR 1 to PR 3. Ideate counts as part of Build Studio dispatch and moves with its client.
+- **AC-1:** PRs 1 and 2 cover Claude and Codex. Grok and Antigravity remain open for the ACP follow-on.
 - **AC-2:** PR 3, with `AiProviderConnection` as the instance.
 - **AC-3:** PR 1 and PR 2 delete the per-client duplicates; PR 3 reports the net line count.
 - **AC-4:** PR 1.
@@ -135,6 +135,6 @@ How this plan meets each:
 - Dependencies: S2 (BI-C64EDA33, done); PR 2 and PR 3 depend on PR 1
 - PR 1 — Driver contract and Claude driver -> BI-A01B06F6
 - PR 2 — Codex driver -> BI-A01B06F6
-- PR 3 — Instances and ACP -> BI-A01B06F6
+- PR 3 — Instance routing (AC-2) -> BI-A01B06F6
 
 [verify substrate first]: ../../founder-kernel/wiki/principles/verify-substrate-before-proposing-new.md

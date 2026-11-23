@@ -88,14 +88,14 @@ export async function syncPageMaterialAfterTransition(input: {
   try {
     return await syncPageMaterialToStatus(input);
   } catch (err) {
-    // Positional substitutions of sanitised values: a page id, status or
-    // driver message carrying CR/LF cannot forge a log line (CWE-117).
+    // JSON.stringify is a CodeQL-recognised log-injection sanitiser; retain
+    // sanitizeForLog so all control and line-separator characters normalize.
     (input.logger ?? console).warn(
       "[%s] decision-material sync failed for page %s -> %s (a missed revocation is repaired on next boot): %s",
-      sanitizeForLog(input.origin),
-      sanitizeForLog(input.pageId),
-      sanitizeForLog(input.pageStatus),
-      sanitizeForLog(getErrorMessage(err)),
+      JSON.stringify(sanitizeForLog(input.origin)),
+      JSON.stringify(sanitizeForLog(input.pageId)),
+      JSON.stringify(sanitizeForLog(input.pageStatus)),
+      JSON.stringify(sanitizeForLog(getErrorMessage(err))),
     );
     return null;
   }

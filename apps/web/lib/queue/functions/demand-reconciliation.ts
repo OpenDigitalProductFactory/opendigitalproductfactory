@@ -47,6 +47,12 @@ export const demandReconciliationScheduled = jobs.createFunction(
       const { runWorkSync } = await import("@/lib/federation/work-sync");
       return runWorkSync();
     });
+    // The paired install's AI plan usage rides the same link and cadence, so
+    // Finance can value a shared plan against its whole usage (BI-6361A930).
+    const aiUsage = await step.run("sync-peer-ai-usage", async () => {
+      const { runPeerAiUsageSync } = await import("@/lib/federation/ai-usage-sync");
+      return runPeerAiUsageSync();
+    });
     // Renew each claim this installation holds at an item's home, and release
     // the ones whose Workroom has ended (BI-30EDDB7F). Queued in the outbox,
     // so a home that cannot be reached receives them when it returns.
@@ -82,6 +88,6 @@ export const demandReconciliationScheduled = jobs.createFunction(
         },
       });
     });
-    return { guidance, posture, peerTargets, demand, work, workWatch, workClaims, links, membership };
+    return { guidance, posture, peerTargets, demand, work, aiUsage, workWatch, workClaims, links, membership };
   },
 );

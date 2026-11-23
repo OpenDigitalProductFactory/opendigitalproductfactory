@@ -69,13 +69,13 @@ export function turnUsageFromResult(event: Record<string, unknown>): TurnUsage {
 
 export function createClaudeSessionDriver(deps: {
   launch: RuntimeLauncher;
-  auth: () => Promise<ClaudeAuth>;
+  auth: (account: RuntimeSessionConfig["account"]) => Promise<ClaudeAuth>;
 }): ExecutorDriver {
   return {
     provider: "claude",
     capabilities: CLAUDE_CAPABILITIES,
     async openSession(config: RuntimeSessionConfig, onEvent: RuntimeEventSink): Promise<RuntimeSession> {
-      const credential = claudeCredential(await deps.auth());
+      const credential = claudeCredential(await deps.auth(config.account));
       const sessionId = config.resumeThreadId && SESSION_ID.test(config.resumeThreadId) ? config.resumeThreadId : randomUUID();
       const mcpConfig = { mcpServers: { dpf: { type: "http", url: config.mcp.url, headers: { Authorization: `Bearer ${config.mcp.bearerToken}` } } } };
       const proc = deps.launch({

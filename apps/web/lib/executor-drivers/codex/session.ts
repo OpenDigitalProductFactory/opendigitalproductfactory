@@ -109,13 +109,13 @@ export function codexApprovalResponse(method: string, params: Record<string, unk
 
 export function createCodexSessionDriver(deps: {
   launch: RuntimeLauncher;
-  login: () => Promise<CodexCatalogLogin>;
+  login: (account: RuntimeSessionConfig["account"]) => Promise<CodexCatalogLogin>;
 }): ExecutorDriver {
   return {
     provider: "codex",
     capabilities: CODEX_CAPABILITIES,
     async openSession(config: RuntimeSessionConfig, onEvent: RuntimeEventSink): Promise<RuntimeSession> {
-      const login = await deps.login();
+      const login = await deps.login(config.account);
       const proc = deps.launch({
         script: CODEX_SESSION_SCRIPT,
         cwd: config.cwd,

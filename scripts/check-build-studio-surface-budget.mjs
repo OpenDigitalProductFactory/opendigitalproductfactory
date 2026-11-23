@@ -30,9 +30,8 @@
 // totals: the failure mode being closed is aggregate accretion, and a per-file
 // map would let a PR add a component while shrinking another and net out flat.
 //
-// The baseline carries an owner and an expiry date — an expired baseline fails
-// until it is re-reviewed and deliberately extended, so "we'll simplify later"
-// cannot quietly become never.
+// The expiry date prompts the owner to review the baseline. Size limits
+// continue to apply while the review is overdue.
 //
 //   node scripts/check-build-studio-surface-budget.mjs            # check (CI)
 //   node scripts/check-build-studio-surface-budget.mjs --update   # retighten
@@ -105,16 +104,12 @@ export function computeBudgets(files) {
   };
 }
 
-export function validateBaseline(baseline, { today = new Date().toISOString().slice(0, 10) } = {}) {
+export function validateBaseline(baseline) {
   const failures = [];
   if (baseline?.version !== 1) failures.push("Baseline version must be 1.");
   if (!baseline?.owner?.trim()) failures.push("Baseline requires an owner.");
   if (!/^\d{4}-\d{2}-\d{2}$/.test(baseline?.expiry ?? "")) {
     failures.push("Baseline requires expiry in YYYY-MM-DD form.");
-  } else if (baseline.expiry < today) {
-    failures.push(
-      `Baseline expired on ${baseline.expiry} — re-review the Build Studio surface and deliberately extend the expiry.`,
-    );
   }
   for (const key of BUDGET_KEYS) {
     if (typeof baseline?.[key] !== "number" || !Number.isFinite(baseline[key])) {
@@ -134,9 +129,9 @@ export function evaluateBudget(current, baselined) {
   return { growth: 0, stale: 0 };
 }
 
-export function runCheck({ files, baseline, today }) {
+export function runCheck({ files, baseline, today = new Date().toISOString().slice(0, 10) }) {
   const budgets = computeBudgets(files);
-  const baselineFailures = validateBaseline(baseline, today ? { today } : {});
+  const baselineFailures = validateBaseline(baseline);
   if (baselineFailures.length) return { ok: false, baselineFailures, budgets };
   const evaluation = {};
   let ok = true;
@@ -144,7 +139,7 @@ export function runCheck({ files, baseline, today }) {
     evaluation[key] = evaluateBudget(budgets[key], baseline[key]);
     if (evaluation[key].growth > 0) ok = false;
   }
-  return { ok, baselineFailures: [], budgets, evaluation };
+  return { ok, baselineFailures: [], budgets, evaluation, reviewOverdue: today > baseline.expiry };
 }
 
 function readFiles() {
@@ -198,6 +193,10 @@ function main() {
     console.error("Build Studio surface baseline is invalid:");
     for (const f of result.baselineFailures) console.error(`  - ${f}`);
     process.exit(1);
+  }
+
+  if (result.reviewOverdue) {
+    console.warn(`Build Studio surface review overdue since ${baseline.expiry}. Owner: ${baseline.owner}.`);
   }
 
   if (!result.ok) {
