@@ -33,26 +33,126 @@
  * @property {boolean} dirty         porcelain non-empty
  * @property {number} ageDays        days since last commit (0 if unknown)
  * @property {boolean} [hasLiveSession]  a fresh session heartbeat is present
+ * @property {boolean} [hasActiveProcessCwd]  a running host process currently has its CWD inside this worktree
+ * @property {boolean} [isFreshCheckout]  freshly created worktree still at origin/main within the startup grace window
  * @property {boolean} [hasActiveClaim]  an active Workroom claims this worktree
  * @property {boolean} [claimSourceUnavailable]  the claim record could not be read
  * @property {string}  [claimSourceReason]  why it could not be read
  * @property {boolean} [midMerge]        a merge is in progress (MERGE_HEAD present)
+ * @property {boolean} [hasUnpushedCommits]  detached HEAD has commits not on any remote
+ * @property {boolean} [unpushedCommitsUnknown]  could not verify whether detached HEAD has unpushed commits
+ */
+
+/**
+ * @typedef {object} OrphanDirInfo
+ * @property {string} path
+ * @property {string} name
+ * @property {"broken-worktree" | "empty-dir" | "unregistered-dir"} kind
+ * @property {number} ageDays
+ * @property {boolean} empty
+ * @property {boolean} pinned
+ * @property {boolean} hasActiveClaim
+ * @property {string | null} [gitdirTarget]
  */
 
 /**
  * Classify one worktree. Pure.
  * @param {WorktreeFacts} facts
- * @param {{ graceDays?: number }} [opts]
+ * @param {{ graceDays?: number, pruneDetached?: boolean, detachedGraceDays?: number }} [opts]
  * @returns {{ verdict: WorktreeVerdict, reason: string, tier: "A" | "B" | null }}
  */
 export function classifyWorktree(facts, opts = {}) {
   const graceDays = opts.graceDays ?? 14;
+  const pruneDetached = opts.pruneDetached === true;
+  const detachedGraceDays = opts.detachedGraceDays ?? graceDays;
 
   if (facts.isRoot) {
     return { verdict: "SKIP", reason: "root clone", tier: null };
   }
   if (!facts.branch) {
-    return { verdict: "SKIP", reason: "detached HEAD", tier: null };
+    if (!pruneDetached) {
+      return { verdict: "SKIP", reason: "detached HEAD", tier: null };
+    }
+    if (facts.pinned) {
+      return { verdict: "PINNED", reason: ".worktree-pinned present (detached HEAD)", tier: null };
+    }
+    if (facts.hasActiveLease) {
+      return {
+        verdict: "KEEP",
+        reason: "detached HEAD active NonProductionEnvironmentLease",
+        tier: null,
+      };
+    }
+    if (facts.hasLiveSession) {
+      return {
+        verdict: "KEEP",
+        reason: "detached HEAD live session heartbeat — refuse to reap an in-use worktree",
+        tier: null,
+      };
+    }
+    if (facts.hasActiveProcessCwd) {
+      return {
+        verdict: "KEEP",
+        reason: "detached HEAD active process CWD — refuse to reap an in-use worktree",
+        tier: null,
+      };
+    }
+    if (facts.isFreshCheckout) {
+      return {
+        verdict: "KEEP",
+        reason: "detached HEAD freshly created checkout — refuse to reap within startup grace",
+        tier: null,
+      };
+    }
+    if (facts.hasActiveClaim) {
+      return {
+        verdict: "KEEP",
+        reason: "detached HEAD claimed by an active Workroom — refuse to reap owned work",
+        tier: null,
+      };
+    }
+    if (facts.claimSourceUnavailable) {
+      return {
+        verdict: "KEEP",
+        reason:
+          `detached HEAD Workroom claims unreadable (${facts.claimSourceReason ?? "unknown"}) — ` +
+          "refusing to reap on absent evidence",
+        tier: null,
+      };
+    }
+    if (facts.midMerge) {
+      return {
+        verdict: "FLAG_ABANDONED_MERGE",
+        reason: "detached HEAD MERGE_HEAD present with no live session — abandoned mid-merge; quarantined for review, never auto-reaped",
+        tier: null,
+      };
+    }
+    if (facts.dirty) {
+      return {
+        verdict: "KEEP",
+        reason: `detached HEAD dirty (${facts.ageDays}d old); refuse auto-reap`,
+        tier: null,
+      };
+    }
+    if (facts.ageDays <= detachedGraceDays) {
+      return {
+        verdict: "KEEP",
+        reason: `detached HEAD ${facts.ageDays}d old (<=${detachedGraceDays}d detached grace)`,
+        tier: null,
+      };
+    }
+    if (!facts.merged && (facts.hasUnpushedCommits === true || facts.unpushedCommitsUnknown === true)) {
+      return {
+        verdict: "PRUNE_TIER_B",
+        reason: `detached HEAD stale ${facts.ageDays}d (>${detachedGraceDays}d), clean, unpushed commits — observe/propose only`,
+        tier: "B",
+      };
+    }
+    return {
+      verdict: "PRUNE_TIER_A",
+      reason: `detached HEAD stale ${facts.ageDays}d (>${detachedGraceDays}d), clean, no unpushed commits, no lease/claim`,
+      tier: "A",
+    };
   }
   if (facts.branch === "main") {
     return { verdict: "SKIP", reason: "on main branch", tier: null };
@@ -80,6 +180,20 @@ export function classifyWorktree(facts, opts = {}) {
     return {
       verdict: "KEEP",
       reason: `branch=${facts.branch} live session heartbeat — refuse to reap an in-use worktree`,
+      tier: null,
+    };
+  }
+  if (facts.hasActiveProcessCwd) {
+    return {
+      verdict: "KEEP",
+      reason: `branch=${facts.branch} active process CWD — refuse to reap an in-use worktree`,
+      tier: null,
+    };
+  }
+  if (facts.isFreshCheckout) {
+    return {
+      verdict: "KEEP",
+      reason: `branch=${facts.branch} freshly created checkout at origin/main — refuse to reap before first commit/claim`,
       tier: null,
     };
   }
@@ -174,8 +288,9 @@ export function isLiveReapEligible(policy, verdict) {
 /**
  * Summarize decisions for JSON / Inngest.
  * @param {Array<{ path: string, branch: string | null, verdict: WorktreeVerdict, reason: string, tier: string | null }>} decisions
+ * @param {OrphanDirInfo[]} [orphanDirs]
  */
-export function summarizeDecisions(decisions) {
+export function summarizeDecisions(decisions, orphanDirs = []) {
   const counts = {
     PRUNE_TIER_A: 0,
     PRUNE_TIER_B: 0,
@@ -194,5 +309,62 @@ export function summarizeDecisions(decisions) {
     flaggedPaths: decisions
       .filter((d) => d.verdict === "FLAG_ABANDONED_MERGE")
       .map((d) => d.path),
+    orphanCount: orphanDirs.length,
+    orphanPaths: orphanDirs.map((o) => o.path),
+  };
+}
+
+/**
+ * Classify an unregistered directory inside the canonical worktree base. Pure.
+ * Returns null when the directory belongs to another git repository (standalone
+ * clone or a linked worktree whose `.git` file points outside this root clone's
+ * `.git/worktrees/`), so foreign checkouts are never misreported as DPF orphans.
+ *
+ * @param {{
+ *   path: string,
+ *   name: string,
+ *   root: string,
+ *   ageDays: number,
+ *   empty: boolean,
+ *   pinned: boolean,
+ *   hasActiveClaim: boolean,
+ *   gitKind: "none" | "dir" | "file",
+ *   gitdirTarget?: string | null,
+ *   gitdirTargetExists?: boolean,
+ * }} input
+ * @returns {OrphanDirInfo | null}
+ */
+export function classifyOrphanDirectory(input) {
+  if (input.gitKind === "dir") {
+    // Standalone git repository parked in the sibling folder — not a DPF orphan.
+    return null;
+  }
+  const normRootGitWorktrees = `${input.root.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase()}/.git/worktrees/`;
+  if (input.gitKind === "file") {
+    const target = (input.gitdirTarget ?? "").replace(/\\/g, "/");
+    if (target && !target.toLowerCase().startsWith(normRootGitWorktrees)) {
+      // Linked worktree belonging to a different repository (e.g. component repo).
+      return null;
+    }
+    return {
+      path: input.path,
+      name: input.name,
+      kind: "broken-worktree",
+      ageDays: input.ageDays,
+      empty: input.empty,
+      pinned: input.pinned,
+      hasActiveClaim: input.hasActiveClaim,
+      gitdirTarget: input.gitdirTarget ?? null,
+    };
+  }
+  return {
+    path: input.path,
+    name: input.name,
+    kind: input.empty ? "empty-dir" : "unregistered-dir",
+    ageDays: input.ageDays,
+    empty: input.empty,
+    pinned: input.pinned,
+    hasActiveClaim: input.hasActiveClaim,
+    gitdirTarget: null,
   };
 }

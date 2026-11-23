@@ -1,0 +1,247 @@
+---
+status: draft
+---
+
+# DPF -> DPF2 Convergence: Production Tenant Record Export Contract & Cutover Readiness
+
+**Date:** 2026-11-22  
+**Scope:** Sister DPF repository readiness for converging live production-tenant operations and platform execution workloads onto DPF2 with zero data loss and zero unverified cutovers.
+
+---
+
+## 1. Operating Guardrails
+
+1. **The live production tenant stays on DPF** as the production test bed until DPF2 proves every cutover gate (record-migration parity, verified restore rehearsal, workload equivalence, and rollback readiness).
+2. **Read-only export posture:** Rehearsal exports MUST execute inside a PostgreSQL `REPEATABLE READ READ ONLY` transaction and read content-addressed blobs via read-only copies. No live production row, sequence, schedule, or blob is mutated.
+3. **Zero committed tenant data or secrets:** No live DB dumps, private tenant customer records, credentials, password hashes, payment tokens, or API tokens may ever be committed to git. Export artifacts live strictly outside version control (e.g. `$DPF_BACKUP_ROOT/dpf2-rehearsal-<YYYY-MM-DD>/`) with owner-only filesystem permissions (`chmod 700`).
+4. **Regenerable projections stay out of the authoritative export:** Postgres rows and content-addressed `DocumentBlob` files are the system of record. Derived `DocumentRendition` projections, Qdrant embeddings, and Neo4j graph projections are regenerated in DPF2 and validated during rehearsal.
+
+---
+
+## 2. Minimal Production-Tenant Record Export Contract (Rehearsal Scope)
+
+The rehearsal bundle exports three bounded, FK-ordered slices from the DPF Postgres database (`packages/db/prisma/schema/`) plus paired content-addressed files from the document blob store (`apps/web/lib/documents/blob-storage.ts`).
+
+### 2.1 Slice 1 — Organization & Principal Identity
+
+Source schema: `packages/db/prisma/schema/core-identity.prisma`.
+
+| Order | Prisma Model (Postgres Table) | Filter / Scope | Natural / Join Key | Explicitly Excluded Columns |
+| --- | --- | --- | --- | --- |
+| 1 | `Organization` (`"Organization"`) | `slug = :org_slug` | `orgId`, `slug`, `id` | None |
+| 2 | `BusinessContext` (`"BusinessContext"`) | `organizationId = :org_id` | `organizationId` (1:1) | None |
+| 3 | `OrgSettings` (`"OrgSettings"`) | Active install row(s) | `id` | None |
+| 4 | `BusinessProfile` (`"BusinessProfile"`) | `isActive = true` | `profileKey` | None |
+| 5 | `OrganizationCapabilityActivation` (`"OrganizationCapabilityActivation"`) | `organizationId = :org_id` | `id` | None |
+| 6 | `Principal` (`"Principal"`) | `status = 'active'` AND referenced by org (`topAccountablePrincipalId`), Slice 2 profiles/versions, or Slice 3 documents/ownership (including `sponsorPrincipalId` closure) | `principalId`, `id` | None |
+| 7 | `PrincipalAlias` (`"PrincipalAlias"`) | `principalId IN (:exported_principals)` | `(aliasType, aliasValue, issuer)` | None |
+| 8 | `AuthorityBinding` + `AuthorityBindingSubject` + `AuthorityBindingGrant` | Active non-revoked bindings for `:exported_principals` | `id` | Never export raw tokens (`McpApiToken`, `ApiToken`, `OAuthClient`, `OAuthAuthorizationCode`, `OAuthRefreshToken`, `PasswordResetToken`) or `User.passwordHash` |
+
+> **Credential hygiene rule:** Authentication secrets and OAuth/MCP bearer tokens are **never** migrated across platforms. DPF2 mints fresh credentials bound to imported `Principal` identities after identity parity is confirmed.
+
+### 2.2 Slice 2 — Active WWWD & WSID Policies
+
+Source schemas: `packages/db/prisma/schema/decision-governance.prisma`, `packages/db/prisma/schema/knowledge-docs.prisma`.
+
+| Order | Prisma Model (Postgres Table) | Filter / Scope | Natural / Join Key | Notes |
+| --- | --- | --- | --- | --- |
+| 9 | `DecisionPerspectiveProfile` (`"DecisionPerspectiveProfile"`) | `status = 'active'` AND (`(kind = 'organization' AND "ownerOrganizationId" = :org_id)` [WWWD] OR `kind = 'profession'` [WSID]) | `profileId` | Preserves `scope`, `fallbackProfileId`, `defaultResolver`, `autonomyPolicy`, `currentVersionId` |
+| 10 | `DecisionPerspectiveProfileVersion` (`"DecisionPerspectiveProfileVersion"`) | `profileId IN (:exported_profiles)` (full lineage or at minimum `currentVersionId`) | `versionId`, `(profileId, versionNumber)` | Preserves `materialFingerprint`, `changeSummary`, `promotedByPrincipalId` |
+| 11 | `PerspectiveMaterial` (`"PerspectiveMaterial"`) | `profileId IN (:exported_profiles)` AND `freshness = 'current'` AND `reviewStatus <> 'rejected'` AND `promotionState IN ('promoted', 'candidate')` | `materialId` | Preserves `sourceType`, `sourceRef`, `domainClass`, `direction`, `domains`, `evidenceGrade`, `stalenessPolicy`, `confidenceWeight`, `summary` |
+| 12 | `WikiPage` (`"WikiPage"`) | (`organizationId = :org_id` AND `status = 'published'` [WWWD overlays]) OR (`id IN (:material_referenced_page_ids)` [WSID profession pages carrying `metadata.professionJurisdiction` / `professionCompetencyLevel`]) | `(organizationId, slug)` / `id` | Base `isKernel = true` pages come from DPF2's kernel seed; org overrides retain `kernelPageId` + `derivedFromKernelVersion` |
+| 13 | `WikiPageRevision` + `WikiPageLink` | Latest revision per exported `WikiPage`; links where both endpoints are in exported `WikiPage` set | `pageId` | Maintains citation graph for PPR / wiki backlinks |
+| 14 | `RegulatoryAutonomyPolicy` + `JurisdictionCriteriaProfile` | Active policies matching `BusinessContext.operatesIn` / `sellsTo` / `employsIn` | `id` | Preserves org regulatory autonomy boundaries |
+
+### 2.3 Slice 3 — One Recurring Customer Commitment & Document Workflow
+
+Source schemas: `packages/db/prisma/schema/crm-commerce.prisma`, `packages/db/prisma/schema/finance.prisma`, `packages/db/prisma/schema/knowledge-docs.prisma`.
+
+Select **one** representative active customer commitment chain (`CustomerAccount` -> `Subscription` -> `RecurringSchedule` -> `Invoice` -> `InvoiceDocument` -> `Document`/`DocumentVersion`/`DocumentBlob`). This single bounded graph exercises commercial party identity, recurring schedule state, regulated financial immutability (`minYears=7`), and content-addressed file custody without exporting the full customer ledger.
+
+| Order | Prisma Model (Postgres Table) | Filter / Scope | Natural / Join Key | Redaction / Rehearsal Hygiene |
+| --- | --- | --- | --- | --- |
+| 15 | `CustomerAccount` (`"CustomerAccount"`) | `id = :rehearsal_account_id` AND `status = 'active'` AND `"mergedIntoId" IS NULL` | `accountId`, `id` | Never committed; stays in local rehearsal bundle only |
+| 16 | `CustomerContact` + `ContactAccountRole` | `accountId = :rehearsal_account_id` AND `isActive = true` | `email`, `id` | **Exclude `passwordHash`** |
+| 17 | `Subscription` (`"Subscription"`) | `accountId = :rehearsal_account_id` AND `status = 'active'` (1 chosen active contract) | `subscriptionRef`, `id` | Optional `SalesOrder`/`Quote` ref exported as metadata if linked |
+| 18 | `RecurringSchedule` + `RecurringLineItem` | `accountId = :rehearsal_account_id` AND `status = 'active'` (matching `:rehearsal_schedule_id`, linked via `subscriptionId` where present) | `scheduleId`, `id` | Preserves `frequency`, `nextInvoiceDate`, `lastInvoicedAt`, `autoSend`, `recurrenceScheduleId` |
+| 19 | `Invoice` + `InvoiceLineItem` | `sourceType = 'recurring'` AND `sourceId = :rehearsal_schedule_id` (most recent 1–3 cycles) | `invoiceRef`, `id` | **Exclude/null `payToken` and `signatureDataUrl` if unneeded for dry-run** so live customer payment URLs cannot collide |
+| 20 | `InvoiceDocument` (`"InvoiceDocument"`) | `invoiceId IN (:exported_invoice_ids)` | `(invoiceId, role, revision)` | Write-once binding to `DocumentVersion.id` (`sent-copy` / `signed-copy`) |
+| 21 | `Document` (`"Document"`) | `id IN (SELECT "documentId" FROM "DocumentVersion" WHERE id IN (:exported_doc_version_ids))` | `documentId`, `id` | Preserves `currentVersionId`, `currentState`, `accessScope`, `classification` |
+| 22 | `DocumentVersion` (`"DocumentVersion"`) | All versions referenced by `InvoiceDocument` or `Document.currentVersionId` | `(documentId, version)`, `id` | Preserves `contentSha256`, `sizeBytes`, `contentBlobId` |
+| 23 | `DocumentBlob` (`"DocumentBlob"`) | `id IN (:exported_blob_ids)` | `sha256`, `storageKey` | Paired with raw bytes copied read-only from `<BLOB_ROOT>/<storageKey>` (`documents/sha256/<aa>/<bb>/<sha256>`) |
+| 24 | `DocumentLifecycleEvent`, `DocumentTag`, `DocumentReference`, `DocumentAccessGrant` | `documentId IN (:exported_document_ids)` | `id` | Preserves document audit & access metadata |
+
+### 2.4 Read-Only Export Command & Manifest
+
+Reuses DPF's verified backup posture (`scripts/backup-postgres.sh`, `scripts/postgres-trial-restore.sh`): point-in-time read-only snapshot, SHA-256 checksums, zero writes to production Postgres, and explicit secret-column exclusion.
+
+```bash
+#!/usr/bin/env bash
+# Read-only rehearsal export (run locally; NEVER commit EXPORT_DIR).
+set -euo pipefail
+
+: "${DPF_PRODUCTION_DB_CONTAINER:=dpf-postgres-1}"
+: "${POSTGRES_USER:=dpf}"
+: "${POSTGRES_DB:=dpf}"
+: "${ORG_SLUG:?Set ORG_SLUG (target organization slug)}"
+: "${REHEARSAL_SCHEDULE_ID:?Set REHEARSAL_SCHEDULE_ID (RecurringSchedule.scheduleId)}"
+: "${UPLOAD_STORAGE_PATH:=./data/uploads}"
+: "${DPF_BACKUP_ROOT:?Set DPF_BACKUP_ROOT outside git tracking}"
+: "${EXPORT_DIR:=$DPF_BACKUP_ROOT/dpf2-rehearsal-$(date -u +%Y-%m-%d)}"
+
+umask 077
+mkdir -p "$EXPORT_DIR/tables" "$EXPORT_DIR/blobs"
+
+# Single REPEATABLE READ READ ONLY snapshot transaction exporting NDJSON summary
+# and blob manifest. Every query omits secret columns (passwordHash, payToken,
+# and API/OAuth tokens).
+docker exec -i "$DPF_PRODUCTION_DB_CONTAINER" \
+  psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 \
+  -v org_slug="$ORG_SLUG" -v schedule_id="$REHEARSAL_SCHEDULE_ID" \
+  --tuples-only --no-align <<'SQL' > "$EXPORT_DIR/snapshot.ndjson"
+BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY;
+
+WITH target_org AS (
+  SELECT id FROM "Organization" WHERE slug = :'org_slug' LIMIT 1
+),
+target_sched AS (
+  SELECT id, "accountId", "subscriptionId"
+  FROM "RecurringSchedule"
+  WHERE "scheduleId" = :'schedule_id' AND status = 'active'
+  LIMIT 1
+),
+target_invoices AS (
+  SELECT id FROM "Invoice"
+  WHERE "sourceType" = 'recurring'
+    AND "sourceId" IN (SELECT id FROM target_sched)
+  ORDER BY "issueDate" DESC
+  LIMIT 3
+),
+target_doc_versions AS (
+  SELECT DISTINCT "documentVersionId" AS id
+  FROM "InvoiceDocument"
+  WHERE "invoiceId" IN (SELECT id FROM target_invoices)
+),
+target_docs AS (
+  SELECT DISTINCT "documentId" AS id
+  FROM "DocumentVersion"
+  WHERE id IN (SELECT id FROM target_doc_versions)
+),
+target_profiles AS (
+  SELECT "profileId"
+  FROM "DecisionPerspectiveProfile"
+  WHERE status = 'active'
+    AND (
+      (kind = 'organization' AND "ownerOrganizationId" IN (SELECT id FROM target_org))
+      OR kind = 'profession'
+    )
+)
+SELECT json_build_object(
+  'contractVersion', '1.0',
+  'exportedAt', now(),
+  'schemaMigrationHead', (SELECT migration_name FROM _prisma_migrations ORDER BY finished_at DESC NULLS LAST LIMIT 1),
+  'counts', json_build_object(
+    'Organization', (SELECT count(*) FROM target_org),
+    'DecisionPerspectiveProfile', (SELECT count(*) FROM target_profiles),
+    'RecurringSchedule', (SELECT count(*) FROM target_sched),
+    'Invoice', (SELECT count(*) FROM target_invoices),
+    'Document', (SELECT count(*) FROM target_docs),
+    'DocumentVersion', (SELECT count(*) FROM target_doc_versions)
+  ),
+  'blobStorageKeys', (
+    SELECT coalesce(json_agg(json_build_object('id', b.id, 'sha256', b.sha256, 'storageKey', b."storageKey", 'sizeBytes', b."sizeBytes")), '[]'::json)
+    FROM "DocumentBlob" b
+    WHERE b.id IN (SELECT "contentBlobId" FROM "DocumentVersion" WHERE id IN (SELECT id FROM target_doc_versions) AND "contentBlobId" IS NOT NULL)
+  )
+);
+
+COMMIT;
+SQL
+
+# Verify every exported blob byte-for-byte against DocumentBlob.sha256 (read-only copy).
+# Storage root resolution matches apps/web/lib/documents/blob-storage.ts:
+# PlatformConfig(key='upload_storage_path') -> UPLOAD_STORAGE_PATH -> ./data/uploads
+sha256sum "$EXPORT_DIR/snapshot.ndjson" > "$EXPORT_DIR/snapshot.ndjson.sha256"
+```
+
+*(Full table-by-table `COPY (SELECT ...) TO STDOUT` / JSONL extraction uses the same `REPEATABLE READ READ ONLY` transaction boundary and CTEs above, writing one file per table under `$EXPORT_DIR/tables/<Model>.jsonl`, copying each referenced `documents/sha256/<aa>/<bb>/<sha256>` file read-only into `$EXPORT_DIR/blobs/`, verifying `sha256sum`, and emitting `$EXPORT_DIR/manifest.json`.)*
+
+### 2.5 Rehearsal Restore & Parity Verification Gates
+
+Before ANY live tenant cutover is considered, DPF2 must pass all five rehearsal gates against an ephemeral staging database (`dpf2_rehearsal_<ts>`):
+
+1. **FK & Schema Integrity Gate:** Every table in Slices 1–3 imports cleanly in topological order with zero dangling FKs, zero constraint violations, and exact row-count parity against `manifest.json`.
+2. **Blob Custody Gate:** Every `DocumentBlob` file restores to DPF2's content-addressed store and passes SHA-256 verification against `DocumentVersion.contentSha256` and `DocumentBlob.sha256`.
+3. **Policy Evaluation Parity Gate:** Active WWWD (`kind = 'organization'`) and WSID (`kind = 'profession'`) profiles resolve identical `currentVersion.materialFingerprint`, `autonomyPolicy`, and `PerspectiveMaterial` sets, and sample `evaluate_org_business_decision` / `principle_decide` decisions produce equivalent outcomes against DPF.
+4. **Recurring Workflow Dry-Run Parity Gate:** Running DPF2's equivalent of `generateDueInvoices()` (`apps/web/lib/actions/recurring.ts`) in dry-run / outbound-disabled mode on the restored `RecurringSchedule` computes the exact next invoice date, line-item totals, tax calculation, and immutable `InvoiceDocument` linkage without sending any external email or payment notice.
+5. **Rollback Proof Gate:** DPF's own `scripts/backup-postgres.sh` + `scripts/postgres-trial-restore.sh` pass with exit code `0` within 24h prior to any stage transition.
+
+---
+
+## 3. Live DPF Execution Seams & Concrete Cutover Preconditions
+
+DPF executes autonomous and background work across four primary runtime seams. Each seam MUST retire independently in reverse-risk order and ONLY after its explicit preconditions are verified.
+
+### 3.1 `runBuildOrchestrator` (Build Specialist Dispatch)
+
+- **Code seam:** `apps/web/lib/build/build-orchestrator.ts` (`runBuildOrchestrator` at line 1156, `runGauntletRepairTask` at line 1166, wrapped in `withOrchestrationRunning` from `build-liveness.ts`).
+- **Call sites:** `apps/web/lib/build/build-on-plan-approval.ts:136`, `apps/web/lib/actions/agent-coworker.ts:1729`.
+- **State touched:** `FeatureBuild` (`buildPlan`, `sandboxId`, `sandboxPort`), `TaskRun`, `TaskNode`/`TaskNodeEdge`, `BuildActivity`, `agentEventBus`, sandbox container (`SANDBOX_CONTAINER_ID` / `SANDBOX_PORT`).
+- **Cutover preconditions:**
+  1. Zero in-flight orchestrations (`TaskRun` where `source = 'build'` and `status NOT IN ('completed','failed','canceled','rejected','archived')` = `0`).
+  2. All open `FeatureBuild` records in `building` / `implementing` phase either completed, promoted, or explicitly parked with recorded handoff notes.
+  3. DPF2 proves end-to-end plan -> specialist dispatch -> verification -> PR delivery parity on a non-production repo/branch.
+  4. Build admission disabled on DPF before disabling the seam so no new plan approval triggers `runBuildOrchestrator` during cutover.
+
+### 3.2 `drive_workroom_runtime` (Supervised Workroom Runtime & Standing Drive)
+
+- **Code seams:**
+  - MCP tool handler: `apps/web/lib/workroom-runtime/runtime-tools.ts` (`driveWorkroomRuntimeTool` at line 61, `approveRuntimePermissionTool` at line 101, `reattachSupervisedSessionsOnBoot` at line 47), registered in `apps/web/lib/mcp/packs/work-capsules-pack.ts:378`.
+  - Process-local supervisor singleton: `globalThis.__dpfWorkroomRuntime` (`apps/web/lib/workroom-runtime/supervisor.ts`), driving `codex` / `claude` adapters with scoped `workroom_session` tokens (`McpApiToken.kind = 'workroom_session'`).
+  - Transactional outbox & standing cron: `WorkroomEffect` (`packages/db/prisma/schema/work-coordination.prisma:552`, `effect-worker.server.ts`) and 15-minute standing drive (`apps/web/lib/queue/functions/workroom-drive.ts`).
+- **Cutover preconditions:**
+  1. Zero active supervised sessions (`drive_workroom_runtime action=status` reports no live sessions across all non-terminal `Workroom` rows).
+  2. Zero unsettled `WorkroomEffect` rows (`status IN ('pending', 'running')` = `0`).
+  3. Zero non-revoked `McpApiToken` rows with `kind = 'workroom_session'`.
+  4. All active `Workroom` claims reconciled (either terminalized or migrated to DPF2) AND DPF2 proves fail-closed worktree liveness parity (worktree janitor never reaps claimed worktrees when liveness is unreadable).
+  5. Standing drive cron (`workroomDriveScheduled`) disabled via per-job kill switch before shutting down the DPF supervisor.
+
+### 3.3 `autoExecuteBuild` (Checkpoint Build Pipeline & Boot Reconciler)
+
+- **Code seams:**
+  - Launcher: `apps/web/lib/actions/build.ts:700` (`autoExecuteBuild`), called from server actions (`:673`, `:856`, `:886`, `:1120`) and the portal boot reconciler (`apps/web/instrumentation.ts:531-660`).
+  - Durable path: gated by `DPF_BUILD_DURABLE_EXECUTION_ENABLED` (`apps/web/lib/build/build-execute-helpers.ts:21`) -> sends `build/execute.run` with deterministic idempotency key `buildExecuteSendId(buildId, state)` to `apps/web/lib/queue/functions/build-execute.ts:36` (`concurrency: [{ key: "event.data.buildId", limit: 1 }]`, `retries: 3`, quiescence via `gateBetweenSteps`).
+  - Legacy in-process path: runs `runBuildPipeline` (`apps/web/lib/build/build-pipeline.ts`) when `DPF_BUILD_DURABLE_EXECUTION_ENABLED` is off.
+- **Cutover preconditions:**
+  1. Zero `FeatureBuild` rows with non-terminal `buildExecState.step` (i.e. `step NOT IN ('complete', 'failed')` = `0`).
+  2. Zero active `SandboxSlot` leases and zero active `NonProductionEnvironmentLease` rows.
+  3. Zero pending/running `build/execute` runs in Inngest / Postgres jobs queue.
+  4. DPF2 proves durable step-checkpoint crash recovery (mid-build process restart resumes without duplicate dispatch or orphaned sandbox slot) AND upgrade quiescence (`defer-not-skip`) parity.
+  5. Boot reconciler (`instrumentation.ts` build re-dispatch) confirmed idle (zero resumable rows) prior to retirement.
+
+### 3.4 Inngest & Redis Queues (Durable Job Engine & Cron Fleet)
+
+- **Code & infrastructure seams:**
+  - Job facade & engine router: `apps/web/lib/jobs/routing.ts` (`DPF_JOBS_ENGINE=inngest|postgres`, `DPF_JOBS_POSTGRES_FUNCTIONS=<comma-list>`), `apps/web/lib/jobs/inngest-adapter.ts`, Postgres job tables (`packages/db/prisma/schema/jobs.prisma`: `JobEvent`, `JobRun`, `JobStep`, `JobWait`, `JobConcurrencySlot`, `JobCronState`).
+  - Function registry: `apps/web/lib/queue/functions/index.ts` — 92 `scheduledFunctions` (master-gated by `DPF_SCHEDULED_INNGEST_FUNCTIONS_ENABLED`, line 348) and 65 `eventFunctions`, including business-critical jobs (`finance/recurring-invoice-dispatch`, `mailroom-poll`, `marketing-scheduler-dispatch`, `postgres-daily-backup`, `workroom-drive`, `worktree-janitor`, `inngest-retention-sweep`).
+  - Runtime containers: `inngest/inngest:v1.36.0` backed by `INNGEST_POSTGRES_URI=.../inngest` (separate `db=inngest`) and `INNGEST_REDIS_URI=redis://redis:6379` (`redis:7-alpine`, `docker-compose.yml:1061-1145`), bounded by `apps/web/lib/operate/inngest-retention/`.
+- **Cutover preconditions (staged per workload domain — never big-bang):**
+  1. **Quiescence & Kill-Switch Proof:** Verify `quiescenceRun` / `gateAtEntry` pauses all DPF crons cleanly (`apps/web/lib/queue/quiescence-gates.ts`) without dropping in-flight `gateBetweenSteps` work.
+  2. **Per-Domain Shadow & Idempotency Parity:** Every business-facing cron (`finance/recurring-invoice-dispatch`, `mailroom-poll`, `marketing-scheduler-dispatch`, `obligation-assurance-watch`, `postgres-daily-backup`) must have an explicit DPF2 owner that has passed shadow dry-run parity and idempotent dedupe verification before its DPF counterpart is disabled.
+  3. **Queue Drain Verification:** Before stopping `inngest` and `redis` on DPF:
+     - `DPF_SCHEDULED_INNGEST_FUNCTIONS_ENABLED=0` active on DPF portal.
+     - Active/running `function_runs` in `db=inngest` = `0` and Postgres `JobRun` with `status IN ('pending','running')` = `0`.
+     - Redis `{queue}:queue:sorted:*` pending partitions drained to `0` (verified via retention/poison-queue check).
+     - `inngest-retention-sweep` confirms zero stuck Redis-TTL orphans.
+  4. **Final Backup & Cold-Standby Rollback Window:** Execute a final verified `scripts/backup-postgres.sh` + `scripts/postgres-trial-restore.sh` immediately after quiescence and before promoting DPF2 to primary. Retain DPF Postgres + backup archive in cold read-only standby until DPF2 completes **two** clean recurring business cycles with zero incidents.
+
+---
+
+## 4. Phased Cutover Sequence (Go / No-Go Summary)
+
+| Phase | Target | DPF Posture | DPF2 Gate Required to Advance |
+| --- | --- | --- | --- |
+| **Phase 0 (Now)** | Record Export & Restore Rehearsal | 100% live primary for production tenant | Slices 1–3 exported read-only; restored to ephemeral DPF2 DB; all 5 rehearsal gates (§2.5) pass |
+| **Phase 1** | Shadow Policy & Dry-Run Workflow Parity | 100% live primary (outbound active) | WWWD/WSID decisions + dry-run recurring invoice/document generation match DPF on restored snapshot; zero external side effects from DPF2 |
+| **Phase 2** | Dev / Build / Workroom Seams (`runBuildOrchestrator`, `autoExecuteBuild`, `drive_workroom_runtime`) | Live for business ops; dev seams drained | DPF2 proves build checkpoint recovery, supervised workroom runtime, and fail-closed worktree liveness; DPF dev seams drained to zero in-flight runs |
+| **Phase 3** | Business Queues & Production Primary Promotion | Quiesced -> cold read-only standby | Final verified DPF backup + trial restore; `DPF_SCHEDULED_INNGEST_FUNCTIONS_ENABLED=0`; Inngest + Redis queues drained to 0; DPF2 assumes primary and passes 2 consecutive recurring cycles before DPF teardown |
