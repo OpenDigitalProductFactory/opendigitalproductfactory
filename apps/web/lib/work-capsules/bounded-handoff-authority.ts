@@ -8,6 +8,9 @@ import type { CapsuleDb, WorkCapsuleActor } from "./work-capsule-store-types";
 const EXTERNAL_SURFACES: Readonly<Record<string, string>> = {
   "AGT-EXT-CLAUDE": "claude-desktop", "AGT-EXT-CODEX": "codex-desktop", "AGT-EXT-GROK": "grok-desktop",
 };
+export function externalAgentForSurface(executorKind: string): string | undefined {
+  return Object.keys(EXTERNAL_SURFACES).find(agentId => EXTERNAL_SURFACES[agentId] === executorKind);
+}
 export type HandoffRoom = Record<string, unknown> & {
   id: string; capsuleId: string; executorKind: string | null; executorRef: string | null;
   leaseHolderPrincipalId: string | null; leaseExpiresAt: Date | null;

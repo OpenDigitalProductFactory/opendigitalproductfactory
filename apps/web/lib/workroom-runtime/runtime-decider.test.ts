@@ -53,7 +53,7 @@ describe("decideRuntimeCommand", () => {
     const s = session({ activeTurnId: "turn-1", queuedInputs: [{ commandId: "a", prompt: "first" }, { commandId: "b", prompt: "second" }] });
     const done = decide(s, { type: "runtime.event", generation: "gen-1", event: { type: "turn-completed", turnId: "turn-1", status: "failed", error: "usage limit" }, at: AT });
     expect(done.effects).toEqual([
-      { kind: "record-plan-limit", payload: { provider: "codex", error: "usage limit" } },
+      { kind: "record-plan-limit", payload: expect.objectContaining({ provider: "codex", error: "usage limit", observedAt: expect.any(String), generation: expect.any(String) }) },
       { kind: "start-turn", payload: { prompt: "first", commandId: "a" } },
     ]);
     expect(done.session).toMatchObject({ activeTurnId: null, inFlight: { commandId: "a" }, queuedInputs: [{ commandId: "b", prompt: "second" }] });

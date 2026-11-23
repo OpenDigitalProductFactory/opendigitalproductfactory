@@ -31,9 +31,7 @@ const EXECUTOR_LABEL: Readonly<Record<string, string>> = {
 /** Capacity states that mean the plan cannot serve now and says when it may. */
 const LIMIT_STATES = new Set(["quota_resets_at", "rate_limited"]);
 /** States that rule a surface out as an alternative, with or without a reset. */
-const UNAVAILABLE_STATES = new Set([...LIMIT_STATES, "reauth_required", "billing_action_required"]);
-/** A lease renewal this long after a checkpoint's capacity note supersedes it. */
-const CHECKPOINT_SUPERSEDED_AFTER_MS = 60_000;
+const UNAVAILABLE_STATES = new Set([...LIMIT_STATES, "cooling_down", "reauth_required", "billing_action_required", "unsupported_plan"]);
 
 export type ProviderCapacityRow = {
   providerId: string | null;
@@ -46,7 +44,7 @@ export type ProviderCapacityRow = {
 /** What an executor (or the harness running it) recorded on its heartbeat. */
 export type CheckpointCapacity = { provider: string; resetAt: string; note?: string; recordedAt?: string };
 
-export type CapacityAlternative = { executorKind: string; label: string; step: string };
+export type CapacityAlternative = { executorKind: string; label: string; step: string; connectionId?: string };
 export type CapacityWait = {
   executorKind: string;
   provider: string;
@@ -66,10 +64,45 @@ function limitedRow(row: ProviderCapacityRow | undefined, now: Date, holdMs = 0)
   return !(row.lastSuccessAt && row.lastObservedAt && row.lastSuccessAt.getTime() > row.lastObservedAt.getTime());
 }
 
-function unavailable(row: ProviderCapacityRow | undefined, now: Date): boolean {
+export function unavailable(row: ProviderCapacityRow | undefined | null, now: Date): boolean {
   if (!row || !UNAVAILABLE_STATES.has(row.state)) return false;
-  if (LIMIT_STATES.has(row.state)) return limitedRow(row, now);
+  if (LIMIT_STATES.has(row.state) || row.state === "cooling_down") {
+    return !providerRecoveredAfter(row, row.lastObservedAt?.getTime() ?? -Infinity)
+      && (!row.retryAt || row.retryAt > now);
+  }
   return true;
+}
+
+export function providerRecoveredAfter(row: ProviderCapacityRow | undefined | null, observedAt: number): boolean {
+  return !!row?.lastSuccessAt && row.lastSuccessAt.getTime() > Math.max(observedAt, row.lastObservedAt?.getTime() ?? -Infinity)
+    || row?.state === "available" && (row.lastObservedAt?.getTime() ?? -Infinity) > observedAt;
+}
+
+export function executorResumedAfter(leaseExpiresAt: Date | null, lastActivityAt: Date | null | undefined, observedAt: number): boolean {
+  return (leaseExpiresAt?.getTime() ?? -Infinity) - LEASE_TTL_MS > observedAt
+    || (lastActivityAt?.getTime() ?? -Infinity) > observedAt;
+}
+
+export function capacityAlternatives(input: {
+  executorKind: string;
+  now: Date;
+  providerRows: readonly ProviderCapacityRow[];
+  costRank?: Readonly<Record<string, number>>;
+  connections?: readonly { executorKind: string; connectionId: string; capacity: readonly (ProviderCapacityRow | null)[] }[];
+}): CapacityAlternative[] {
+  const { executorKind, now, providerRows, costRank, connections = [] } = input;
+  const kinds = Object.keys(EXECUTOR_PLAN_PROVIDER).filter(kind => kind !== executorKind)
+    .sort((a, b) => (costRank?.[a] ?? Number.MAX_SAFE_INTEGER) - (costRank?.[b] ?? Number.MAX_SAFE_INTEGER));
+  const available = kinds.filter(kind => !unavailable(providerRows.find(row => row.providerId === EXECUTOR_PLAN_PROVIDER[kind]), now));
+  const alternative = (kind: string, connectionId?: string): CapacityAlternative => ({
+    executorKind: kind, label: EXECUTOR_LABEL[kind], ...(connectionId ? { connectionId } : {}),
+    step: `reassign_workroom_executor phase "request" to ${connectionId ?? kind}; the receiving ${EXECUTOR_LABEL[kind]} session acknowledges. Same owner and scope, so no approval.`,
+  });
+  return [
+    ...available.flatMap(kind => connections.filter(connection => connection.executorKind === kind
+      && connection.capacity.every(row => !unavailable(row, now))).map(connection => alternative(kind, connection.connectionId))),
+    ...available.map(kind => alternative(kind)),
+  ];
 }
 
 export function parseCheckpointCapacity(input: unknown): ActionResult<CheckpointCapacity> {
@@ -91,6 +124,7 @@ export function capacityWaitFor(input: {
   leaseExpiresAt: Date | null;
   now: Date;
   providerRows: readonly ProviderCapacityRow[];
+  lastActivityAt?: Date | null;
   checkpoint?: { capacity?: CheckpointCapacity; recordedAt?: string } | null;
   /** Lower first: estimated cost per unit by executor kind, when the estimator has one. */
   costRank?: Readonly<Record<string, number>>;
@@ -108,23 +142,19 @@ export function capacityWaitFor(input: {
   const noted = input.checkpoint?.capacity;
   const notedAtText = noted?.recordedAt ?? input.checkpoint?.recordedAt;
   const notedAt = notedAtText ? Date.parse(notedAtText) : NaN;
-  const lastRenewal = leaseExpiresAt ? leaseExpiresAt.getTime() - LEASE_TTL_MS : NaN;
   if (noted && Number.isFinite(notedAt) && Date.parse(noted.resetAt) + graceMs > now.getTime()
-    && !(Number.isFinite(lastRenewal) && lastRenewal > notedAt + CHECKPOINT_SUPERSEDED_AFTER_MS)) {
+    && !executorResumedAfter(leaseExpiresAt, input.lastActivityAt, notedAt)
+    && !providerRecoveredAfter(byProvider.get(noted.provider), notedAt)) {
     wait = { provider: noted.provider, resetAt: new Date(noted.resetAt), source: "executor-checkpoint" };
   }
   const row = byProvider.get(provider);
-  if (!wait && limitedRow(row, now, graceMs)) wait = { provider, resetAt: row.retryAt, source: "provider-capacity" };
+  if (!wait && limitedRow(row, now, graceMs)
+    && !executorResumedAfter(leaseExpiresAt, input.lastActivityAt, row.lastObservedAt?.getTime() ?? Infinity)) {
+    wait = { provider, resetAt: row.retryAt, source: "provider-capacity" };
+  }
   if (!wait) return null;
 
-  const alternatives = Object.keys(EXECUTOR_PLAN_PROVIDER)
-    .filter((kind) => kind !== executorKind && !unavailable(byProvider.get(EXECUTOR_PLAN_PROVIDER[kind]), now))
-    .sort((a, b) => (input.costRank?.[a] ?? Number.MAX_SAFE_INTEGER) - (input.costRank?.[b] ?? Number.MAX_SAFE_INTEGER))
-    .map((kind) => ({
-      executorKind: kind,
-      label: EXECUTOR_LABEL[kind],
-      step: `reassign_workroom_executor phase "request" to ${kind}; the receiving ${EXECUTOR_LABEL[kind]} session acknowledges. Same owner and scope, so no approval.`,
-    }));
+  const alternatives = capacityAlternatives({ ...input, executorKind });
   return { executorKind, label: EXECUTOR_LABEL[executorKind], ...wait, alternatives };
 }
 
@@ -158,6 +188,13 @@ export function checkpointOf(workspaceState: unknown): { capacity?: CheckpointCa
     ...(capacity?.ok ? { capacity: capacity.data } : {}),
     ...(typeof record.recordedAt === "string" ? { recordedAt: record.recordedAt } : {}),
   };
+}
+
+export function latestExecutorActivity(workspaceState: unknown, lastSyncedAt: Date | null): Date | null {
+  if (!workspaceState || typeof workspaceState !== "object") return lastSyncedAt;
+  const session = (workspaceState as { runtimeSession?: { lastHeartbeatAt?: string } }).runtimeSession;
+  const heartbeat = Date.parse(session?.lastHeartbeatAt ?? "");
+  return heartbeat > (lastSyncedAt?.getTime() ?? -Infinity) ? new Date(heartbeat) : lastSyncedAt;
 }
 
 type CapacityReader = { providerCapacityStatus?: { findMany(args: unknown): Promise<ProviderCapacityRow[]> } };

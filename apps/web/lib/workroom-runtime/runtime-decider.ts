@@ -136,7 +136,8 @@ function decideEvent(s: StoredRuntimeSession, generation: string, event: Runtime
       return { activities: [runtime("action", `${provider} started a turn`, { turnId: event.turnId, provider })],
         session: { ...started(s, event.turnId), activeTurnId: event.turnId, lastHeartbeatAt: at }, effects: [], reply: {} };
     case "message":
-      return { activities: [runtime("response", event.text, { turnId: event.turnId, provider })], effects: [], reply: {} };
+      return { activities: [runtime("response", event.text, { turnId: event.turnId, provider })],
+        session: { ...s, lastHeartbeatAt: at }, effects: [], reply: {} };
     case "usage":
       // Recorded as the client reported it; unknown usage stays unknown (S4 feeds the per-instance window store).
       return { activities: [runtime("action", event.usage.reported === "native"
@@ -149,7 +150,7 @@ function decideEvent(s: StoredRuntimeSession, generation: string, event: Runtime
         activities: [runtime(failed ? "error" : "response", failed ? `Turn failed: ${event.error ?? "no detail"}` : `Turn ${event.status}.`,
           { turnId: event.turnId, status: event.status, provider })],
         session: next.session,
-        effects: [...(failed ? [{ kind: "record-plan-limit" as const, payload: { provider, error: event.error ?? null } }] : []), ...next.effects],
+        effects: [...(failed ? [{ kind: "record-plan-limit" as const, payload: { provider, error: event.error ?? null, observedAt: at, generation } }] : []), ...next.effects],
         reply: {},
       };
     }

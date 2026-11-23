@@ -267,7 +267,7 @@ Each slice is its own backlog item, sized delivery-medium or smaller, in this or
 | S1 | BI-53BED66C | T3 as a first-class executor (built) | none |
 | S2 | BI-C64EDA33 | Workroom runtime core: decide/commit/outbox, deterministic ids, retire-not-replay | S1 |
 | S3 | BI-A01B06F6 | One driver per client, instance routing; collapse the three client paths | S2 |
-| S4 | BI-1E498941 | Per-instance plan windows, per-turn usage, history importer, guarded resume and reroute; one store replaces two. Absorbs open BI-02A513D1 | S3 |
+| S4 | BI-1E498941 | First PR records the same-owner handoff offer at a plan limit, with guarded wait clearing and receiver acknowledgement still required. Per-instance plan windows, per-turn usage, history importer and replacement of both capacity stores remain. Absorbs open BI-02A513D1 | S3 |
 | S5 | BI-687E7D81 | Workroom-bound toolset and per-session ceiling (first slice of BI-3E2B7A96) | S3 |
 | S6 | BI-5A866218 | Execution hosts: registry, host runtime, route lists, narrowing links. Extends the per-user host service from BI-65C17737 | S3, S4 |
 | S7 | BI-2C132569 | Context-handoff record; checkpoints and safe revert | S2, S3 |

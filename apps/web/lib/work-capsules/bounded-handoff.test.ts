@@ -25,7 +25,9 @@ function database() {
     create: vi.fn(async ({ data }: { data: Record<string, unknown> }) => { const row = { id: "activity-" + activities.length, ...JSON.parse(JSON.stringify(data)) }; activities.push(row); return row; }),
     findFirst: vi.fn(async ({ where, orderBy }: any) => (orderBy ? [...activities].reverse() : activities).find((row) => row.workCapsuleId === where.workCapsuleId && row.kind === where.kind && (!where.id || row.id === where.id) && (!where.commandScopeKey || row.commandScopeKey === where.commandScopeKey) && (!where.commandKey || row.commandKey === where.commandKey) && (!where.AND || where.AND.every((clause: any) => clause.payload.path.reduce((value: any, key: string) => value?.[key], row.payload) === clause.payload.equals))) ?? null),
     findMany: vi.fn(async ({ where, take }: any) => [...activities].reverse().filter(row => row.workCapsuleId === where.workCapsuleId && row.kind === where.kind && (!where.AND || where.AND.every((clause: any) => clause.payload.path.reduce((value: any, key: string) => value?.[key], row.payload) === clause.payload.equals))).slice(0, take)),
-  }, workroomParticipant: { findMany: vi.fn(async () => roster), create: vi.fn(), update: vi.fn() }, $queryRaw: vi.fn(async (sql: TemplateStringsArray, ...values: unknown[]) => sql.join("").includes("clock_timestamp") ? [{ now: state.now }]
+  }, providerCapacityStatus: { findMany: vi.fn(async (): Promise<unknown[]> => []) },
+  aiProviderConnection: { findMany: vi.fn(async () => []) },
+  workroomParticipant: { findMany: vi.fn(async () => roster), create: vi.fn(), update: vi.fn() }, $queryRaw: vi.fn(async (sql: TemplateStringsArray, ...values: unknown[]) => sql.join("").includes("clock_timestamp") ? [{ now: state.now }]
     : sql.join("").includes('SELECT "kind" FROM "Principal"') ? (state.principalKinds[String(values[0])] ? [{ kind: state.principalKinds[String(values[0])] }] : []) : []) };
   mocks.access.mockImplementation(async ({ agentId }: { agentId: string }) => {
     const id = agentId === "AGT-EXT-CLAUDE" ? "claude" : "codex";
@@ -48,6 +50,21 @@ async function pending(env: ReturnType<typeof database>) { const result = await 
 const ack = (requestId: string, commandId = "ack-1") => ({ phase: "acknowledge", commandId, capsuleId: "WC-1", requestId });
 beforeEach(() => { vi.clearAllMocks(); mocks.bound.mockReturnValue(true); mocks.dependencies.mockResolvedValue(undefined); });
 describe("bounded receiver handoff", () => {
+  it("records a limit request while the source lease is live and refuses its ACK after recovery", async () => {
+    const env = database();
+    const capacity = { provider: "anthropic-sub", resetAt: "2026-10-24T12:00:00.000Z", recordedAt: NOW.toISOString() };
+    env.room.workspaceState = { executorCheckpoint: { capacity } };
+    const pending = await execute(env, { ...request, toExecutorRef: "codex-desktop", handoffManifest: {
+      ...request.handoffManifest, planLimit: { provider: capacity.provider, resetAt: capacity.resetAt, observedAt: capacity.recordedAt, generation: null },
+    } });
+    expect(pending).toMatchObject({ success: true, data: { handoff: { state: "pending-acknowledgement" } } });
+    expect(env.db.workroom.update).not.toHaveBeenCalled();
+    env.state.now = new Date(NOW.getTime() + 1000);
+    env.db.providerCapacityStatus.findMany.mockResolvedValue([{ providerId: capacity.provider, state: "available", lastObservedAt: env.state.now }]);
+    const id = (pending.data as { handoff: { requestId: string } }).handoff.requestId;
+    expect(await execute(env, ack(id), receiver)).toMatchObject({ success: false, error: "handoff-plan-limit-cleared" });
+    expect(env.db.workroom.update).not.toHaveBeenCalled();
+  });
   it("a request remains pending without transfer, renewal or admission", async () => {
     const env = database(); const result = await execute(env, request);
     expect(result).toMatchObject({ success: true, data: { handoff: { state: "pending-acknowledgement" }, assistantAdmitted: false } });

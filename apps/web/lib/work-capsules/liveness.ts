@@ -367,12 +367,15 @@ export function classifyWorkCapsuleLiveness(
   // Lease-backed executor: the lease IS the liveness contract. On expiry, a
   // token-limited client is PAUSED (not dead) and resumes + renews when tokens
   // return, so withhold reaping until past the resume grace window.
+  const wait = input.capacityWait;
+  if (!input.leaseExpiresAt && wait && wait.resetAt.getTime() + pauseGraceMs > now.getTime()) {
+    return verdict("paused", describeCapacityWait(wait, now), null);
+  }
   if (input.leaseExpiresAt != null) {
     const elapsed = now.getTime() - input.leaseExpiresAt.getTime();
     const expired = elapsed >= 0;
     if (expired) {
       const age = humanAge(elapsed);
-      const wait = input.capacityWait;
       if (wait && wait.resetAt.getTime() + pauseGraceMs > now.getTime()) {
         return verdict("paused", `Lease expired ${age} ago. ${describeCapacityWait(wait, now)}`, input.leaseExpiresAt);
       }

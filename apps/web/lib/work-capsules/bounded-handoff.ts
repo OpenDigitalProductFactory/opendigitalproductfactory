@@ -105,6 +105,11 @@ export async function assessBoundedHandoff(input: Input, options: { lock?: boole
   if (completion && request) return { capsule, request, proposed, authority, snapshot: request.snapshot, terminal: completion.handoff };
   await assertBoundedHandoffDependencies(db as unknown as Parameters<typeof assertBoundedHandoffDependencies>[0], { capsule, sourceExecutorRef: proposed.expectedExecutorRef, destinationExecutorRef: proposed.toExecutorRef });
   const now = await databaseWallTime(db);
+  if (proposed.handoffManifest.planLimit) {
+    const { assertPlanLimitHandoffCurrent } = await import("./executor-capacity-handoff.server");
+    await assertPlanLimitHandoffCurrent(db as unknown as Parameters<typeof assertPlanLimitHandoffCurrent>[0],
+      capsule, proposed, request?.ownerPrincipalId ?? actor.principalId!, now);
+  }
   const holderKind = await readLeaseHolderKind(db, capsule.leaseHolderPrincipalId, options.lock === true);
   const snapshot = snapshotHandoff(capsule, authority.boundary, now, request?.ownerPrincipalId ?? actor.principalId ?? null, holderKind);
   if (request) assertHandoffSnapshot(snapshot, request.snapshot);
