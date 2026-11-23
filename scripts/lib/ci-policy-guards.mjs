@@ -934,6 +934,9 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "scripts/lib/worktree-janitor-core.test.mjs",
         "scripts/worktree-janitor.test.mjs",
         "scripts/worktree-janitor-sh.test.mjs",
+        // Temporary T3 on-create/on-settle bridge. Host-only, but its test
+        // still has to run in CI or the inventory guard fails closed.
+        "scripts/t3-worktree-bridge.test.mjs",
         "scripts/lib/worktree-session-heartbeat.test.mjs",
         // BI-DBAD1A1B: SessionEnd process matching accepts only the canonical
         // worktree itself or descendants, never sibling worktrees/CI runners.
