@@ -1,5 +1,7 @@
 # owner: platform-architecture
-# expiry: 2026-11-22
+# expiry: 2027-02-16
+# Re-reviewed 2026-11-23: all 13 entries still exist and still have no twin,
+# so the baseline cannot shrink. Next review matches the module-size budget.
 # Twin-artifact baseline (BI-788EC51A). Shrink-only: files leave by gaining
 # their sh/ps1 twin or being removed, never by expanding the baseline.
 # Each entry is a repo-relative path of a script inside a twin-norm directory

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, cp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, cp, open, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createHash, createHmac } from "node:crypto";
@@ -392,8 +392,13 @@ for (const point of ['image-prepared', 'image-applied', 'image-reverted']) test(
     const first = run({ ...fixture.env(), DPF_TEST_CRASH_AFTER_PHASE: point });
     assert.equal(first.status, 86, first.stderr);
     const base = join(dir, 'runtime-capability-transitions/RCT-test.image-baseline.json');
-    assert.equal((await stat(base)).mode & 0o777, 0o600);
-    assert((await readFile(base, 'utf8')).includes('synthetic-private-image-value'));
+    const handle = await open(base, 'r');
+    try {
+      assert.equal((await handle.stat()).mode & 0o777, 0o600);
+      assert((await handle.readFile('utf8')).includes('synthetic-private-image-value'));
+    } finally {
+      await handle.close();
+    }
     const journal = await readFile(join(dir, 'runtime-capability-transitions/RCT-test.journal.json'), 'utf8');
     assert.equal(journal.includes('synthetic-private-image-value'), false);
     const resumed = run(fixture.env());

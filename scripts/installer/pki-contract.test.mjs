@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
-import { resolveGuardBash } from "../lib/guard-bash.mjs";
+import { guardShellEnv, resolveGuardBash } from "../lib/guard-bash.mjs";
 
 const REQUIRED_JOIN_PACKAGE_MODE = 0o600;
 
@@ -198,7 +198,7 @@ test("Bash join rejects an expired package before Docker is invoked", async (con
     ].join("\n"), { mode: 0o600 });
     await chmod(packagePath, 0o600);
 
-    const result = spawnSync(resolveGuardBash(), [script, "--mode", "join", "--hostname", "peer.local", "--join-package", packagePath], { encoding: "utf8" });
+    const result = spawnSync(resolveGuardBash(), [script, "--mode", "join", "--hostname", "peer.local", "--join-package", packagePath], { encoding: "utf8", env: guardShellEnv({ ...process.env }) });
     assert.equal(result.status, 77);
     assert.match(result.stderr, /expired/i);
     assert.doesNotMatch(`${result.stdout}\n${result.stderr}`, /Docker is required/i);
@@ -227,7 +227,7 @@ test("Bash join rejects a package intended for a different installation", async 
     ].join("\n"), { mode: 0o600 });
     await chmod(packagePath, 0o600);
 
-    const result = spawnSync(resolveGuardBash(), [script, "--mode", "join", "--hostname", "peer.local", "--join-package", packagePath], { encoding: "utf8" });
+    const result = spawnSync(resolveGuardBash(), [script, "--mode", "join", "--hostname", "peer.local", "--join-package", packagePath], { encoding: "utf8", env: guardShellEnv({ ...process.env }) });
     assert.equal(result.status, 77);
     assert.match(result.stderr, /intended for another installation/i);
   } finally {
@@ -255,7 +255,7 @@ test("Bash join rejects a public CA origin before Docker is invoked", async (con
     ].join("\n"), { mode: 0o600 });
     await chmod(packagePath, 0o600);
 
-    const result = spawnSync(resolveGuardBash(), [script, "--mode", "join", "--join-package", packagePath], { encoding: "utf8" });
+    const result = spawnSync(resolveGuardBash(), [script, "--mode", "join", "--join-package", packagePath], { encoding: "utf8", env: guardShellEnv({ ...process.env }) });
     assert.equal(result.status, 77);
     assert.match(result.stderr, /private or local/i);
     assert.doesNotMatch(`${result.stdout}\n${result.stderr}`, /Docker is required/i);
@@ -450,6 +450,59 @@ test('authority client recovery shares public identity policy and ships its help
   assert.match(image, /COPY scripts\/installer\/edge-client-certificate\.mjs/);
   assert.match(image, /cp scripts\/installer\/edge-client-certificate\.mjs \/dpf-release-assets\/scripts\/installer\//);
   assert.match(image, /cp scripts\/bootstrap-organization-pki\.ps1 scripts\/bootstrap-organization-pki\.sh/);
+});
+
+test('Bash join rejects a join package with overly permissive mode on a POSIX filesystem', { skip: process.platform === 'win32' }, async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'dpf-join-mode-'));
+  const packagePath = join(directory, 'wide-open.dpfjoin');
+  const script = fileURLToPath(new URL('../bootstrap-organization-pki.sh', import.meta.url));
+
+  try {
+    await writeFile(packagePath, [
+      'DPF_ORGANIZATION_JOIN_V1',
+      'package_id=0123456789abcdef0123456789abcdef',
+      'ca_url=https://192.168.0.10:9000',
+      `root_fingerprint=${'a'.repeat(64)}`,
+      'intended_hostname=peer.local',
+      'intended_sans=192.168.0.20',
+      `expires_at=${Math.floor(Date.now() / 1000) + 900}`,
+      'enrollment_token=fixture-enrollment-token-mode-test',
+      '',
+    ].join('\n'), { mode: 0o644 });
+    await chmod(packagePath, 0o644);
+
+    const result = spawnSync(resolveGuardBash(), [script, '--mode', 'join', '--hostname', 'peer.local', '--join-package', packagePath], { encoding: 'utf8', env: guardShellEnv({ ...process.env }) });
+    assert.equal(result.status, 77);
+    assert.match(result.stderr, /mode 0600/i);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('Bash join skips the mode check when NTFS cannot represent POSIX permissions', { skip: process.platform !== 'win32' || posixModeSupported }, async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'dpf-join-ntfs-'));
+  const packagePath = join(directory, 'ntfs.dpfjoin');
+  const script = fileURLToPath(new URL('../bootstrap-organization-pki.sh', import.meta.url));
+
+  try {
+    await writeFile(packagePath, [
+      'DPF_ORGANIZATION_JOIN_V1',
+      'package_id=0123456789abcdef0123456789abcdef',
+      'ca_url=https://192.168.0.10:9000',
+      `root_fingerprint=${'a'.repeat(64)}`,
+      'intended_hostname=peer.local',
+      'intended_sans=192.168.0.20',
+      `expires_at=${Math.floor(Date.now() / 1000) - 900}`,
+      'enrollment_token=fixture-enrollment-token-ntfs-test',
+      '',
+    ].join('\n'), { mode: 0o644 });
+
+    const result = spawnSync(resolveGuardBash(), [script, '--mode', 'join', '--hostname', 'peer.local', '--join-package', packagePath], { encoding: 'utf8', env: guardShellEnv({ ...process.env }) });
+    assert.equal(result.status, 77, result.stderr);
+    assert.match(result.stderr, /expired/i);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
 });
 
 test('posixModeIsEnforceable probes correctly and returns a boolean consistent with the module-level result', async () => {
