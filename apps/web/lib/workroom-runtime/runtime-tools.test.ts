@@ -14,7 +14,7 @@ const { db, supervisor } = vi.hoisted(() => ({
   },
 }));
 vi.mock("@dpf/db", () => ({ prisma: db }));
-vi.mock("./supervisor", () => ({ createRuntimeSupervisor: () => supervisor }));
+vi.mock("./supervisor", async (importOriginal) => ({ ...await importOriginal<typeof import("./supervisor")>(), createRuntimeSupervisor: () => supervisor }));
 vi.mock("@/lib/work-capsules/handler-actor", () => ({ workCapsuleActor: async (userId: string) => ({ userId, agentId: null, principalId: null }) }));
 vi.mock("@/lib/executor-drivers/codex", () => ({ codexDriver: { provider: "codex" } }));
 vi.mock("@/lib/executor-drivers/claude", () => ({ claudeDriver: { provider: "claude" } }));
@@ -28,7 +28,9 @@ describe("drive_workroom_runtime", () => {
     await expect(driveWorkroomRuntimeTool({ capsuleId: "WC-1", action: "fly" }, "u1", undefined)).resolves.toMatchObject({ error: "invalid_input" });
     await expect(driveWorkroomRuntimeTool({ capsuleId: "WC-1", action: "start", provider: "gemini" }, "u1", undefined)).resolves.toMatchObject({ error: "invalid_input" });
     await driveWorkroomRuntimeTool({ capsuleId: "WC-1", action: "start", provider: "codex", prompt: "go" }, "u1", undefined);
-    expect(supervisor.start).toHaveBeenCalledWith(expect.objectContaining({ capsuleId: "WC-1", provider: "codex", prompt: "go" }));
+    expect(supervisor.start).toHaveBeenCalledWith(expect.objectContaining({ capsuleId: "WC-1", provider: "codex", connectionId: "provider-default-codex", prompt: "go" }));
+    await driveWorkroomRuntimeTool({ capsuleId: "WC-1", action: "start", connectionId: "account-b" }, "u1", undefined);
+    expect(supervisor.start).toHaveBeenLastCalledWith(expect.objectContaining({ connectionId: "account-b" }));
     await driveWorkroomRuntimeTool({ capsuleId: "WC-1", action: "steer", prompt: "more" }, "u1", undefined);
     expect(supervisor.turn).toHaveBeenCalledWith({ capsuleId: "WC-1", prompt: "more", steer: true });
     await expect(driveWorkroomRuntimeTool({ capsuleId: "WC-1", action: "decide", requestId: "r", decision: "maybe" }, "u1", undefined))

@@ -71,7 +71,7 @@ export type RoomSnapshot = { session: StoredRuntimeSession | null };
 export type RuntimeHandoff = { text: string; included: number; omitted: number; bytes: number; fromProvider: RuntimeProvider; fromThreadId: string | null };
 
 export type RuntimeCommand =
-  | { type: "session.open"; provider: RuntimeProvider; threadId: string; tokenId: string; cwd: string; actor: SupervisionActor;
+  | { type: "session.open"; provider: RuntimeProvider; connectionId?: string; threadId: string; tokenId: string; cwd: string; actor: SupervisionActor;
     addressedAs: string | null; generation: string; hostId: string; reattach: boolean; prompt: string | null; handoff?: RuntimeHandoff | null; at: string }
   | { type: "turn.request"; prompt: string; steer: boolean; supportsSteer: boolean }
   | { type: "room-message.deliver"; prompt: string; deliveredCursor: string; at: string; wake?: RoomMessageWakeWrite | null }
@@ -261,6 +261,7 @@ function decideOpen(s: StoredRuntimeSession | null, commandId: string, c: Extrac
   const first = [handoff?.text ?? "", c.prompt?.trim() ?? ""].filter(Boolean).join("\n\n");
   const opened: StoredRuntimeSession = {
     provider: c.provider, threadId: c.threadId, tokenId: c.tokenId, status: "supervised", openedAt: c.at, cwd: c.cwd,
+    ...(c.connectionId ? { connectionId: c.connectionId } : {}),
     actor: c.actor, addressedAs: c.addressedAs, lastHeartbeatAt: c.at,
     // The session keeps its place in the room across a resume of its own thread.
     deliveredCursor: s?.provider === c.provider ? s.deliveredCursor ?? null : null,
@@ -322,7 +323,8 @@ export function decideRuntimeCommand(room: RoomSnapshot, commandId: string, comm
       }
       const turn = requestTurn(s, { commandId, prompt: command.prompt });
       return { activities: [], session: turn.session, effects: turn.effects,
-        reply: { outcome: turn.outcome, ...(turn.outcome === "queued" ? { queued: turn.session.queuedInputs?.length ?? 0 } : {}) } };
+        reply: { outcome: turn.outcome, ...(turn.outcome === "queued" ? { queued: turn.session.queuedInputs?.length ?? 0 } : {}),
+          ...(command.steer && !command.supportsSteer && s.activeTurnId ? { capability: "capability-unavailable" } : {}) } };
     }
     case "room-message.deliver": {
       if (s?.status !== "supervised") return none({ outcome: "no-session" });

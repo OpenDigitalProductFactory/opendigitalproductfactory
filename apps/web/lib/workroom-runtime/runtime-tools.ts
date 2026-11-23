@@ -9,7 +9,7 @@ import { workCapsuleActor } from "@/lib/work-capsules/handler-actor";
 import { claudeDriver } from "@/lib/executor-drivers/claude";
 import { codexDriver } from "@/lib/executor-drivers/codex";
 import { buildRuntimeHandoff } from "./runtime-handoff";
-import { createRuntimeSupervisor, type RuntimeSupervisor } from "./supervisor";
+import { createRuntimeSupervisor, defaultRuntimeConnection, type RuntimeSupervisor } from "./supervisor";
 import type { RuntimeDecision, RuntimeProvider } from "@/lib/executor-drivers/types";
 
 type ToolContext = { agentId?: string; authSource?: string; apiTokenId?: string } | undefined;
@@ -70,8 +70,12 @@ export async function driveWorkroomRuntimeTool(params: Record<string, unknown>, 
   switch (action) {
     case "start": {
       const provider = str(params, "provider") as RuntimeProvider;
-      if (!PROVIDERS.includes(provider)) return { success: false, error: "invalid_input", message: "provider must be codex or claude." };
-      return runtime.start({ capsuleId, provider, actor, prompt, model: str(params, "model") || null, ...(str(params, "cwd") ? { cwd: str(params, "cwd") } : {}) });
+      if ((provider || params["connectionId"] === undefined) && !PROVIDERS.includes(provider)) {
+        return { success: false, error: "invalid_input", message: "Choose codex, claude, or a provider connection." };
+      }
+      const connectionId = params["connectionId"] === undefined ? defaultRuntimeConnection(provider) : str(params, "connectionId");
+      if (!connectionId) return { success: false, error: "invalid_input", message: "connectionId must name a provider account." };
+      return runtime.start({ capsuleId, provider: provider || undefined, connectionId, actor, prompt, model: str(params, "model") || null, ...(str(params, "cwd") ? { cwd: str(params, "cwd") } : {}) });
     }
     case "turn":
     case "steer":

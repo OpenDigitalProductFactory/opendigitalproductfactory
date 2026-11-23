@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 // through the runtime commit and every side effect through the room outbox,
 // here over memory (__fixtures__/memory-runtime-store.ts).
 
-const { db } = vi.hoisted(() => ({ db: { workroom: { findUnique: vi.fn() } } }));
+const { db } = vi.hoisted(() => ({ db: { workroom: { findUnique: vi.fn() }, aiProviderConnection: { findUnique: vi.fn() } } }));
 vi.mock("@dpf/db", () => ({ prisma: db }));
 
 import { decideClaudeToolCall, decideCodexRequest } from "./runtime-request-policy";
@@ -87,6 +87,42 @@ describe("provider handoff", () => {
     expect(h.buildHandoff).not.toHaveBeenCalled();
     expect(h.adapter.openSession).toHaveBeenCalledWith(expect.objectContaining({ resumeThreadId: "thr-old" }), expect.any(Function));
     expect(h.session.startTurn).toHaveBeenCalledWith("carry on");
+  });
+
+  it("routes two Codex connections separately and preserves the sender address", async () => {
+    db.aiProviderConnection.findUnique.mockImplementation(async ({ where: { connectionId } }) => ({
+      connectionId, providerId: "codex", executionChannel: "subscription-cli", status: "active",
+      authMethod: "oauth", credentialEntryId: `credential-${connectionId}`, accessibleModelIds: [],
+    }));
+    room.workspaceState = stored("codex");
+    const first = harness();
+    const opened = await first.runtime.start({ capsuleId: "WC-1", connectionId: "account-a", actor });
+    expect(first.adapter.openSession).toHaveBeenCalledWith(expect.objectContaining({
+      account: expect.objectContaining({ connectionId: "account-a", providerId: "codex" }), resumeThreadId: null,
+    }), expect.any(Function));
+    expect(opened.data?.addressedAs).toBe("gaid:priv:dpf.internal:agt-ext-codex#session=thr-1");
+    expect(room.workspaceState.runtimeSession).toMatchObject({ connectionId: "account-a" });
+
+    const reattached = harness();
+    await reattached.runtime.start({ capsuleId: "WC-1", provider: "codex", connectionId: "account-a", actor, reattach: true });
+    expect(reattached.adapter.openSession).toHaveBeenCalledWith(expect.objectContaining({ resumeThreadId: "thr-1" }), expect.any(Function));
+
+    const second = harness();
+    await second.runtime.start({ capsuleId: "WC-1", connectionId: "account-b", actor });
+    expect(second.adapter.openSession).toHaveBeenCalledWith(expect.objectContaining({
+      account: expect.objectContaining({ connectionId: "account-b", providerId: "codex" }), resumeThreadId: null,
+    }), expect.any(Function));
+  });
+
+  it("refuses a connection without a session driver before issuing a credential", async () => {
+    db.aiProviderConnection.findUnique.mockResolvedValueOnce({
+      providerId: "anthropic-sub", status: "active", executionChannel: "direct-api", credentialEntryId: "key-a",
+    });
+    const h = harness();
+    await expect(h.runtime.start({ capsuleId: "WC-1", connectionId: "account-a", actor }))
+      .resolves.toMatchObject({ success: false, error: "capability-unavailable" });
+    expect(h.issueToken).not.toHaveBeenCalled();
+    expect(h.adapter.openSession).not.toHaveBeenCalled();
   });
 
   it("keeps the session's open time on the stored session after it closes", async () => {

@@ -42,7 +42,7 @@ describe("decideRuntimeCommand", () => {
     expect(decide(session({ activeTurnId: "turn-1" }), { type: "turn.request", prompt: "s", steer: true, supportsSteer: true }).effects)
       .toEqual([{ kind: "steer-turn", payload: { prompt: "s" } }]);
     expect(decide(session({ activeTurnId: "turn-1" }), { type: "turn.request", prompt: "s", steer: true, supportsSteer: false }).reply)
-      .toMatchObject({ outcome: "queued" });
+      .toMatchObject({ outcome: "queued", capability: "capability-unavailable" });
     const fallback = decide(session({ activeTurnId: "turn-1" }), { type: "effect.settled", effectId: "e1", attempt: 1, kind: "steer-turn",
       payload: { prompt: "s" }, outcome: "succeeded", final: true, result: { steered: false } });
     expect(fallback.session?.queuedInputs).toEqual([{ commandId: "steer-fallback:e1", prompt: "s" }]);
