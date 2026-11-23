@@ -17,6 +17,7 @@ import { isWorkCapsuleExecutorKind, type WorkCapsuleExecutorKind } from "@/lib/w
 import { liveLeaseHeldByAnother } from "./scope-claim-lease";
 import type { CapsuleDb, WorkCapsuleActor } from "./work-capsule-store-types";
 import type { ExecutorCheckpoint } from "./executor-checkpoint";
+import { EXECUTOR_PLAN_PROVIDER } from "./executor-capacity";
 
 /** A renewal was refused because another principal holds a live lease. */
 export class WorkroomLeaseHeldError extends Error {
@@ -118,7 +119,10 @@ export async function heartbeatWorkCapsule(args: {
       const stateRow = (await tx.workroom.findUnique({ where: { capsuleId: args.capsuleId }, select: { workspaceState: true } })) as { workspaceState?: unknown } | null;
       const state = stateRow?.workspaceState && typeof stateRow.workspaceState === "object" && !Array.isArray(stateRow.workspaceState)
         ? stateRow.workspaceState as Record<string, unknown> : {};
-      workspaceState = { ...state, executorCheckpoint: { ...args.checkpoint, recordedAt: now.toISOString(), recordedByPrincipalId: args.actor.principalId } };
+      const capacity = args.checkpoint.capacity;
+      workspaceState = { ...state, executorCheckpoint: { ...args.checkpoint,
+        ...(capacity ? { capacity: { ...capacity, recordedAt: now.toISOString() } } : {}),
+        recordedAt: now.toISOString(), recordedByPrincipalId: args.actor.principalId } };
     }
     const capsule = await tx.workroom.update({
       where: { capsuleId: args.capsuleId },
@@ -134,6 +138,18 @@ export async function heartbeatWorkCapsule(args: {
       summary: `Lease renewed until ${nextLease.toISOString()}`,
       actor: args.actor,
     });
+    const capacity = args.checkpoint?.capacity;
+    if (capacity && current.executorKind && capacity.provider === EXECUTOR_PLAN_PROVIDER[current.executorKind]
+      && Date.parse(capacity.resetAt) > now.getTime() && args.actor.agentPrincipalId && tx.$queryRaw) {
+      const { insertEffects } = await import("@/lib/workroom-runtime/workroom-effect-store");
+      await insertEffects(tx as Parameters<typeof insertEffects>[0], {
+        roomRowId: capsule.id, commandId: `heartbeat-plan-limit:${nextLease.toISOString()}`, generation: null, now,
+        effects: [{ kind: "record-plan-limit", payload: {
+          checkpoint: capacity, userId: args.actor.userId, principalId: args.actor.principalId,
+          agentId: args.actor.agentId, observedAt: now.toISOString(),
+        } }],
+      });
+    }
     return capsule;
   });
 }
@@ -226,11 +242,14 @@ export async function recordExecutorCapacityNote(args: {
   capsuleId: string;
   capacity: { provider: string; resetAt: string };
   now?: Date;
+  /** Evaluate the observation against the locked room before replacing its note. */
+  ifCurrent?: (room: { workspaceState: unknown; lastSyncedAt: Date | null } & LeaseRow) => boolean;
 }) {
   const now = args.now ?? new Date();
   return inTransaction(args.db, async (tx) => {
-    await lockLease(tx, args.capsuleId);
-    const row = (await tx.workroom.findUnique({ where: { capsuleId: args.capsuleId }, select: { workspaceState: true } })) as { workspaceState?: unknown } | null;
+    const lease = await lockLease(tx, args.capsuleId);
+    const row = (await tx.workroom.findUnique({ where: { capsuleId: args.capsuleId }, select: { workspaceState: true, lastSyncedAt: true } })) as { workspaceState: unknown; lastSyncedAt: Date | null } | null;
+    if (args.ifCurrent && (!row || !args.ifCurrent({ ...lease, ...row }))) return null;
     const state = row?.workspaceState && typeof row.workspaceState === "object" && !Array.isArray(row.workspaceState)
       ? row.workspaceState as Record<string, unknown> : {};
     const prior = state.executorCheckpoint && typeof state.executorCheckpoint === "object" && !Array.isArray(state.executorCheckpoint)

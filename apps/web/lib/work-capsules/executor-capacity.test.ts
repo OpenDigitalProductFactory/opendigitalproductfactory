@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { capacityWaitFor, describeCapacityWait, formatCentral, parseCheckpointCapacity, runtimePlanLimit, type ProviderCapacityRow } from "./executor-capacity";
+import { capacityAlternatives, capacityWaitFor, describeCapacityWait, formatCentral, parseCheckpointCapacity, runtimePlanLimit, type ProviderCapacityRow } from "./executor-capacity";
 import { classifyWorkCapsuleLiveness } from "./liveness";
 import { parseExecutorCheckpoint } from "./executor-checkpoint";
 
@@ -40,6 +40,24 @@ describe("a plan-limited executor's room waits visibly (BI-53BED66C)", () => {
   it("orders alternatives by estimated cost when the estimator has one", () => {
     expect(capacityWaitFor({ ...room, costRank: { "grok-desktop": 1, "claude-desktop": 2 } })?.alternatives.map((entry) => entry.executorKind))
       .toEqual(["grok-desktop", "claude-desktop"]);
+  });
+
+  it("offers an unblocked account before executor-kind fallbacks", () => {
+    const available = { executorKind: "claude-desktop", connectionId: "claude-account", capacity: [null] };
+    const blocked = { ...available, connectionId: "blocked", capacity: [{ ...codexLimited, state: "reauth_required" }] };
+    const alternatives = capacityAlternatives({ ...room, connections: [blocked, available], costRank: { "grok-desktop": 1 } });
+    expect(alternatives.map(entry => entry.connectionId ?? entry.executorKind)).toEqual(["claude-account", "grok-desktop", "claude-desktop"]);
+    expect(capacityAlternatives({ ...room, connections: [blocked] }).map(entry => entry.executorKind)).toEqual(["claude-desktop", "grok-desktop"]);
+  });
+
+  it("clears even a future checkpoint after activity, a newer renewal, or early provider recovery", () => {
+    const recordedAt = "2026-11-13T07:20:00Z";
+    const checkpoint = { capacity: { provider: "codex", resetAt: RESET.toISOString(), recordedAt } };
+    const waiting = { ...room, checkpoint };
+    expect(capacityWaitFor(waiting)?.source).toBe("executor-checkpoint");
+    expect(capacityWaitFor({ ...waiting, lastActivityAt: new Date("2026-11-13T07:20:01Z") })).toBeNull();
+    expect(capacityWaitFor({ ...waiting, leaseExpiresAt: new Date("2026-11-13T07:50:01Z") })).toBeNull();
+    expect(capacityWaitFor({ ...waiting, providerRows: [{ ...codexLimited, lastSuccessAt: new Date("2026-11-13T07:21:00Z") }] })).toBeNull();
   });
 
   // Owner, 2026-11-13: providers also reset early, periodically and at random.
@@ -92,6 +110,8 @@ describe("liveness of a plan-limited room", () => {
     expect(verdict).toMatchObject({ liveness: "paused", isReapable: false, isLive: true });
     expect(verdict.reason).toContain(`Codex plan limit reached; expected back by ${formatCentral(RESET)}`);
     expect(classifyWorkCapsuleLiveness(base, later)).toMatchObject({ liveness: "lease-expired", isReapable: true });
+    expect(classifyWorkCapsuleLiveness({ ...base, leaseExpiresAt: null, capacityWait }, later))
+      .toMatchObject({ liveness: "paused", isReapable: false });
   });
 });
 

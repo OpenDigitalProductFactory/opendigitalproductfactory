@@ -618,10 +618,11 @@ export async function reapStaleWorkCapsules(args: {
 
   // BI-53BED66C: a room waiting on its executor's plan reset is paused, not dead.
   {
-    const { capacityWaitFor, checkpointOf, loadProviderCapacityRows } = await import("./executor-capacity");
+    const { capacityWaitFor, checkpointOf, latestExecutorActivity, loadProviderCapacityRows } = await import("./executor-capacity");
     const providerRows = await loadProviderCapacityRows(args.db as never);
     for (const capsule of capsules as Array<ReaperCapsuleRow & { workspaceState?: unknown }>) {
       capsule.capacityWait = capacityWaitFor({ executorKind: capsule.executorKind ?? null, leaseExpiresAt: capsule.leaseExpiresAt ?? null,
+        lastActivityAt: latestExecutorActivity(capsule.workspaceState, capsule.lastSyncedAt),
         now, providerRows, checkpoint: checkpointOf(capsule.workspaceState) });
     }
   }
@@ -666,6 +667,7 @@ export async function reapStaleWorkCapsules(args: {
     : candidates;
   let reaped = 0;
   const actor = args.actor ?? SYSTEM_ACTOR;
+  const scannedUpdates = new Map(capsules.map(capsule => [capsule.capsuleId, capsule.updatedAt]));
   for (const candidate of toClose) {
     // Disposition decides the closeout, NOT a single blanket "abandoned":
     //   - delivered (merged) → ARCHIVE as delivered. The worktree + the merged
@@ -690,6 +692,7 @@ export async function reapStaleWorkCapsules(args: {
         reason,
         actor,
         now,
+        ...(delivered ? {} : { expectedUpdatedAt: scannedUpdates.get(candidate.capsuleId) }),
       });
       reaped += 1;
       console.warn(

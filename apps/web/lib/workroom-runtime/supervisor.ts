@@ -1,4 +1,5 @@
 import { accountExecutionVersion } from "@/lib/routing/provider-account-candidates";
+import { runtimeAccountDriver } from "./runtime-account";
 // The Workroom runtime supervisor (BI-05715F4C, design
 // 2026-10-07-durable-delegation-ledger-design.md §4.7).
 //
@@ -21,7 +22,7 @@ import { accountExecutionVersion } from "@/lib/routing/provider-account-candidat
 import { createHash, randomUUID } from "node:crypto";
 
 import { prisma } from "@dpf/db";
-import type { CapsuleDb, WorkCapsuleActor } from "@/lib/work-capsules/work-capsule-store-types";
+import type { WorkCapsuleActor } from "@/lib/work-capsules/work-capsule-store-types";
 import { TERMINAL_WORKROOM_STATUSES } from "@/lib/work-management/standing-room-nesting";
 
 import { createEffectWorker, effectResultCommandId, RetireEffectError, type EffectReport } from "./effect-worker.server";
@@ -152,8 +153,6 @@ export function defaultRuntimeConnection(provider: RuntimeProvider): string {
   return provider === "codex" ? "provider-default-codex" : "provider-default-anthropic-sub";
 }
 
-const ACCOUNT_DRIVERS = new Map<string, RuntimeProvider>([["codex", "codex"], ["chatgpt", "codex"], ["anthropic-sub", "claude"]]);
-
 const TURN_MESSAGES: Record<string, string> = {
   started: "Turn requested.",
   queued: "A turn is running; the input runs as the next turn.",
@@ -217,25 +216,6 @@ export function createRuntimeSupervisor(deps: RuntimeSupervisorDeps) {
     return entry;
   }
 
-  async function recordPlanLimit(payload: Record<string, unknown>, capsuleId: string): Promise<Record<string, unknown>> {
-    const [{ runtimePlanLimit, formatCentral }, { parseAbsoluteResetAt }] = await Promise.all([
-      import("@/lib/work-capsules/executor-capacity"), import("@/lib/routing/cli-limit-reset")]);
-    const provider = payload["provider"] as RuntimeProvider;
-    const limit = runtimePlanLimit(provider, (payload["error"] as string | null) ?? null, clock(), parseAbsoluteResetAt);
-    if (!limit) return {};
-    if (limit.resetAt) {
-      // BI-53BED66C: the room waits visibly on the provider's stated reset, and is offered to an unblocked executor.
-      const { recordExecutorCapacityNote } = await import("@/lib/work-capsules/workroom-lease");
-      await recordExecutorCapacityNote({ db: prisma as unknown as CapsuleDb, capsuleId, capacity: { provider: limit.provider, resetAt: limit.resetAt.toISOString() } });
-    }
-    return {
-      provider: limit.provider, resetAt: limit.resetAt?.toISOString() ?? null,
-      summary: limit.resetAt
-        ? `Plan limit reached on ${provider}; expected back by ${formatCentral(limit.resetAt)} (may return sooner).`
-        : `Plan limit reached on ${provider}; the provider gave no reset time.`,
-    };
-  }
-
   async function execute(effect: ClaimedEffect): Promise<Record<string, unknown>> {
     const entry = liveFor(effect);
     const p = effect.payload;
@@ -277,8 +257,10 @@ export function createRuntimeSupervisor(deps: RuntimeSupervisorDeps) {
         await deps.onSupervisionLost?.({ capsuleId: effect.capsuleId, reason: String(p["reason"] ?? ""), actingUserId: (p["actingUserId"] as string | null) ?? null,
           addressedAs: (p["addressedAs"] as string | null) ?? null, wakeCoordinator: p["wakeCoordinator"] === true });
         return {};
-      case "record-plan-limit":
-        return recordPlanLimit(p, effect.capsuleId);
+      case "record-plan-limit": {
+        const { recordPlanLimitHandoff } = await import("@/lib/work-capsules/executor-capacity-handoff.server");
+        return recordPlanLimitHandoff(effect, clock());
+      }
       case "ensure-workitem-anchor": {
         // PR 3 (AC-5): setup a claim or adoption owes its room, run by whichever portal process holds the worker.
         const { executeRoomSetupEffect } = await import("./room-setup-effects.server");
@@ -329,10 +311,9 @@ export function createRuntimeSupervisor(deps: RuntimeSupervisorDeps) {
     if (connectionId && (!account || account.status === "disabled" || !account.credentialEntryId)) {
       return refuse("provider_unavailable", "Selected provider account is unavailable.");
     }
-    const provider = account ? ACCOUNT_DRIVERS.get(account.providerId) : input.provider;
+    const provider = account ? runtimeAccountDriver(account) : input.provider;
     const adapter = provider && deps.adapters[provider];
-    if (!adapter || !provider || input.provider && input.provider !== provider
-      || account && account.executionChannel !== "subscription-cli" && !(provider === "codex" && account.executionChannel === "direct-api" && account.authMethod === "api-key")) {
+    if (!adapter || !provider || input.provider && input.provider !== provider) {
       return refuse("capability-unavailable", account ? "Selected provider account has no supervised session driver." : `No ${provider} runtime is configured on this install.`);
     }
     const sameInstance = stored?.provider === provider && (stored.connectionId ?? defaultRuntimeConnection(provider)) === (connectionId ?? defaultRuntimeConnection(provider));

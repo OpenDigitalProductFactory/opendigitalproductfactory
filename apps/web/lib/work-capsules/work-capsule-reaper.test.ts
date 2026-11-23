@@ -553,7 +553,7 @@ describe("reapStaleWorkCapsules", () => {
     expect(db.workroom.update).toHaveBeenCalledTimes(1);
     expect(db.workroom.update).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { capsuleId: "WC-LEASE-DEAD" },
+        where: { capsuleId: "WC-LEASE-DEAD", updatedAt: expect.any(Date) },
         data: expect.objectContaining({ status: "abandoned" }),
       }),
     );

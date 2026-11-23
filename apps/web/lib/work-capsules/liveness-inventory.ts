@@ -168,10 +168,11 @@ export async function loadCapsuleLivenessInventory(
     || (normalize(row.headBranch) && normalize(lease.branchName) === normalize(row.headBranch)));
 
   // BI-53BED66C: one read for the page; a plan-limited executor's room waits visibly.
-  const { capacityWaitFor, checkpointOf, loadProviderCapacityRows } = await import("./executor-capacity");
+  const { capacityWaitFor, checkpointOf, latestExecutorActivity, loadProviderCapacityRows } = await import("./executor-capacity");
   const providerRows = await loadProviderCapacityRows(db);
   const capsulesAll = rows.map((row) => {
     const capacityWait = capacityWaitFor({ executorKind: row.executorKind ?? null, leaseExpiresAt: row.leaseExpiresAt ?? null,
+      lastActivityAt: latestExecutorActivity(row.workspaceState, row.lastSyncedAt),
       now, providerRows, checkpoint: checkpointOf(row.workspaceState) });
     const drive = args.portalSummary ? readStoredWorkroomDriveState(row.workspaceState) : null;
     const featureBuild = row.featureBuildId ? buildsById.get(row.featureBuildId) ?? null : null;
