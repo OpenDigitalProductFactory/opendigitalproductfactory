@@ -27,6 +27,23 @@ describe("selected Codex catalog authentication", () => {
     expect(mocks.credential).toHaveBeenCalledWith("codex", "account-b");
     expect(mocks.bearer).toHaveBeenCalledWith("codex", "account-b");
   });
+  it("returns separate app-server login objects for two Codex connections", async () => {
+    const other = { ...connection, connectionId: "account-a", credentialEntryId: "credential-a" };
+    const otherToken = token({ chatgpt_account_id: "upstream-a" });
+    mocks.connection.mockImplementation(async ({ where }) => where.connectionId === "account-a" ? other : connection);
+    mocks.credential.mockImplementation(async (_providerId, connectionId) => ({
+      id: connectionId === "account-a" ? "credential-a" : "credential-b",
+    }));
+    const selectedBearer = { token: token({ chatgpt_account_id: "upstream-b" }) };
+    mocks.bearer.mockImplementation(async (_providerId, connectionId) =>
+      connectionId === "account-a" ? { token: otherToken } : selectedBearer);
+    const [a, b] = await Promise.all([
+      resolveCodexCatalogAuth("codex", "account-a"),
+      resolveCodexCatalogAuth("codex", "account-b"),
+    ]);
+    expect(a).toEqual({ type: "chatgptAuthTokens", accessToken: otherToken, chatgptAccountId: "upstream-a" });
+    expect(b).toEqual({ type: "chatgptAuthTokens", accessToken: selectedBearer.token, chatgptAccountId: "upstream-b" });
+  });
   it("passes the selected account login to the isolated transport without a provider-default lookup", async () => {
     const read = vi.spyOn(catalog, "discoverCodexCliModels").mockResolvedValue([{ modelId: "selected-model", rawMetadata: {} }]);
     expect(await discoverCodexCliModels("codex", "account-b")).toEqual([{ modelId: "selected-model", rawMetadata: {} }]);
