@@ -1,8 +1,5 @@
 import { CAPABILITY_INSTALL_SCOPES } from "@dpf/db/capability-maturity";
 
-import {
-  parsePersistedWorkPatternExperimentExecution,
-} from "@/lib/build/work-pattern-experiment-runtime";
 import { isRecord } from "@/lib/shared/coerce";
 
 import {
@@ -10,8 +7,26 @@ import {
   type HermeticBuildReplayFixture,
 } from "./work-pattern-experiment-fixture";
 import type { WorkPatternExperimentDefinitionIdentity } from "./work-pattern-experiment-identity";
-import { WORK_PATTERN_EXPERIMENT_RISK_CLASSES } from "./work-pattern-experiment-types";
+import {
+  WORK_PATTERN_EXPERIMENT_RISK_CLASSES,
+  parseWorkPatternExecutionProfile,
+  type WorkPatternExecutionProfile,
+} from "./work-pattern-experiment-types";
 import { DEFAULT_WORK_PATTERN_PROMOTION_POLICY } from "./work-pattern-promotion-policy";
+
+export type WorkPatternExperimentCellRequest = {
+  experimentRunId: string;
+  childTaskRunId: string;
+  cellKey: string;
+  pairKey: string;
+  methodVariantKey: string;
+  modelVariantKey: string;
+  executionProfile: WorkPatternExecutionProfile;
+  fixtureKey: string;
+  oracleKey: string;
+  oracleVersion: string;
+  resourcePolicyKey: string;
+};
 
 export type ReviewedExperimentCandidate = {
   definition: WorkPatternExperimentDefinitionIdentity;
@@ -21,15 +36,51 @@ export type ReviewedExperimentCandidate = {
   cells: Array<{
     methodVariantKey: string;
     modelVariantKey: string;
-    executionRequest: NonNullable<
-      ReturnType<typeof parsePersistedWorkPatternExperimentExecution>
-    >;
+    executionRequest: WorkPatternExperimentCellRequest;
     fixtureParts?: HermeticBuildReplayFixture;
   }>;
 };
 
 function nonEmptyString(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;
+}
+
+export function parsePersistedWorkPatternExperimentExecution(
+  value: unknown,
+): WorkPatternExperimentCellRequest | null {
+  if (!isRecord(value)) return null;
+  const executionProfile = parseWorkPatternExecutionProfile(value.executionProfile);
+  const requiredStrings = [
+    "experimentRunId",
+    "childTaskRunId",
+    "cellKey",
+    "pairKey",
+    "methodVariantKey",
+    "modelVariantKey",
+    "fixtureKey",
+    "oracleKey",
+    "oracleVersion",
+    "resourcePolicyKey",
+  ] as const;
+  if (
+    !executionProfile
+    || requiredStrings.some((field) => !nonEmptyString(value[field]))
+  ) {
+    return null;
+  }
+  return {
+    experimentRunId: value.experimentRunId as string,
+    childTaskRunId: value.childTaskRunId as string,
+    cellKey: value.cellKey as string,
+    pairKey: value.pairKey as string,
+    methodVariantKey: value.methodVariantKey as string,
+    modelVariantKey: value.modelVariantKey as string,
+    executionProfile,
+    fixtureKey: value.fixtureKey as string,
+    oracleKey: value.oracleKey as string,
+    oracleVersion: value.oracleVersion as string,
+    resourcePolicyKey: value.resourcePolicyKey as string,
+  };
 }
 
 export function parseReviewedExperimentCandidate(

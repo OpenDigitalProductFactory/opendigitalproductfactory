@@ -1,17 +1,21 @@
 import { createHash } from "node:crypto";
 
 import { isRecord } from "@/lib/shared/coerce";
+import {
+  parsePersistedWorkPatternExperimentExecution,
+  type WorkPatternExperimentCellRequest,
+} from "@/lib/tak/work-pattern-experiment-candidate-schema";
 import { parseHermeticBuildReplayFixture } from "@/lib/tak/work-pattern-experiment-fixture";
 import {
-  parseWorkPatternExecutionProfile,
   type WorkPatternExecutionProfile,
 } from "@/lib/tak/work-pattern-experiment-types";
 
 import {
   executeWorkPatternExperimentCell,
-  type WorkPatternExperimentCellRequest,
   type WorkPatternExperimentCellResult,
 } from "./work-pattern-experiment-adapter";
+
+export { parsePersistedWorkPatternExperimentExecution };
 
 type ReplayMessage = {
   role: "user" | "assistant";
@@ -93,44 +97,6 @@ export type PersistedWorkPatternRuntimeDeps = {
 
 function nonEmptyString(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;
-}
-
-export function parsePersistedWorkPatternExperimentExecution(
-  value: unknown,
-): WorkPatternExperimentCellRequest | null {
-  if (!isRecord(value)) return null;
-  const executionProfile = parseWorkPatternExecutionProfile(value.executionProfile);
-  const requiredStrings = [
-    "experimentRunId",
-    "childTaskRunId",
-    "cellKey",
-    "pairKey",
-    "methodVariantKey",
-    "modelVariantKey",
-    "fixtureKey",
-    "oracleKey",
-    "oracleVersion",
-    "resourcePolicyKey",
-  ] as const;
-  if (
-    !executionProfile
-    || requiredStrings.some((field) => !nonEmptyString(value[field]))
-  ) {
-    return null;
-  }
-  return {
-    experimentRunId: value.experimentRunId as string,
-    childTaskRunId: value.childTaskRunId as string,
-    cellKey: value.cellKey as string,
-    pairKey: value.pairKey as string,
-    methodVariantKey: value.methodVariantKey as string,
-    modelVariantKey: value.modelVariantKey as string,
-    executionProfile,
-    fixtureKey: value.fixtureKey as string,
-    oracleKey: value.oracleKey as string,
-    oracleVersion: value.oracleVersion as string,
-    resourcePolicyKey: value.resourcePolicyKey as string,
-  };
 }
 
 function parseFixture(value: unknown): HermeticInferenceFixture | null {
