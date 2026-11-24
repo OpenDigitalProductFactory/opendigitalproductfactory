@@ -42,7 +42,7 @@ import { resolveManagedScriptPath, runManagedScript } from "./managed-script-pat
 import type { AnyBackupManifest, BackupEngineSpec } from "./engine-specs";
 import type { BackupPreflightResult } from "./extension-preflight";
 
-const BACKUPS_ROOT = "/backups";
+export const BACKUPS_ROOT = "/backups";
 
 export type PrismaLike = typeof import("@dpf/db").prisma;
 
@@ -72,6 +72,12 @@ export interface ManagedBackupArgs {
   prismaClient?: PrismaLike;
   /** Inject a clock for deterministic testing. */
   now?: () => Date;
+  /**
+   * Extra script environment for this run, merged over the spec's env. The
+   * uploads engine uses it to pass the resolved roots and the paired Postgres
+   * run (BI-1C6BF6B6).
+   */
+  extraEnv?: Readonly<Record<string, string>>;
   /**
    * Override the spec's pre-dump capability check (for tests). When provided,
    * takes precedence over `spec.preflight`. Pass `() => Promise.resolve({ ok:
@@ -171,6 +177,16 @@ export function summarizeScriptFailure(
   if (lastStderr) return lastStderr.slice(0, 500);
   if (outcome.exitCode !== 0) return `${opts.exitLabel} exited ${outcome.exitCode}`;
   return opts.fallback;
+}
+
+/**
+ * Size and digest recorded on the BackupRun row. A Postgres manifest names
+ * them sizeBytes/sha256; an uploads manifest names them totalBytes/archiveSha256.
+ */
+export function manifestSummary(manifest: AnyBackupManifest): { sizeBytes: number; sha256: string } {
+  return manifest.target === "uploads"
+    ? { sizeBytes: manifest.totalBytes, sha256: manifest.archiveSha256 }
+    : { sizeBytes: manifest.sizeBytes, sha256: manifest.sha256 };
 }
 
 async function readManifest(targetDir: string): Promise<AnyBackupManifest | null> {
@@ -365,7 +381,7 @@ export async function runManagedBackup(
   // is created by the shell script.
   await fs.mkdir(path.posix.join(backupsRoot, spec.subdir), { recursive: true });
 
-  const env = spec.buildEnv({ targetDir: absoluteTargetDir, composeProject });
+  const env = { ...spec.buildEnv({ targetDir: absoluteTargetDir, composeProject }), ...(args.extraEnv ?? {}) };
 
   // Routes through the shared /bin/sh chokepoint so the script need not carry
   // the executable bit (which git-on-Windows + the Docker COPY both strip).
@@ -383,9 +399,9 @@ export async function runManagedBackup(
       data: {
         status: "ok",
         finishedAt,
-        sizeBytes: BigInt(manifest.sizeBytes),
+        sizeBytes: BigInt(manifestSummary(manifest).sizeBytes),
         durationMs,
-        sha256: manifest.sha256,
+        sha256: manifestSummary(manifest).sha256,
         ...(spec.successRowExtras ? spec.successRowExtras(manifest) : {}),
       },
     });
@@ -407,7 +423,7 @@ export async function runManagedBackup(
     spec.metrics.storageBytes.set(retainedBytes);
 
     trace(
-      `run ok id=${created.id} size=${manifest.sizeBytes} duration_ms=${durationMs}`,
+      `run ok id=${created.id} size=${manifestSummary(manifest).sizeBytes} duration_ms=${durationMs}`,
     );
     return { runId: created.id, status: "ok" };
   }

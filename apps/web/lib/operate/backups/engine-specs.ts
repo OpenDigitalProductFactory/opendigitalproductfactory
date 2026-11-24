@@ -23,10 +23,14 @@ import {
   postgresBackupStorageBytes,
   postgresRestoreDurationSeconds,
   postgresRestoreRunsTotal,
+  uploadsBackupDurationSeconds,
+  uploadsBackupLastSuccessSeconds,
+  uploadsBackupRunsTotal,
+  uploadsBackupStorageBytes,
 } from "@/lib/operate/metrics";
 
-import { POSTGRES_BACKUP_JOB_ID, POSTGRES_BACKUP_SCHEDULE } from "./constants";
-import type { BackupManifest, BackupTarget } from "./types";
+import { POSTGRES_BACKUP_JOB_ID, POSTGRES_BACKUP_SCHEDULE, UPLOADS_BACKUP_JOB_ID, UPLOADS_BACKUP_SCHEDULE } from "./constants";
+import type { BackupManifest, BackupTarget, UploadsBackupManifest } from "./types";
 import type { PrismaLike } from "./managed-backup";
 import {
   postgresExtensionPreflight,
@@ -38,7 +42,7 @@ import { RestoreIntegrityError } from "./managed-restore";
  * Union of every live engine's sidecar manifest shape. Postgres-only after
  * BET-5; kept as a union alias so a future engine widens it in one place.
  */
-export type AnyBackupManifest = BackupManifest;
+export type AnyBackupManifest = BackupManifest | UploadsBackupManifest;
 
 /** Inputs the shared backup engine hands to a spec's env builder. */
 export interface BackupScriptEnvContext {
@@ -199,6 +203,39 @@ export const POSTGRES_BACKUP_SPEC: BackupEngineSpec = {
     return { pgVersion: (manifest as BackupManifest).pgVersion };
   },
   preflight: (ctx) => postgresExtensionPreflight(ctx),
+};
+
+/**
+ * Upload-store backup (BI-1C6BF6B6). Runs only paired with a finished Postgres
+ * run: the caller passes the resolved roots and that run through extraEnv
+ * (see uploads-backup-runner.ts). The writer is scripts/backup-uploads.mjs.
+ */
+export const UPLOADS_BACKUP_SPEC: BackupEngineSpec = {
+  target: "uploads",
+  jobId: UPLOADS_BACKUP_JOB_ID,
+  schedule: UPLOADS_BACKUP_SCHEDULE,
+  subdir: "uploads",
+  scriptName: "backup-uploads.sh",
+  timeoutMs: 60 * 60 * 1000, // 60-minute hard cap; the store can outgrow the dump
+  traceTag: "[uploads-backup-trace]",
+  failureMarker: "BACKUP_UPLOADS_FAILED:",
+  failureStrip: /^.*BACKUP_UPLOADS_FAILED:\s*/,
+  failureFallback: "upload-store backup failed (no diagnostic captured)",
+  metrics: {
+    get runsTotal() { return uploadsBackupRunsTotal; },
+    get lastSuccessSeconds() { return uploadsBackupLastSuccessSeconds; },
+    get storageBytes() { return uploadsBackupStorageBytes; },
+    get durationSeconds() { return uploadsBackupDurationSeconds; },
+  },
+  buildEnv({ targetDir, composeProject }) {
+    return {
+      ...process.env,
+      TARGET_DIR: targetDir,
+      DPF_PRODUCTION_DB_CONTAINER: process.env.DPF_PRODUCTION_DB_CONTAINER ?? `${composeProject}-postgres-1`,
+      POSTGRES_USER: process.env.POSTGRES_USER ?? "dpf",
+      POSTGRES_DB: process.env.POSTGRES_DB ?? "dpf",
+    };
+  },
 };
 
 // ─── Restore specs ──────────────────────────────────────────────────────────

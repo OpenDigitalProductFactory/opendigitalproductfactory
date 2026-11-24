@@ -386,6 +386,35 @@ export const postgresBackupDurationSeconds = histogram({
   registers: [metricsRegistry],
 });
 
+// ─── Upload-store backup (BI-1C6BF6B6) ──────────────────────────────────────
+
+export const uploadsBackupRunsTotal = counter({
+  name: "dpf_uploads_backup_runs_total",
+  help: "Upload-store backup runs by status and trigger",
+  labelNames: ["status", "trigger"] as const,
+  registers: [metricsRegistry],
+});
+
+export const uploadsBackupLastSuccessSeconds = gauge({
+  name: "dpf_uploads_backup_last_success_seconds",
+  help: "Epoch seconds at which the last successful upload-store backup finished",
+  registers: [metricsRegistry],
+});
+
+export const uploadsBackupStorageBytes = gauge({
+  name: "dpf_uploads_backup_storage_bytes",
+  help: "Total bytes of upload-store files held by retained backups",
+  registers: [metricsRegistry],
+});
+
+export const uploadsBackupDurationSeconds = histogram({
+  name: "dpf_uploads_backup_duration_seconds",
+  help: "Wall-clock duration of upload-store backup runs",
+  labelNames: ["trigger"] as const,
+  buckets: [1, 2, 5, 10, 30, 60, 300, 900, 3600],
+  registers: [metricsRegistry],
+});
+
 // ─── Postgres Restore (Slice 2) ────────────────────────────────────────────
 // Spec: docs/superpowers/specs/2026-05-17-postgres-daily-backup-design.md §4.6
 

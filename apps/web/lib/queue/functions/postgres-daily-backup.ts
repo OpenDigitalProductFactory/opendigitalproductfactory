@@ -73,17 +73,39 @@ export async function runCapabilityOwnedBackupSteps(
   return receipts;
 }
 
+/**
+ * The upload-store backup pairs with the Postgres run it follows
+ * (BI-1C6BF6B6): it runs only after that run finished ok, so every blob row in
+ * the dump has its file in the archive. A failed dump leaves nothing to pair.
+ */
+export async function runPairedUploadsBackupStep(
+  step: StepRunner,
+  name: string,
+  pgResult: unknown,
+  runUploads: ((pairedPostgresRunId: string) => Promise<unknown>) | undefined,
+): Promise<unknown> {
+  if (!runUploads) return undefined;
+  const pg = pgResult as { status?: unknown; runId?: unknown } | null | undefined;
+  if (pg?.status !== "ok" || typeof pg.runId !== "string") {
+    return { status: "skipped", reason: "the paired Postgres backup did not finish ok" };
+  }
+  const pairedRunId = pg.runId;
+  return step.run(name, () => runUploads(pairedRunId));
+}
+
 export async function runScheduledCoreAndCapabilityBackups(deps: {
   step: StepRunner;
   runPostgres: () => Promise<unknown>;
+  runUploads?: (pairedPostgresRunId: string) => Promise<unknown>;
   loadOperationalState: () => Promise<OperationalCapabilityState>;
-}): Promise<{ pgResult: unknown; capabilityReceipts: CapabilityBackupReceipt[] }> {
+}): Promise<{ pgResult: unknown; uploadsResult?: unknown; capabilityReceipts: CapabilityBackupReceipt[] }> {
   const pgResult = await deps.step.run("run-postgres-backup-scheduled", deps.runPostgres);
+  const uploadsResult = await runPairedUploadsBackupStep(deps.step, "run-uploads-backup-scheduled", pgResult, deps.runUploads);
   try {
     const state = await deps.step.run("load-operational-capability-state", deps.loadOperationalState) as OperationalCapabilityState;
-    return { pgResult, capabilityReceipts: await runCapabilityOwnedBackupSteps(deps.step, state) };
+    return { pgResult, uploadsResult, capabilityReceipts: await runCapabilityOwnedBackupSteps(deps.step, state) };
   } catch (error) {
-    return { pgResult, capabilityReceipts: [{ target: "capability-planning", status: "optional_degraded", selection: "selected", result: { error: error instanceof Error ? error.message : "capability_planning_failed" } }] };
+    return { pgResult, uploadsResult, capabilityReceipts: [{ target: "capability-planning", status: "optional_degraded", selection: "selected", result: { error: error instanceof Error ? error.message : "capability_planning_failed" } }] };
   }
 }
 
@@ -105,6 +127,11 @@ export const allBackupsDailyScheduled = jobs.createFunction(
         "@/lib/operate/backups/postgres-backup-runner"
       );
       return runPostgresBackup({ trigger: "scheduled" });
+    }, runUploads: async (pairedPostgresRunId) => {
+      const { runUploadsBackup } = await import(
+        "@/lib/operate/backups/uploads-backup-runner"
+      );
+      return runUploadsBackup({ trigger: "scheduled", pairedPostgresRunId });
     }, loadOperationalState: () => loadOperationalCapabilityState({ observedProviders: {} }) });
 
     // Postgres trial-restore verification (BI-31C9FBDF). Runs AFTER the
@@ -177,11 +204,18 @@ export const postgresBackupRequested = jobs.createFunction(
     triggers: [{ event: POSTGRES_BACKUP_EVENT }],
   },
   async ({ step }) => {
-    return step.run("run-postgres-backup-manual", async () => {
+    const pgResult = await step.run("run-postgres-backup-manual", async () => {
       const { runPostgresBackup } = await import(
         "@/lib/operate/backups/postgres-backup-runner"
       );
       return runPostgresBackup({ trigger: "manual" });
     });
+    const uploadsResult = await runPairedUploadsBackupStep(step, "run-uploads-backup-manual", pgResult, async (pairedPostgresRunId) => {
+      const { runUploadsBackup } = await import(
+        "@/lib/operate/backups/uploads-backup-runner"
+      );
+      return runUploadsBackup({ trigger: "manual", pairedPostgresRunId });
+    });
+    return { ...(pgResult as object), uploadsResult };
   },
 );
