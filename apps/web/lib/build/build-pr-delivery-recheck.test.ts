@@ -81,6 +81,15 @@ describe("re-evaluating an escalated room (BI-0EDCF2EC AC-2)", () => {
   it("leaves stops that need a person, and rooms that are not stopped, alone", () => {
     expect(resumeClearedEscalation({ ...base, status: "escalated", lastError: "local-evidence-not-cleared" }, { kind: "ready", headSha: HEAD }).kind).toBe("not-reevaluable");
     expect(resumeClearedEscalation({ ...base, status: "escalated", lastError: "autonomous-eligibility-withheld" }, { kind: "ready", headSha: HEAD }).kind).toBe("not-reevaluable");
+    const withheld = {
+      ...base,
+      status: "escalated" as const,
+      escalationKey: "build-pr-delivery:6983:autonomous-eligibility-withheld",
+      lastError: "active_pattern_binding_missing",
+      lastObservedAt: now.toISOString(),
+    };
+    expect(isDeliveryObservationDue(withheld, now)).toBe(false);
+    expect(isDeliveryObservationDue({ ...withheld, lastObservedAt: new Date(now.getTime() - ESCALATION_RECHECK_MS).toISOString() }, now)).toBe(true);
     expect(resumeClearedEscalation({ ...base, status: "checking" }, { kind: "ready", headSha: HEAD }).kind).toBe("not-escalated");
   });
 });
