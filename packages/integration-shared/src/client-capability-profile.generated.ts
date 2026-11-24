@@ -155,7 +155,7 @@ export const CLIENT_CAPABILITY_PROFILE: ClientCapabilityProfile = {
             "verifiedAt": "2026-11-24",
             "verifiedVersion": "2.1.330",
             "evidence": "BI-95665E9B live observation 2026-11-24: T3 Code 0.1.11 started Claude Code 2.1.330 through the Agent SDK (CLAUDE_CODE_ENTRYPOINT=t3-code, --permission-mode=bypassPermissions) in the root clone. The SessionStart hooks returned their context to the session, and `npx tsc --version` was denied by raw-tool-guard (PreToolUse on Bash). Which of the two delivery planes fired was not isolated. Write/Edit, the ask tool, UserPromptSubmit, Stop and SessionEnd were not probed.",
-            "delivery": "plugin hooks/hooks.json plus project .claude/settings.json",
+            "delivery": "configured: plugin hooks/hooks.json and project .claude/settings.json; which of the two fired under the harness is unproven",
             "denyEnvelope": "hookSpecificOutput",
             "permissionModes": [
               "bypassPermissions"
