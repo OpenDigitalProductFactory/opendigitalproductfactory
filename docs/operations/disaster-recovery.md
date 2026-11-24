@@ -8,6 +8,7 @@ relatedCode:
   - docker-compose.yml
   - packages/db/src/seed-platform-backup.ts
   - scripts/backup-postgres.sh
+  - scripts/backup-uploads.mjs
   - scripts/restore-postgres.sh
   - dpf-reinstall.ps1
   - scripts/fresh-install.ps1
@@ -37,6 +38,7 @@ The DR-hardening epic (BIs shipped 2026-05-24) put recovery artifacts in **speci
 |---|---|---|
 | Postgres rows (current state) | `$DPF_BACKUPS_HOST_PATH/postgres/<YYYY-MM-DDTHH-MM-SSZ>/dpf.dump` — nightly at 03:00 UTC | Admin UI `/admin/backups` → "Restore" wizard, OR `docker exec -i dpf-postgres-1 pg_restore --clean --if-exists -U dpf -d dpf < <dump>` |
 | Graph topology + vector/semantic memory | **Inside the Postgres dump above** — since BET-5 these are the `graph_node` / `graph_edge` tables and `pgvector` embeddings, not separate stores | Same Postgres restore; there is no separate graph or vector member to restore |
+| Uploaded files: documents (including sent and signed invoice copies), media, coworker attachments, voice audio | `$DPF_BACKUPS_HOST_PATH/uploads/<YYYY-MM-DDTHH-MM-SSZ>/uploads.tar`, written right after each successful nightly or manual Postgres backup and paired with it (`manifest.json` names the paired run and its dump digest). `files.ndjson` lists every file with its SHA-256; `deletedAfterSnapshot` lists blob rows deleted between the dump and the copy (BI-1C6BF6B6) | Restore the paired Postgres dump first. Then, with the portal stopped, verify `sha256sum -c uploads.tar.sha256`, extract into an empty directory (`tar -xf uploads.tar -C <dir>`), check every `files.ndjson` line's hash, and move `<dir>/upload-store/` into the upload store (`upload_storage_path`, else `UPLOAD_STORAGE_PATH`). A governed restore and trial restore for this member are still to come on BI-1C6BF6B6 |
 | Postgres state from JUST BEFORE a destructive action | `$DPF_BACKUPS_HOST_PATH/pre-destructive/<date>/docker-volume-rm-pgdata-<ts>.dump` (or similar fingerprint per action) | Same restore wizard; treats it as any other dump |
 | Postgres state from JUST BEFORE `dpf-reinstall.ps1` or `scripts/fresh-install.ps1` ran `docker compose down -v` | `$DPF_BACKUPS_HOST_PATH/pre-destructive/<date>/dpf-reinstall-<ts>/dpf.dump` (or `fresh-install-<ts>/`), with `dpf.dump.sha256` and `manifest.json` beside it. Both scripts refuse to destroy the database if this dump fails; `-SkipPreDestructiveDump` is the only way past, and it says what it costs. This is what keeps Workrooms, decisions and unmirrored backlog rows alive across a reinstall (BI-F9939341). | Same restore wizard, or `docker exec -i dpf-postgres-1 pg_restore --clean --if-exists -U dpf -d dpf < dpf.dump` |
 | Workrooms after a reinstall, when you have a backlog bundle rather than a dump | `workrooms.json` beside the epic bundles, written by `pnpm --filter @dpf/db backlog:capture` | `pnpm --filter @dpf/db workrooms:restore -- --from <dir> --apply`. Dry run without `--apply`. A room whose worktree is gone returns as archived with the reason; a room already present is untouched, so it is safe to re-run (BI-E2507972). |

@@ -28,7 +28,12 @@ export type BackupTrigger =
   | "pre-upgrade-recovery"
   | "pre-teardown-recovery";
 export type BackupRunStatus = "running" | "ok" | "failed";
-export type BackupTarget = "postgres";
+/**
+ * `uploads` (BI-1C6BF6B6) archives the upload store: document and media blobs,
+ * coworker attachments and voice audio. Each uploads run is paired with the
+ * Postgres run it follows, so a restore brings back the bytes the rows point to.
+ */
+export type BackupTarget = "postgres" | "uploads";
 
 /** GFS retention policy. Tunable via Platform Config in a later slice. */
 export interface BackupRetentionPolicy {
@@ -64,6 +69,28 @@ export interface BackupManifest {
   sizeBytes: number;
   sha256: string;
   dumpFormat: string;
+}
+
+/**
+ * Manifest written by scripts/backup-uploads.mjs (BI-1C6BF6B6). The key set is
+ * a contract with the DPF2 restore intake: do not add or rename keys without
+ * agreeing the change there first.
+ */
+export interface UploadsBackupManifest {
+  schemaVersion: 1;
+  target: "uploads";
+  roots: Array<{ name: string; path: string; resolvedFrom: "platform-config" | "env" | "default" }>;
+  pairedPostgresRunId: string;
+  pairedPostgresSha256: string;
+  fileCount: number;
+  totalBytes: number;
+  archiveSha256: string;
+  filesManifestSha256: string;
+  deletedAfterSnapshot: Array<{ table: string; id: string; root: string; path: string }>;
+  startedAt: string;
+  finishedAt: string;
+  durationMs: number;
+  archiveFormat: string;
 }
 
 export interface ReadinessSummary {

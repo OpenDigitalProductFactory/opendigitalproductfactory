@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { capabilityBackupReceipt, runCapabilityOwnedBackupSteps, runScheduledCoreAndCapabilityBackups, selectCapabilityBackupServices } from "./postgres-daily-backup";
+import { capabilityBackupReceipt, runCapabilityOwnedBackupSteps, runPairedUploadsBackupStep, runScheduledCoreAndCapabilityBackups, selectCapabilityBackupServices } from "./postgres-daily-backup";
 
 describe("capability-owned backup selection", () => {
   it("keeps postgres scheduled and selects enabled targets from the projection", () => {
@@ -44,5 +44,28 @@ describe("capability-owned backup selection", () => {
     expect(core).toHaveBeenCalledOnce();
     expect(result.pgResult).toEqual({ ok: true });
     expect(result.capabilityReceipts[0]).toMatchObject({ status: "optional_degraded", result: { error: "state unavailable" } });
+  });
+});
+
+describe("paired upload-store backup (BI-1C6BF6B6)", () => {
+  const step = { run: async (_name: string, operation: () => unknown) => operation() };
+
+  it("runs the uploads backup paired with a successful Postgres run", async () => {
+    const uploads = vi.fn(async (paired: string) => ({ status: "ok", paired }));
+    const result = await runScheduledCoreAndCapabilityBackups({
+      step,
+      runPostgres: async () => ({ runId: "pg-run-1", status: "ok" }),
+      runUploads: uploads,
+      loadOperationalState: async () => { throw new Error("state unavailable"); },
+    });
+    expect(uploads).toHaveBeenCalledWith("pg-run-1");
+    expect(result.uploadsResult).toEqual({ status: "ok", paired: "pg-run-1" });
+  });
+
+  it("skips the uploads backup when the Postgres run failed", async () => {
+    const uploads = vi.fn();
+    const result = await runPairedUploadsBackupStep(step, "s", { runId: "pg-run-2", status: "failed" }, uploads);
+    expect(uploads).not.toHaveBeenCalled();
+    expect(result).toEqual({ status: "skipped", reason: "the paired Postgres backup did not finish ok" });
   });
 });

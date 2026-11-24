@@ -25,6 +25,10 @@ export const ALL_BACKUPS_CRON = "0 3 * * *";
 // backup completes; also exposed via a manual-trigger event so admins can
 // re-verify on demand.
 
+/** Upload-store backup (BI-1C6BF6B6): runs right after, and paired with, each Postgres backup. */
+export const UPLOADS_BACKUP_JOB_ID = "uploads-daily-backup";
+export const UPLOADS_BACKUP_SCHEDULE = "daily";
+
 export const POSTGRES_TRIAL_RESTORE_JOB_ID = "postgres-trial-restore-daily";
 export const POSTGRES_TRIAL_RESTORE_JOB_NAME =
   "Postgres trial-restore verification (platform-managed)";
