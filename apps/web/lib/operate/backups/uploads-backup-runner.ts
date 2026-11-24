@@ -16,6 +16,8 @@
 import path from "node:path";
 
 import { resolveDocumentBlobStorageRoot } from "@/lib/documents/blob-storage";
+import { err, ok, type ActionResult } from "@/lib/shared/action-result";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 import { resolveVoiceStorageRoot } from "@/lib/voice-synthesis/storage-root";
 
 import { UPLOADS_BACKUP_SPEC } from "./engine-specs";
@@ -60,20 +62,17 @@ export function buildUploadsRunEnv(input: {
   roots: UploadRoot[];
   paired: PairedPostgresRun;
   backupsRoot: string;
-}): { ok: true; env: Record<string, string> } | { ok: false; error: string } {
+}): ActionResult<Record<string, string>> {
   const { paired } = input;
-  if (paired.target !== "postgres") return { ok: false, error: `paired run ${paired.id} is a ${paired.target} run, not postgres` };
-  if (paired.status !== "ok" || !paired.sha256) return { ok: false, error: `paired Postgres run ${paired.id} did not finish ok, so there is no dump to pair with` };
-  return {
-    ok: true,
-    env: {
-      DPF_UPLOAD_ROOTS: JSON.stringify(input.roots),
-      DPF_BLOB_ROOT_NAME: UPLOAD_STORE_ROOT_NAME,
-      PAIRED_POSTGRES_RUN_ID: paired.id,
-      PAIRED_POSTGRES_DUMP: path.posix.join(input.backupsRoot, paired.storagePath, "dpf.dump"),
-      PAIRED_POSTGRES_SHA256: paired.sha256,
-    },
-  };
+  if (paired.target !== "postgres") return err(`paired run ${paired.id} is a ${paired.target} run, not postgres`);
+  if (paired.status !== "ok" || !paired.sha256) return err(`paired Postgres run ${paired.id} did not finish ok, so there is no dump to pair with`);
+  return ok({
+    DPF_UPLOAD_ROOTS: JSON.stringify(input.roots),
+    DPF_BLOB_ROOT_NAME: UPLOAD_STORE_ROOT_NAME,
+    PAIRED_POSTGRES_RUN_ID: paired.id,
+    PAIRED_POSTGRES_DUMP: path.posix.join(input.backupsRoot, paired.storagePath, "dpf.dump"),
+    PAIRED_POSTGRES_SHA256: paired.sha256,
+  });
 }
 
 /** Run one upload-store backup paired with the given Postgres run. */
@@ -93,9 +92,9 @@ export async function runUploadsBackup(
   try {
     roots = resolveUploadRoots({ configuredPath: typeof config?.value === "string" ? config.value : null, env: process.env });
   } catch (error) {
-    return { runId: null, status: "failed", error: error instanceof Error ? error.message : String(error) };
+    return { runId: null, status: "failed", error: getErrorMessage(error) };
   }
   const built = buildUploadsRunEnv({ roots, paired, backupsRoot });
   if (!built.ok) return { runId: null, status: "failed", error: built.error };
-  return runManagedBackup(UPLOADS_BACKUP_SPEC, { ...args, prismaClient: prisma, backupsRoot, extraEnv: built.env });
+  return runManagedBackup(UPLOADS_BACKUP_SPEC, { ...args, prismaClient: prisma, backupsRoot, extraEnv: built.data });
 }

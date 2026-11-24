@@ -48,7 +48,7 @@ describe("buildUploadsRunEnv", () => {
     });
     expect(built).toEqual({
       ok: true,
-      env: {
+      data: {
         DPF_UPLOAD_ROOTS: JSON.stringify(roots),
         DPF_BLOB_ROOT_NAME: "upload-store",
         PAIRED_POSTGRES_RUN_ID: "run-1",
