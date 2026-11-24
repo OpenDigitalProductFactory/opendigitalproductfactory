@@ -140,6 +140,59 @@ describe("readGithubPullRequests", () => {
     );
   });
 
+  it("reads the open population independently of the recent inventory validator", async () => {
+    mocks.credentialFindUnique.mockResolvedValueOnce({ secretRef: "enc:xxx", status: "active" });
+    mocks.scheduledJobFindUnique.mockResolvedValue({ metadata: { githubPrEtag: '"recent-prs"' } });
+    const fetchImpl = vi.fn().mockResolvedValueOnce(makeResponse([makeRawPr(7180)]));
+
+    const result = await readGithubPullRequests({ fetchImpl: fetchImpl as never, population: "open" });
+
+    expect(fetchImpl.mock.calls[0]?.[0]).toContain("state=open");
+    expect(fetchImpl.mock.calls[0]?.[1].headers["If-None-Match"]).toBeUndefined();
+    expect(mocks.scheduledJobUpdate).not.toHaveBeenCalled();
+    expect(result).toMatchObject({ ok: true, rows: [{ sourceKey: "7180" }] });
+  });
+
+  it("does not report a capped open scan as a complete population", async () => {
+    mocks.credentialFindUnique.mockResolvedValueOnce({ secretRef: "enc:xxx", status: "active" });
+    let nextNumber = 1;
+    const fetchImpl = vi.fn(async () => makeResponse(Array.from({ length: 100 }, () => makeRawPr(nextNumber++))));
+
+    const result = await readGithubPullRequests({ fetchImpl: fetchImpl as never, population: "open" });
+
+    expect(result).toMatchObject({ ok: false, state: "error", error: expect.stringContaining("page limit") });
+    expect(fetchImpl).toHaveBeenCalledTimes(10);
+  });
+
+  it("rejects an inconsistent page when reading the open population", async () => {
+    mocks.credentialFindUnique.mockResolvedValueOnce({ secretRef: "enc:xxx", status: "active" });
+    const fetchImpl = vi.fn().mockResolvedValueOnce(makeResponse([makeRawPr(7180), makeRawPr(7179, { state: "closed" })]));
+
+    const result = await readGithubPullRequests({ fetchImpl: fetchImpl as never, population: "open" });
+
+    expect(result).toMatchObject({ ok: false, state: "error", error: expect.stringContaining("open population") });
+  });
+
+  it("retains the fork's head repository and the exact target branch for custody", async () => {
+    mocks.credentialFindUnique.mockResolvedValueOnce({ secretRef: "enc:xxx", status: "active" });
+    const fork = makeRawPr(7180, {
+      base: { ref: "main", sha: "a".repeat(40), repo: { full_name: "o/r" } },
+      head: { ref: "shared-branch", sha: "b".repeat(40), repo: { full_name: "someone/r" } },
+      user: { login: "submitter", type: "User" },
+    });
+    const missingTarget = makeRawPr(7181);
+    const fetchImpl = vi.fn().mockResolvedValueOnce(makeResponse([fork, missingTarget]));
+
+    const result = await readGithubPullRequests({ fetchImpl: fetchImpl as never, population: "open" });
+
+    expect(result).toMatchObject({ ok: true, rows: [
+      { sourceKey: "7180", custodySource: {
+        baseBranch: "main", baseSha: "a".repeat(40), headRepositoryFullName: "someone/r", authorLogin: "submitter", authorType: "User",
+      } },
+      { sourceKey: "7181", custodySource: null },
+    ] });
+  });
+
   it("persists exact authored-head and squash-merge provenance", async () => {
     mocks.credentialFindUnique.mockResolvedValueOnce({
       secretRef: "enc:xxx",
