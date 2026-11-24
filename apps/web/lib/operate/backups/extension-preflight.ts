@@ -154,8 +154,10 @@ export async function postgresExtensionPreflight(
 ): Promise<BackupPreflightResult> {
   if (!psql && await usesPrivateActuator()) {
     return detectMissingExtensions(async () => {
-      const { Prisma, prisma } = await import("@dpf/db");
-      const [row] = await prisma.$queryRaw<Array<{ string_agg: string | null }>>(Prisma.raw(DB_EXTENSION_AVAILABILITY_SQL));
+      const { prisma } = await import("@dpf/db");
+      // Static text identical to DB_EXTENSION_AVAILABILITY_SQL; a tagged
+      // template keeps the query provably free of dynamic input.
+      const [row] = await prisma.$queryRaw<Array<{ string_agg: string | null }>>`SELECT string_agg(e.extname, ',' ORDER BY e.extname) FROM pg_extension e LEFT JOIN pg_available_extensions a ON a.name = e.extname WHERE a.name IS NULL`;
       return { stdout: row?.string_agg ?? "", exitCode: 0 };
     });
   }
