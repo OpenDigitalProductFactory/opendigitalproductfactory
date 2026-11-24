@@ -253,8 +253,10 @@ describe("bounded recovery packet round trip", () => {
     mocks.access.mockResolvedValue({ decision: { level: "none" } });
     expect((await authorizeCoworkerRequest(packet, "human", context)).refusal).toBeDefined();
   });
-  it.each(["amended-design", "merged-fix"])("admits the actual %s claim packet with real readiness", async scenario => {
+  it.each(["amended-design", "merged-fix", "stale-build-plan"])("admits the actual %s claim packet with real readiness", async scenario => {
     const mergedFix = scenario === "merged-fix";
+    const staleBuildPlan = scenario === "stale-build-plan";
+    const firstBaseline = mergedFix || staleBuildPlan;
     const canonical = await vi.importActual<typeof import("@/lib/backlog/initiative-readiness/canonical-artifact-discovery")>(
       "@/lib/backlog/initiative-readiness/canonical-artifact-discovery");
     const entry = await vi.importActual<typeof import("@/lib/backlog/initiative-readiness/entry-adapter")>(
@@ -267,9 +269,24 @@ describe("bounded recovery packet round trip", () => {
     const source = { repositoryFullName: input.repositoryFullName, headBranch: input.headBranch,
       baseSha: "3".repeat(40), headSha: "1".repeat(40) };
     const artifact = { kind: "repo-blob-at-commit" as const, repositoryFullName: source.repositoryFullName,
-      commitSha: source.baseSha, path: "docs/superpowers/specs/roundtrip.md", providerBlobId: "b".repeat(40) };
-    const activities = (mergedFix ? readyActivities().filter(activity => activity.gateKey === "research") : readyActivities()).map(activity => activity.kind === "initiative_scope_baseline"
-      ? { ...activity, payload: { ...activity.payload, artifactRef: artifact } } : activity);
+      commitSha: staleBuildPlan ? source.headSha : source.baseSha, path: "docs/superpowers/specs/roundtrip.md", providerBlobId: "b".repeat(40) };
+    const activities: Parameters<typeof entry.projectBacklogItemReadiness>[0]["activities"][number][] =
+      (firstBaseline ? readyActivities().filter(activity => activity.gateKey === "research") : readyActivities())
+        .map(activity => activity.kind === "initiative_scope_baseline"
+          ? { ...activity, payload: { ...activity.payload, artifactRef: artifact } } : activity);
+    if (staleBuildPlan) {
+      const { buildPlanCoveragePayload, traceBuildPlanToAcceptance } = await import("@/lib/backlog/initiative-readiness/build-plan-coverage");
+      const trace = traceBuildPlanToAcceptance({ tasks: [{ title: "Prior work", satisfies: ["AC-1"] }] }, ["AC-1"]);
+      if (!trace.complete) throw new Error("The historical plan fixture must have complete traceability");
+      const recordedAt = "2026-10-21T00:00:00.000Z";
+      activities.push({ id: "abandoned-build-coverage", kind: "plan_backlog_coverage", gateKey: null,
+        recordedAt: new Date(recordedAt), payload: buildPlanCoveragePayload({
+          itemId: input.backlogItemId, buildId: "FB-ABANDONED", revisionId: "prior-plan",
+          planDigest: `sha256:${"c".repeat(64)}`,
+          baseline: { baselineId: "build-design:FB-ABANDONED", artifactDigest: `sha256:${"d".repeat(64)}` },
+          acceptanceIds: ["AC-1"], trace, recordedAt,
+        }) });
+    }
     const room = { ...source, id: "room-row", capsuleId: "WC-ENTRY", backlogItemId: input.backlogItemId,
       executorKind: "codex-desktop", archivedAt: null, status: "ready", isLive: true };
     const rooms = [room, { ...room, capsuleId: "WC-OTHER", headBranch: "feat/other" }];
@@ -283,7 +300,8 @@ describe("bounded recovery packet round trip", () => {
     vi.mocked(db.workroom.findMany).mockImplementation(selectRooms as never);
     const oldItem = await mocks.item();
     const item = { ...oldItem, id: "row-bi", itemId: input.backlogItemId, activities,
-      ...(mergedFix ? { status: "awaiting-acceptance", type: "product", workType: "bug" } : {}) };
+      ...(firstBaseline ? { type: "product", workType: "bug" } : {}),
+      ...(mergedFix ? { status: "awaiting-acceptance" } : {}) };
     vi.mocked(db.backlogItem!.findFirst).mockResolvedValue(item);
     if (mergedFix) mocks.completion.mockResolvedValue({ mergedThroughGates: "merged", decision: {
       ...entry.projectBacklogItemReadinessSummary({ item, activities, hasSpec: false, hasPlan: false,
@@ -300,11 +318,21 @@ describe("bounded recovery packet round trip", () => {
       canonical.prepareCurrentDesignObservation({ ...args, ports: { readCurrentArtifact: async () => ({ state: "verified", digest: "sha256:new-design" }) } }));
     const discover = async () => ({ resolved: true as const, path: artifact.path, providerBlobId: artifact.providerBlobId });
     const issued = await claimGovernedBacklogWorkspace({ db, input: { ...input, ...source },
-      actor: { ...actor, userId: "human", agentId: "AGT-AUTHOR", taskAuthorityTokenId: "access" }, workIntent: mergedFix ? "implementation" : "plan",
+      actor: { ...actor, userId: "human", agentId: "AGT-AUTHOR", taskAuthorityTokenId: "access" }, workIntent: firstBaseline ? "implementation" : "plan",
       dependencies: { discoverCanonicalArtifact: discover } });
     expect(issued.ok).toBe(false);
-    if (issued.ok) throw new Error("The changed design still requires approval");
+    if (issued.ok) throw new Error("The claim must still owe approval");
     const packet = issued.data.recovery.reviewerRoutes.find(route => route.gate === "spec-approval")!.requestCoworker;
+    if (staleBuildPlan) {
+      expect(issued.data.readiness).toMatchObject({
+        verdict: "input-required",
+        unmet: expect.arrayContaining([expect.objectContaining({ code: "PLAN_REQUIRED", state: "stale" })]),
+      });
+      expect(packet.initiativeReviewBinding).toMatchObject({
+        expectedCurrentBaselineId: null, workroomRef: { workroomId: room.capsuleId, headSha: source.headSha },
+        artifactRef: artifact,
+      });
+    }
     mocks.recovery.mockImplementation((args: Parameters<typeof terminal.resolveTerminalInitiativeRecovery>[0]) =>
       terminal.resolveTerminalInitiativeRecovery({ ...args, ports: { ...terminal.DEFAULT_TERMINAL_RECOVERY_PORTS,
         loadLiveRooms: async ({ refusedWorkroomId }) => refusedWorkroomId
@@ -335,8 +363,14 @@ describe("bounded recovery packet round trip", () => {
     const unscoped = await getBacklogItem({ itemId: input.backlogItemId, claimSource: source,
       currentDesignSource: source, internal: { currentDesignSource: source } });
     expect(mocks.design).toHaveBeenLastCalledWith({ itemId: input.backlogItemId });
-    if (mergedFix) {
-      expect(unscoped.data?.readiness).toMatchObject({ decisions: { completion: { verdict: "allowed" } } });
+    if (firstBaseline) {
+      if (mergedFix) expect(unscoped.data?.readiness).toMatchObject({ decisions: { completion: { verdict: "allowed" } } });
+      if (staleBuildPlan) {
+        mocks.room.mockResolvedValue({ ...room, headSha: "f".repeat(40) });
+        expect((await authorizeCoworkerRequest(packet, "human", context)).refusal?.message)
+          .toContain("immutable source changed");
+        mocks.room.mockResolvedValue(room);
+      }
       const retained = readyActivities().find(activity => activity.kind === "initiative_scope_baseline")!;
       activities.push({ ...retained, payload: { ...retained.payload, artifactRef: artifact } });
       const changedHistory = await authorizeCoworkerRequest(packet, "human", context);

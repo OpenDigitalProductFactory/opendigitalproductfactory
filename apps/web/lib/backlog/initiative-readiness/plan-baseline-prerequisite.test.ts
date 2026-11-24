@@ -12,6 +12,10 @@ const decision: InitiativeReadinessDecision = {
   unmet: [readinessRequirement({ code: "PLAN_REQUIRED", state: "missing", accountableRole: "plan-author" })],
   evaluatedAt: "2026-10-23T00:00:00Z",
 };
+const stalePlanDecision: InitiativeReadinessDecision = {
+  ...decision,
+  unmet: [readinessRequirement({ code: "PLAN_REQUIRED", state: "stale", accountableRole: "plan-author" })],
+};
 function database() {
   return { backlogItem: { findFirst: vi.fn().mockResolvedValue(null) },
     backlogItemActivity: { findMany: vi.fn().mockResolvedValue([]) } };
@@ -20,6 +24,14 @@ const baseline = (payload: unknown) => ({ id: "old-baseline", kind: "initiative_
   recordedAt: new Date("2026-09-01T00:00:00Z"), payload });
 
 describe("plan baseline prerequisite independent of delivery closure", () => {
+  it("finds a missing first baseline when past plan coverage is stale", async () => {
+    expect(await loadPlanBaselinePrerequisite({
+      db: database(), item, decision: stalePlanDecision, currentDesignState: "not-applicable",
+    })).toMatchObject({
+      code: "OBJECTIVE_BASELINE_REQUIRED", state: "missing", accountableRole: "design-checklist-reviewer",
+    });
+  });
+
   it.each(["verified", "not-applicable"])("finds a missing baseline with %s design observation", async currentDesignState => {
     const db = database();
     expect(await loadPlanBaselinePrerequisite({ db, item, decision, currentDesignState })).toMatchObject({
@@ -40,7 +52,7 @@ describe("plan baseline prerequisite independent of delivery closure", () => {
   ])("does not treat retained history as absent: %j", async (...payloads) => {
     const db = database();
     db.backlogItemActivity.findMany.mockResolvedValueOnce(payloads.map(baseline));
-    expect(await loadPlanBaselinePrerequisite({ db, item, decision, currentDesignState: "not-applicable" })).toBeNull();
+    expect(await loadPlanBaselinePrerequisite({ db, item, decision: stalePlanDecision, currentDesignState: "not-applicable" })).toBeNull();
     expect(db.backlogItemActivity.findMany).toHaveBeenCalledTimes(1);
   });
 
@@ -54,13 +66,13 @@ describe("plan baseline prerequisite independent of delivery closure", () => {
         deliverables: [{ key: "child", backlogItemId: item.itemId }],
       } }])
       .mockResolvedValueOnce([baseline({ baselineId: "parent", supersedesBaselineId: null })]);
-    expect(await loadPlanBaselinePrerequisite({ db, item, decision, currentDesignState: "not-applicable" })).toBeNull();
+    expect(await loadPlanBaselinePrerequisite({ db, item, decision: stalePlanDecision, currentDesignState: "not-applicable" })).toBeNull();
     expect(db.backlogItem.findFirst).toHaveBeenCalled();
   });
 
   it.each(["unavailable", "recorded-only", undefined])("does not infer absence from %s design evidence", async currentDesignState => {
     const db = database();
-    expect(await loadPlanBaselinePrerequisite({ db, item, decision, currentDesignState })).toBeNull();
+    expect(await loadPlanBaselinePrerequisite({ db, item, decision: stalePlanDecision, currentDesignState })).toBeNull();
     expect(db.backlogItemActivity.findMany).not.toHaveBeenCalled();
   });
 
@@ -69,6 +81,7 @@ describe("plan baseline prerequisite independent of delivery closure", () => {
     { ...decision, verdict: "denied" as const },
     { ...decision, target: "plan" as const },
     { ...decision, unmet: [] },
+    { ...decision, unmet: [readinessRequirement({ code: "PLAN_REQUIRED", state: "malformed", accountableRole: "plan-author" })] },
     undefined,
   ])("does not add reviews when implementation does not owe plan coverage", async candidate => {
     const db = database();
@@ -79,7 +92,7 @@ describe("plan baseline prerequisite independent of delivery closure", () => {
   it("propagates unavailable history instead of representing it as missing", async () => {
     const db = database();
     db.backlogItemActivity.findMany.mockRejectedValue(new Error("history unavailable"));
-    await expect(loadPlanBaselinePrerequisite({ db, item, decision, currentDesignState: "not-applicable" }))
+    await expect(loadPlanBaselinePrerequisite({ db, item, decision: stalePlanDecision, currentDesignState: "not-applicable" }))
       .rejects.toThrow("history unavailable");
   });
 });
