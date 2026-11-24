@@ -41,10 +41,25 @@ POSTGRES_USER="${POSTGRES_USER:-dpf}"
 POSTGRES_DB="${POSTGRES_DB:-dpf}"
 DB_CONTAINER="${DPF_PRODUCTION_DB_CONTAINER:-dpf-postgres-1}"
 LOG_PATH="${LOG_PATH:-${DUMP_PATH}.restore-log.txt}"
+DIRECT="${DPF_MANAGED_POSTGRES_DIRECT:-0}"
 
 [ -n "$DUMP_PATH" ] || fail "DUMP_PATH not set" 2
 [ -r "$DUMP_PATH" ] || fail "dump not readable at $DUMP_PATH" 2
-command -v docker >/dev/null 2>&1 || fail "docker CLI not available in runner image" 2
+if [ "$DIRECT" = 1 ]; then
+  [ -n "${PGDATABASE:-}" ] && [ "$PGDATABASE" = "$POSTGRES_DB" ] || fail "managed database target missing" 2
+  command -v pg_restore >/dev/null 2>&1 || fail "pg_restore not available in runner image" 2
+  DB_CONTAINER="configured-postgres"
+else
+  command -v docker >/dev/null 2>&1 || fail "docker CLI not available in runner image" 2
+fi
+
+restore_database() {
+  if [ "$DIRECT" = 1 ]; then
+    pg_restore --single-transaction "$@"
+  else
+    docker exec -i "$DB_CONTAINER" pg_restore "$@"
+  fi
+}
 
 STARTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 STARTED_EPOCH="$(date +%s)"
@@ -61,7 +76,7 @@ log "starting pg_restore container=$DB_CONTAINER user=$POSTGRES_USER db=$POSTGRE
 # restore: N" against a clean target. As long as the exit code is 0, the
 # restore is functionally complete. We surface the full log either way for
 # operator review via the audit row.
-if docker exec -i "$DB_CONTAINER" pg_restore \
+if restore_database \
     --clean \
     --if-exists \
     --no-owner \
@@ -74,9 +89,9 @@ if docker exec -i "$DB_CONTAINER" pg_restore \
   DURATION_MS=$(( (FINISHED_EPOCH - STARTED_EPOCH) * 1000 ))
   log "ok startedAt=$STARTED_AT finishedAt=$FINISHED_AT duration_ms=$DURATION_MS"
   exit 0
+else
+  EXIT=$?
 fi
-
-EXIT=$?
 log "pg_restore exit=$EXIT — tail of log:"
 tail -n 20 "$LOG_PATH" >&2 || true
 fail "pg_restore failed (exit=$EXIT)" 3

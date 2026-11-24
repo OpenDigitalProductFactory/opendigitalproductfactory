@@ -59,22 +59,45 @@ DB_CONTAINER="${DPF_PRODUCTION_DB_CONTAINER:-dpf-postgres-1}"
 TRIAL_DB_PREFIX="${TRIAL_DB_PREFIX:-dpf_trial_}"
 ASSERT_TABLES="${ASSERT_TABLES:-BacklogItem,Epic,ModelProvider,User}"
 LOG_PATH="${LOG_PATH:-${DUMP_PATH}.trial-restore-log.txt}"
+DIRECT="${DPF_MANAGED_POSTGRES_DIRECT:-0}"
 
 [ -n "$DUMP_PATH" ] || fail "DUMP_PATH not set" 2
 [ -r "$DUMP_PATH" ] || fail "dump not readable at $DUMP_PATH" 2
-command -v docker >/dev/null 2>&1 || fail "docker CLI not available in runner image" 2
+if [ "$DIRECT" = 1 ]; then
+  [ -n "${PGDATABASE:-}" ] || fail "managed database connection missing" 2
+  command -v pg_restore >/dev/null 2>&1 || fail "pg_restore not available in runner image" 2
+else
+  command -v docker >/dev/null 2>&1 || fail "docker CLI not available in runner image" 2
+fi
+case "$TRIAL_DB_PREFIX" in ""|*[!a-zA-Z0-9_]*) fail "invalid trial database prefix" 2;; esac
+
+trial_psql() {
+  if [ "$DIRECT" = 1 ]; then
+    psql -X -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" "$@"
+  else
+    docker exec "$DB_CONTAINER" psql -X -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" "$@"
+  fi
+}
+
+trial_restore() {
+  if [ "$DIRECT" = 1 ]; then
+    pg_restore "$@"
+  else
+    docker exec -i "$DB_CONTAINER" pg_restore "$@"
+  fi
+}
 
 # Garbage-collect any stragglers from previous failed runs (>24h old).
 # Names match TRIAL_DB_PREFIX*; we drop unconditionally since these DBs are
 # ephemeral by design.
 log "garbage-collecting orphan trial DBs older than 24h"
-ORPHAN_QUERY="SELECT datname FROM pg_database WHERE datname LIKE '${TRIAL_DB_PREFIX}%' AND (pg_stat_file('base/' || oid)).modification < (now() - interval '24 hours');"
-ORPHANS="$(docker exec "$DB_CONTAINER" psql -U "$POSTGRES_USER" -d postgres -t -A -c "$ORPHAN_QUERY" 2>/dev/null || true)"
+ORPHAN_QUERY="SELECT datname FROM pg_database WHERE left(datname, length('${TRIAL_DB_PREFIX}')) = '${TRIAL_DB_PREFIX}' AND substring(datname from length('${TRIAL_DB_PREFIX}') + 1) ~ '^[0-9]+_[0-9]+$' AND (pg_stat_file('base/' || oid)).modification < (now() - interval '24 hours');"
+ORPHANS="$(trial_psql -d postgres -t -A -c "$ORPHAN_QUERY" 2>/dev/null || true)"
 if [ -n "$ORPHANS" ]; then
   echo "$ORPHANS" | while IFS= read -r orphan; do
     [ -n "$orphan" ] || continue
     log "dropping orphan: $orphan"
-    docker exec "$DB_CONTAINER" psql -U "$POSTGRES_USER" -d postgres \
+    trial_psql -d postgres \
       -c "DROP DATABASE IF EXISTS \"$orphan\";" >/dev/null 2>&1 || true
   done
 fi
@@ -94,7 +117,7 @@ log "starting trial restore trial_db=$TRIAL_DB dump=$DUMP_PATH size=$SIZE_BYTES"
 CLEANUP_OK=1
 cleanup() {
   log "cleaning up trial DB $TRIAL_DB"
-  if ! docker exec "$DB_CONTAINER" psql -U "$POSTGRES_USER" -d postgres \
+  if ! trial_psql -d postgres \
        -c "DROP DATABASE IF EXISTS \"$TRIAL_DB\";" >> "$LOG_PATH" 2>&1; then
     log "WARN: failed to drop $TRIAL_DB; operator may need to clean up manually"
     CLEANUP_OK=0
@@ -112,7 +135,7 @@ trap cleanup EXIT
 
 # Step 1: CREATE DATABASE. Requires CREATEDB privilege on the role.
 log "creating trial DB"
-if ! docker exec "$DB_CONTAINER" psql -U "$POSTGRES_USER" -d postgres \
+if ! trial_psql -d postgres \
      -c "CREATE DATABASE \"$TRIAL_DB\";" >> "$LOG_PATH" 2>&1; then
   fail "CREATE DATABASE failed (does $POSTGRES_USER have CREATEDB privilege?)" 3
 fi
@@ -121,11 +144,13 @@ fi
 # --no-owner / --no-privileges keeps role differences from blowing up the
 # restore (same flags the operator restore script uses).
 log "running pg_restore"
-if ! docker exec -i "$DB_CONTAINER" pg_restore \
+if trial_restore \
      --no-owner --no-privileges \
      -U "$POSTGRES_USER" \
      -d "$TRIAL_DB" \
      < "$DUMP_PATH" >> "$LOG_PATH" 2>&1; then
+  :
+else
   EXIT=$?
   log "pg_restore exit=$EXIT — tail of log:"
   tail -n 20 "$LOG_PATH" >&2 || true
@@ -141,7 +166,8 @@ RESULTS=""
 ASSERTION_FAIL=""
 IFS=','
 for table in $ASSERT_TABLES; do
-  COUNT="$(docker exec "$DB_CONTAINER" psql -U "$POSTGRES_USER" -d "$TRIAL_DB" \
+  case "$table" in ""|*[!a-zA-Z0-9_]*) fail "invalid trial assertion table" 2;; esac
+  COUNT="$(trial_psql -d "$TRIAL_DB" \
            -t -A -c "SELECT count(*) FROM \"$table\";" 2>>"$LOG_PATH" || echo "-1")"
   COUNT="$(echo "$COUNT" | tr -d ' \n\r')"
   RESULTS="${RESULTS}assert_${table}=${COUNT} "

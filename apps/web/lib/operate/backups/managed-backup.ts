@@ -370,8 +370,7 @@ export async function runManagedBackup(
   let env = spec.buildEnv({ targetDir: absoluteTargetDir, composeProject });
   if (spec.target === "postgres" && !args.scriptPath && await usesPrivateActuator()) {
     try {
-      env = { ...managedPostgresConnection(), TARGET_DIR: absoluteTargetDir, DPF_MANAGED_POSTGRES_DIRECT: "1",
-        DPF_VERSION: env.DPF_VERSION, NODE_ENV: "production", PATH: "/usr/local/bin:/usr/bin:/bin" };
+      env = { ...managedPostgresConnection(), TARGET_DIR: absoluteTargetDir, DPF_VERSION: env.DPF_VERSION };
     } catch { return recordFailure("The configured PostgreSQL backup connection could not be verified."); }
   }
 

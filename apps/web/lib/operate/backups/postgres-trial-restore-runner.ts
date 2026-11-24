@@ -31,6 +31,8 @@ import {
 } from "./constants";
 import { recordJobHeartbeat } from "./managed-backup";
 import { resolveManagedScriptPath, runManagedScript } from "./managed-script-path";
+import { managedPostgresConnection } from "./managed-postgres-connection";
+import { usesPrivateActuator } from "../../../../../scripts/lib/scope-writer-observation.mjs";
 
 const BACKUPS_ROOT = "/backups";
 const TRIAL_RESTORE_SCRIPT_NAME = "postgres-trial-restore.sh";
@@ -227,7 +229,18 @@ export async function runPostgresTrialRestore(
     ASSERT_TABLES: assertTables.join(","),
   };
 
-  const outcome = await runScript(scriptPath, env);
+  let outcome: ScriptOutcome;
+  if (!args.runScript && !args.scriptPath && await usesPrivateActuator()) {
+    try {
+      outcome = await runScript(scriptPath, {
+        ...managedPostgresConnection(), DUMP_PATH: source.dumpPath, ASSERT_TABLES: assertTables.join(","),
+      });
+    } catch {
+      outcome = { ok: false, exitCode: 2, stdout: "", stderr: "The trial restore connection could not be verified." };
+    }
+  } else {
+    outcome = await runScript(scriptPath, env);
+  }
   const parsed = parseResultLine(outcome.stdout);
   const finishedAt = now();
   const durationMs = parsed?.durationMs ?? finishedAt.getTime() - startedAt.getTime();

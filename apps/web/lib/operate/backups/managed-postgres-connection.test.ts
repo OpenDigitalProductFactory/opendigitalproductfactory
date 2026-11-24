@@ -3,9 +3,9 @@ import { managedPostgresConnection } from "./managed-postgres-connection";
 
 it("keeps the configured database identity and TLS without forwarding Prisma-only options", () => {
   const result = managedPostgresConnection("postgresql://operator:example@postgres:5432/database?schema=public&connection_limit=4&sslmode=require");
-  expect(result).toEqual({
-    PGDATABASE: "postgresql://operator:example@postgres:5432/database?sslmode=require",
-    POSTGRES_USER: "operator", POSTGRES_DB: "database",
+  expect(result).toMatchObject({
+    PGHOST: "postgres", PGPORT: "5432", PGUSER: "operator", PGPASSWORD: "example",
+    PGDATABASE: "database", PGSSLMODE: "require", POSTGRES_USER: "operator", POSTGRES_DB: "database",
   });
 });
 
