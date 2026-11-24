@@ -100,7 +100,7 @@ describe("inventory binding checkpoint", () => {
     });
     expect(run.mock.calls.map(([name]) => name)).toEqual(["run-sync-cron", "bind-workroom-pr-observations"]);
     expect(mocks.readPullRequests).toHaveBeenCalledExactlyOnceWith({ population: "open" });
-    expect(mocks.bindObservations).toHaveBeenCalledWith("persisted-run", expect.any(Date), scan);
+    expect(mocks.bindObservations).toHaveBeenCalledWith("persisted-run", expect.any(Date), scan, { reconcileCustody: true });
   });
 
   it("still runs the binding step with unknown coverage if the open scan throws", async () => {
@@ -110,7 +110,7 @@ describe("inventory binding checkpoint", () => {
     await syncAndBind({ run }, "run-sync-cron", { triggeredBy: "cron" });
     expect(mocks.bindObservations).toHaveBeenCalledWith("persisted-run", expect.any(Date), {
       ok: false, state: "error", error: "provider unavailable",
-    });
+    }, { reconcileCustody: true });
   });
 });
 

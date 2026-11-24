@@ -733,7 +733,7 @@ export async function syncAndBind(step: Pick<Parameters<typeof gateAtEntry>[0], 
     const openScan = await readGithubPullRequests({ population: "open" }).catch((error): GithubReaderResult => ({
       ok: false, state: "error", error: error instanceof Error ? error.message : String(error),
     }));
-    return reconcileInventoryPullRequestBindings(sync.syncRunId, new Date(), openScan);
+    return reconcileInventoryPullRequestBindings(sync.syncRunId, new Date(), openScan, { reconcileCustody: true });
   });
   return { ...sync, workroomBindings: bindings };
 }
