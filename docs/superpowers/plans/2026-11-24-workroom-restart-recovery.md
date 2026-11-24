@@ -34,6 +34,11 @@ Design and acceptance criteria are in the [restart-recovery design](../specs/202
 
 ## Backlog coverage
 
+**Backlog item:** `BI-224F56F1`
+
+- Decision: atomic
+- Receipt: `cmwuy4nri09780ert8i2jyc5n`
+
 All four phases implement a single repair on BI-224F56F1. The authority migration, immutable launch recipe, continuity comparison and claim-local proof require coordinated delivery. An upgrade that only changes the timestamp predicate can reopen scope without the reviewed writer guarantee. The separate runtime, PR-automation and cost-control workstreams retain their own carriers.
 
 DPF recorded schema-v2 coverage `cmwuy4nri09780ert8i2jyc5n` against baseline

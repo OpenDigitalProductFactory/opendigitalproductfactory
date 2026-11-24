@@ -98,6 +98,7 @@ const definitions: ToolDefinition[] = [
         staleOnly: { type: "boolean", description: "Return only capsules that are NOT truly live (reap candidates). Default false." },
         headBranch: { type: "string", maxLength: 255, description: "Find the room for this branch, including one another assistant made for you." },
         pullRequestNumber: { type: "integer", minimum: 1, description: "Find the room for this pull request, including one another assistant made for you." },
+        harnessThreadId: { type: "string", maxLength: 256, description: "Find the room claimed from this harness thread (for T3 Code, T3CODE_THREAD_ID), including one another assistant made for you." },
         limit: { type: "integer", minimum: 1, maximum: 400, description: "Requested page size (default 5, maximum 100; view atlas default 10, maximum 400); whole rows are reduced to fit the client budget." },
         cursor: { type: "string", maxLength: 1024, description: "Opaque continuation for the selected view. Instance and definition cursors cannot be mixed. Keep instance filters unchanged. Instance expiry or changed definition inventory requires a fresh traversal." },
       },
@@ -207,6 +208,14 @@ const definitions: ToolDefinition[] = [
         headSha: { type: "string", description: "SHA of the branch head: full, or a 7+ character prefix of a pushed commit. An unpushed head must be the full git rev-parse HEAD output." },
         provider: { type: "string", description: "Provider string (claude, codex, grok) — mapped to the closest executor kind." },
         harness: { type: "string", enum: ["t3-code"], description: "The orchestrating harness when one runs the client, e.g. t3-code when T3 Code drives Codex or Claude. provider stays the model client; sessionRef is the client thread id (CODEX_THREAD_ID / CLAUDE_CODE_SESSION_ID)." },
+        harnessRef: {
+          type: "object", additionalProperties: false, required: ["threadId"],
+          description: "With harness: the harness's own references for this session, so the room can be found from the thread. For T3 Code, threadId is T3CODE_THREAD_ID. Descriptive only; sessionRef stays the client thread id.",
+          properties: {
+            threadId: { type: "string", maxLength: 256 }, projectId: { type: "string", maxLength: 256 },
+            environmentId: { type: "string", maxLength: 256 }, providerInstanceId: { type: "string", maxLength: 256 },
+          },
+        },
         sessionRef: { type: "string", description: "Owner/session id, stored as the workroom executorRef." },
         workShape: {
           type: "string",

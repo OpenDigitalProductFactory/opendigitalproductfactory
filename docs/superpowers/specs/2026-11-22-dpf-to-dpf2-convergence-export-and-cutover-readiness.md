@@ -260,6 +260,25 @@ sha256sum "$EXPORT_DIR/snapshot.ndjson" > "$EXPORT_DIR/snapshot.ndjson.sha256"
 
 *(Full table-by-table `COPY (SELECT ...) TO STDOUT` / JSONL extraction uses the same `REPEATABLE READ READ ONLY` transaction boundary and CTEs above, writing one file per table under `$EXPORT_DIR/tables/<Model>.jsonl`, copying each referenced `documents/sha256/<aa>/<bb>/<sha256>` file read-only into `$EXPORT_DIR/blobs/`, verifying `sha256sum`, and emitting `$EXPORT_DIR/manifest.json`.)*
 
+#### 2.4.1 Scratch-database verification of the example (2026-11-24)
+
+On 2026-11-24 the SQL above was copied exactly from this file and run, with the flags shown, against a throwaway `pgvector/pgvector:pg16` container. All 666 migrations were applied in order, through `20261120180000_workroom_dispatch_build_effect`. The data was a synthetic fixture; no live tenant database was read. Each output was checked by parsing every line as JSON. (This record was meant to land with PR #7185 and is added here.)
+
+- **One organization:** exit 0, one valid NDJSON line, `slice3.status = "exported"`. A decoy invoice whose `sourceId` held the operator `scheduleId` instead of the internal id was excluded: 2 invoices exported, not 3. The schedule amount came back as the exact string `"12345678901234567.890123456789000000000000000000"`. Prisma `Decimal` maps to `numeric(65,30)`, so trailing zeros are part of the exact value; the importer compares values numerically, not as text. `nextInvoiceDate` serialized as `2026-12-01T00:00:00+00:00`. Creator counts matched the fixture: the schedule creator resolved through `PrincipalAlias`, one invoice creator was unresolved, one invoice-document creator was null.
+- **Two organizations:** exit 0, one valid line, `slice3 = { status: "held", reason: "commerce-ownership-unverifiable" }`, every Slice 3 count 0. The second tenant's organization and profession profiles were excluded (3 profiles exported).
+
+Without `--quiet`, psql writes `BEGIN`, `SET` and `COMMIT` command tags into `snapshot.ndjson` and the file is no longer valid NDJSON. The `document-owned-by-another-organization` hold is defensive: it cannot trigger while the single-organization guard holds, and becomes reachable once a supported commerce ownership mapping lifts that guard.
+
+#### 2.4.2 Synthetic restore artifact for the same-schema rehearsal
+
+WWMD advisory `DI-520267766767` and the ratified install-is-the-tenant rule make the first Gate 3 rehearsal a same-schema cold restore of DPF's own database, not a translated export. [`scripts/convergence/build-synthetic-restore-artifact.sh`](../../../scripts/convergence/build-synthetic-restore-artifact.sh) builds its input from fictional data only (BI-3357F36E):
+
+1. Start a throwaway `pgvector/pgvector:pg16` container. Apply every migration in order, each in one transaction as Prisma does, and record each in `_prisma_migrations` with the SHA-256 of its `migration.sql`.
+2. Load [`synthetic-restore-fixture.sql`](../../../scripts/convergence/synthetic-restore-fixture.sql): one organization, a creator mapped through `PrincipalAlias(user)`, one with no alias, and one recurring customer chain through invoice documents, with amounts a double cannot carry.
+3. Run the production `scripts/backup-postgres.sh` against that container. Its `pg_restore --list` check runs with the container's own PostgreSQL 16 client.
+
+The output folder holds `backup/` (exactly `manifest.json`, `dpf.dump`, `dpf.dump.sha256`, `log.txt`, the shape DPF2's intake reads), `files/` (the synthetic document bytes at their storage keys) and `provenance.json` (source commit, migration head, fixture and dump digests, files manifest). Nothing is added to `backup/`, because DPF2's intake refuses any extra entry. The files manifest moves into the backup shape once BI-1C6BF6B6 agrees one with DPF2. The script writes outside any git checkout with owner-only permissions and refuses to overwrite an existing artifact.
+
 ### 2.5 Rehearsal Restore & Parity Verification Gates
 
 Before ANY live tenant cutover is considered, DPF2 must pass all five rehearsal gates against an ephemeral staging database (`dpf2_rehearsal_<ts>`):

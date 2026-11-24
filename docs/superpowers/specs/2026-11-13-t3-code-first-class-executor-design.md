@@ -88,6 +88,14 @@ When `gh pr merge --auto` is refused, `pnpm land` (`scripts/land-branch.mjs`) na
 
 `claim_backlog_item_for_work` accepts an optional `harness` (closed set: `t3-code`). The room records it as `workspaceState.executorHarness`, and readback and `get_workroom` show it. The executor kind stays the authenticated client surface (`codex-desktop` when T3 drives Codex). That is what OAuth admission and the handoff surface map check, and changing it would break both. A provider string that names only a harness ("t3", "t3-code") is refused with `provider_harness_only`, which says to pass the model client as `provider` and the harness as `harness`, instead of silently becoming `human`.
 
+**The harness's own references (BI-75AB446B).** The label says a harness ran the client; it does not say which thread. T3 exports `T3CODE_THREAD_ID` to every session it starts, and DPF read it nowhere, so neither side could find the other. The claim accepts an optional `harnessRef: { threadId, projectId?, environmentId?, providerInstanceId? }`, stored as `workspaceState.executorHarness.ref`.
+- **Fields.** `threadId` and `providerInstanceId` are the pair DPF's T3 port already reads back (`lib/build/t3-code`) and the pair DPF2's governed T3 binds a claim to. `projectId` and `environmentId` say where the thread lives.
+- **Descriptive only.** Executor kind, `executorRef` (the client session id the gate records) and grants do not change. Authority still comes from the authenticated caller and the room's grants.
+- **Refusals.** A reference without `harness` is refused `harness_ref_requires_harness`. A malformed one is refused `invalid_harness_ref` before the room is touched.
+- **Re-claim.** A later claim by the same session that omits the reference keeps the recorded one. Another session's claim does not inherit it.
+- **Lookup.** `list_workrooms` takes `harnessThreadId` and matches that stored thread id, under the same visibility rule as the branch and PR lookups.
+- **Not here.** No call from the portal to a T3 server (S6, BI-5A866218), no session token or tool ceiling (S5, BI-687E7D81), and no room membership (BI-B62B218E). No schema migration: the reference lives in `workspaceState`.
+
 The T3 brief in the delivery-surfaces runbook says:
 - claim first with `provider: codex|claude`, `harness: t3-code` and `sessionRef` set to the client thread id;
 - run the gate in the same thread;
@@ -107,6 +115,7 @@ The T3 brief in the delivery-surfaces runbook says:
 - **AC-7** (OBJ-3): A checkpoint `capacity` recorded by the executor is shown the same way, and a malformed one is refused without renewing the lease.
 - **AC-8** (OBJ-1): `queue_workroom_pull_request` enables auto-merge only for a PR whose head equals the room head with passing bound gate evidence, and refuses otherwise with a typed reason.
 - **AC-9** (OBJ-1): A claim with `harness: t3-code` records and shows the harness; `provider: "t3"` is refused with `provider_harness_only`.
+- **AC-9b** (OBJ-1, BI-75AB446B): A claim with `harness: t3-code` and a `harnessRef` stores and shows the reference, and `list_workrooms` with `harnessThreadId` finds the room; a reference without a harness or a malformed one is refused and changes nothing.
 - **AC-10** (OBJ-1, OBJ-2): After deployment, a delivery-small item is delivered end to end by T3 inside its workroom with zero owner approvals.
 
 ## Compatibility and rollback

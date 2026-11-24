@@ -89,7 +89,10 @@ T3 Code orchestrates a native client (Codex or Claude) in its own thread. Trial 
 1. **Claim first, never adopt first.** Call `claim_backlog_item_for_work` with:
    - `provider` set to the client T3 drives (`codex` or `claude`);
    - `harness: "t3-code"`;
-   - `sessionRef` set to the client thread id: `CODEX_THREAD_ID` for Codex, `CLAUDE_CODE_SESSION_ID` for Claude.
+   - `sessionRef` set to the client thread id: `CODEX_THREAD_ID` for Codex, `CLAUDE_CODE_SESSION_ID` for Claude;
+   - `harnessRef: { threadId }` set to T3's own thread id, which T3 exports as `T3CODE_THREAD_ID`. Add `projectId`, `environmentId` and `providerInstanceId` when you know them (BI-75AB446B).
+
+   The room then shows which T3 thread works in it, and `list_workrooms` with `harnessThreadId` finds the room from the thread. The reference describes; `sessionRef` is still the id the gate records.
 
    `provider: "t3"` is refused with `provider_harness_only`.
 2. **Create the worktree under the canonical sibling base**, not T3's default `~/.t3/worktrees`.
