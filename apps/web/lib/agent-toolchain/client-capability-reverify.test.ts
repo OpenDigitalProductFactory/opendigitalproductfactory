@@ -85,6 +85,15 @@ describe("runClientCapabilityReverification", () => {
     expect(proposal!.findings.find((f) => f.field === "oauthHttps")!.currentValue).toBe("false (unproven)");
   });
 
+  it("reports the harness host among the verified hook hosts (BI-95665E9B)", async () => {
+    const first = await runClientCapabilityReverification(deps());
+    const source = CLIENT_CAPABILITY_PROFILE.clients["claude-code"]!.sources[0]!;
+    const d = deps({ state: first.state }, { [source]: `${PAGE}<p>Hooks: PreToolUse now receives the permission mode.</p>` });
+    const result = await runClientCapabilityReverification(d);
+    const proposal = result.proposals.find((p) => p.clientKind === "claude-code");
+    expect(proposal!.findings.find((f) => f.field === "hookPlane")!.currentValue).toBe("desktop+harness (per host)");
+  });
+
   it("files for a reported CLI version newer than verified, keyed on that version", async () => {
     const first = await runClientCapabilityReverification(deps());
     const d = deps({ state: first.state, reportedCliVersions: { codex: "0.160.0", "claude-code": "2.1.295" } });
