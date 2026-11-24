@@ -36,10 +36,18 @@ Only the canonical runtime owner may advance that install through its governed p
 
 ## Acceptance contract
 
-- AC-1: Same authenticated replacement IDs with valid non-backward restart times no later than observation can qualify; new IDs, malformed/future/backward times, old-container presence and mismatched source/daemon/project remain held.
-- AC-2: Signed retirement authentication, packaged writer/image proof, current ownership and transition admission checks retain precedence; no evidence rewriting or authorization bypass.
-- AC-3: Independently establish stable loaded writer/process qualification and canonical-transition exclusion through transaction commit, or atomic abort, with meaningful after-qualification mutation, lock-race and crash/rollback evidence. Do not substitute mocked Docker or timestamp tests for that proof.
-- AC-4: Reconcile one current source carrier and record research/plan admission before publication; canonical owner deploys through protected release and verifies real scope acquisition plus refusal of incompatible evidence.
+**OBJ-CONTINUITY:** Restore fresh scope enrollment after a routine restart of the authenticated replacement containers.
+
+**OBJ-WRITER:** Keep the served writer and canonical transition boundary qualified for the whole claim transaction.
+
+**OBJ-DELIVERY:** Deliver through the existing Workroom and canonical release with independent evidence from the real scope path.
+
+| Acceptance ID | Objective IDs | Statement |
+| --- | --- | --- |
+| AC-1 | OBJ-CONTINUITY | Same authenticated replacement IDs with valid non-backward restart times no later than observation can qualify. Hold new IDs, malformed, future or backward times, old-container presence and mismatched source, daemon or project. |
+| AC-2 | OBJ-WRITER | Preserve signed retirement authentication, packaged writer and image proof, current ownership and transition admission checks. Retain signed evidence as issued and require existing caller authority. |
+| AC-3 | OBJ-WRITER | Independently establish stable loaded writer and process qualification and canonical-transition exclusion through transaction commit or atomic abort. Use real after-qualification mutation, lock-race and crash or rollback evidence on the served claim path. |
+| AC-4 | OBJ-DELIVERY | Reconcile one current source carrier and record research and covered-plan admission before repair publication. The canonical owner deploys through protected release and verifies real scope acquisition and refusal of incompatible evidence. |
 
 ## Ordered atomic delivery
 
@@ -124,7 +132,7 @@ admission `IRD-5EDB4EE5CA9B` succeeded. Implementation admission
 The first refusal is a runtime precondition failure. The implementation
 refusal still requires resolution through the independent review gates.
 
-### Keep the writer in the canonical portal if its launch can enforce custody
+### Serve the claim from an immutable canonical portal
 
 Retain the same governed MCP dispatch, `prepareScopeClaim`, `claimWorkCapsuleScope`
 and `runReceiptedCommand`. This avoids new credential handoffs, startup per
@@ -138,16 +146,83 @@ the code and loader paths. Fail closed on a mismatched launch recipe before
 enabling fresh scope enrollment. Exercise the same recipe in local CI with
 the admitted image and an isolated database before live verification.
 
-The live portal has a writable root and a raw Docker socket. `docker diff`
-reported zero changes under `/app` at the time of inspection. The existing
-packaged probe hashes source copies under `/app/apps/web-src`. The runtime
-owner must show how the same portal process loses code-changing authority
-while preserving its supported Docker operations. A usable construction must
-name the enforcing owner for those operations, the allowed destinations and
-the real read/probe transport. The raw mount or a read-only bind of the socket
-leaves Docker API authority in the process. The served recipe must exclude
-unadmitted exec, debugging and alternative loaders. This enforcement boundary
-is still missing for in-process reuse.
+The operator selected this construction for review. The running portal uses
+the default root user and capabilities, a writable container root, a raw
+Docker socket and writable host install and worktree mounts. `docker diff`
+found 23,172 `/tmp` entries and 19 `/root` entries, with zero changes under
+`/app`. The current package probe hashes copies in `apps/web-src`. Those
+observations do not establish loaded-writer stability.
+
+**Launch policy.** `promote.sh` qualifies an exact image ID using
+`promoter-epoch-evidence.mjs`. Extend that existing path to validate the
+generated effective Compose recipe before launch and the observed Docker
+configuration of the full portal ID before completing promotion. The same
+recipe must be selected by source, release and rollback readiness. Retain
+the existing signed retirement envelope. The closure attestation belongs to
+the existing promoter readiness artifact and binds run, source, resolved
+image ID, exact portal ID and canonical recipe digest. A probe report must
+identify the baked standalone output, native libraries and Node entrypoint
+used by that recipe, not only the copied TypeScript contract. The qualified
+portal validates this binding and its live process generation on first use.
+
+- Run the served portal under a fixed unprivileged UID with `read_only: true`,
+  `cap_drop: [ALL]`, `no-new-privileges`, private PID and IPC namespaces and
+  enforced seccomp. Prevent ptrace and process-memory writes. Verify the
+  packaged Node supports `--disable-sigusr1`; disable inspector activation
+  at launch and forbid inspector, arbitrary preload, custom loader,
+  `NODE_PATH`, native-loader overrides and writable module search roots.
+  Boot the known standalone entrypoint via an exact argument list.
+- Keep `/app`, interpreter and library paths image-owned. Mount only bounded
+  `noexec,nosuid,nodev` temp and cache paths outside the executable graph.
+  Relocate root-user caches to those paths. Expose evidence, the transition
+  receipt directory, PKI and signing material as narrow read-only inputs.
+  Keep backup, federation, map and sandbox data at their declared destinations
+  with no executable use by the writer. Make host source and worktrees
+  read-only. Move host worktree maintenance, `.mcp.json` writes and source
+  preparation outside the served process to the existing authorized owners.
+  The privileged owner must read release inputs from verified immutable
+  artifacts or a separately owned staging directory, never from writer-owned
+  scratch or a writable source mount.
+- Validate actual mount namespace and target ancestry, including symlinks and
+  nested mounts, before issuing proof. A `noexec` mount still permits source
+  reads by an interpreter. Gate the Next server trace and native dependency
+  closure on realpath containment inside immutable image trees, audit runtime
+  dynamic loads and place mutable input only in data readers. The in-process
+  `gpp/shape-language/resolve-sources.ts` and `build/codebase-tools.ts` dynamic
+  load paths need explicit closure checks. A child process accepting arbitrary
+  command strings is outside this recipe, even when an admin can request it.
+
+**Docker authority.** Bind a private, install-scoped Unix socket from a
+canonical local actuator in the Docker VM. Compose mounts only its dedicated
+socket directory, outside the loader graph. Do not publish a TCP listener or
+forward raw HTTP, a Docker CLI, Compose arguments or caller-supplied command
+lines. Use `platform-runtime/docker-socket.mjs` for the actuator's bounded
+daemon client and the existing promoter and runtime capability handlers for
+privileged effects. Clients send typed operations with bounded payload and
+reply, deadline and correlation ID. The actuator resolves project and daemon
+from its installation binding, derives target IDs and recipes server-side,
+validates exact fields, and rejects all operations outside this table before
+calling Docker. For consequential actions reread current authority through
+the existing execution, run or lease owner. Files, socket access, names and
+caller parameters cannot stand in for that record.
+
+| Operation | Owner and admitted target |
+| --- | --- |
+| Read runtime, logs and lease facts | `operational-state`, `local-ci-capacity-broker`, `preview-runtime-fence`, `substrate-reconciler`, admin logs and Docker discovery request bounded projections of daemon info, admitted project service identity, image metadata and capped service logs. Construct Engine routes internally. No unrestricted inspect, archive, environment, path or filter output. Preview stop is allowed only for the exact full ID and reconciled lease; service start or restart only for catalog-owned IDs after existing health, ownership and consequence checks. |
+| Observe scope and probe a package | `scope-epoch-enrollment` asks for a single bounded snapshot of daemon, exact project service IDs and starts, image, recipe, retired-ID absence and canonical actor absence. Only `inspectScopeEpochWriterImage` may start the existing probe recipe against an already admitted image. Fix the entrypoint and arguments, pin the full image ID, forbid network and mounts, drop all caps, use read-only root and fixed resource ceilings. Track probe ownership by full ID, including cleanup on errors. The snapshot operation never launches a probe. |
+| Sandbox and build work | `build/sandbox`, `routing` CLI adapters and `workroom-runtime/sandbox-launcher` invoke fixed operations for the current build or Workroom reservation. Permit interactive exec and data streams solely on the admitted sandbox or owned isolated build container, with bounded input and output and no privileged exec. Validate full container ID, image, lease, labels, network, mounts, and absence of raw Docker, host namespaces, host source and writer credentials. Source sync streams only fixed release assets directly from immutable portal assets into the owned sandbox, replacing `docker exec` against portal. Creation and cleanup accept only existing sandbox recipes with server-derived mount and network IDs. |
+| Conversion and image readiness | `documents/conversion` uses the existing `command.ts` converter recipe with byte and time caps and input/output streams. Resolve images for `doctools-release-image`, production release identity and preflight by the existing signed artifact owner. No arbitrary image pulls, builds, bind mounts or converter entrypoint. |
+| Promote, reconcile, backup, restore and retire | Retain `self-upgrade/promoter`, `runtime-capability-executor`, backup/restore runners, `teardown/dispatcher` and their existing decision owners. The actuator launches only their exact admitted immutable action. Resolve Compose, image, DB service, backup destination and teardown target from the admitted record and current install. Stream backup and restore bytes only between owned endpoints. Prune jobs can remove exact owned unused artifacts after lease and reference checks. No writer-facing production exec, general compose mutation, or per-caller cleanup selector. |
+| Admin diagnostics | Replace `admin_run_command` shell fallback with its existing fixed `parseAdminDiagnostic` forms. Map Docker diagnostics to the explicit read operations above. Route migrations, seed, promotion and restore through their named governed owners. Shell commands forwarded to the sandbox cannot obtain the writer's socket, host mounts, database or loader paths. |
+
+The cutover disables the direct Docker clients after migrating these caller
+families. A source guard must follow CLI launchers, child shell scripts,
+direct HTTP and literal socket paths, including `packages/db` discovery and
+maintenance scripts invoked by jobs. Keep the raw daemon on the actuator and
+the existing separately trusted host-side controllers. The writer cannot
+connect to a daemon over the network. At deployment, attest that the actual
+sockets, mounts and networks match the fixed profile. There is no enabling
+fallback to raw Docker in the qualified runtime.
 
 ### Close the observation window in the claim transaction
 
@@ -169,15 +244,29 @@ containers and live canonical actuators. This requires a bounded exception
 to the existing DB-only lock prefix. An inconclusive observation aborts before
 the room write. Establish the duration limit and measure admission lock hold
 time in local CI. Keep the probe launch and receipt import outside the locks.
-Reuse a checked proof only within its exact transaction. Confirm that a
-previously admitted launcher which can still act cannot escape both the
-active-row and live-actuator checks.
+Reuse a checked proof only within its exact transaction. The actuator's
+launch path takes the same admission locks and rechecks the current run or
+transition before handing a mutating action to Docker. A run retains its
+active or recovery-required hold until its launch reservation is closed and
+the owned actuator's closure is proven. This closes the interval between an
+admission row becoming terminal and a delayed launcher starting. The closing
+observer performs bounded Docker reads without reentering PostgreSQL. In
+either lock order the transition waits for the claim to settle, or its row
+or actuator is present and the claim refuses. For steady state, reuse the
+packaged proof within one qualified portal generation. Keep the live closing
+observation for fresh epochs and remove the preliminary duplicate Docker
+snapshot. Measure the closing deadline from the first byte of the request.
+An expired budget ends the transaction with a retryable, no-write result.
 
 Preserve the timestamp candidate's exact-ID rule. Compare fractional UTC
 seconds without truncating Docker's nanosecond precision. The candidate's
 `Date.parse` comparator accepted a one-nanosecond reversal at the observed
 portal timestamp. Add that regression alongside malformed and future-start
-cases. Preserve the authenticated historical timestamps as read.
+cases. Parse UTC seconds with a real calendar round-trip and pad the accepted
+fraction to nine digits before comparing seconds and nanoseconds. Keep the
+original signed strings. Compare against the lower bound represented by the
+observation clock. If a restart falls into the clock's current millisecond,
+defer for a fresh observation instead of rounding the start backwards.
 
 ### Prove the served path before delivery
 
@@ -195,11 +284,48 @@ database connection. Include an acknowledged commit and a lost reply with
 readback of the original command. The earlier marker tests cover PostgreSQL
 lock lifetime and process rollback in their fixtures.
 
-The canonical runtime owner and independent reviewer must settle the launch
-and verification contracts before approval of production changes. If the
-supported portal recipe needs a wider runtime change, route that scope
-decision to the operator. AC-3 remains open pending the governed verification
-route and its evidence.
+### Implementation sequence and backlog coverage
+
+Each phase serves BI-224F56F1 in WC-228D7A07. The actuator migration and
+runtime recipe must land together. The timestamp comparison alone cannot
+establish safe enrollment. Neither source-only tests nor a deployed proof
+without the repair delivers the outcome.
+
+1. **Launch recipe and runtime trust (AC-2, AC-3).** Use `Dockerfile`,
+   `docker-compose.yml` and its release overlays, `runtime-secret-bootstrap`,
+   `portal-migrate-boot`, `promote.sh` and `promoter-epoch-evidence`. Add
+   build and pre-swap checks for mounted paths, launch identity and image
+   identity. Boot the same recipe on local CI and prove migrations, startup,
+   portal health, native import, caches and ordinary launch behavior.
+2. **Constrain actuator operations (AC-2, AC-3).** Move the caller inventory
+   above to the install actuator, preserving admission and output contracts.
+   Verify each production operation with fixed targets in the leased runtime.
+   Test denial of cross-project targets, arbitrary compose and arguments,
+   forbidden mounts and loader changes, writes to host source and production
+   access from the isolated qualification network and database.
+3. **Wire the actual claim (AC-1, AC-2, AC-3).** Use
+   `scope-epoch-enrollment.server.ts`, `scope-claim-store.ts`,
+   `command-receipts.ts`, `platform-runtime/work-admission.ts` and the
+   self-upgrade admission store. Reuse exact prepared transaction ownership
+   and existing claim and receipt locks. Add regressions first for time
+   precision, both lock orders, delayed launch, changed observations, rollback,
+   same-container restart and missing or conflicting receipts. Run affected
+   suites, web typecheck, guard obligations from the fresh impact contract
+   and the served verification matrix above.
+4. **Protected release and acceptance (AC-4).** Submit only exact verified
+   source and runtime identities. Preserve DCO, required PR gates and the
+   canonical `request_self_upgrade` lane. The installed release must pass
+   real restart acquisition and incompatible-identity refusal before closure.
+   On regression, use the approved rollback path and keep new enrollment held
+   if the prior release cannot prove identity. Preserve scope rows and signed
+   retirement evidence. Never restore raw Docker as a qualification fallback.
+
+This sequence is an internal plan while fresh plan-file scope is held by
+`current-cohort-unproven`. Publish the covered plan under `docs/superpowers/plans/`
+when that path can be admitted. The large-work coverage writer requires the
+baseline minted by independent spec approval before plan review. No coverage
+receipt or passing review is claimed here. AC-3 remains open pending served
+evidence on the approved recipe.
 
 ## Admission and evidence status
 
@@ -214,7 +340,7 @@ AC-3 proof, live repair or original cost-control delivery is claimed.
 Reviewer context lives in archived WC-495809CB sequence 11;
 that archived room supplies historical requirements, not current source authority.
 
-## Local qualification-contract correction — proposed, not implemented
+## Historical local qualification-contract proposal
 
 Kernel decision DI-7E9EC89A4A86 recommends extending existing qualification
 bindings rather than adding a controller or treating lab evidence as production
@@ -230,21 +356,18 @@ only. Extending it to a TypeScript claim/receipt writer changes its source and
 execution trust contract. Merely widening those path regular expressions is
 explicitly insufficient.
 
-**OBJ-R1:** Preserve restart continuity only for authenticated replacement IDs,
+Original objective R1 preserved restart continuity only for authenticated replacement IDs,
 while rejecting incompatible identity, source, time and retirement evidence.
-**OBJ-R2:** Establish the real claim/receipt writer's qualified lifetime through
+Original objective R2 established the real claim/receipt writer's qualified lifetime through
 commit or atomic abort, including meaningful mutation and crash observations.
-**OBJ-R3:** Extend the existing two-phase qualification substrate only through a
+Original objective R3 extended the existing two-phase qualification substrate only through a
 versioned, independently reviewed local runtime profile and machine-owned result.
-**OBJ-R4:** Deliver the complete correction and its live verification atomically;
-retain incomplete, negative and historical evidence without false closure.
+Original objective R4 delivered the complete correction and its live verification atomically
+with incomplete, negative and historical evidence retained.
 
-| Acceptance | Objectives | Retained requirement |
-|---|---|---|
-| AC-1 | OBJ-R1 | Existing exact identity and valid restart-time criteria above remain unchanged. |
-| AC-2 | OBJ-R1, OBJ-R3 | Existing signature, packaged writer, ownership and transition checks above remain authoritative. |
-| AC-3 | OBJ-R2, OBJ-R3 | Existing independently established loaded-writer/process and through-commit or atomic-abort requirement above remains unchanged. |
-| AC-4 | OBJ-R3, OBJ-R4 | Existing single carrier, research/plan admission, protected delivery and real claim/refusal verification above remain unchanged. |
+The original mapping was AC-1 to R1, AC-2 to R1 and R3, AC-3 to R2 and R3,
+and AC-4 to R3 and R4. The current acceptance table governs the selected
+canonical portal construction.
 
 ### Proposed binding and producer contract
 
