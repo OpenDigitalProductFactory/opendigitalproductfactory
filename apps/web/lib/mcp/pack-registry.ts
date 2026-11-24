@@ -117,6 +117,7 @@ import { buildChangePack } from "./packs/build-change-pack";
 import { gateContextPack } from "./packs/gate-context-pack";
 import { federationMembershipPack } from "./packs/federation-membership-pack";
 import { uxVerificationPack } from "./packs/ux-verification-pack";
+import { workPatternExperimentPack } from "./packs/work-pattern-experiment-pack";
 
 export const TOOL_PACK_REGISTRY = composeToolPacks([
   deliberationSiemPack,
@@ -216,6 +217,7 @@ export const TOOL_PACK_REGISTRY = composeToolPacks([
   productOutcomesPack,
   initiativeReadinessPack,
   surfaceReadinessPack,
+  workPatternExperimentPack,
 ].map(pack => pack === coworkerServiceCatalogPack ? withEngagementFulfillment((engagementId, locator, userId, context, rawParams) => fulfillCoworkerEngagement(engagementId, locator, userId, context, undefined, rawParams))
   : pack === sandboxPack ? withSandboxRepairDispatch(async (input) => {
     const { runGauntletRepairTask } = await import("@/lib/build/build-orchestrator");

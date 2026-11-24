@@ -41,6 +41,7 @@ import {
   listWorkPatternBindingsForAgent,
   type WorkPatternBindingRecord,
 } from "./work-pattern-binding-reader";
+import { parseReviewedExperimentCandidate } from "./work-pattern-experiment-scheduler";
 import { isRecord } from "@/lib/shared/coerce";
 
 const DEFAULT_WINDOW_DAYS = 30;
@@ -135,6 +136,7 @@ export type WorkPatternSummary = {
   caseStaging: WorkPatternCaseStagingState | null;
   shadowEvaluation: WorkPatternShadowEvaluation | null;
   experiment: WorkPatternExperimentProjection | null;
+  experimentCandidateProposed?: boolean;
 };
 
 export type WorkPatternReadModel = {
@@ -502,6 +504,7 @@ function createAccumulator(seed: PatternSeed): SummaryAccumulator {
     shadowRegulatoryCeiling: null,
     shadowRiskClass: null,
     experiment: null,
+    experimentCandidateProposed: false,
   };
 }
 
@@ -660,6 +663,12 @@ function attachNeed(summary: SummaryAccumulator, row: WorkPatternReadModelNeedRo
   summary.linkedNeedIds.add(row.needId);
   if (OPEN_NEED_STATUSES.has(row.status)) {
     summary.openNeedCount += 1;
+    if (
+      isRecord(row.evidenceJson)
+      && parseReviewedExperimentCandidate(row.evidenceJson.workPatternExperimentCandidate) !== null
+    ) {
+      summary.experimentCandidateProposed = true;
+    }
   }
   if (!summary.candidate) {
     summary.candidate = seedFromNeed(row)?.candidate ?? null;

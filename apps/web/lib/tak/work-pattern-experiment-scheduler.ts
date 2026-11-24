@@ -24,7 +24,7 @@ import { DEFAULT_WORK_PATTERN_PROMOTION_POLICY } from "./work-pattern-promotion-
 export const MAX_AUTONOMOUS_WORK_PATTERN_REPLICATES =
   DEFAULT_WORK_PATTERN_PROMOTION_POLICY.minimumValidPairCount;
 
-type ReviewedExperimentCandidate = {
+export type ReviewedExperimentCandidate = {
   definition: WorkPatternExperimentDefinitionIdentity;
   activityKey: string;
   riskClass: (typeof WORK_PATTERN_EXPERIMENT_RISK_CLASSES)[number];
@@ -43,7 +43,7 @@ function nonEmptyString(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;
 }
 
-function parseReviewedExperimentCandidate(value: unknown): ReviewedExperimentCandidate | null {
+export function parseReviewedExperimentCandidate(value: unknown): ReviewedExperimentCandidate | null {
   if (!isRecord(value) || !isRecord(value.definition) || !Array.isArray(value.cells)) {
     return null;
   }
@@ -181,6 +181,27 @@ function parseReviewedExperimentCandidate(value: unknown): ReviewedExperimentCan
   };
 }
 
+export function isPromotionPolicyAdmissible(
+  candidate: ReviewedExperimentCandidate,
+): boolean {
+  return (
+    candidate.definition.promotionPolicyKey
+      === DEFAULT_WORK_PATTERN_PROMOTION_POLICY.policyKey
+    && candidate.definition.promotionPolicyVersion
+      === DEFAULT_WORK_PATTERN_PROMOTION_POLICY.version
+    && DEFAULT_WORK_PATTERN_PROMOTION_POLICY.supportedActivityKeys.includes(
+      candidate.activityKey,
+    )
+    && DEFAULT_WORK_PATTERN_PROMOTION_POLICY.supportedRiskClasses.includes(
+      candidate.riskClass,
+    )
+    && candidate.cells.every(
+      (cell) =>
+        cell.executionRequest.executionProfile.environmentKey === "shadow",
+    )
+  );
+}
+
 export async function scheduleReviewedWorkPatternExperiment(input: {
   action: "approve" | "defer" | "reject";
   candidate: unknown;
@@ -190,22 +211,7 @@ export async function scheduleReviewedWorkPatternExperiment(input: {
   if (input.action !== "approve") return { scheduled: false, reason: "review_not_approved" };
   const candidate = parseReviewedExperimentCandidate(input.candidate);
   if (!candidate) return { scheduled: false, reason: "no_evidence_cleared_experiment" };
-  if (
-    candidate.definition.promotionPolicyKey
-      !== DEFAULT_WORK_PATTERN_PROMOTION_POLICY.policyKey
-    || candidate.definition.promotionPolicyVersion
-      !== DEFAULT_WORK_PATTERN_PROMOTION_POLICY.version
-    || !DEFAULT_WORK_PATTERN_PROMOTION_POLICY.supportedActivityKeys.includes(
-      candidate.activityKey,
-    )
-    || !DEFAULT_WORK_PATTERN_PROMOTION_POLICY.supportedRiskClasses.includes(
-      candidate.riskClass,
-    )
-    || candidate.cells.some(
-      (cell) =>
-        cell.executionRequest.executionProfile.environmentKey !== "shadow",
-    )
-  ) {
+  if (!isPromotionPolicyAdmissible(candidate)) {
     return { scheduled: false, reason: "authority_ceiling" };
   }
 
