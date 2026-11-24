@@ -35,6 +35,8 @@ The four decisions the program cannot make for itself, stated as briefs with the
 
 **If overridden toward SaaS tenancy:** the consult's ledger shows the cost concentration (blast radius across every install's forward-only chain; speed near zero); an override should state the customer evidence that outweighs it.
 
+**Ruling (2026-11-24): ratified.** The owner answered "Yes ratify" in T3 thread 5556b3c8. A fresh WWMD consult, DI-2DEB0D9B417F (composite 7.98 vs 2.85 vs 1.62, margin 5.13, high confidence), records the outcome as followed. The principle page is promoted to core tier (BI-62812C25). The estate-hardening and `findFirst` lint work remains on BI-F238FBE4.
+
 ---
 
 ## Brief 3 — W13: IA section taxonomy (BI-118EF48B, EP-8DC217EB)
