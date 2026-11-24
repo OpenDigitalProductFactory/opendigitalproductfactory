@@ -1,5 +1,5 @@
 ---
-status: draft
+status: proposed
 ---
 
 # Workroom scope enrollment after an ordinary container restart
@@ -7,8 +7,8 @@ status: draft
 Implementation item: BI-224F56F1. Design Workroom: WC-228D7A07.
 Branch: `codex/workroom-restart-recovery`.
 Delivery classification: large design work. The normal same-item claim admitted
-this classification on November 14, 2026 (IRD-8265DDFD5FCF); it does not admit
-implementation of the qualification execution-contract extension.
+this classification on November 14, 2026 (IRD-8265DDFD5FCF). The selected
+canonical portal design is submitted for independent review.
 Historical contract: `docs/superpowers/specs/2026-10-14-owned-workroom-scope-release-design.md`.
 The delivered historical BI-B13239B1 is not reopened. BI-7B1D74B3 owns separate agent cost controls.
 
@@ -49,74 +49,7 @@ Only the canonical runtime owner may advance that install through its governed p
 | AC-3 | OBJ-WRITER | Independently establish stable loaded writer and process qualification and canonical-transition exclusion through transaction commit or atomic abort. Use real after-qualification mutation, lock-race and crash or rollback evidence on the served claim path. |
 | AC-4 | OBJ-DELIVERY | Reconcile one current source carrier and record research and covered-plan admission before repair publication. The canonical owner deploys through protected release and verifies real scope acquisition and refusal of incompatible evidence. |
 
-## Ordered atomic delivery
-
-1. **R1 / V1 — reproduce and bind.** Use this implementation item's current
-   workroom and immutable design as the ordered fix plan. Record actual red/green
-   research. Reconcile source identity and covered plan through governed writers.
-2. **R3 / C2 / F2 / V3 — resolve qualification before ordinary implementation.**
-   The selected evidence strategy is a bounded qualification experiment using
-   the existing current-process proof and transaction-scoped canonical admission
-   locks, not a new timestamp-derived authority. It must establish the complete
-   lifetime described below before admitting the ordinary correction. If that
-   mechanism cannot satisfy AC-3, retain the hold and obtain scoped correction
-   admission; the candidate is not a substitute for that decision.
-3. **R2 / C1 / F1 / V2 — qualify restart continuity.** Extend the existing
-   `scope-epoch-enrollment.server.ts` predicate and its colocated tests. Exact
-   authenticated IDs must remain equal; accept only finite, non-backward starts
-   no later than observation. Preserve receipt verification, image/writer checks,
-   absence of retired IDs and canonical admission serialization. No migration,
-   new persistence concept, dependency or runtime service is proposed.
-4. **R4 / C3 / F3 / V4 — deliver and observe.** Run affected tests/typecheck,
-   deterministic guards and the exact-tree shared gate; obtain independent
-   review against immutable source. Publish DCO-signed through protected PR.
-   The sole canonical owner deploys. Verify real successful acquisition and
-   incompatible-evidence refusal before recording delivery.
-
-One atomic implementation item owns this sequence: reproducing, correcting,
-proving and deploying the same enrollment defect are not independently useful
-deliverables. No separate cost-control feature or stale-proof recovery is included.
-Rollback reverts this source correction through protected release; it does not
-rewrite signed proof or reset protected claims. Unknown lifetime evidence holds
-acceptance and is never recorded as a passing check.
-
-## Selected qualification mechanism and falsification plan
-
-The generation under test is the actual production Node process and its loaded
-writer closure, not the mutable Docker start timestamp. Candidate qualification
-retains a frozen process-bound proof; acquisition and receipt publication must
-remain inside the same database transaction holding both canonical admission
-locks. Test the claim/receipt path from qualification through the transaction's
-actual commit or rollback. The image identity and packaged source comparison
-alone do not prove loaded-code immutability: live read-only inspection found a
-writable container root filesystem. Enumerate writable overlays, mounts, dynamic
-loads and admitted production code-changing writers; prove they cannot change
-the qualified writer closure during that lifetime, or require a scoped correction.
-Do not describe this unresolved guarantee as already enforced.
-
-Source anchors below are immutable blobs at main
-`4fff0a44d8b957e479a1d17379eab3041c2e2432`:
-
-| Path | Blob | Obligation |
-|---|---|---|
-| `apps/web/lib/work-capsules/scope-epoch-enrollment.server.ts` | `788135e546588b9255a4cb13dcc81f68e0a54427` | Current process proof, packaged bytes and admission locks |
-| `apps/web/lib/work-capsules/scope-claim-store.ts` | `7e9ff5a98791a4692d38f6f50ee7e14aaae374bc` | Qualification before receipt transaction; same transaction retained through effect |
-| `apps/web/lib/work-capsules/command-receipts.ts` | `2bdda63a729f82f7bd6abe391a1875cc7433cea3` | Actual commit/rollback and no partial effect/activity/receipt |
-| `apps/web/lib/work-capsules/scope-epoch.pg.test.ts` | `534170053590cb481fad2ea80fe80191f05b6432` | Both lock orders and real database barriers; qualifier remains mocked |
-| `Dockerfile` | `1ae237f2282e36f31361f8ae247a6d9655b8f667` | Production standalone process and packaged writer generation |
-| `docker-compose.yml` | `007b9d4790b78240ab61eb5c9cdcc2f3cca4411b` | Sandbox database isolation and actual mounts; dev-preview services are distinct |
-
-Use a governed nonproduction target and real isolated database for a child writer
-bound to the exact candidate. Terminate it after qualification, after the room
-lock and before commit; independently observe complete commit or complete abort.
-Force a generation/cohort change after qualification and demonstrate actual
-exclusion or refusal. Predicate mocks and PG fixture locks are separate evidence
-layers, never proof of production process/image isolation. Current sandbox
-inspection confirmed no `PRODUCTION_DATABASE_URL` variable, but that observation
-alone is not complete network, credential or writer isolation proof. No ad hoc
-runtime, production crash injection or manual retirement-proof change is allowed.
-
-## November 24 repair design and remaining admission
+## November 24 reproduction and runtime design
 
 The operator install completed SUR-F511161C on
 `e800eb568713723803e3ed56ac5f8c395652f162`.
@@ -164,6 +97,13 @@ image ID, exact portal ID and canonical recipe digest. A probe report must
 identify the baked standalone output, native libraries and Node entrypoint
 used by that recipe, not only the copied TypeScript contract. The qualified
 portal validates this binding and its live process generation on first use.
+The local actuator owns the launch evidence and reads it from host-owned
+state. The portal receives its bounded projection over the private socket.
+Readiness fields echoed by the caller do not authenticate this proof. Publish
+the recipe binding after the promoted full ID has been checked and before
+fresh enrollment. A same-ID restart reuses the immutable image and recipe
+binding and requalifies the live process generation against Docker's current
+start and the process's kernel start identity.
 
 - Run the served portal under a fixed unprivileged UID with `read_only: true`,
   `cap_drop: [ALL]`, `no-new-privileges`, private PID and IPC namespaces and
@@ -205,6 +145,11 @@ validates exact fields, and rejects all operations outside this table before
 calling Docker. For consequential actions reread current authority through
 the existing execution, run or lease owner. Files, socket access, names and
 caller parameters cannot stand in for that record.
+The actuator alone can create, replace or remove the socket and its directory.
+Mount the directory read-only for the portal and give only the portal UID and
+actuator access. Compare container identity and project before returning a
+qualified generation. A binding missing after reboot leaves new enrollment
+held until the actuator reconciles against the current signed run and recipe.
 
 | Operation | Owner and admitted target |
 | --- | --- |
@@ -257,6 +202,12 @@ packaged proof within one qualified portal generation. Keep the live closing
 observation for fresh epochs and remove the preliminary duplicate Docker
 snapshot. Measure the closing deadline from the first byte of the request.
 An expired budget ends the transaction with a retryable, no-write result.
+Five read-only host observations of daemon identity, inventory and the two
+exact runtime containers took a median 612 ms and a maximum 1,063 ms. These
+CLI samples exclude actuator policy and database work. Use a two-second
+initial ceiling for the closing observation in qualification and report
+lock duration and timeout rates under contention before setting the shipped
+budget. Reaching the ceiling cannot extend the transaction budget.
 
 Preserve the timestamp candidate's exact-ID rule. Compare fractional UTC
 seconds without truncating Docker's nanosecond precision. The candidate's
@@ -327,472 +278,25 @@ baseline minted by independent spec approval before plan review. No coverage
 receipt or passing review is claimed here. AC-3 remains open pending served
 evidence on the approved recipe.
 
-## Admission and evidence status
-
-The original research attempt was rejected for missing immutable provenance;
-subsequent published research receipt initiative-90b04b96-df68-48f2-8fa2-b62421e9851d
-records reproduction only. Exact source 1b700d9a093095c34b19d4abb3bede0a9a97972b
-passed its 15-test integration gate and independent code review as detailed below.
-Those results do not approve this later design amendment. The same-item large
-design claim is allowed; amended baseline, architecture review and covered plan
-are required before implementing the qualification contract change. No completed
-AC-3 proof, live repair or original cost-control delivery is claimed.
-Reviewer context lives in archived WC-495809CB sequence 11;
-that archived room supplies historical requirements, not current source authority.
-
-## Historical local qualification-contract proposal
-
-Kernel decision DI-7E9EC89A4A86 recommends extending existing qualification
-bindings rather than adding a controller or treating lab evidence as production
-qualification. Its usable, autonomy-eligible recommendation authorizes following
-the normal design process; it is neither a protocol approval nor execution grant.
-
-The owning canonical admission design remains
-`2026-10-28-qualification-research-admission-design.md` (BI-2664971A).
-That peer-owned Windows repair is not reopened or modified by this local work.
-Installed source 62368996af69704f838614314126e0059bb0e595, issuer blob
-0ffa6566615fe70bfadb4133182805315da3f3dd, accepts a script writer and script test
-only. Extending it to a TypeScript claim/receipt writer changes its source and
-execution trust contract. Merely widening those path regular expressions is
-explicitly insufficient.
-
-Original objective R1 preserved restart continuity only for authenticated replacement IDs,
-while rejecting incompatible identity, source, time and retirement evidence.
-Original objective R2 established the real claim/receipt writer's qualified lifetime through
-commit or atomic abort, including meaningful mutation and crash observations.
-Original objective R3 extended the existing two-phase qualification substrate only through a
-versioned, independently reviewed local runtime profile and machine-owned result.
-Original objective R4 delivered the complete correction and its live verification atomically
-with incomplete, negative and historical evidence retained.
-
-The original mapping was AC-1 to R1, AC-2 to R1 and R3, AC-3 to R2 and R3,
-and AC-4 to R3 and R4. The current acceptance table governs the selected
-canonical portal construction.
-
-### Proposed binding and producer contract
-
-Research references for this amendment:
-[OCI content descriptors](https://github.com/opencontainers/image-spec/blob/main/descriptor.md)
-bind bytes by digest and size; this is artifact identity, not a claim about a
-running process. [SLSA v1.2 provenance](https://slsa.dev/spec/v1.2/provenance)
-separates build/source provenance; this design extends the existing artifact
-evidence rather than treating an author's source list as producer attestation.
-[PostgreSQL advisory locks](https://www.postgresql.org/docs/current/explicit-locking.html#ADVISORY-LOCKS)
-release transaction-level locks at transaction end and require application
-cooperation. Consequently every admitted competing writer and the real commit
-boundary must be covered; the database lock alone does not immobilize code.
-
-Extend `qualification-research-admission.ts`, its issuer and the existing remote
-action producer/result owners. Add no grant class, table or generic shell tool.
-Preserve the Windows profile and its historical tokens/results without interpreting
-them as the proposed local profile. An unknown profile must fail closed.
-
-The local profile must bind the same installation, accountable principal, item,
-Workroom, stage, protocol and candidate review identities already required. It
-must additionally bind the canonical candidate image digest, source tree and
-compiler/lockfile/runtime identities; the production entrypoint and transitive
-loaded writer/module inventory; the actual claim and command-receipt transaction
-entrypoints; the isolated database reservation; and the permitted fault/barrier
-set. The inventory must come from a checked, bounded build artifact, not an
-author-supplied path list or a filesystem scan presented as loaded-code proof.
-An incomplete or dynamic/unresolved dependency inventory holds qualification.
-
-Prepare retains test/helper-only edits. Verify requires independent approval of
-the exact candidate, unchanged target production blobs and typed result semantics.
-It permits one start with an immutable command class, timeout and resource bounds.
-It cannot acquire production scope, create a replacement review, change research
-to PASS, or grant the caller additional authority. The normal grant intersection
-and current source/lease checks remain in force at each effect.
-
-Use only an admitted nonproduction runtime with the exact canonical candidate
-image and an isolated test database. A source worktree, arbitrary Docker command
-or hand-built image does not establish that runtime. The trusted producer must
-prove that test resources and credentials cannot reach the production datastore
-or production scope/receipt records. Missing runtime reservation or isolation
-proof refuses Verify; do not silently fall back to the live portal or host.
-
-The machine-authenticated Edge action is a closed local qualification procedure,
-not a caller-authored command. Host platform and qualified Linux runtime platform
-are separate evidence fields. Require a current trusted same-installation node
-advertising that exact procedure and its allowed action type; do not infer support
-from `action.execute`, host OS or an unattested peer. A stale, absent or ambiguous
-producer is unavailable, not permission to use a user-authored execution receipt.
-
-### Producer contract and implementation prerequisites
-
-Owning scale/architecture boundary: EP-B9DD37C7, with this local change retained
-under BI-224F56F1. The following table describes required amendments, not existing
-capabilities. Every absent component is a prerequisite to Verify, not work to be
-discovered after starting the experiment.
-
-| Contract | Existing owner and current capability | Required local amendment / admission prerequisite |
-|---|---|---|
-| Protocol and single-start admission | `qualification-terminal-admission.ts` / `qualification-research-admission.ts`: reviewed script protocol, signed Prepare/Verify bindings | Versioned local TypeScript profile with exact production and transitive loaded-generation identities. Legacy parsing cannot issue it. |
-| Canonical image acquisition | Existing canonical build/release artifact owners; no candidate-image producer is established for this experiment | Resolve an already governed candidate artifact and its verified OCI descriptor through an admitted build. The protocol cannot build/tag an image or turn a source checkout into runtime evidence. No token if this artifact/reservation is absent. |
-| Runtime and database reservation | Existing nonproduction lease service and `scripts/lib/local-ci-slot-manifest.mjs` / `local-ci-slot-substrate.mjs`: owned slot resources and isolated test database | Bind the exact reservation and a closed runtime layout for the candidate writer, observer and fault actions. Ordinary CI's successful slot reservation alone does not attest that layout or loaded closure. |
-| Production exclusion | Existing slot isolation checks in `scripts/lib/local-ci-slot-isolation.test.mjs`; no complete real-writer qualification isolation attestation yet | Producer verifies database identity/role, dedicated test schema, credential origin and network destination allowlist before launch; denies production datastore/receipt endpoints and production secrets. Credentials remain machine-local and are never copied into caller evidence. |
-| Action dispatch | `remote-action/qualification-windows-action.ts` and `services/edge-node-go/internal/action/qualification_windows_action.go`: closed Windows action, trusted node and exact source resolution | Independently reviewed local typed action/profile in these existing action/producer registries; current same-installation capability advertisement, policy intersection and source/runtime binding. No generic-command delegation or inferred Windows support. |
-| Loaded writer and fault execution | Production claim/receipt transaction owners exist; current child lab invokes only admission locks | Candidate entrypoint must invoke the actual claim and receipt writers and emit independently observable transaction barriers. Producer proves its complete loaded-module inventory and code-changing-writer exclusions before faults. This component is not implemented. |
-| Machine result verification | Existing `remote-action/qualification-windows-result.ts` and Edge action-result route verify producer-owned Windows output | Extend existing result verification with the reviewed local profile's process/runtime/transaction identities, bounded artifacts and cleanup attestations; a host-authored test log or marker cannot settle it. |
-
-The local profile must have a concrete reviewed implementation for each row before
-Verify is issuable. Missing image production, isolated runtime layout, loaded-code
-attestation or typed producer/verifier returns a named unavailable prerequisite.
-It never substitutes an existing Windows action, live production container,
-ordinary sandbox command, or the already passing marker suite.
-
-### Initial profile limits and overflow semantics
-
-These are proposed hard ceilings, requiring independent review and an observed
-whole-closure fit before issuance; they are not claims that today's Next.js writer
-fits them. No caller may increase them through protocol prose or command flags.
-
-| Resource / evidence | Ceiling | Overflow or missing proof |
-|---|---|---|
-| Protocol bytes | 32 KiB UTF-8 | Refuse issuance; no Prepare/Verify start. |
-| Transitive module inventory | 512 distinct entries, dependency depth 32, 64 MiB total application code bytes | Refuse issuance on overflow, unresolved dynamic dependency, missing native-module identity or incomplete closure. Cycles require finite visited-node accounting, not silent truncation. Runtime/base-image bytes are separately bound by descriptor/digest, not excluded from identity. |
-| Inventory/result artifact | 8 MiB per complete artifact; envelope 64 KiB; sanitized error detail 2 KiB | Reject oversize input before start. Overflow/truncation after start is inconclusive, never positive. Detail can live only in digest-bound artifacts within this ceiling. |
-| Preparation / verification | Prepare 15 minutes; Verify 10 minutes; measurement 30 seconds; cleanup 2 minutes | Expired admission cannot start. Post-start timeout aborts owned work and records inconclusive/unrun as appropriate; failed cleanup retains a recovery-required hold. |
-| Runtime child / database | At most 2 writer/fault children plus 1 observer, 6 database sessions, 2 CPUs and 4 GiB child memory | Normal environment/resource admission must reserve the full envelope before start. Exhaustion aborts the experiment without changing host floors or taking unrelated processes' resources. |
-| Results / cases | One start and the fixed reviewed fault set; 128 barrier observations and 64 evidence references maximum | No continuation run or omitted case can be relabelled complete. An incomplete case set or observation overflow is inconclusive and requires normal recovery, not a new key. |
-
-The source manifest resolver must enforce count, depth and byte limits before
-materializing the complete closure, and the producer must stream bounded output
-without retaining unbounded logs. A larger target requires a reviewed profile
-revision owned by EP-B9DD37C7 and fresh source/scope admission; it cannot raise a
-limit mid-experiment or borrow the Windows profile's authority.
-
-### Experiment and acceptance of its evidence
-
-The producer must invoke the actual claim and command-receipt path against its
-isolated resources. Bind the loaded process generation before qualification;
-hold the canonical admission locks and actual receipt transaction through commit
-or rollback. Enumerate writable code overlays/mounts, preloads, dynamic loads and
-all admitted code-changing writers. Either demonstrate their exclusion for that
-entire lifetime or observe an atomic abort. A frozen proof object, source hash,
-read-only probe container or test marker alone cannot establish this guarantee.
-
-The exact fault set includes child termination after qualification, after the
-room lock, and after scope/activity/receipt writes before commit; both competing
-canonical transition lock orders; and writer-generation/cohort mutation after
-qualification. Independently observe a complete successful commit or the complete
-absence of claim/activity/receipt effects after abort. Record process identity,
-barrier sequence, reservation and transaction observation references, source/image
-and binding digests, owned resource cleanup and typed positive/negative/inconclusive
-or unrun status. Never return secrets or raw private tool results as shared proof.
-
-Current evidence at 1b700d9a093095c34b19d4abb3bede0a9a97972b is narrower:
-12 real claim-writer PostgreSQL tests plus three real child-process admission-lock
-tests passed in cmwgpmgat1aqv0eqqhqii0lp0; native code review
-cmwgptmws1djj0eqq1i0zrc1e passed. The child tests use lab markers, so they do not
-settle actual claim/receipt process atomicity, loaded production code or Docker
-qualification. Preserve those results and this distinction after any source change.
-
-### Scope admission, compatibility and rollback
-
-This amendment requires large-scope independent design/architecture approval and
-covered implementation planning before issuer/Edge changes. Review must resolve
-how the proposed producer establishes an isolated real writer and transitive
-loaded-code lifetime, not approve a promise to discover that during execution.
-If no existing admitted runtime can supply it, return that exact missing capability
-and retain AC-3; no fabricated protocol, signing material or substitute marker.
-Do not widen the peer-owned Windows protocol or write to an unattested peer.
-
-Rollback disables issuance of the local profile, settles or preserves its existing
-single-start action through the producer's normal cleanup, and retains all audit
-and negative evidence. Old Windows tokens must keep their old interpretation.
-No completed test slice, code-review receipt or kernel decision closes the atomic
-repair or the separate TokenEconomizer feature.
-
-## November 14 review findings and construction feasibility
-
-The immutable spec-approval of head `6e2a6e81c8de3cd5c6e8b070c5fed207e6ebe76d`
-failed in receipt
-`initiative-review-v1-c51e34cbbf55cb360464efc713599546ae5459df6a4ce359c439214f1a5d7e67`.
-That decision remains in force. The architecture pass
-`initiative-review-v1-b211bef56c63852475ef599f4160f8484ec0acddb70f987e93203d3c0843d667`
-does not supersede it. This section records source investigation and unresolved
-construction questions; it neither requests reassessment nor declares readiness.
-The original canonical design-spec task also settled as fail in receipt
-`initiative-review-v1-430b0a0e3f56763799d6c4467a0d1e5853bdbcccccc9a9a7da2af37d6bb18717`.
-Its instruction to complete AC-3 with real production evidence before resubmission
-is retained as the reviewer's disposition, not permission to inject faults into
-production or skip the preimplementation design gate.
-
-| Recorded review premise | Applicable obligation | Disposition |
-|---|---|---|
-| Document is draft | Independent approval of a proposed design | Retain draft status until approval; changing its label supplies no evidence. |
-| Approval and covered planning precede issuer/Edge changes | Preimplementation admission | Retain the required order. No code admission is inferred from this document. |
-| Seven producer prerequisites are unimplemented | A credible construction must precede approval; implementation must precede Verify | Valid design gap: the earlier owner table is not an implementation algorithm. Resolve the interfaces and lifetime construction below before another review request. |
-| AC-3 has no completed proof | Verify and delivery acceptance | Retain the hold. The lifecycle places spec approval before implementation, but that ordering cannot excuse an infeasible design. A rubric clarification cannot supply the missing construction. |
-| Passing tests use lab markers | Evidence scope | Retain their narrow interpretation. No production atomicity, loaded-code stability or Docker isolation follows from the marker tests. |
-
-### Existing candidate artifact construction
-
-`scripts/local-ci-bounded-build.mjs` already owns a governed production build
-with a durable `production-build` stage receipt. Its identity includes
-`candidateSha`, `integrationTreeSha` and `imageTag`; a passed receipt carries
-`artifact.imageId`. `canReuseBuildReceipt` checks the complete build identity and
-reinspects the image ID. `scripts/local-ci-bounded-build.test.mjs` covers changed
-tree identity, missing artifacts and a tag resolving to different bytes.
-
-The local qualification resolver must consume that existing owner's passed
-receipt through the existing governed gate, rather than build or tag an image
-itself. Resolve the candidate commit to the recorded integration tree; validate
-the corresponding gate/lease identity and completed build stage; resolve the
-recorded image to exactly `artifact.imageId`; then bind that immutable identity
-and the runtime recipe digest in the signed admission. A missing stage, stale
-lease, different tree, moved image or incomplete provenance refuses issuance.
-The build's local image ID is not a registry distribution manifest digest: the
-resolver must retain that distinction and must not invent an OCI descriptor.
-If a remote producer needs transport, its existing artifact owner must supply
-verified transport provenance before that producer becomes eligible.
-
-`scripts/lib/local-ci-slot-manifest.mjs` supplies an admitted slot's compose
-project, PostgreSQL container/database/volume, scratch boundary and evidence
-paths. Reuse the existing lease rather than accepting a caller-supplied database
-URL. The producer must verify the lease still owns these exact resources before
-launch and before settling results. This source contract establishes resource
-identities; it does not yet implement isolated real-writer qualification.
-
-### Exact remaining lifetime and isolation gaps
-
-The actual `prepareScopeClaim` in `scope-claim-store.ts` qualifies before the
-receipt transaction and retains the proof through its `beforeRoomLock` callback.
-The claim invokes `enrollment.assertCurrent(tx)` before its room lock, writes
-scope and activity inside that transaction, and uses the bound transaction when
-called through the receipt owner. The production proof currently brands and
-freezes an object and checks PID/hostname before acquiring the two admission
-locks. Those facts identify existing insertion points; they do not establish
-the identity of every loaded function or exclude subsequent code changes.
-
-Two concrete counterexamples constrain any proposed producer:
-
-1. The canonical `portal` service currently has a writable root and a Docker
-   socket. Running an isolated candidate with a read-only root and no socket
-   does not prove the canonical writer has those properties. Production
-   acceptance requires the same established lifetime invariant, not a stronger
-   experimental recipe silently substituted for the deployed recipe.
-2. The real enrollment qualifier invokes Docker inspection and a packaged-image
-   probe through its production Docker port. Giving an isolated writer the
-   unrestricted production socket defeats the proposed production exclusion;
-   removing it makes the real default qualification path unavailable. Merely
-   injecting successful mocked port responses would repeat the rejected proof.
-
-Before implementing the local profile, its existing runtime/Edge owners must
-therefore specify both (a) a loaded-closure lifetime mechanism valid for the
-canonical writer and (b) a bounded real Docker observation/probe transport that
-cannot mutate production resources from the experiment. The mechanism must name
-all late-load and code-changing paths, the enforcement boundary, and what aborts
-the receipt transaction when that boundary changes. Static imports, PID checks,
-source hashes, chmod, a read-only socket bind, or an independent probe container
-are individually insufficient. This investigation has not established an
-existing admitted implementation of both contracts.
-
-Kernel decision `DI-35264B27B0BC` selects concrete source/design feasibility under
-the existing profile and runtime owners, with that runtime precondition retained.
-The supplied feature scores are qualitative engineering judgments, not measured
-results. The earlier unscored call `DI-AB9AEA0D18AE` was unusable and supplies no
-decision authority. Neither decision authorizes implementation or reassessment.
-
-The supported next action is to resolve these two construction contracts in this
-same design scope, reconcile the original design-spec task, and obtain the normal
-reviewer's disposition of substantive corrections. Until then the original
-approval failure and AC-3 hold remain; no new assessment key, replacement review,
-test-only merge or live upgrade can stand in for them.
-
-## Unselected construction: closed protected-claim worker
-
-This is a substantive production-dispatch alternative for decision and review,
-not an approved implementation plan. Kernel comparison `DI-6DC15A3648AE` ranked
-it highest with low confidence and `autonomyEligible: false`; operator ratification
-is required before selecting it. Do not rescore unchanged facts to evade that
-condition. The earlier feasibility decision does not approve this alternative.
-
-### Scope and actual entrypoint
-
-Source search found one non-test direct caller of `claimWorkCapsuleScope`:
-`mcp-handlers.ts`, within `claimCapsuleScopeTool`. The public MCP pack's
-`claimScope` currently creates the outer `receiptedWorkroomTool` wrapper. The
-alternative relocates that *entire* wrapped invocation into one closed worker;
-it cannot start a parent receipt transaction and then dispatch the child.
-The source worker becomes the declared actual production writer for this path.
-Its TypeScript import graph must be built, bound and tested as that writer;
-presence of `web-src` or a `tsx` binary proves neither compatibility nor
-equivalence to the existing Next.js standalone graph.
-
-All public calls, including refreshes, must use the selected dispatch path; no
-fallback may publish a new epoch in the parent. The core requires independently
-validated worker process/runtime evidence in addition to its current actor,
-lease, authorization, scope, retirement and transaction checks. An environment
-flag or caller-supplied context cannot establish worker authority. Add a source
-invariant for every non-test direct caller and test refusal of a parent-process
-attempt to invoke the core. These changes require review of the production
-writer contract, not just qualification-profile approval.
-
-### Parent, child and authority boundaries
-
-Keep the authentic canonical portal ID, project, image and retirement evidence
-separate from the child writer ID, image and process generation. Never label a
-child as the canonical portal or substitute its ID into a retirement receipt.
-The existing server owner validates canonical evidence and launches the child
-from the exact admitted image. A reviewed proof extension must bind both
-identities and their relationship; the current PID/hostname brand is insufficient.
-The child receives no retirement signing secret and cannot manufacture a matching
-SelfUpgradeRun. Qualification binds its candidate separately from the canonical
-parent rather than pretending an uninstalled candidate was already deployed.
-
-The inherited, producer-owned channel carries one bounded invocation: original
-user/principal/agent and authority-decision references, original stable command
-identity, normalized payload digest, exact room row, source/profile identities,
-deadline and a producer challenge. It carries no caller-authored command, module
-path, executable, Docker arguments or database URL. The standard server boundary
-and child both revalidate their applicable current authority; the child reads
-current lease and preconditions before the actual write. A prior authorization
-decision or valid channel is not a grant. The reviewed implementation must name
-the existing token/session and grant checks used for this revalidation, including
-revocation and actor-confusion tests, before the design is ready for approval.
-
-### Closed real observation transport
-
-Extend the existing Docker adapter/Edge action and result owners, without adding
-a generic service or shell tool. The child has no Docker socket or host mount.
-Its producer-owned inherited channel supports only the typed observations the
-existing qualifier needs: daemon identity, bounded inventory, the exact admitted
-project's container identities, exact full-ID inspection, canonical-actuator
-absence, and a pinned-image packaged probe. The producer constructs the argument
-vectors from immutable binding fields and fixed templates. It returns actual
-daemon responses and bounded observation references, never successful fixtures.
-
-Only the producer can create the probe. Its immutable recipe has a producer-owned
-name, pinned image ID, no network or mounts, read-only root, dropped capabilities,
-no privilege escalation and fixed resource limits. Inspection, termination and
-cleanup accept only that owned probe's full ID. Unknown operations, arbitrary
-filters, paths, image overrides, volume declarations and commands refuse before
-Docker invocation. Production and qualification use the same typed observation
-algorithm and validation; their resource/authority bindings remain distinct.
-Protocol, adapter and daemon error paths must preserve negative or inconclusive
-results, with no substitution of a host-authored test log for machine evidence.
-
-### Whole transaction, lost replies and process closure
-
-Only the child owns `prepareScopeClaim`, `receiptedWorkroomTool` and the actual
-claim/activity/receipt transaction. Preserve the existing command authority scope,
-payload binding and command/admission/room lock order. Use the original stable
-command ID across process or transport recovery. A request lacking a stable
-server-validated identity cannot use a fresh random ID on each retry; its normal
-entry boundary must supply the existing tool-execution identity or refuse safely.
-
-The producer observes child identity and owned resource closure independently.
-Parent death, child death, deadline, lost reply and late completion are distinct
-outcomes. A lost reply is unknown until current authorization permits readback of
-the original durable receipt and the owned child's state. A matching committed
-receipt settles that original command; a conflicting payload refuses. Absent a
-receipt, do not start another child until original process closure and transaction
-abort are established. Existing command serialization prevents duplicate effects
-but does not, by itself, prove single-start or resource cleanup. The design must
-resolve that launch/recovery ownership through the existing action lifecycle;
-no new ledger or optimistic retry is proposed.
-
-The candidate worker recipe must exclude writable application code, host mounts,
-unreviewed preloads/loaders, inspector access, executable writable paths and
-unadmitted code-changing writers for its entire lifetime. Bind all runtime and
-native dependencies, not just TypeScript files. Producer-enforced database and
-network reservations give the qualification worker access only to its test
-resources; the production worker uses its independently authorized production
-binding. Merely omitting an environment variable does not enforce this separation.
-
-### Additional source checks and explicit unsupported reuse
-
-`workCapsuleActor` resolves the OAuth human principal independently of the shared
-assistant and retains `apiTokenId` as `taskAuthorityTokenId`. Preserve that
-distinction in any delegation. `mcp-task-background-worker.ts` already rechecks
-the submitting credential's user, revocation and capability, using
-`OAUTH_EXECUTION_AUTHORITY_SELECT` and `isCurrentOAuthExecutionAuthority` for OAuth.
-Those are source anchors for a shared credential revalidation function, not a
-claim that an ordinary tool call can use TaskRun reconstruction unchanged.
-Session JWT and internal coworker calls need their own currently authenticated
-context retained and revalidated through the existing governed tool preflight;
-do not invent a PAT or replace their actor with the producer's identity.
-
-`RemoteAction` has a unique action key, existing approval state, signed dispatch
-identity and terminal result. `claimActionsForNode` enforces current trusted-node
-and action-policy admission. These are candidate launch-ownership primitives,
-not automatic approval for a new protected writer action. Its
-`timeoutStaleClaims` updates a status: that does not prove the external process
-stopped or its transaction rolled back. A reviewed action extension must
-reconcile actual owned-process closure and original receipt before permitting a
-second launch. No generic timeout-to-retry rule is acceptable.
-
-The dispatcher's current secret-decryption branch is specific to organization
-join imports. It is not a general database-credential delivery facility and must
-not be reused under another action's parameters. The closed writer proposal
-still needs a reviewed machine-owned credential channel and destination-bound
-database reservation. No database secret may be persisted in ordinary action
-parameters, tool history, model context or shared evidence. These concrete
-unsupported interfaces are design work still owed, not permission to add a
-generic secret-export or execution capability.
-
-### Decision and verification still owed
-
-Before selection, finish the exact authority-revalidation, packaged-entrypoint
-and launch/recovery contracts above and assess the startup/latency/resource cost
-against the original in-process path. No measured cost or feasible import-closure
-fit is currently claimed. Compare this bounded writer change against a qualified
-in-process closure mechanism and the broader immutable-portal alternative using
-new evidence, not more favorable scores for unchanged facts.
-
-If selected and normally approved, planned verification includes real served
-MCP dispatch, the actual child-owned claim and receipt transaction, both transition
-lock orders, meaningful post-qualification code/cohort mutation, every named
-crash boundary, parent-death/lost-reply/late-child reconciliation, refusal of
-forged actor/command/runtime bindings and production-resource exclusion. Canonical
-deployment and real acquisition/refusal evidence remain AC-4 obligations. A
-successful design decision would authorize neither those executions nor delivery.
-
-### Parse-only packaging observations and approval-result boundary
-
-At source `1ebd3a6f94c733107e61a3da054c1fcd00f64b87`, an in-memory esbuild
-0.28.2 parse of the actual `claimCapsuleScopeTool` export reached 1,574 source
-inputs, 29,940,083 input bytes and 19,598,781 output bytes. Its first attempt
-could not resolve four `server-only` imports. The successful parse used the exact
-server marker aliases found in the installed Next compiler; no source module
-was executed, no image was built and no database was accessed.
-
-A narrower export set (claim core, preparation, receipt wrapper, provisioning
-gate and impact computation) reached 787 parsed inputs, including 607 with
-nonzero output contribution, and produced 16,792,051 bytes. The emitted bundle
-retained one non-builtin external import, `pg-native`. Seven non-builtin edges
-in the *input* metadata include erased/type-only or unused edges; they are not
-seven emitted runtime dependencies. Neither a clean parse nor absence of compiler
-warnings establishes native/dynamic dependency closure or executable packaging.
-The 607 included inputs exceed the proposed 512-module ceiling; do not omit
-dependencies or raise a profile limit without a substantive reviewed revision.
-These are local source observations, not canonical build or runtime evidence.
-
-Another source boundary requires an explicit result contract before worker
-selection: `governedExecuteTool` already calls `handApprovalToToolRun` before
-handler dispatch, preventing its outer error path from releasing that handed-off
-reservation. However, the handler catch converts a thrown transport error into
-`tool_threw`, and then finalizes the approval using `result.success`. A lost
-child reply can be an unknown effect, not a known failed action. A closed worker
-must preserve that distinction through the existing approval/consequential
-receipt owner and reconcile the original command and process before terminal
-finalization. This is a required production-contract correction, not a missing
-handoff, permission to retry, or a new approval ledger.
-
-A second parse-only investigation simulated selective imports from the actual
-database leaf owners, without editing repository source. The minimum core fell
-from 607 to 275 included inputs. That is **not** a complete worker fit: retaining
-the actual heartbeat and Windows qualification action materializer reached 764
-included inputs and 19,427,548 output bytes; the full current handler with the
-same virtual leaf strategy reached 979 included inputs and 19,598,904 bytes.
-`materializeQualificationWindowsAction` also reads immutable provider blobs and
-queues its action within the bound receipt transaction. A smaller design must
-preserve those obligations and their atomicity, not omit them to fit a ceiling
-or move them to an unreceipted parent continuation. A reviewed extraction can
-separate its existing `readBlob` port from the pure materialization owner;
-the worker's fixed producer channel would then need real blob responses bound
-to the already admitted repository, commit, paths and hashes, without giving
-the worker a GitHub credential or unrestricted network access. No such extraction,
-channel implementation or complete executable closure has been established.
+## Review history and verification gates
+
+The November 14 local qualification profile and closed-worker proposal are
+historical alternatives. The operator selected the canonical portal with its
+existing claim transaction. The [preserved historical draft](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/01d6440e11da37096a9b9fddd538187f16ccd2d5/docs/superpowers/specs/2026-11-10-workroom-restart-recovery-design.md)
+records the original failed design and spec approvals, architecture review,
+packaging measurements and bounded marker evidence. Their receipts retain
+those exact artifacts. The November 24 design-spec failure on `06e8a2535e32`
+(`initiative-review-v1-183f13e693f8d34e163fb90afeb20b1984f1d1cdf58d23847cd0e5fbe694797b`)
+identified the historical profile's unresolved prerequisites as ambiguities in
+that revision. This specification makes the selected proposed construction and
+its verification path the review subject.
+
+Design review evaluates the implementation contract and whether its tests
+can establish the writer guarantee. A passing independent spec review is
+required to mint the baseline. Plan coverage and independent plan review then
+admit implementation and qualification through the existing governed runtime.
+The actual runtime and transaction evidence required by AC-3 is a delivery
+condition. If review requires an executed feasibility proof before admitting
+implementation, it must name the required evidence and issue a bounded
+qualification route that can run on the actual candidate recipe. Production
+fault injection and marker-only substitutes cannot satisfy that requirement.
