@@ -108,6 +108,99 @@ inspection confirmed no `PRODUCTION_DATABASE_URL` variable, but that observation
 alone is not complete network, credential or writer isolation proof. No ad hoc
 runtime, production crash injection or manual retirement-proof change is allowed.
 
+## November 24 repair design and remaining admission
+
+The operator install completed SUR-F511161C on
+`e800eb568713723803e3ed56ac5f8c395652f162`.
+The signed receipt records portal start `2026-11-24T15:48:23.148553887Z`.
+Docker reports the same full container ID at `2026-11-24T16:21:34.296462753Z`.
+The sandbox start still matches and quiescence is normal. BI-224F56F1 activity
+`cmwux33hq02lp0ertrenbuzxn` retains the original report. After the executor
+takeover, the existing design-file scope refreshed with its original epoch.
+A fresh, unforced claim for `scope-epoch-enrollment.server.ts` in WC-228D7A07
+returned `scope_claim_precondition_failed/current-cohort-unproven`. Design
+admission `IRD-5EDB4EE5CA9B` succeeded. Implementation admission
+`IRD-45D712633B32` retained `REVIEW_FAILED` and the design and plan obligations.
+The first refusal is a runtime precondition failure. The implementation
+refusal still requires resolution through the independent review gates.
+
+### Keep the writer in the canonical portal if its launch can enforce custody
+
+Retain the same governed MCP dispatch, `prepareScopeClaim`, `claimWorkCapsuleScope`
+and `runReceiptedCommand`. This avoids new credential handoffs, startup per
+claim and cross-process replies. The canonical promoter already resolves an
+image ID and runs `inspectScopeEpochWriterImage`. Extend that owner to qualify
+the **served** standalone program and its launch recipe. The image ID binds
+the baked file tree. The recipe must keep the actual Node entrypoint, compiled
+Next.js chunks, late imports, native dependencies and loader configuration
+immutable for the process lifetime. Mount writable data and caches outside
+the code and loader paths. Fail closed on a mismatched launch recipe before
+enabling fresh scope enrollment. Exercise the same recipe in local CI with
+the admitted image and an isolated database before live verification.
+
+The live portal has a writable root and a raw Docker socket. `docker diff`
+reported zero changes under `/app` at the time of inspection. The existing
+packaged probe hashes source copies under `/app/apps/web-src`. The runtime
+owner must show how the same portal process loses code-changing authority
+while preserving its supported Docker operations. A usable construction must
+name the enforcing owner for those operations, the allowed destinations and
+the real read/probe transport. The raw mount or a read-only bind of the socket
+leaves Docker API authority in the process. The served recipe must exclude
+unadmitted exec, debugging and alternative loaders. This enforcement boundary
+is still missing for in-process reuse.
+
+### Close the observation window in the claim transaction
+
+At `36187bfbd0a6`, the runtime transition coordinator already shares
+`lockRuntimeTransitionAdmission` with its production work producers. A new
+epoch should use that owner's table-then-advisory order before the existing
+`self-upgrade-admission` lock. Keep the keyed command lock first and the
+Workroom row lock last. Keep the accepted scope, activity and receipt in the
+same transaction. The unkeyed entry uses the same admission check inside its
+scope/activity transaction. An enrolled same-owner refresh adds no runtime
+qualification.
+
+Authenticate retirement and do the packaged qualification outside the
+transaction. After taking the admission locks and checking active and
+recovery-required transitions, take a short closing observation through the
+trusted observer. Confirm the same run and immutable writer generation,
+exact portal and sandbox IDs, daemon and project, and absence of retired
+containers and live canonical actuators. This requires a bounded exception
+to the existing DB-only lock prefix. An inconclusive observation aborts before
+the room write. Establish the duration limit and measure admission lock hold
+time in local CI. Keep the probe launch and receipt import outside the locks.
+Reuse a checked proof only within its exact transaction. Confirm that a
+previously admitted launcher which can still act cannot escape both the
+active-row and live-actuator checks.
+
+Preserve the timestamp candidate's exact-ID rule. Compare fractional UTC
+seconds without truncating Docker's nanosecond precision. The candidate's
+`Date.parse` comparator accepted a one-nanosecond reversal at the observed
+portal timestamp. Add that regression alongside malformed and future-start
+cases. Preserve the authenticated historical timestamps as read.
+
+### Prove the served path before delivery
+
+Use real served MCP on the qualified image and the leased test database.
+Restart the same container and acquire new scope. Refuse incompatible images,
+replacement IDs, unsafe mount/loader configuration, backward times and
+reappearing retired containers. After qualification, attempt a mutation of a
+late-loaded writer dependency through the served runtime's actual boundaries.
+Show launch-policy exclusion or atomic refusal. Race both canonical admission
+writers in both lock orders and complete a transition between preliminary
+observation and the transaction to test the closing check. Terminate the
+actual served writer after qualification, after the room lock and after its
+writes before commit. Read scope, activity and keyed receipt from another
+database connection. Include an acknowledged commit and a lost reply with
+readback of the original command. The earlier marker tests cover PostgreSQL
+lock lifetime and process rollback in their fixtures.
+
+The canonical runtime owner and independent reviewer must settle the launch
+and verification contracts before approval of production changes. If the
+supported portal recipe needs a wider runtime change, route that scope
+decision to the operator. AC-3 remains open pending the governed verification
+route and its evidence.
+
 ## Admission and evidence status
 
 The original research attempt was rejected for missing immutable provenance;
