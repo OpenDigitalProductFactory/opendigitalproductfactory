@@ -37,7 +37,10 @@ Design and acceptance criteria are in the [restart-recovery design](../specs/202
 **Backlog item:** `BI-224F56F1`
 
 - Decision: atomic
+- Parent: `BI-224F56F1`
 - Receipt: `cmwuy4nri09780ert8i2jyc5n`
+- Dependencies: none
+- Rationale: The phases are not independently shippable. An upgrade that only changes the timestamp predicate would reopen scope without the reviewed writer guarantee, and the immutable recipe cannot be enabled until the Docker authority migration removes every writer-reachable raw caller.
 
 All four phases implement a single repair on BI-224F56F1. The authority migration, immutable launch recipe, continuity comparison and claim-local proof require coordinated delivery. An upgrade that only changes the timestamp predicate can reopen scope without the reviewed writer guarantee. The separate runtime, PR-automation and cost-control workstreams retain their own carriers.
 
