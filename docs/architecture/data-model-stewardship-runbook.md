@@ -89,6 +89,14 @@ Findings reconcile into `EaConformanceIssue` beside the structural ones (visible
 - **Why it matters.** Before the ceiling, one 16-day-old install held ~560 MB (32% of the database) of local-CI console text twice, inside `ExternalEvidenceRecord.details` and `ToolExecution.parameters`, growing ~6.5 GB/year per copy. Backfill for rows written before the ceiling: `apps/web/scripts/offload-evidence-output.ts` (dry-run by default, `--apply` to rewrite).
 - **Adding a new evidence-bearing writer?** Route the body through `offloadEvidenceOutput` (or `boundLargeStrings` if the row is a pure ledger) before the insert. A JSON column is a place for structure and references, never for a log.
 
+## The install is the tenant
+
+The owner ratified [install-is-the-tenant](../founder-kernel/wiki/principles/install-is-the-tenant.md) on 2026-11-24 (W18, DI-2DEB0D9B417F). Each install holds one customer and one `Organization` row, so the schema does not add tenancy columns platform-wide.
+
+- **Ask for the install's organization by name (BI-EE2F38D5).** Use `getInstallOrganization(db, select)` from `@dpf/db`. Where "not set up yet" is a normal state, such as setup and onboarding, use `findInstallOrganization(db, select)`, which returns null instead. Both refuse an install that holds more than one organization rather than picking one.
+- **No new unfiltered `organization.findFirst`.** [`check-no-unfiltered-organization-findfirst.mjs`](../../scripts/check-no-unfiltered-organization-findfirst.mjs) fails a new call whose arguments have no `where`. Existing calls sit in a shrink-only, owned budget ([`unfiltered-organization-findfirst-baseline.json`](../../scripts/unfiltered-organization-findfirst-baseline.json)); BI-40F7C033 moves them onto the helper. After moving a call, record the lower count with `--update` in the same change.
+- **The one real boundary inside an install** is the MSP customer estate. Scope it with the composite-FK estate pattern, never by adding an organization to the schema (design: BI-10CB7878).
+
 ## Retiring a model nothing reads
 
 **How a model leaves the schema (BI-911840CB).** The `prismaModelCount` ratchet makes every new model owned debt, and a retirement is how that debt is paid back. Show that no live code path reads or writes the model (the Prisma accessor, its back-relation fields, and raw SQL against the table), then land in one PR:
