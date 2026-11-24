@@ -51,6 +51,14 @@ export function isReevaluableEscalation(state: BuildPrDeliveryStateV1): boolean 
   return state.status === "escalated" && stoppingCondition(state.lastError) !== null;
 }
 
+/** A withheld room is quiet only until the recheck interval. Eligibility, not GitHub, lifts it. */
+export function isAutonomousEligibilityWithheld(
+  state: Pick<BuildPrDeliveryStateV1, "status" | "escalationKey">,
+): boolean {
+  return state.status === "escalated"
+    && !!state.escalationKey?.endsWith(":autonomous-eligibility-withheld");
+}
+
 export type EscalationRecheck =
   | { kind: "not-escalated" | "not-reevaluable" | "holds" }
   | { kind: "cleared"; state: BuildPrDeliveryStateV1; reason: string };
@@ -87,7 +95,7 @@ export function isDeliveryObservationDue(state: BuildPrDeliveryStateV1 | null, n
   if (!state) return true;
   if (state.status === "closed" || state.status === "deployed") return false;
   if (state.status === "escalated") {
-    if (!isReevaluableEscalation(state)) return false;
+    if (!isReevaluableEscalation(state) && !isAutonomousEligibilityWithheld(state)) return false;
     const last = state.lastObservedAt ? Date.parse(state.lastObservedAt) : Number.NaN;
     return !Number.isFinite(last) || now.getTime() - last >= ESCALATION_RECHECK_MS;
   }

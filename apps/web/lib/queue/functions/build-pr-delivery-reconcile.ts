@@ -100,6 +100,7 @@ export async function runBuildPrDeliveryReconcile(): Promise<{
     const [owner, repo] = repository.split("/");
     if (!owner || !repo) continue;
     let state = existing ?? createBuildPrDeliveryState({ repository, prNumber, prUrl });
+    const withheldKey = `build-pr-delivery:${prNumber}:autonomous-eligibility-withheld`;
 
     try {
       const { getAutonomousPlaybookMode } = await import(
@@ -128,15 +129,42 @@ export async function runBuildPrDeliveryReconcile(): Promise<{
             deliveryStatusOverride: state.status,
           });
           if (autonomousMode === "enforce" && !autonomy.mayAct) {
+            const blockers = autonomy.eligibility.blockers;
+            // A recorded human gate must still reach a person. The seam treats
+            // a missing pattern as ordinary evidence and would hand it to an agent.
+            const declarations = blockers.includes("high_sensitivity_requires_human")
+              ? { sensitivity: "restricted" as const }
+              : blockers.includes("regulatory_ceiling_requires_human")
+                ? { regulated: true }
+                : undefined;
+            if (state.escalationKey == null) {
+              const filed = await routeToHuman({
+                producer: "build-pr-delivery",
+                subject: { kind: "pull-request", id: `#${prNumber}` },
+                blockingFacts: blockers.length > 0 ? blockers : ["autonomous-eligibility-withheld"],
+                blockerClass: "evidence-withheld",
+                ...(declarations ? { declarations } : {}),
+                report: {
+                  source: "build-studio",
+                  severity: "high",
+                  title: `Build Studio withheld PR #${prNumber}`,
+                  description:
+                    `Build Studio will not move PR #${prNumber} (${capsule.capsuleId}) while autonomous eligibility is withheld.\n` +
+                    `Blockers: ${blockers.join(", ") || "autonomous-eligibility-withheld"}\nPR: ${prUrl}`,
+                  featureBuildId: capsule.featureBuildId,
+                  triggerKind: "build-pr-delivery-reconcile",
+                  dedupeKey: withheldKey,
+                },
+                notice: { deepLink: "/admin/issue-reports" },
+              });
+              if (filed.error) throw new Error(`autonomous-eligibility-route-failed:${filed.error}`);
+            }
             const blockedState = {
               ...state,
               status: "escalated" as const,
-              escalationKey:
-                state.escalationKey
-                ?? `build-pr-delivery:${prNumber}:autonomous-eligibility-withheld`,
-              lastError:
-                autonomy.eligibility.blockers.join(",")
-                || "autonomous-eligibility-withheld",
+              escalationKey: state.escalationKey ?? withheldKey,
+              lastError: blockers.join(",") || "autonomous-eligibility-withheld",
+              lastObservedAt: new Date().toISOString(),
             };
             const saved = await prisma.workroom.updateMany({
               where: { id: capsule.id, updatedAt: capsule.updatedAt },
@@ -150,6 +178,15 @@ export async function runBuildPrDeliveryReconcile(): Promise<{
             if (saved.count === 0) compareAndSwapLost += 1;
             else escalated += 1;
             continue;
+          }
+          if (state.escalationKey === withheldKey) {
+            state = {
+              ...state,
+              status: "checking",
+              escalationKey: null,
+              lastError: null,
+              nextObservationAt: null,
+            };
           }
         }
       }
