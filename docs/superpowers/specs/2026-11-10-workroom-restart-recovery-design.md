@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: active
 ---
 
 # Workroom scope enrollment after an ordinary container restart

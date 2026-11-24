@@ -100,16 +100,21 @@ export async function observeMaintenanceEnvironments({ project, runDocker }) {
   // for proving removal. Do not load Docker Config.Env or other secret fields.
   const projectIds = (await runDocker(['ps', '--all', '--no-trunc', '--filter', `label=com.docker.compose.project=${project}`,
     '--format', '{{.ID}}'])).trim().split(/\r?\n/).filter(Boolean);
-  for (const id of projectIds) {
-    if (!inventory.includes(id)) observationInvalid();
-    const raw = await runDocker(['inspect', '--type', 'container', '--format', INSPECT_TEMPLATE, id]);
-    // The executable prints a bounded JSON projection (not the environment).
+  const inventoryIds = new Set(inventory);
+  if (projectIds.length < SERVICES.length || projectIds.length > 1024
+    || new Set(projectIds).size !== projectIds.length || projectIds.some(id => !inventoryIds.has(id))) observationInvalid();
+  // Ask for the whole project in one inspection. The executable emits one
+  // bounded projection per ID without container environment values.
+  const rows = (await runDocker(['inspect', '--type', 'container', '--format', INSPECT_TEMPLATE, ...projectIds])).trim().split(/\r?\n/);
+  if (rows.length !== projectIds.length) observationInvalid();
+  for (const [index, raw] of rows.entries()) {
     let inspected;
     try { inspected = JSON.parse(raw); } catch { observationInvalid(); }
-    const service = inspected.Config?.Labels?.['com.docker.compose.service'];
+    const id = projectIds[index], labels = inspected?.Config?.Labels;
+    if (inspected?.Id !== id || labels?.['com.docker.compose.project'] !== project) observationInvalid();
+    const service = labels['com.docker.compose.service'];
     if (!SERVICES.includes(service)) continue;
-    if (environments[service] || inspected.Id !== id || inspected.State?.Running !== true
-      || inspected.Config.Labels['com.docker.compose.project'] !== project) observationInvalid();
+    if (environments[service] || inspected.State?.Running !== true) observationInvalid();
     environments[service] = { id, startedAt: inspected.State.StartedAt };
   }
   if (!SERVICES.every(service => environments[service])) observationInvalid();

@@ -87,11 +87,12 @@ function harness() {
       return ids.join('\n');
     }
     assert.equal(args[0], 'inspect');
-    const id = args.at(-1); const service = (id[0] === '1' || id[0] === '3') ? 'portal' : 'sandbox';
-    return JSON.stringify({ Id: id, State: { Running: fault !== 'stopped', StartedAt: phase === 'before'
+    const ids = args.slice(args.indexOf('--format') + 2);
+    return ids.map(id => JSON.stringify({ Id: id, State: { Running: fault !== 'stopped', StartedAt: phase === 'before'
       ? '2026-10-15T00:00:00.000Z' : '2026-10-16T01:01:00.000Z' }, Config: { Labels: {
-      'com.docker.compose.project': fault === 'wrong-project' ? 'other' : 'dpf', 'com.docker.compose.service': service,
-    } } });
+      'com.docker.compose.project': fault === 'wrong-project' ? 'other' : 'dpf',
+      'com.docker.compose.service': (id[0] === '1' || id[0] === '3') ? 'portal' : 'sandbox',
+    } } })).join('\n');
   };
   return { runDocker, commands, advance: () => { phase = 'after'; }, fail: f => { fault = f; } };
 }
@@ -148,6 +149,9 @@ describe('canonical promoter retirement observation', () => {
     assert.equal(payload.after.sandbox.id, '4'.repeat(64));
     assert(h.commands.every(args => ['info', 'ps', 'inspect'].includes(args[0])));
     assert(h.commands.filter(args => args[0] === 'ps').every(args => args.includes('--all') && args.includes('--no-trunc')));
+    assert.deepEqual(h.commands.filter(args => args[0] === 'inspect').map(args => args.slice(5)), [
+      ['1'.repeat(64), '2'.repeat(64)], ['3'.repeat(64), '4'.repeat(64)],
+    ]);
   });
   for (const fault of ['transport', 'daemon-changed', 'old-present', 'wrong-project', 'stopped']) {
     it(`does not produce proof on ${fault}`, async () => {
@@ -165,7 +169,7 @@ describe('scope writer actuator observations', () => {
   const launchId = 'c'.repeat(64);
   const launchIdentity = { id: launchId, image: launchImage, project: 'fixture' };
   const launch = () => ({
-    ...launchIdentity, service: 'portal', running: true,
+    ...launchIdentity, service: 'portal', running: true, startedAt: '2026-10-16T01:01:00.000Z',
     path: 'docker-entrypoint.sh',
     args: ['node', '/usr/local/bin/runtime-secret-bootstrap.mjs', '--', '/usr/local/bin/portal-migrate-boot.sh',
       '/usr/local/bin/node', '--disable-sigusr1', '/app/apps/web/server.js'],
@@ -187,7 +191,7 @@ describe('scope writer actuator observations', () => {
     const reordered = launch();
     reordered.mounts.reverse();
     assert.deepEqual(proof, await read(reordered));
-    assert.deepEqual(Object.keys(proof), ['id', 'image', 'recipeDigest']);
+    assert.deepEqual(Object.keys(proof), ['id', 'image', 'recipeDigest', 'startedAt']);
     assert.equal(proof.id, launchId);
     assert.equal(proof.image, launchImage);
     assert.match(proof.recipeDigest, /^[a-f0-9]{64}$/);
@@ -219,6 +223,81 @@ describe('scope writer actuator observations', () => {
       assert.equal(unsafe.status, 78);
       assert.equal(unsafe.stdout, '');
     } finally { await rm(dir, { recursive: true, force: true }); }
+  });
+
+  it('closes over the attested launch and signed replacement cohort without a probe or a write', async () => {
+    const h = harness();
+    h.advance();
+    const portal = { ...launch(), ...launchIdentity, id: '3'.repeat(64), project: 'dpf', networkMode: 'dpf_default' };
+    const identity = { id: portal.id, image: launchImage, project: portal.project };
+    const launchProof = await imageEvidence.observeScopeWriterLaunch({ ...identity, runDocker: async () => JSON.stringify(portal) });
+    const retirement = { runId: 'SUR-CLOSED', targetSha: 'a'.repeat(40), project: portal.project, daemonId: 'daemon-example',
+      retiredContainerIds: ['1'.repeat(64), '2'.repeat(64)], after: {
+        portal: { id: portal.id, startedAt: '2026-10-16T01:00:10.000000005Z' },
+        sandbox: { id: '4'.repeat(64), startedAt: '2026-10-16T01:00:20.000000001Z' },
+      } };
+    const calls = [];
+    const runDocker = async (args, options) => {
+      calls.push({ args, options });
+      if (args.includes('name=dpf-promoter')) return '';
+      if (args.includes(portal.id) && args.length === 6 && args[0] === 'inspect') return JSON.stringify(portal);
+      return h.runDocker(args);
+    };
+    const binding = { launch: launchProof, retirement, runDocker, wallNow: () => finishAt.getTime() };
+    const result = await imageEvidence.observeClosedScopeWriterCohort(binding);
+    assert.equal(result.runId, retirement.runId);
+    assert.equal(result.sourceSha, retirement.targetSha);
+    assert.equal(result.cohort.portal.id, portal.id);
+    assert.equal(result.launch.recipeDigest, launchProof.recipeDigest);
+    assert(calls.every(({ args, options }) => ['info', 'ps', 'inspect'].includes(args[0])
+      && options.timeoutMs > 0 && options.timeoutMs <= 2_000));
+    await assert.rejects(imageEvidence.observeClosedScopeWriterCohort({ ...binding,
+      launch: { ...launchProof, recipeDigest: '0'.repeat(64) },
+    }), /scope_writer_cohort_unproven/);
+    await assert.rejects(imageEvidence.observeClosedScopeWriterCohort({ ...binding, runDocker: async (args, options) =>
+      args.includes('name=dpf-promoter') ? 'an-active-actuator' : runDocker(args, options),
+    }), /scope_writer_cohort_unproven/);
+  });
+
+  it('binds launch evidence to the authenticated retirement bytes and refuses substituted evidence', async () => {
+    const h = harness();
+    const baseline = await captureMaintenanceEpoch({ ...identity, secret, runDocker: h.runDocker, now: captureAt });
+    h.advance();
+    const retirement = await finishMaintenanceEpoch({ baseline, secret, expected: identity, runDocker: h.runDocker, now: finishAt });
+    const portal = { ...launch(), id: '3'.repeat(64), project: 'dpf', networkMode: 'dpf_default' };
+    const runDocker = async args => {
+      if (args[0] === 'inspect') return JSON.stringify(portal);
+      if (args[0] === 'image') return launchImage;
+      if (args[0] === 'run') return JSON.stringify({ schemaVersion: 1, serverSha256: '4'.repeat(64),
+        routeSha256: '5'.repeat(64), manifestSha256: '6'.repeat(64) });
+      throw new Error('unexpected actuator operation');
+    };
+    const evidence = await imageEvidence.collectScopeWriterLaunchEvidence({ retirement, secret, image: launchImage,
+      currentRun: identity, runDocker, now: finishAt });
+    const verified = imageEvidence.verifyScopeWriterLaunchEvidence({ evidence, retirement, secret, now: finishAt });
+    assert.equal(verified.retirement.runId, identity.runId);
+    assert.equal(verified.launch.id, portal.id);
+    assert.equal(verified.launch.image, launchImage);
+    assert.throws(() => imageEvidence.verifyScopeWriterLaunchEvidence({ evidence: { ...evidence,
+      payload: evidence.payload.replace(launchImage, `sha256:${'f'.repeat(64)}`) }, retirement, secret, now: finishAt,
+    }), /scope_writer_launch_evidence_invalid/);
+    assert.throws(() => imageEvidence.verifyScopeWriterLaunchEvidence({ evidence, retirement: { ...retirement,
+      signature: '0'.repeat(64) }, secret, now: finishAt }), /scope_writer_launch_evidence_invalid/);
+
+    const stateDir = await mkdtemp(join(tmpdir(), 'dpf-writer-proof-'));
+    try {
+      const retirementPath = join(stateDir, 'maintenance-epoch-retirement.json');
+      const retiredBytes = JSON.stringify(retirement);
+      await writeFile(retirementPath, retiredBytes, { mode: 0o600 });
+      await imageEvidence.persistScopeWriterLaunch({ stateDir, backupDir: stateDir, secret, image: launchImage,
+        currentRun: identity, runDocker, now: finishAt });
+      const restored = await imageEvidence.readScopeWriterObserverBinding({ stateDir, secret, now: finishAt });
+      assert.deepEqual(restored, verified);
+      assert.equal(await readFile(retirementPath, 'utf8'), retiredBytes);
+      const { chmod } = await import('node:fs/promises');
+      await chmod(join(stateDir, 'scope-writer-launch.json'), 0o666);
+      await assert.rejects(imageEvidence.readScopeWriterObserverBinding({ stateDir, secret, now: finishAt }), /scope_writer_launch_evidence_invalid/);
+    } finally { await rm(stateDir, { recursive: true, force: true }); }
   });
 
   for (const [name, change] of [
@@ -263,7 +342,8 @@ describe('scope writer actuator observations', () => {
 });
 
 
-import { inspectScopeEpochWriters } from "../apps/web/lib/work-capsules/scope-epoch-writer-probe.mjs";
+import * as writerProbe from "../apps/web/lib/work-capsules/scope-epoch-writer-probe.mjs";
+const { inspectScopeEpochWriters } = writerProbe;
 import * as scopeWriterContract from "../apps/web/lib/work-capsules/scope-epoch-contract.ts";
 const scopeProbeFixture = () => ({ root: "/packaged", loadContract: async () => scopeWriterContract,
   readFile: async path => Buffer.from(path.endsWith(".dpf-image-version") ? "a".repeat(40)
@@ -284,6 +364,61 @@ it("rejects malformed source identity", async () => {
   const f = scopeProbeFixture(), read = f.readFile;
   f.readFile = async path => path.endsWith(".dpf-image-version") ? Buffer.from("unknown") : read(path);
   await assert.rejects(inspectScopeEpochWriters(f), /scope_writer_probe_identity_invalid/);
+});
+
+describe('actual served writer bundle evidence', () => {
+  const root = '/fixture/app';
+  const launcher = `${root}/apps/web/server.js`;
+  const route = `${root}/apps/web/.next/server/app/api/mcp/v1/route.js`;
+  const manifest = `${root}/apps/web/.next/server/app-paths-manifest.json`;
+  const fixture = () => {
+    const files = new Map([[launcher, 'compiled standalone entrypoint'], [route, 'compiled MCP route'],
+      [manifest, JSON.stringify({ '/api/mcp/v1/route': 'app/api/mcp/v1/route.js' })]]);
+    return { files, root,
+      readFile: async path => { if (!files.has(path)) throw new Error('missing'); return Buffer.from(files.get(path)); },
+      stat: async path => ({ isFile: () => files.has(path), size: Buffer.byteLength(files.get(path) ?? '') }),
+      realpath: async path => path,
+    };
+  };
+
+  it('binds the standalone server and the actual MCP route independently of copied sources', async () => {
+    const f = fixture();
+    const before = await writerProbe.inspectServedScopeWriter(f);
+    assert.deepEqual(Object.keys(before), ['schemaVersion', 'serverSha256', 'routeSha256', 'manifestSha256']);
+    f.files.set(route, 'changed emitted route');
+    const after = await writerProbe.inspectServedScopeWriter(f);
+    assert.equal(after.serverSha256, before.serverSha256);
+    assert.notEqual(after.routeSha256, before.routeSha256);
+  });
+
+  it('refuses an external symlink or route manifest pointing outside the standalone server', async () => {
+    const f = fixture();
+    assert.equal(typeof writerProbe.inspectServedScopeWriter, 'function');
+    await assert.rejects(writerProbe.inspectServedScopeWriter({ ...f,
+      realpath: async path => path === route ? '/workspace/route.js' : path }), /scope_writer_probe_served_bundle_unproven/);
+    f.files.set(manifest, JSON.stringify({ '/api/mcp/v1/route': '../../../../workspace/route.js' }));
+    await assert.rejects(writerProbe.inspectServedScopeWriter(f), /scope_writer_probe_served_bundle_unproven/);
+  });
+
+  it('qualifies emitted bytes through the pinned, isolated promoter image probe', async () => {
+    const image = `sha256:${'e'.repeat(64)}`;
+    const served = await writerProbe.inspectServedScopeWriter(fixture());
+    const calls = [];
+    const evidence = await imageEvidence.inspectServedScopeWriterImage({ image, runDocker: async args => {
+      calls.push(args);
+      if (args[0] === 'image') return image;
+      if (args[0] === 'run') return JSON.stringify(served);
+      throw new Error('unexpected operation');
+    } });
+    assert.deepEqual(evidence, { image, ...served });
+    const run = calls.find(args => args[0] === 'run');
+    assert.deepEqual(run.slice(-3), [image, '/app/apps/web-src/lib/work-capsules/scope-epoch-writer-probe.mjs', '--served']);
+    assert(run.includes('--read-only') && run.includes('--cap-drop') && run.includes('--network'));
+    assert.equal(run.includes('--mount'), false);
+    await assert.rejects(imageEvidence.inspectServedScopeWriterImage({ image, runDocker: async args =>
+      args[0] === 'image' ? image : JSON.stringify({ ...served, routeSha256: 'not-a-hash' }),
+    }), /scope_writer_served_image_unproven/);
+  });
 });
 
 it("canonical shell candidate check refuses incompatible portal bytes independently", async () => {

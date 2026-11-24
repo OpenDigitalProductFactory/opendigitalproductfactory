@@ -42,6 +42,8 @@ export const PROMOTER_BUILD_CONTEXT_SOURCES: readonly string[] = [
   "scripts/promoter-migration-envelope.mjs",
   "scripts/promoter-epoch-evidence.mjs",
   "scripts/lib/maintenance-epoch-receipt.mjs",
+  "scripts/lib/scope-writer-observation.mjs",
+  "scripts/lib/docker-socket.mjs",
   "scripts/installer/validate-install-state.mjs",
   "scripts/installer/migrate-install-state.mjs",
   "scripts/installer/resolve-host-identity.mjs",

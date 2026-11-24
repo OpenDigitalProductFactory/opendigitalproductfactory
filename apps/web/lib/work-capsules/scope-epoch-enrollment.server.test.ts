@@ -3,6 +3,7 @@ import { hostname } from "node:os";
 import { describe, expect, it, vi } from "vitest";
 import { canonicalJson } from "@dpf/integration-shared/canonical-json";
 import { signMaintenanceEpoch } from "../../../../scripts/lib/maintenance-epoch-receipt.mjs";
+import { attestScopeWriterProcess } from "./scope-epoch-writer-probe.mjs";
 vi.mock("@dpf/db", () => ({ prisma: {} }));
 import { assertScopeEpochEnrollmentReady, currentScopeWriterContainerId, type ScopeEpochEnrollmentPorts } from "./scope-epoch-enrollment.server";
 import { SCOPE_EPOCH_WRITER_PATHS } from "./scope-epoch-contract";
@@ -43,9 +44,11 @@ function fixture() {
       else if (args.some(value => value.includes('"image"'))) stdout = JSON.stringify({ id: after.portal.id, image, running: true,
         hostname: hostname(), labels: { "com.docker.compose.service": "portal", "com.docker.compose.project": state.project } });
       else {
-        const service = args.at(-1) === after.portal.id ? "portal" : "sandbox";
-        stdout = JSON.stringify({ Id: after[service].id, State: { Running: true, StartedAt: after[service].startedAt },
-          Config: { Labels: { "com.docker.compose.service": service, "com.docker.compose.project": state.project } } });
+        stdout = args.slice(5).map(id => {
+          const service = id === after.portal.id ? "portal" : "sandbox";
+          return JSON.stringify({ Id: after[service].id, State: { Running: true, StartedAt: after[service].startedAt },
+            Config: { Labels: { "com.docker.compose.service": service, "com.docker.compose.project": state.project } } });
+        }).join("\n");
       }
       return { exitCode: 0, stdout, stderr: "" };
     },
@@ -58,7 +61,7 @@ function fixture() {
     },
     runtimeCapabilityTransition: { findFirst: vi.fn(async (): Promise<unknown> => null) },
     selfUpgradeRun: { findFirst: vi.fn(async (): Promise<unknown> => null) } };
-  return { ports, proof, run, state, commands, locks, tx };
+  return { ports, proof, run, state, commands, locks, tx, receipt };
 }
 
 describe("canonical scope epoch enrollment", () => {
@@ -95,5 +98,101 @@ describe("canonical scope epoch enrollment", () => {
     expect(() => currentScopeWriterContainerId("0::/", "")).toThrow("current-container-identity-unproven");
     expect(currentScopeWriterContainerId(`0::/docker/${after.portal.id}\n`, "")).toBe(after.portal.id);
     expect(() => currentScopeWriterContainerId(`0::/docker/${before.portal.id}\n`, `/containers/${after.portal.id}/hostname `)).toThrow();
+  });
+  function hardenedFixture() {
+    const f = fixture();
+    const read = f.ports.readFile;
+    f.ports.readFile = async path => path === "/proc/self/mountinfo"
+      ? `${await read(path)}2 1 0:2 / /run/dpf-actuator ro - ext4 /dev/sdb rw\n`
+      : await read(path);
+    const served = { schemaVersion: 1, serverSha256: hash("server"), routeSha256: hash("route"),
+      manifestSha256: hash("manifest") };
+    const observation = { runId: f.run.runId, sourceSha: source, retirementDigest: hash(canonicalJson(f.receipt)),
+      project: "dpf", daemonId: "daemon-test", observedAt: now.getTime(),
+      launch: { id: after.portal.id, image, recipeDigest: hash("recipe"), startedAt: "2026-10-16T01:01:59.987654321Z" },
+      served: { image, ...served },
+      cohort: { portal: { id: after.portal.id, startedAt: "2026-10-16T01:01:59.987654321Z" }, sandbox: after.sandbox } };
+    const attestProcess = vi.fn(async () => ({ pid: process.pid, startTicks: "123" }));
+    const inspectServed = vi.fn(async () => served);
+    const readClosing = vi.fn(async (): Promise<unknown> => {
+      expect(f.locks).toHaveLength(3);
+      expect(f.tx.selfUpgradeRun.findFirst).toHaveBeenCalledTimes(1);
+      return observation;
+    });
+    return { ...f, ports: { ...f.ports, attestProcess, inspectServed, readClosing }, observation };
+  }
+  it("uses the closing host observation once inside the actual admission locks after a same-ID restart", async () => {
+    const f = hardenedFixture(), proof = await assertScopeEpochEnrollmentReady(f.ports);
+    expect(f.ports.readClosing).not.toHaveBeenCalled();
+    await proof.assertCurrent(f.tx as never);
+    await proof.assertCurrent(f.tx as never);
+    expect(f.ports.readClosing).toHaveBeenCalledTimes(1);
+    expect(f.commands).toEqual([]);
+  });
+  it.each(["writer", "retirement", "source", "restart", "unavailable"] as const)("holds the hardened claim for an incompatible %s observation", async fault => {
+    const f = hardenedFixture(), proof = await assertScopeEpochEnrollmentReady(f.ports);
+    if (fault === "writer") f.observation.served.routeSha256 = hash("other route");
+    if (fault === "retirement") f.observation.retirementDigest = hash("other retirement");
+    if (fault === "source") f.observation.sourceSha = "0".repeat(40);
+    if (fault === "restart") {
+      f.observation.cohort.portal.startedAt = "2026-10-16T01:00:59.999999999Z";
+      f.observation.launch.startedAt = f.observation.cohort.portal.startedAt;
+    }
+    if (fault === "unavailable") f.ports.readClosing.mockRejectedValue(new Error("connection refused"));
+    await expect(proof.assertCurrent(f.tx as never)).rejects.toThrow("current-cohort-unproven");
+    expect(f.commands).toEqual([]);
+  });
+  it("never falls back to raw Docker after failed qualification in the actuator runtime", async () => {
+    const f = hardenedFixture();
+    f.ports.attestProcess.mockRejectedValue(new Error("writable root"));
+    await expect(assertScopeEpochEnrollmentReady(f.ports)).rejects.toThrow("canonical-writer-evidence-unavailable");
+    expect(f.commands).toEqual([]);
+  });
+});
+
+describe("served scope writer process qualification", () => {
+  const boot = "Node.js s (next-server) ";
+  const status = [
+    "Uid:\t1000\t1000\t1000\t1000", "Gid:\t1000\t1000\t1000\t1000", "Groups:\t1000",
+    "TracerPid:\t0", "NoNewPrivs:\t1", "Seccomp:\t2", "Seccomp_filters:\t1",
+    ...["Inh", "Prm", "Eff", "Bnd", "Amb"].map(key => `Cap${key}:\t0000000000000000`),
+  ].join("\n");
+  const mounts = [
+    "1 0 0:99 / / ro,relatime - overlay overlay rw",
+    "2 1 0:100 / /tmp rw,nosuid,nodev,noexec - tmpfs tmpfs rw",
+    "3 1 0:101 / /run/dpf-actuator ro,nosuid,nodev,noexec - ext4 /dev/sda rw",
+    "4 1 0:102 / /proc rw,nosuid,nodev,noexec - proc proc rw",
+  ].join("\n");
+  function input(files: Record<string, string> = {}) {
+    const kernel: Record<string, string> = {
+      "/proc/self/status": status, "/proc/self/mountinfo": mounts,
+      "/proc/self/stat": `1 (${boot}) S ${Array(18).fill("0").join(" ")} 7654321 0\n`,
+      ...files,
+    };
+    return { readFile: async (path: string) => Buffer.from(kernel[path] ?? ""),
+      readlink: async () => "/usr/local/bin/node", pid: 1, execPath: "/usr/local/bin/node",
+      argv: ["--disable-sigusr1"], env: { NODE_ENV: "production" as const, PATH: "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" } };
+  }
+  it("binds Linux process start to an unprivileged immutable loader namespace", async () => {
+    await expect(attestScopeWriterProcess(input())).resolves.toEqual({ pid: 1, startTicks: "7654321" });
+  });
+  it.each([
+    ["writable root", "/proc/self/mountinfo", mounts.replace("/ / ro,", "/ / rw,")],
+    ["nested loader mount", "/proc/self/mountinfo", mounts + "\n5 1 0:55 / /app/node_modules ro - tmpfs tmpfs rw"],
+    ["unexpected writable mount", "/proc/self/mountinfo", mounts + "\n5 1 0:55 / /run/untrusted rw - tmpfs tmpfs rw"],
+    ["writable actuator", "/proc/self/mountinfo", mounts.replace("actuator ro,", "actuator rw,")],
+    ["missing proc fields", "/proc/self/status", ""],
+    ["privileged bounding capability", "/proc/self/status", status.replace("CapBnd:\t0000000000000000", "CapBnd:\t0000000000000001")],
+    ["attached tracer", "/proc/self/status", status.replace("TracerPid:\t0", "TracerPid:\t7")],
+  ])("refuses %s", async (_name, path, bytes) => {
+    await expect(attestScopeWriterProcess(input({ [path]: bytes }))).rejects.toThrow("scope_writer_probe_process_unproven");
+  });
+  it.each([
+    { argv: ["--disable-sigusr1", "--inspect"] },
+    { env: { ...input().env, NODE_PATH: "/tmp" } },
+    { env: { ...input().env, PATH: "/tmp:/usr/local/bin" } },
+    { readlink: async () => "/tmp/node" },
+  ])("refuses loader, inspector or interpreter substitution", async change => {
+    await expect(attestScopeWriterProcess({ ...input(), ...change })).rejects.toThrow("scope_writer_probe_process_unproven");
   });
 });

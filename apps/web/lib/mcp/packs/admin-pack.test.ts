@@ -220,21 +220,24 @@ describe("admin pack — handler behavior (delegation preserved)", () => {
   });
 
   it("admin_run_command blocks a command outside the allowlist", async () => {
-    const res = await adminPack.handlers.admin_run_command({ command: "rm -rf /" }, "u1");
+    const res = await adminPack.handlers.admin_run_command({ command: "date" }, "u1");
     expect(res.success).toBe(false);
-    expect(res.error).toContain("Only docker compose, git, and pnpm");
+    expect(res.error).toBe("unsupported_diagnostic");
   });
 
-  it("admin_run_command blocks a destructive allowlisted command", async () => {
-    const res = await adminPack.handlers.admin_run_command({ command: "git push origin main" }, "u1");
+  it.each(["git push origin main", "pnpm run seed", "docker compose restart sandbox"])("admin_run_command refuses %s without executing it", async command => {
+    const res = await adminPack.handlers.admin_run_command({ command }, "u1");
     expect(res.success).toBe(false);
-    expect(res.error).toContain("Destructive command blocked");
+    expect(res.error).toBe("unsupported_diagnostic");
+    expect(execution.exec).not.toHaveBeenCalled();
+    expect(execution.execFile).not.toHaveBeenCalled();
+    expect(db.adminActivityCreate).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ result: "blocked" }) }));
   });
 
   it("admin_run_command reports a nonzero command failure while retaining its output", async () => {
-    execution.exec.mockRejectedValue({ code: 1, stderr: 'service "web" is not running', message: "Command failed" });
-    const res = await adminPack.handlers.admin_run_command({ command: "docker compose exec -T web printenv PUBLIC_URL" }, "u1");
-    expect(res).toMatchObject({ success: false, data: { output: 'service "web" is not running', exitCode: 1 } });
+    execution.execFile.mockRejectedValue({ code: 1, stderr: "Compose configuration unavailable", message: "Command failed" });
+    const res = await adminPack.handlers.admin_run_command({ command: "docker compose ps" }, "u1");
+    expect(res).toMatchObject({ success: false, data: { output: "Compose configuration unavailable", exitCode: 1 } });
   });
 
   it("admin_run_command keeps stdout and stderr bounded for a failed safe diagnostic", async () => {

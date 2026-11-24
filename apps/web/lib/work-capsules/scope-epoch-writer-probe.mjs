@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { createHash } from "node:crypto";
-import { readFile as readPackagedFile } from "node:fs/promises";
+import { readFile as readPackagedFile, readlink as readKernelLink, realpath as resolvePackagedPath, stat as statPackagedFile } from "node:fs/promises";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { isEntryModule } from "../../../../scripts/lib/entry-module.mjs";
@@ -35,9 +35,107 @@ export async function inspectScopeEpochWriters({ root = "/app", readFile = readP
     refuse("evidence_unavailable");
   }
 }
+
+/** Measure the emitted standalone files that dispatch the Workroom tool.
+ * The resolved image and hardened launch recipe protect their late loads. */
+export async function inspectServedScopeWriter({ root = "/app", readFile = readPackagedFile,
+  realpath = resolvePackagedPath, stat = statPackagedFile } = {}) {
+  try {
+    const web = join(await realpath(root), "apps/web");
+    async function readEmitted(path, maxBytes) {
+      // These three paths must live at the canonical standalone locations.
+      // Reject symlinks into development sources and shared volumes.
+      if (await realpath(path) !== path) refuse("served_bundle_unproven");
+      const info = await stat(path);
+      if (!info.isFile() || info.size < 1 || info.size > maxBytes) refuse("served_bundle_unproven");
+      const bytes = await readFile(path);
+      if (bytes.length !== info.size) refuse("served_bundle_unproven");
+      return bytes;
+    }
+    const serverDir = join(web, ".next/server");
+    const routePath = "app/api/mcp/v1/route.js";
+    const manifest = await readEmitted(join(serverDir, "app-paths-manifest.json"), 1024 * 1024);
+    if (JSON.parse(manifest.toString("utf8"))?.["/api/mcp/v1/route"] !== routePath) refuse("served_bundle_unproven");
+    const [server, route] = await Promise.all([
+      readEmitted(join(web, "server.js"), 1024 * 1024),
+      readEmitted(join(serverDir, routePath), 16 * 1024 * 1024),
+    ]);
+    return { schemaVersion: 1, serverSha256: sha256(server), routeSha256: sha256(route), manifestSha256: sha256(manifest) };
+  } catch { return refuse("served_bundle_unproven"); }
+}
+
+const rootOptions = ["nodev", "nosuid", "noexec"];
+const systemMounts = new Set([
+  "/dev", "/dev/pts", "/dev/mqueue", "/dev/shm", "/sys", "/sys/fs/cgroup", "/proc",
+  "/proc/acpi", "/proc/asound", "/proc/bus", "/proc/fs", "/proc/interrupts",
+  "/proc/irq", "/proc/kcore", "/proc/keys", "/proc/latency_stats", "/proc/scsi",
+  "/proc/sys", "/proc/sysrq-trigger", "/proc/timer_list", "/sys/firmware",
+  "/sys/devices/virtual/powercap",
+]);
+const readOnlyInputs = new Set([
+  "/run/dpf-actuator", "/dpf-state", "/host-dpf", "/host-worktrees", "/evidence", "/workspace",
+  "/etc/dpf/pki/root_ca.crt", "/run/secrets/dpf-edge-action-signing-password",
+  "/run/secrets/dpf-edge-action-signing-private.pem", "/run/secrets/dpf-edge-mtls-proxy-secret",
+]);
+const dataMounts = new Set([
+  "/etc/hostname", "/etc/hosts", "/etc/resolv.conf", "/sandbox-workspace",
+  "/var/lib/dpf/maps", "/backups", "/dpf-federation",
+]);
+
+/** Inspect this process's generation and existing kernel protections.
+ * @param {{ readFile?: (path: string) => Promise<Buffer|string>,
+ *   readlink?: (path: string) => Promise<string>, pid?: number,
+ *   execPath?: string, argv?: string[], env?: Record<string, string|undefined> }} [options]
+ */
+export async function attestScopeWriterProcess({ readFile = readPackagedFile, readlink = readKernelLink,
+  pid = process.pid, execPath = process.execPath, argv = process.execArgv, env = process.env } = {}) {
+  try {
+    if (execPath !== "/usr/local/bin/node" || argv.length !== 1 || argv[0] !== "--disable-sigusr1"
+      || env.PATH !== "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+      || Object.keys(env).some(name => /^(?:NODE_OPTIONS$|NODE_PATH$|NODE_CHANNEL_FD$|LD_|DYLD_|BASH_ENV$|ENV$|DPF_APP_DIR$)/.test(name))) {
+      refuse("process_unproven");
+    }
+    const [status, mountinfo, stat, executable] = await Promise.all([
+      readFile("/proc/self/status"), readFile("/proc/self/mountinfo"), readFile("/proc/self/stat"), readlink("/proc/self/exe"),
+    ]);
+    if (executable !== execPath) refuse("process_unproven");
+    const fields = new Map(status.toString().split("\n").flatMap(line => {
+      const split = line.indexOf(":");
+      return split < 0 ? [] : [[line.slice(0, split), line.slice(split + 1).trim()]];
+    }));
+    for (const key of ["Uid", "Gid"]) {
+      if (!/^1000\s+1000\s+1000\s+1000$/.test(fields.get(key) ?? "")) refuse("process_unproven");
+    }
+    if (!["", "1000"].includes(fields.get("Groups")) || fields.get("TracerPid") !== "0"
+      || fields.get("NoNewPrivs") !== "1" || fields.get("Seccomp") !== "2"
+      || !/^[1-9][0-9]*$/.test(fields.get("Seccomp_filters") ?? "")
+      || ["Inh", "Prm", "Eff", "Bnd", "Amb"].some(key => !/^0{16}$/.test(fields.get(`Cap${key}`) ?? ""))) refuse("process_unproven");
+    const targets = new Set();
+    for (const line of mountinfo.toString().trim().split("\n")) {
+      const [mount, filesystem] = line.split(" - ");
+      const [, , , , target, opts] = mount.split(" ");
+      if (!target || !opts || !filesystem || targets.has(target)) refuse("process_unproven");
+      targets.add(target);
+      const options = opts.split(",");
+      if (target === "/" || readOnlyInputs.has(target)) {
+        if (!options.includes("ro")) refuse("process_unproven");
+      } else if (target === "/tmp") {
+        if (!filesystem.startsWith("tmpfs ") || rootOptions.some(option => !options.includes(option))) refuse("process_unproven");
+      } else if (!systemMounts.has(target) && !dataMounts.has(target)) refuse("process_unproven");
+    }
+    if (["/", "/tmp", "/run/dpf-actuator", "/proc"].some(target => !targets.has(target))) refuse("process_unproven");
+    const processStat = stat.toString(), endOfName = processStat.lastIndexOf(") ");
+    const startTicks = processStat.slice(endOfName + 2).trim().split(/\s+/)[19];
+    if (!processStat.startsWith(`${pid} (`) || endOfName < 0 || !/^[1-9][0-9]*$/.test(startTicks ?? "")) refuse("process_unproven");
+    return { pid, startTicks };
+  } catch { return refuse("process_unproven"); }
+}
+
 if (isEntryModule(import.meta.url)) {
   try {
-    if (process.argv.length !== 2) refuse("arguments_invalid");
-    process.stdout.write(`${JSON.stringify(await inspectScopeEpochWriters())}\n`);
+    const args = process.argv.slice(2);
+    const proof = args.length === 0 ? await inspectScopeEpochWriters()
+      : args.length === 1 && args[0] === "--served" ? await inspectServedScopeWriter() : refuse("arguments_invalid");
+    process.stdout.write(`${JSON.stringify(proof)}\n`);
   } catch { process.stderr.write("scope_writer_probe_unavailable\n"); process.exitCode = 78; }
 }

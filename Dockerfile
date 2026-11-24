@@ -577,6 +577,8 @@ COPY scripts/lib/transition-signing.mjs /promoter/scripts/lib/transition-signing
 COPY scripts/promoter-migration-envelope.mjs /promoter/scripts/promoter-migration-envelope.mjs
 COPY scripts/promoter-epoch-evidence.mjs /promoter/scripts/promoter-epoch-evidence.mjs
 COPY scripts/lib/maintenance-epoch-receipt.mjs /promoter/scripts/lib/maintenance-epoch-receipt.mjs
+COPY scripts/lib/scope-writer-observation.mjs /promoter/scripts/lib/scope-writer-observation.mjs
+COPY scripts/lib/docker-socket.mjs /promoter/scripts/lib/docker-socket.mjs
 COPY scripts/installer/validate-install-state.mjs /promoter/scripts/installer/validate-install-state.mjs
 COPY scripts/installer/install-state-transaction.mjs /promoter/scripts/installer/install-state-transaction.mjs
 COPY scripts/installer/install-release-assets.mjs /promoter/scripts/installer/install-release-assets.mjs

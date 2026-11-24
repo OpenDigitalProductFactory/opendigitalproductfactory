@@ -1,8 +1,12 @@
+---
+status: active
+---
+
 # Workroom scope recovery after a portal restart
 
 BI-224F56F1 · WC-228D7A07 · `codex/workroom-restart-recovery`
 
-Design and acceptance criteria are in the [restart-recovery design](../specs/2026-11-10-workroom-restart-recovery-design.md). The operator selected the existing in-process claim path under a hardened canonical portal. This draft is prepared for independent review. Fresh scope enrollment for the plan path returned `current-cohort-unproven`. The Workroom retains the existing design admission. Implementation needs fresh edit admission and a reviewed scope baseline and plan.
+Design and acceptance criteria are in the [restart-recovery design](../specs/2026-11-10-workroom-restart-recovery-design.md). The operator selected the existing in-process claim path under a hardened canonical portal. DPF approved the scope baseline and plan. Fresh implementation edit scope returned `current-cohort-unproven`. The Workroom records the operator-authorized bounded source recovery and the path admission that could not run successfully.
 
 ## Phase 1 · Qualify the canonical portal (AC-2, AC-3)
 
@@ -32,7 +36,11 @@ Design and acceptance criteria are in the [restart-recovery design](../specs/202
 
 All four phases implement a single repair on BI-224F56F1. The authority migration, immutable launch recipe, continuity comparison and claim-local proof require coordinated delivery. An upgrade that only changes the timestamp predicate can reopen scope without the reviewed writer guarantee. The separate runtime, PR-automation and cost-control workstreams retain their own carriers.
 
-The schema-v2 plan coverage receipt needs the baseline minted by independent spec approval and an immutable plan artifact. No receipt or plan-review result exists yet. On admission, bind AC-1 through AC-4 and the phase contracts, flows and verification to the exact provider plan blob before requesting plan review.
+DPF recorded schema-v2 coverage `cmwuy4nri09780ert8i2jyc5n` against baseline
+`baseline-5ae828d5-0109-4427-a8e5-00cfe16cd433` and independently approved the
+plan at `d94d7af76f70`. The status and evidence annotations above record that
+decision. Keep the receipt bound to its exact provider plan blob and verify
+current plan coverage as part of source reconciliation.
 
 | Phase | Objectives | Contract | Flow | Acceptance evidence |
 | --- | --- | --- | --- | --- |

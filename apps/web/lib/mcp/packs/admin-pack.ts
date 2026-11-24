@@ -104,17 +104,17 @@ const definitions: ToolDefinition[] = [
   },
   {
     name: "admin_run_command",
-    description: "Run a diagnostic or controlled command in the project directory. Only docker compose, git, and pnpm commands are permitted. Bounded local diagnostics use current delegation; destructive commands remain blocked.",
+    description: "Run a bounded project diagnostic. Supports Docker Compose ps and logs, Git status and Git rev-parse. Use the dedicated tools for service, migration and recovery actions.",
     inputSchema: {
       type: "object",
       properties: {
-        command: { type: "string", description: "Shell command to run (docker compose, git, or pnpm only)" },
+        command: { type: "string", description: "A supported Docker Compose or Git diagnostic" },
       },
       required: ["command"],
     },
     requiredCapability: "view_admin",
     executionMode: "immediate",
-    sideEffect: true, // Tier 3: potentially destructive
+    sideEffect: true, // Preserve the public grant and consequence floor.
     consequence: "irreversible",
     consequenceForCall: async ({ params }) => parseAdminDiagnostic(params.command)
       ? { consequence: null, reason: "bounded-local-diagnostic" }
@@ -323,52 +323,21 @@ async function adminRunSeed(_params: Record<string, unknown>, userId: string): P
 }
 
 async function adminRunCommand(params: Record<string, unknown>, userId: string): Promise<ToolResult> {
-  const command = String(params.command ?? "").trim();
+  const command = typeof params.command === "string" ? params.command.trim() : "";
   if (!command) return { success: false, error: "command is required.", message: "Provide a command." };
-
-  // Allowlist: only docker compose, git, and pnpm commands
-  if (!/^(docker compose|git|pnpm)\b/.test(command)) {
-    await logAdminActivity(userId, "admin_run_command", { command }, "blocked", 3, "Command not in allowlist");
-    return {
-      success: false,
-      error: "Only docker compose, git, and pnpm commands are permitted.",
-      message: `Command blocked: "${command.slice(0, 80)}". Only docker compose, git, and pnpm commands are allowed.`,
-    };
-  }
-
-  // Block destructive patterns
-  const ADMIN_BLOCKED = [
-    /rm\s+-rf/i,
-    /docker compose\s+down/i,
-    /git\s+push/i,
-    /git\s+reset\s+--hard/i,
-    /prisma\s+migrate\s+reset/i,
-    /curl\s+.*\|\s*(ba)?sh/i,
-    /wget\s+.*\|\s*(ba)?sh/i,
-    /--privileged/i,
-    /--force/i,
-  ];
-  const blocked = ADMIN_BLOCKED.find(p => p.test(command));
-  if (blocked) {
-    await logAdminActivity(userId, "admin_run_command", { command }, "blocked", 3, "Destructive command blocked");
-    return {
-      success: false,
-      error: "Destructive command blocked by safety policy.",
-      message: `This command is blocked: "${command.slice(0, 80)}". Use the governed recovery or deployment operation for destructive work.`,
-    };
+  const diagnostic = parseAdminDiagnostic(params.command);
+  if (!diagnostic) {
+    await logAdminActivity(userId, "admin_run_command", { command: command.slice(0, 1_000) }, "blocked", 3, "Unsupported diagnostic");
+    return { success: false, error: "unsupported_diagnostic",
+      message: "Use Docker Compose ps or logs, Git status or Git rev-parse, or call the dedicated operation." };
   }
 
   try {
-    const diagnostic = parseAdminDiagnostic(command);
-    const { exec: execCb, execFile: execFileCb } = lazyChildProcess();
+    const { execFile: execFileCb } = lazyChildProcess();
     const { promisify } = lazyUtil();
-    const execAsync = promisify(execCb);
-    await logAdminActivity(userId, "admin_run_command", { command }, "success", diagnostic ? 1 : 2, `Running: ${command.slice(0, 200)}`);
+    await logAdminActivity(userId, "admin_run_command", { command }, "success", 1, `Running: ${command.slice(0, 200)}`);
     const options = { cwd: composeCwd(), timeout: 60_000 };
-    // The exact argv admitted by the refiner is executed without a shell.
-    const { stdout, stderr } = diagnostic
-      ? await promisify(execFileCb)(diagnostic.file, diagnostic.args, options)
-      : await execAsync(command + " 2>&1", options);
+    const { stdout, stderr } = await promisify(execFileCb)(diagnostic.file, diagnostic.args, options);
     const output = (stdout + "\n" + stderr).trim();
     return { success: true, message: `Command completed.`, data: { command, output: output.slice(0, 15000), exitCode: 0 } };
   } catch (err) {

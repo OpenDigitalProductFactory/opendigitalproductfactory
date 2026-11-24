@@ -1,16 +1,19 @@
 import { createHash } from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { parseArgs, promisify } from 'node:util';
-import { mkdtemp, readFile, rename, rm, writeFile } from 'node:fs/promises';
-import { isAbsolute, join } from 'node:path';
+import { constants } from 'node:fs';
+import { once } from 'node:events';
+import { chmod, chown, lstat, mkdtemp, open, readFile, rename, rm, writeFile } from 'node:fs/promises';
+import { dirname, isAbsolute, join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { canonicalJson } from './lib/canonical-json.mjs';
 import { signMaintenanceEpoch, verifyMaintenanceEpoch } from './lib/maintenance-epoch-receipt.mjs';
 import { readMigrationSecret } from './promoter-migration-envelope.mjs';
+import { signTransitionPayload, verifyTransitionSignature } from './lib/transition-signing.mjs';
 import { isEntryModule } from './lib/entry-module.mjs';
 import { scriptArgv } from './lib/script-argv.mjs';
 
-import { observeMaintenanceEnvironments } from "./lib/maintenance-epoch-receipt.mjs";
+import { assertNoCanonicalActuators, hasContinuousMaintenanceStarts, observeMaintenanceEnvironments } from "./lib/maintenance-epoch-receipt.mjs";
 export { observeMaintenanceEnvironments } from "./lib/maintenance-epoch-receipt.mjs";
 
 const exec = promisify(execFile);
@@ -50,16 +53,14 @@ export function resolveEpochDockerInvocation(args, env = process.env) {
   return { command, args: [...prefix, ...args] };
 }
 
-export async function runEpochDocker(args, { env = process.env, execute = exec } = {}) {
+export async function runEpochDocker(args, { env = process.env, execute = exec, timeoutMs = 15_000 } = {}) {
   const invocation = resolveEpochDockerInvocation(args, env);
   const { stdout } = await execute(invocation.command, invocation.args,
-    { timeout: 15_000, maxBuffer: 2 * 1024 * 1024, encoding: 'utf8' });
+    { timeout: timeoutMs, maxBuffer: 2 * 1024 * 1024, encoding: 'utf8' });
   return stdout;
 }
 
-/** A scoped packaged-writer proof of the actual immutable portal image.
- * No mounts, network, credentials or deployment effects are exposed to the probe. */
-export async function inspectScopeEpochWriterImage({ image, expectedSource = '', runDocker = runEpochDocker }) {
+async function runScopeWriterImageProbe({ image, runDocker, served = false }) {
   const config = (await runDocker(['image', 'inspect', image, '--format', '{{.Id}}'])).trim();
   if (!/^sha256:[a-f0-9]{64}$/.test(config)) throw new Error('scope_writer_image_unproven');
   const name = `dpf-scope-writer-probe-${randomUUID()}`;
@@ -67,20 +68,41 @@ export async function inspectScopeEpochWriterImage({ image, expectedSource = '',
   try {
     bytes = await runDocker(['run', '--rm', '--read-only', '--name', name, '--network', 'none', '--cap-drop', 'ALL',
       '--security-opt', 'no-new-privileges', '--memory', '128m', '--cpus', '1', '--pids-limit', '64', '--pull', 'never',
-      '--entrypoint', 'node', config, '/app/apps/web-src/lib/work-capsules/scope-epoch-writer-probe.mjs']);
+      '--entrypoint', 'node', config, '/app/apps/web-src/lib/work-capsules/scope-epoch-writer-probe.mjs',
+      ...(served ? ['--served'] : [])]);
   } catch {
     try { await runDocker(['rm', '-f', name]); } catch { /* Only this observation's own container. */ }
     throw new Error('scope_writer_image_unproven');
   }
+  if (Buffer.byteLength(bytes) > 8192) throw new Error('scope_writer_image_unproven');
+  return { bytes, config };
+}
+
+/** A scoped packaged-writer proof of the actual immutable portal image.
+ * No mounts, network, credentials or deployment effects are exposed to the probe. */
+export async function inspectScopeEpochWriterImage({ image, expectedSource = '', runDocker = runEpochDocker }) {
+  const { bytes, config } = await runScopeWriterImageProbe({ image, runDocker });
   try {
     const proof = JSON.parse(bytes), hash = value => typeof value === 'string' && /^[a-f0-9]{64}$/.test(value);
-    if (Buffer.byteLength(bytes) > 8192 || !proof || Object.keys(proof).length !== 6 || proof.schemaVersion !== 1 || proof.version !== 1
+    if (!proof || Object.keys(proof).length !== 6 || proof.schemaVersion !== 1 || proof.version !== 1
       || !/^[a-f0-9]{40}$/.test(proof.sourceSha ?? '') || (expectedSource && proof.sourceSha !== expectedSource)
       || !hash(proof.sourceContentHash) || !hash(proof.contractSha256) || !proof.writers || typeof proof.writers !== 'object'
       || Array.isArray(proof.writers) || !Object.keys(proof.writers).length || Object.values(proof.writers).some(value => !hash(value))) throw new Error();
   } catch { throw new Error('scope_writer_image_unproven'); }
   if ((await runDocker(['image', 'inspect', image, '--format', '{{.Id}}'])).trim() !== config) throw new Error('scope_writer_image_moved');
   return config;
+}
+
+/** Observe the emitted MCP writer in the full, already resolved OCI image. */
+export async function inspectServedScopeWriterImage({ image, runDocker = runEpochDocker }) {
+  try {
+    if (!/^sha256:[a-f0-9]{64}$/.test(image)) throw new Error();
+    const { bytes, config } = await runScopeWriterImageProbe({ image, runDocker, served: true });
+    const proof = JSON.parse(bytes), keys = ['serverSha256', 'routeSha256', 'manifestSha256'];
+    if (config !== image || !proof || proof.schemaVersion !== 1 || Object.keys(proof).length !== keys.length + 1
+      || keys.some(key => typeof proof[key] !== 'string' || !/^[a-f0-9]{64}$/.test(proof[key]))) throw new Error();
+    return { image, ...proof };
+  } catch { throw new Error('scope_writer_served_image_unproven'); }
 }
 
 const servedPortalArgs = ['node', '/usr/local/bin/runtime-secret-bootstrap.mjs', '--',
@@ -90,7 +112,7 @@ const loaderPrefixes = ['NODE_OPTIONS=', 'NODE_PATH=', 'NODE_CHANNEL_FD=', 'LD_'
 const loaderChecks = loaderPrefixes.map(prefix =>
   `{{if ge (len .) ${prefix.length}}}{{if eq (slice . 0 ${prefix.length}) ${JSON.stringify(prefix)}}}"${prefix}",{{end}}{{end}}`,
 ).join('');
-const portalLaunchTemplate = '{"id":{{json .Id}},"image":{{json .Image}},"running":{{json .State.Running}},'
+const portalLaunchTemplate = '{"id":{{json .Id}},"image":{{json .Image}},"running":{{json .State.Running}},"startedAt":{{json .State.StartedAt}},'
   + '"project":{{json (index .Config.Labels "com.docker.compose.project")}},"service":{{json (index .Config.Labels "com.docker.compose.service")}},'
   + '"path":{{json .Path}},"args":{{json .Args}},"user":{{json .Config.User}},"workingDir":{{json .Config.WorkingDir}},'
   + `"loaderOverrides":[{{range .Config.Env}}${loaderChecks}{{end}}null],`
@@ -153,10 +175,78 @@ export async function observeScopeWriterLaunch({ id, image, project, runDocker =
       targets.add(mount.target);
     }
     if (!targets.has('/run/dpf-actuator') || !targets.has('/dpf-state')) refuse();
-    const recipe = { ...value, loaderOverrides: [], tmpfs,
-      mounts: value.mounts.toSorted((left, right) => left.target.localeCompare(right.target)) };
-    return { id, image, recipeDigest: createHash('sha256').update(canonicalJson(recipe)).digest('hex') };
+    const { startedAt, ...effective } = value;
+    if (typeof startedAt !== 'string' || !Number.isFinite(Date.parse(startedAt))) refuse();
+    const recipe = { ...effective, loaderOverrides: [], tmpfs,
+      mounts: value.mounts.toSorted((left, right) => (left.target < right.target ? -1 : 1)) };
+    return { id, image, recipeDigest: createHash('sha256').update(canonicalJson(recipe)).digest('hex'), startedAt };
   } catch { return refuse(); }
+}
+
+/** Called by the actuator with authenticated retirement and a host-owned launch
+ * record. This closing observation performs no image launch or state write. */
+export async function observeClosedScopeWriterCohort({ launch, retirement, runDocker = runEpochDocker,
+  wallNow = Date.now, monotonicNow = () => performance.now() }) {
+  const refuse = () => { throw new Error('scope_writer_cohort_unproven'); };
+  const deadline = monotonicNow() + 2_000;
+  const docker = async args => {
+    const remaining = Math.floor(deadline - monotonicNow());
+    if (remaining <= 0) refuse();
+    const bytes = await runDocker(args, { timeoutMs: remaining });
+    if (monotonicNow() >= deadline) refuse();
+    return bytes;
+  };
+  try {
+    if (launch.id !== retirement.after.portal.id || !/^[a-f0-9]{64}$/.test(launch.recipeDigest)) refuse();
+    const { project, daemonId, runId, targetSha } = retirement;
+    const observed = await observeMaintenanceEnvironments({ project, runDocker: docker });
+    const currentLaunch = await observeScopeWriterLaunch({ id: launch.id, image: launch.image, project, runDocker: docker });
+    await assertNoCanonicalActuators({ runDocker: docker });
+    const observedAt = wallNow();
+    if (observed.daemonId !== daemonId || currentLaunch.recipeDigest !== launch.recipeDigest
+      || currentLaunch.startedAt !== observed.environments.portal.startedAt
+      || retirement.retiredContainerIds.some(id => observed.inventory.includes(id))
+      || !hasContinuousMaintenanceStarts(retirement.after, observed.environments, observedAt)) refuse();
+    return { runId, sourceSha: targetSha, project, daemonId, launch: currentLaunch, cohort: observed.environments, observedAt };
+  } catch { return refuse(); }
+}
+
+const launchEvidenceKind = 'scope-writer-launch';
+const evidenceHash = value => typeof value === 'string' && /^[a-f0-9]{64}$/.test(value);
+const receiptDigest = value => createHash('sha256').update(canonicalJson(value)).digest('hex');
+
+/** Produce separate launch evidence. The signed retirement remains immutable. */
+export async function collectScopeWriterLaunchEvidence({ retirement, secret, image, currentRun,
+  runDocker = runEpochDocker, now = new Date() }) {
+  const signed = verifyMaintenanceEpoch(retirement, secret, { ...currentRun, now: now.getTime() });
+  if (signed.project !== currentRun.project) throw new Error('scope_writer_launch_evidence_invalid');
+  const launch = await observeScopeWriterLaunch({ id: signed.after.portal.id, image, project: signed.project, runDocker });
+  const served = await inspectServedScopeWriterImage({ image, runDocker });
+  if (!hasContinuousMaintenanceStarts(signed.after, {
+    ...signed.after, portal: { id: launch.id, startedAt: launch.startedAt },
+  }, now.getTime())) throw new Error('scope_writer_launch_evidence_invalid');
+  const envelope = { version: 1, kind: launchEvidenceKind,
+    payload: canonicalJson({ runId: signed.runId, targetSha: signed.targetSha, project: signed.project,
+      promoterDigest: signed.promoterDigest, recoveryPointDigest: signed.recoveryPointDigest,
+      retirementDigest: receiptDigest(retirement), launch, served }) };
+  return { ...envelope, signature: signTransitionPayload(envelope, secret) };
+}
+
+export function verifyScopeWriterLaunchEvidence({ evidence, retirement, secret, now = new Date() }) {
+  try {
+    const { signature, ...envelope } = evidence;
+    if (Object.keys(envelope).length !== 3 || envelope.version !== 1 || envelope.kind !== launchEvidenceKind
+      || typeof envelope.payload !== 'string' || Buffer.byteLength(envelope.payload) > 8192) throw new Error();
+    verifyTransitionSignature(envelope, signature, secret);
+    const payload = JSON.parse(envelope.payload);
+    if (canonicalJson(payload) !== envelope.payload || payload.retirementDigest !== receiptDigest(retirement)) throw new Error();
+    const signed = verifyMaintenanceEpoch(retirement, secret, { ...payload, now: now.getTime() });
+    const { launch, served } = payload;
+    if (payload.project !== signed.project || launch.id !== signed.after.portal.id || !evidenceHash(launch.recipeDigest)
+      || !/^sha256:[a-f0-9]{64}$/.test(launch.image) || served.image !== launch.image || served.schemaVersion !== 1
+      || ![served.serverSha256, served.routeSha256, served.manifestSha256].every(evidenceHash)) throw new Error();
+    return { launch, served, retirement: signed, retirementDigest: payload.retirementDigest };
+  } catch { throw new Error('scope_writer_launch_evidence_invalid'); }
 }
 
 const serviceImageInvalid = () => { throw new Error('runtime_service_image_unproven'); };
@@ -259,6 +349,83 @@ async function writeOnce(path, bytes) {
   catch (error) { if (error.code !== 'EEXIST' || await readFile(path, 'utf8') !== bytes) throw error; }
 }
 
+async function replaceEvidencePointer(path, bytes) {
+  const temporary = `${path}.${randomUUID()}.tmp`;
+  try {
+    await writeFile(temporary, bytes, { flag: 'wx', mode: 0o600 });
+    await rename(temporary, path);
+  } finally { await rm(temporary, { force: true }); }
+}
+
+async function readHostObservationFile(path) {
+  const file = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
+  try {
+    const info = await file.stat();
+    if (!info.isFile() || info.uid !== process.getuid() || (info.mode & 0o22) !== 0 || info.size > 32_768) throw new Error();
+    const bytes = Buffer.alloc(info.size + 1);
+    const { bytesRead } = await file.read(bytes, 0, bytes.length, 0);
+    if (bytesRead !== info.size) throw new Error();
+    return JSON.parse(bytes.subarray(0, bytesRead).toString('utf8'));
+  } finally { await file.close(); }
+}
+
+const retirementFile = 'maintenance-epoch-retirement.json';
+const scopeLaunchFile = 'scope-writer-launch.json';
+
+export async function persistScopeWriterLaunch({ stateDir, backupDir, secret, image, currentRun,
+  runDocker = runEpochDocker, now = new Date() }) {
+  if (!isAbsolute(stateDir) || !isAbsolute(backupDir)) throw new Error('scope_writer_launch_evidence_invalid');
+  const retirement = await readHostObservationFile(join(stateDir, retirementFile));
+  const backupPath = join(backupDir, scopeLaunchFile);
+  let launch;
+  try { launch = await readHostObservationFile(backupPath); }
+  catch (error) {
+    if (error.code !== 'ENOENT') throw error;
+    launch = await collectScopeWriterLaunchEvidence({ retirement, secret, image, currentRun, runDocker, now });
+  }
+  const verified = verifyScopeWriterLaunchEvidence({ evidence: launch, retirement, secret, now });
+  if (verified.launch.image !== image || verified.retirement.runId !== currentRun.runId
+    || verified.retirement.targetSha !== currentRun.targetSha || verified.retirement.project !== currentRun.project
+    || verified.retirement.promoterDigest !== currentRun.promoterDigest
+    || verified.retirement.recoveryPointDigest !== currentRun.recoveryPointDigest) throw new Error('scope_writer_launch_evidence_invalid');
+  const bytes = JSON.stringify(launch);
+  await writeOnce(backupPath, bytes);
+  const pointer = join(stateDir, scopeLaunchFile);
+  if (pointer !== backupPath) await replaceEvidencePointer(pointer, bytes);
+}
+
+export async function readScopeWriterObserverBinding({ stateDir, secret, now = new Date() }) {
+  try {
+    if (!isAbsolute(stateDir)) throw new Error();
+    const [evidence, retirement] = await Promise.all([
+      readHostObservationFile(join(stateDir, scopeLaunchFile)), readHostObservationFile(join(stateDir, retirementFile)),
+    ]);
+    return verifyScopeWriterLaunchEvidence({ evidence, retirement, secret, now });
+  } catch { throw new Error('scope_writer_launch_evidence_invalid'); }
+}
+
+async function serveScopeWriterObserver(env) {
+  const { createScopeWriterObserver, observeActuatorProjectServices, SCOPE_WRITER_OBSERVER_SOCKET } = await import('./lib/scope-writer-observation.mjs');
+  const stateDir = env.DPF_PROMOTER_STATE_DIR ?? '/dpf-state';
+  const project = env.PROMOTE_COMPOSE_PROJECT;
+  const directory = await lstat(dirname(SCOPE_WRITER_OBSERVER_SOCKET));
+  if (process.getuid() !== 0 || !directory.isDirectory() || directory.uid !== 0 || (directory.mode & 0o022) !== 0
+    || typeof project !== 'string' || !/^[a-z0-9][a-z0-9_-]{0,99}$/.test(project)) throw new Error('scope_writer_observer_installation_invalid');
+  const secret = await readMigrationSecret({ env });
+  const server = createScopeWriterObserver(async () => {
+    const { launch, retirement, served, retirementDigest } = await readScopeWriterObserverBinding({ stateDir, secret });
+    if (retirement.project !== project) throw new Error('scope_writer_observer_installation_invalid');
+    return { ...await observeClosedScopeWriterCohort({ launch, retirement }), served, retirementDigest };
+  }, () => observeActuatorProjectServices(project));
+  process.umask(0o117);
+  server.listen(SCOPE_WRITER_OBSERVER_SOCKET);
+  await once(server, 'listening');
+  try {
+    await chown(SCOPE_WRITER_OBSERVER_SOCKET, 0, 1000);
+    await chmod(SCOPE_WRITER_OBSERVER_SOCKET, 0o660);
+  } catch (error) { server.close(); throw error; }
+}
+
 /** Called only around the existing canonical swap, never a maintenance actuator. */
 export async function persistMaintenanceEpoch({ phase, env = process.env, secret, runDocker = runEpochDocker, now }) {
   if (!['capture', 'finish'].includes(phase)) invalid();
@@ -282,18 +449,16 @@ export async function persistMaintenanceEpoch({ phase, env = process.env, secret
     return;
   }
   if (!bytes) invalid();
-  const finalPath = join(env.PROMOTE_BACKUP_PATH, 'maintenance-epoch-retirement.json');
+  const finalPath = join(env.PROMOTE_BACKUP_PATH, retirementFile);
   const prior = await readOptional(finalPath);
   const receipt = prior ? JSON.parse(prior)
     : await finishMaintenanceEpoch({ baseline: JSON.parse(bytes), secret: key, expected: identity, runDocker, now });
   verifyMaintenanceEpoch(receipt, key, { ...identity, now: (now ?? new Date()).getTime() });
   const finalBytes = JSON.stringify(receipt);
   await writeOnce(finalPath, finalBytes);
-  const pointer = join(env.DPF_PROMOTER_STATE_DIR ?? '/dpf-state', 'maintenance-epoch-retirement.json');
+  const pointer = join(env.DPF_PROMOTER_STATE_DIR ?? '/dpf-state', retirementFile);
   if (pointer === finalPath) return;
-  const temporary = `${pointer}.${randomUUID()}.tmp`;
-  await writeFile(temporary, finalBytes, { flag: 'wx', mode: 0o600 });
-  await rename(temporary, pointer);
+  await replaceEvidencePointer(pointer, finalBytes);
 }
 
 if (isEntryModule(import.meta.url)) {
@@ -303,10 +468,23 @@ if (isEntryModule(import.meta.url)) {
       container: { type: 'string' }, project: { type: 'string' },
     }, allowPositionals: false });
     if (values.phase === 'scope-image') process.stdout.write(`${await inspectScopeEpochWriterImage({ image: values.image, expectedSource: values.source })}\n`);
+    else if (values.phase === 'scope-served-image') {
+      const observation = await inspectServedScopeWriterImage({ image: values.image });
+      process.stdout.write(`${JSON.stringify(observation)}\n`);
+    }
     else if (values.phase === 'scope-launch') {
       const observation = await observeScopeWriterLaunch({ id: values.container, image: values.image, project: values.project });
       process.stdout.write(`${JSON.stringify(observation)}\n`);
     }
+    else if (values.phase === 'scope-record-launch') {
+      const env = process.env;
+      await persistScopeWriterLaunch({ stateDir: env.DPF_PROMOTER_STATE_DIR ?? '/dpf-state', backupDir: env.PROMOTE_BACKUP_PATH,
+        secret: await readMigrationSecret({ env }), image: values.image, currentRun: {
+          runId: env.DPF_SELF_UPGRADE_RUN_ID, targetSha: env.PROMOTE_TARGET_SHA, project: env.PROMOTE_COMPOSE_PROJECT,
+          promoterDigest: env.DPF_PROMOTER_DIGEST, recoveryPointDigest: env.DPF_MAINTENANCE_RECOVERY_POINT_DIGEST,
+        } });
+    }
+    else if (values.phase === 'scope-serve') await serveScopeWriterObserver(process.env);
     else if (values.phase === 'scope-fallback') process.stdout.write(`${JSON.stringify(await classifyInitialScopeEpochFallback({ image: values.image }))}\n`);
     else await persistMaintenanceEpoch({ phase: values.phase });
   } catch {

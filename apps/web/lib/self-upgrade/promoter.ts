@@ -516,6 +516,8 @@ export const PROMOTER_JIT_BUILD_SCRIPT =
   "cp /promoter/scripts/promoter-migration-envelope.mjs \"$BDIR/scripts/promoter-migration-envelope.mjs\" && " +
   "cp /promoter/scripts/promoter-epoch-evidence.mjs \"$BDIR/scripts/promoter-epoch-evidence.mjs\" && " +
   "cp /promoter/scripts/lib/maintenance-epoch-receipt.mjs \"$BDIR/scripts/lib/maintenance-epoch-receipt.mjs\" && " +
+  "cp /promoter/scripts/lib/scope-writer-observation.mjs \"$BDIR/scripts/lib/scope-writer-observation.mjs\" && " +
+  "cp /promoter/scripts/lib/docker-socket.mjs \"$BDIR/scripts/lib/docker-socket.mjs\" && " +
   "cp /promoter/scripts/installer/validate-install-state.mjs \"$BDIR/scripts/installer/validate-install-state.mjs\" && " +
   "cp /promoter/scripts/installer/migrate-install-state.mjs \"$BDIR/scripts/installer/migrate-install-state.mjs\" && " +
   "cp /promoter/scripts/installer/resolve-host-identity.mjs \"$BDIR/scripts/installer/resolve-host-identity.mjs\" && " +

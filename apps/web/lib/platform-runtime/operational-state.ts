@@ -9,6 +9,7 @@ import { readFile } from "node:fs/promises";
 import { hostname as osHostname } from "node:os";
 import { prisma } from "@dpf/db";
 import { dockerSocketGet } from "./docker-socket.mjs";
+import { hasPrivateActuatorMount, readActuatorProjectServices } from "../../../../scripts/lib/scope-writer-observation.mjs";
 export { boundedDockerSocketGet } from "./docker-socket.mjs";
 
 import { getErrorMessage } from "@/lib/shared/get-error-message";
@@ -153,16 +154,20 @@ type DockerGet = (path: string) => Promise<unknown>;
 // the Next.js bind address (Dockerfile ENV HOSTNAME), so it never names the
 // container (BI-3925A700).
 export async function observeDockerProjectServices(
-  get: DockerGet = dockerSocketGet,
+  get?: DockerGet,
   containerHostname: string = osHostname(),
 ): Promise<Record<string, ObservedServiceState>> {
   try {
+    if (!get && await readFile("/proc/self/mountinfo").then(hasPrivateActuatorMount, () => false)) {
+      return await readActuatorProjectServices() as Record<string, ObservedServiceState>;
+    }
+    const dockerGet = get ?? dockerSocketGet;
     const hostname = containerHostname;
     if (!hostname) return {};
-    const current = await get(`/containers/${encodeURIComponent(hostname)}/json`) as { Config?: { Labels?: Record<string, string> } };
+    const current = await dockerGet(`/containers/${encodeURIComponent(hostname)}/json`) as { Config?: { Labels?: Record<string, string> } };
     const project = current.Config?.Labels?.["com.docker.compose.project"];
     if (!project) return {};
-    const containers = await get("/containers/json?all=1") as Array<{ State?: string; Status?: string; Labels?: Record<string, string> }>;
+    const containers = await dockerGet("/containers/json?all=1") as Array<{ State?: string; Status?: string; Labels?: Record<string, string> }>;
     return Object.fromEntries(containers.filter((item) => item.Labels?.["com.docker.compose.project"] === project).flatMap((item) => {
       const service = item.Labels?.["com.docker.compose.service"];
       if (!service) return [];
