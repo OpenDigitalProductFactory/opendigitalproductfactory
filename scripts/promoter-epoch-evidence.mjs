@@ -107,30 +107,36 @@ export async function inspectServedScopeWriterImage({ image, runDocker = runEpoc
 
 const servedPortalArgs = ['node', '/usr/local/bin/runtime-secret-bootstrap.mjs', '--',
   '/usr/local/bin/portal-migrate-boot.sh', '/usr/local/bin/node', '--disable-sigusr1', '/app/apps/web/server.js'];
-const loaderPrefixes = ['NODE_OPTIONS=', 'NODE_PATH=', 'NODE_CHANNEL_FD=', 'LD_', 'DYLD_', 'BASH_ENV=', 'ENV='];
+const loaderPrefixes = ['NODE_OPTIONS=', 'NODE_PATH=', 'NODE_CHANNEL_FD=', 'LD_', 'DYLD_', 'BASH_ENV=', 'ENV=', 'DPF_APP_DIR='];
+const trustedPath = 'PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin';
 // Report names of forbidden overrides, never container environment values.
 const loaderChecks = loaderPrefixes.map(prefix =>
   `{{if ge (len .) ${prefix.length}}}{{if eq (slice . 0 ${prefix.length}) ${JSON.stringify(prefix)}}}"${prefix}",{{end}}{{end}}`,
-).join('');
+).join('') + `{{if ge (len .) 5}}{{if eq (slice . 0 5) "PATH="}}{{if ne . ${JSON.stringify(trustedPath)}}}"PATH=",{{end}}{{end}}{{end}}`;
 const portalLaunchTemplate = '{"id":{{json .Id}},"image":{{json .Image}},"running":{{json .State.Running}},"startedAt":{{json .State.StartedAt}},'
   + '"project":{{json (index .Config.Labels "com.docker.compose.project")}},"service":{{json (index .Config.Labels "com.docker.compose.service")}},'
   + '"path":{{json .Path}},"args":{{json .Args}},"user":{{json .Config.User}},"workingDir":{{json .Config.WorkingDir}},'
   + `"loaderOverrides":[{{range .Config.Env}}${loaderChecks}{{end}}null],`
+  + `"pathMatches":[{{range .Config.Env}}{{if eq . ${JSON.stringify(trustedPath)}}}true,{{end}}{{end}}false],`
   + '"rootReadOnly":{{json .HostConfig.ReadonlyRootfs}},"privileged":{{json .HostConfig.Privileged}},'
   + '"capAdd":{{json (index .HostConfig "CapAdd")}},"capDrop":{{json (index .HostConfig "CapDrop")}},"securityOpt":{{json (index .HostConfig "SecurityOpt")}},'
   + '"pidMode":{{json .HostConfig.PidMode}},"ipcMode":{{json .HostConfig.IpcMode}},"networkMode":{{json .HostConfig.NetworkMode}},'
-  + '"devices":{{json (index .HostConfig "Devices")}},"volumesFrom":{{json (index .HostConfig "VolumesFrom")}},"tmpfs":{{json (index .HostConfig "Tmpfs")}},'
-  + '"mounts":[{{range $i, $m := .Mounts}}{{if $i}},{{end}}{"type":{{json $m.Type}},"target":{{json $m.Destination}},"write":{{json $m.RW}}}{{end}}]}';
+  + '"usernsMode":{{json .HostConfig.UsernsMode}},"cgroupnsMode":{{json .HostConfig.CgroupnsMode}},'
+  + '"devices":{{json (index .HostConfig "Devices")}},"deviceRequests":{{json (index .HostConfig "DeviceRequests")}},'
+  + '"deviceRules":{{json (index .HostConfig "DeviceCgroupRules")}},"groupAdd":{{json (index .HostConfig "GroupAdd")}},'
+  + '"volumesFrom":{{json (index .HostConfig "VolumesFrom")}},"tmpfs":{{json (index .HostConfig "Tmpfs")}},'
+  + '"mounts":[{{range $i, $m := .Mounts}}{{if $i}},{{end}}{"type":{{json $m.Type}},"target":{{json $m.Destination}},'
+  + '"write":{{json $m.RW}},"name":{{json (index $m "Name")}},"source":{{json $m.Source}},"propagation":{{json $m.Propagation}}}{{end}}]}';
 
 const portalMountPolicy = new Map([
-  ['/run/dpf-actuator', { type: 'volume', write: false }],
+  ['/run/dpf-actuator', { type: 'volume', write: false, name: 'portal_actuator' }],
   ['/dpf-state', { type: 'bind', write: false }],
   ['/host-dpf', { type: 'bind', write: false }],
   ['/host-worktrees', { type: 'bind', write: false }],
-  ['/evidence', { type: 'volume', write: false }],
-  ['/workspace', { type: 'volume', write: false }],
-  ['/sandbox-workspace', { type: 'volume', write: true }],
-  ['/var/lib/dpf/maps', { type: 'volume', write: true }],
+  ['/evidence', { type: 'volume', write: false, name: 'browser_evidence' }],
+  ['/workspace', { type: 'volume', write: false, name: 'dpf-source-code' }],
+  ['/sandbox-workspace', { type: 'volume', write: true, name: 'sandbox_workspace' }],
+  ['/var/lib/dpf/maps', { type: 'volume', write: true, name: 'map_data' }],
   ['/backups', { type: 'bind', write: true }],
   ['/dpf-federation', { type: 'bind', write: true }],
   ['/etc/dpf/pki/root_ca.crt', { type: 'bind', write: false }],
@@ -150,6 +156,70 @@ function normalizePortalTmpfs(value) {
   return exactArguments(tokens, expected) ? { '/tmp': tokens } : null;
 }
 
+const shareMount = '/run/dpf-actuator';
+const stateMount = '/dpf-state';
+const dockerSocketMount = '/var/run/docker.sock';
+const admissionNetwork = 'runtime-admission';
+
+/** Check the fully interpolated, merged Compose service plans without exposing
+ * environment values. An exact Docker inspection is still required at boot. */
+export function verifyPortalWriterCompose(recipe, { project, image, actuatorImage }) {
+  const refuse = () => { throw new Error('scope_writer_compose_unproven'); };
+  const portal = recipe?.services?.portal, actuator = recipe?.services?.['portal-actuator'];
+  const network = recipe?.networks?.[admissionNetwork], volume = recipe?.volumes?.portal_actuator;
+  const safeProfiles = service => !service.privileged && !service.pid && !service.ipc && !service.userns_mode
+    && !service.network_mode && (!service.cgroup || service.cgroup === 'private')
+    && ['devices', 'device_cgroup_rules', 'group_add', 'volumes_from', 'configs', 'secrets', 'profiles']
+      .every(key => service[key] === undefined || isEmptyList(service[key]));
+  const safeEnvironment = environment => Object.entries(environment ?? {}).every(([key, value]) =>
+    !loaderPrefixes.some(prefix => `${key}=${String(value)}`.startsWith(prefix))
+    && (key !== 'PATH' || `PATH=${value}` === trustedPath) && !['DOCKER_HOST', 'DOCKER_CONTEXT'].includes(key));
+  const privateBinds = mount => mount.type !== 'bind'
+    || (!mount.bind?.propagation || ['private', 'rprivate'].includes(mount.bind.propagation));
+  const pinned = (service, id) => /^sha256:[a-f0-9]{64}$/.test(id ?? '') && service.image === id && service.pull_policy === 'never';
+  try {
+    if (!/^[a-z0-9][a-z0-9_-]{0,99}$/.test(project) || recipe?.name !== project || !portal || !actuator
+      || !pinned(portal, image) || !pinned(actuator, actuatorImage) || !safeProfiles(portal) || !safeProfiles(actuator)
+      || portal.read_only !== true || portal.user !== '1000:1000' || !exactArguments(portal.cap_drop, ['ALL'])
+      || (portal.cap_add !== undefined && !isEmptyList(portal.cap_add))
+      || !exactArguments(portal.security_opt, ['no-new-privileges:true'])
+      || portal.entrypoint !== undefined || portal.command !== undefined
+      || (portal.working_dir !== undefined && portal.working_dir !== '/app') || !safeEnvironment(portal.environment)
+      || !exactArguments(Object.keys(portal.networks ?? {}), ['default']) || !Array.isArray(portal.tmpfs) || portal.tmpfs.length !== 1
+      || !portal.tmpfs[0].startsWith('/tmp:') || !normalizePortalTmpfs({ '/tmp': portal.tmpfs[0].slice(5) })
+      || actuator.read_only !== true || actuator.user !== '0:0' || !exactArguments(actuator.cap_drop, ['ALL'])
+      || !exactArguments(actuator.cap_add, ['CHOWN']) || !exactArguments(actuator.security_opt, ['no-new-privileges:true'])
+      || !exactArguments(actuator.entrypoint, ['node', '/app/scripts/promoter-epoch-evidence.mjs'])
+      || !exactArguments(actuator.command, ['--phase', 'scope-serve']) || !safeEnvironment(actuator.environment)
+      || actuator.environment?.PROMOTE_COMPOSE_PROJECT !== project
+      || (actuator.ports !== undefined && !isEmptyList(actuator.ports))
+      || !exactArguments(Object.keys(actuator.networks ?? {}), [admissionNetwork])
+      || network?.name !== `${project}_${admissionNetwork}` || network.internal !== true || network.external || network.driver_opts
+      || Object.keys(recipe.services).some(service => !['portal-actuator', 'postgres'].includes(service)
+        && Object.hasOwn(recipe.services[service].networks ?? {}, admissionNetwork))
+      || !Object.hasOwn(recipe.services.postgres?.networks ?? {}, admissionNetwork)
+      || volume?.name !== `${project}_portal_actuator` || volume.external || volume.driver_opts
+      || (volume.driver !== undefined && volume.driver !== 'local')) refuse();
+    const portalMounts = new Map();
+    if (!Array.isArray(portal.volumes) || !Array.isArray(actuator.volumes)) refuse();
+    for (const mount of portal.volumes) {
+      const policy = portalMountPolicy.get(mount.target);
+      if (!policy || portalMounts.has(mount.target) || mount.type !== policy.type || Boolean(mount.read_only) === policy.write
+        || !privateBinds(mount) || (policy.name ? mount.source !== policy.name : !isAbsolute(mount.source))) refuse();
+      portalMounts.set(mount.target, mount.source);
+    }
+    const actionMounts = new Map(actuator.volumes.map(mount => [mount.target, mount]));
+    if (actuator.volumes.length !== 3 || actionMounts.size !== 3 || !actuator.volumes.every(privateBinds)
+      || portalMounts.get(shareMount) !== 'portal_actuator'
+      || actionMounts.get(shareMount)?.type !== 'volume' || actionMounts.get(shareMount).source !== 'portal_actuator'
+      || actionMounts.get(shareMount).read_only
+      || actionMounts.get(stateMount)?.type !== 'bind' || actionMounts.get(stateMount).source !== portalMounts.get(stateMount)
+      || actionMounts.get(stateMount).read_only !== true
+      || actionMounts.get(dockerSocketMount)?.type !== 'bind' || actionMounts.get(dockerSocketMount).source !== dockerSocketMount
+      || actionMounts.get(dockerSocketMount).read_only) refuse();
+  } catch { return refuse(); }
+}
+
 /** Observe the effective container recipe. The caller still owns trust in the
  * Docker/actuator transport, initial attestation and process generation. */
 export async function observeScopeWriterLaunch({ id, image, project, runDocker = runEpochDocker }) {
@@ -164,14 +234,20 @@ export async function observeScopeWriterLaunch({ id, image, project, runDocker =
       || value.running !== true || value.path !== 'docker-entrypoint.sh' || !exactArguments(value.args, servedPortalArgs)
       || value.user !== '1000:1000' || value.workingDir !== '/app'
       || !Array.isArray(value.loaderOverrides) || value.loaderOverrides.some(name => name !== null)
+      || !exactArguments(value.pathMatches, [true, false])
       || value.rootReadOnly !== true || value.privileged !== false || !isEmptyList(value.capAdd)
       || !exactArguments(value.capDrop, ['ALL']) || !exactArguments(value.securityOpt, ['no-new-privileges:true'])
       || value.pidMode !== '' || value.ipcMode !== 'private' || value.networkMode !== `${project}_default`
-      || !isEmptyList(value.devices) || !isEmptyList(value.volumesFrom) || !tmpfs || !Array.isArray(value.mounts)) refuse();
+      || value.usernsMode !== '' || value.cgroupnsMode !== 'private'
+      || [value.devices, value.deviceRequests, value.deviceRules, value.groupAdd, value.volumesFrom].some(values => !isEmptyList(values))
+      || !tmpfs || !Array.isArray(value.mounts)) refuse();
     const targets = new Set();
     for (const mount of value.mounts) {
       const policy = portalMountPolicy.get(mount?.target);
-      if (!policy || targets.has(mount.target) || mount.type !== policy.type || mount.write !== policy.write) refuse();
+      if (!policy || targets.has(mount.target) || mount.type !== policy.type || mount.write !== policy.write
+        || typeof mount.source !== 'string' || !isAbsolute(mount.source)) refuse();
+      if (policy.name ? mount.name !== `${project}_${policy.name}` || mount.propagation !== ''
+        : mount.name !== null || mount.propagation !== 'rprivate') refuse();
       targets.add(mount.target);
     }
     if (!targets.has('/run/dpf-actuator') || !targets.has('/dpf-state')) refuse();

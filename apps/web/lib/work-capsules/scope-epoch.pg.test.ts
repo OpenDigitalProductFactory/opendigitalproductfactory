@@ -8,7 +8,13 @@ import { createDatabaseClient } from "@dpf/db";
 import type { ScopeClaim } from "@/lib/work-capsules";
 import type { CapsuleDb } from "./work-capsule-store-types";
 import { isRecord } from "@/lib/shared/coerce";
+import { lockRuntimeTransitionAdmission } from "@/lib/platform-runtime/work-admission";
 const qualification = vi.hoisted(() => ({ before: async () => {}, afterAdmission: async () => {} }));
+const commandFixture = vi.hoisted(() => ({ db: null as object | null }));
+vi.mock("@dpf/db", async original => ({
+  ...await original<typeof import("@dpf/db")>(),
+  prisma: new Proxy({}, { get: (_target, key) => commandFixture.db && Reflect.get(commandFixture.db, key) }),
+}));
 vi.mock("@/lib/portal-context/invalidation", () => ({ revalidatePortalContext: vi.fn() }));
 vi.mock("./activity-events", () => ({ publishRecordedWorkCapsuleActivity: vi.fn() }));
 vi.mock("./change-impact-contract", () => ({ planCapsuleChangeImpact: async () => ({ contract: {} }) }));
@@ -25,6 +31,9 @@ import { claimWorkCapsuleScope } from "./scope-claim-store";
 import { releaseWorkCapsuleScope } from "./scope-release-store";
 import { parseOriginalScopeReleaseTargets } from "./scope-release-targets";
 import { workroomBoundaryWriteWhere } from "@/lib/work-management/workroom-boundary-write.server";
+import { assertScopeEpochEnrollmentReady, retainPreparedScopeEpochEnrollment } from "./scope-epoch-enrollment.server";
+import { commandPayloadBinding, type ReceiptDb } from "./command-receipts";
+import { commandDb, receiptedWorkroomTool } from "./receipted-tool";
 
 const slotUrl = process.env.DATABASE_URL?.trim() ?? "";
 const slot = (() => { try { return /^\/dpf_local_ci_[01]$/.test(new URL(slotUrl).pathname) ? slotUrl : ""; } catch { return ""; } })();
@@ -70,9 +79,13 @@ function models(tx: Raw): CapsuleDb {
     },
     workroomActivity: { create: async (args: unknown) => {
       const data = rec(rec(args).data), id = randomUUID();
-      await tx.$executeRaw`INSERT INTO "WorkCapsuleActivity" (id, "workCapsuleId", kind, payload)
-        VALUES (${id}, ${data.workCapsuleId}, ${data.kind}, ${JSON.stringify(data.payload)}::jsonb)`;
+      await tx.$executeRaw`INSERT INTO "WorkCapsuleActivity" (id, "workCapsuleId", kind, payload, "commandScopeKey", "commandKey")
+        VALUES (${id}, ${data.workCapsuleId}, ${data.kind}, ${JSON.stringify(data.payload)}::jsonb, ${data.commandScopeKey ?? null}, ${data.commandKey ?? null})`;
       return { id };
+    }, findFirst: async (args: unknown) => {
+      const where = rec(rec(args).where);
+      return (await tx.$queryRaw`SELECT kind, payload FROM "WorkCapsuleActivity"
+        WHERE "commandScopeKey" = ${where.commandScopeKey} AND "commandKey" = ${where.commandKey}` as Array<{ kind: string; payload: unknown }>)[0] ?? null;
     } },
     runtimeCapabilityTransition: { findFirst: async (args: unknown) => {
       expect(rec(args).where).toHaveProperty("OR");
@@ -110,7 +123,8 @@ describe.skipIf(!DATABASE_URL)("scope epochs with real PostgreSQL locks", () => 
     await pool.query(`CREATE TABLE "WorkCapsule" (id TEXT PRIMARY KEY, "capsuleId" TEXT UNIQUE NOT NULL, status TEXT NOT NULL,
       "archivedAt" TIMESTAMPTZ(3), "scopeClaims" JSONB NOT NULL, "updatedAt" TIMESTAMPTZ(3) NOT NULL,
       "leaseHolderPrincipalId" TEXT, "leaseExpiresAt" TIMESTAMPTZ(3));
-      CREATE TABLE "WorkCapsuleActivity" (id TEXT PRIMARY KEY, "workCapsuleId" TEXT REFERENCES "WorkCapsule"(id), kind TEXT, payload JSONB);
+      CREATE TABLE "WorkCapsuleActivity" (id TEXT PRIMARY KEY, "workCapsuleId" TEXT REFERENCES "WorkCapsule"(id), kind TEXT,
+        payload JSONB, "commandScopeKey" TEXT, "commandKey" TEXT, UNIQUE ("commandScopeKey", "commandKey"));
       CREATE TABLE "SelfUpgradeRun" (id TEXT PRIMARY KEY, status TEXT);
       CREATE TABLE "RuntimeCapabilityTransition" (id TEXT PRIMARY KEY, status TEXT, failure JSONB);`);
   });
@@ -119,10 +133,67 @@ describe.skipIf(!DATABASE_URL)("scope epochs with real PostgreSQL locks", () => 
     if (pool) { try { await pool.query(`DROP SCHEMA IF EXISTS "${SCHEMA}" CASCADE`); } finally { await pool.end(); } }
   });
   beforeEach(async () => {
+    commandFixture.db = null;
     qualification.before = async () => {}; qualification.afterAdmission = async () => {};
     await pool.query(`TRUNCATE "WorkCapsuleActivity", "WorkCapsule", "SelfUpgradeRun", "RuntimeCapabilityTransition";`);
     await pool.query(`INSERT INTO "WorkCapsule" (id,"capsuleId",status,"scopeClaims","updatedAt","leaseHolderPrincipalId","leaseExpiresAt") VALUES ($1,$2,'working',$3,$4,'owner',$5)`,
       ["original-row", "WC-EPOCH-PG", JSON.stringify([{ ...incoming, recordedAt: NOW.toISOString(), recordedByPrincipalId: "owner" }]), NOW, EXPIRY]);
+  });
+
+  it.each(["rollback", "commit with lost reply"] as const)("settles actual keyed claim, activity and receipt together on %s", async outcome => {
+    const written = latch(), proceed = latch();
+    const before = await read();
+    let initial = true;
+    const initialFailure = new Error(outcome);
+    commandFixture.db = { ...models(prisma), $transaction: async <T>(fn: (tx: ReceiptDb) => Promise<T>) => {
+      const hold = initial;
+      initial = false;
+      const result = await prisma.$transaction(async tx => {
+        const value = await fn(models(tx) as unknown as ReceiptDb);
+        if (hold) {
+          const receipt = await tx.$queryRaw<Array<{ kind: string }>>`SELECT kind FROM "WorkCapsuleActivity" ORDER BY kind`;
+          expect(receipt.map(row => row.kind)).toEqual(["command-accepted", "scope-claimed"]);
+          written.resolve();
+          await proceed.promise;
+          if (outcome === "rollback") throw initialFailure;
+        }
+        return value;
+      }, { timeout: 15_000 });
+      if (hold) throw initialFailure;
+      return result;
+    } };
+    let handlerCalls = 0;
+    const acquire = receiptedWorkroomTool("claim_workroom_scope", async () => {
+      handlerCalls++;
+      const result = await claimWorkCapsuleScope({ db: commandDb(), capsuleId: "WC-EPOCH-PG", claims: [incoming], actor, now: NOW });
+      return { success: true, message: "claimed", data: { epoch: targets(result)[0]!.releaseEpoch } };
+    }, {
+      prepareAsync: async params => {
+        const proof = await assertScopeEpochEnrollmentReady();
+        return { params, payloadBinding: commandPayloadBinding(params), expectedRoomRowId: "original-row",
+          beforeRoomLock: async tx => {
+            await proof.assertCurrent(tx as unknown as CapsuleDb);
+            retainPreparedScopeEpochEnrollment(tx, proof);
+          } };
+      },
+    });
+    const call = () => acquire({ capsuleId: "WC-EPOCH-PG", commandId: "keyed-retry" }, actor.userId, undefined);
+    const first = call();
+    const failure = expect(first).rejects.toBe(initialFailure);
+    try {
+      await Promise.race([written.promise, first]);
+      expect((await read()).scopeClaims).toEqual(before.scopeClaims);
+      expect(await activityCount()).toBe(0);
+      const blocked = await pool.query<{ locked: boolean }>("SELECT pg_try_advisory_xact_lock(hashtext('self-upgrade-admission')) AS locked");
+      expect(blocked.rows[0]!.locked).toBe(false);
+    } finally { proceed.resolve(); }
+    await failure;
+    const rolledBack = outcome === "rollback";
+    expect(await activityCount()).toBe(rolledBack ? 0 : 2);
+    const retried = await call();
+    expect(retried.data?.epoch).toBe(targets(await read())[0]!.releaseEpoch);
+    expect(handlerCalls).toBe(rolledBack ? 2 : 1);
+    expect(await activityCount()).toBe(2);
   });
 
   it("publishes only the winning epoch under concurrent legacy enrollment", async () => {
@@ -227,7 +298,7 @@ describe.skipIf(!DATABASE_URL)("scope epochs with real PostgreSQL locks", () => 
           await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('self-upgrade-admission'))`;
           await tx.$executeRaw`INSERT INTO "SelfUpgradeRun" (id,status) VALUES ('admitted','pending')`;
         } else {
-          await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('runtime-capability-transition'))`;
+          await lockRuntimeTransitionAdmission(tx as never);
           await tx.$executeRaw`INSERT INTO "RuntimeCapabilityTransition" (id,status) VALUES ('admitted','pending')`;
         }
         locked.resolve(); await commit.promise;
@@ -245,7 +316,7 @@ describe.skipIf(!DATABASE_URL)("scope epochs with real PostgreSQL locks", () => 
       const acquisition = claim(); await qualified.promise;
       const admission = prisma.$transaction(async tx => {
         if (carrier === "upgrade") await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('self-upgrade-admission'))`;
-        else await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('runtime-capability-transition'))`;
+        else await lockRuntimeTransitionAdmission(tx as never);
         const row = (await tx.$queryRaw<Row[]>`SELECT * FROM "WorkCapsule" WHERE id = 'original-row'`)[0]!;
         return targets(row);
       }, { timeout: 15_000 });

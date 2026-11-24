@@ -951,6 +951,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "scripts/lib/compose-safety.test.mjs",
         "scripts/lib/promoter-compose-mounts.test.mjs",
         "scripts/lib/maintenance-epoch-receipt.test.mjs",
+        "scripts/lib/scope-writer-observation.test.mjs",
         "scripts/promoter-epoch-evidence.test.mjs",
         "scripts/promote-reassessment-compatibility.test.mjs",
         "scripts/reassessment-capability-probe.test.mjs",

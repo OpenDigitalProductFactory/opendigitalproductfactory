@@ -173,13 +173,58 @@ describe('scope writer actuator observations', () => {
     path: 'docker-entrypoint.sh',
     args: ['node', '/usr/local/bin/runtime-secret-bootstrap.mjs', '--', '/usr/local/bin/portal-migrate-boot.sh',
       '/usr/local/bin/node', '--disable-sigusr1', '/app/apps/web/server.js'],
-    user: '1000:1000', workingDir: '/app', loaderOverrides: [],
+    user: '1000:1000', workingDir: '/app', loaderOverrides: [], pathMatches: [true, false],
     rootReadOnly: true, privileged: false, capAdd: null, capDrop: ['ALL'],
     pidMode: '', ipcMode: 'private', networkMode: 'fixture_default',
-    securityOpt: ['no-new-privileges:true'], devices: [], volumesFrom: null,
+    securityOpt: ['no-new-privileges:true'], devices: [], deviceRequests: null, deviceRules: null,
+    groupAdd: null, usernsMode: '', cgroupnsMode: 'private', volumesFrom: null,
     tmpfs: { '/tmp': 'rw,noexec,nosuid,nodev,size=512m,mode=1777' },
-    mounts: [{ type: 'volume', target: '/run/dpf-actuator', write: false },
-      { type: 'bind', target: '/dpf-state', write: false }],
+    mounts: [{ type: 'volume', target: '/run/dpf-actuator', write: false, name: 'fixture_portal_actuator',
+      source: '/var/lib/docker/volumes/fixture_portal_actuator/_data', propagation: '' },
+    { type: 'bind', target: '/dpf-state', write: false, name: null, source: '/install/state', propagation: 'rprivate' }],
+  });
+
+  it('qualifies only the canonical generated portal and actuator services before launch', () => {
+    const actuatorImage = `sha256:${'d'.repeat(64)}`;
+    const recipe = {
+      name: 'fixture',
+      volumes: { portal_actuator: { name: 'fixture_portal_actuator' } },
+      networks: { 'runtime-admission': { name: 'fixture_runtime-admission', internal: true } },
+      services: {
+        portal: { image: launchImage, pull_policy: 'never', user: '1000:1000', read_only: true,
+          cap_drop: ['ALL'], security_opt: ['no-new-privileges:true'], tmpfs: ['/tmp:rw,noexec,nosuid,nodev,size=512m,mode=1777'],
+          networks: { default: null }, volumes: [
+            { type: 'volume', source: 'portal_actuator', target: '/run/dpf-actuator', read_only: true },
+            { type: 'bind', source: '/install/state', target: '/dpf-state', read_only: true },
+          ] },
+        postgres: { networks: { default: null, 'runtime-admission': null } },
+        'portal-actuator': { image: actuatorImage, pull_policy: 'never', user: '0:0', read_only: true,
+          networks: { 'runtime-admission': null }, cap_drop: ['ALL'], cap_add: ['CHOWN'], security_opt: ['no-new-privileges:true'],
+          entrypoint: ['node', '/app/scripts/promoter-epoch-evidence.mjs'], command: ['--phase', 'scope-serve'],
+          environment: { PROMOTE_COMPOSE_PROJECT: 'fixture' }, volumes: [
+            { type: 'volume', source: 'portal_actuator', target: '/run/dpf-actuator' },
+            { type: 'bind', source: '/install/state', target: '/dpf-state', read_only: true },
+            { type: 'bind', source: '/var/run/docker.sock', target: '/var/run/docker.sock' },
+          ] },
+      },
+    };
+    const expected = { project: 'fixture', image: launchImage, actuatorImage };
+    assert.doesNotThrow(() => imageEvidence.verifyPortalWriterCompose(recipe, expected));
+    for (const change of [
+      value => { value.services.portal.command = ['sh']; },
+      value => { value.services.portal.volumes[0].read_only = false; },
+      value => { value.services.portal.volumes[1].source = '/different'; },
+      value => { value.services.portal.environment = { DOCKER_HOST: 'tcp://peer:2375' }; },
+      value => { value.services.portal.networks.untrusted = {}; },
+      value => { value.services['portal-actuator'].entrypoint.push('--inspect'); },
+      value => { value.services['portal-actuator'].ports = [{ target: 80 }]; },
+      value => { value.services['portal-actuator'].environment.PROMOTE_COMPOSE_PROJECT = 'peer'; },
+      value => { value.volumes.portal_actuator.driver_opts = { type: 'none', device: '/tmp' }; },
+    ]) {
+      const changed = structuredClone(recipe);
+      change(changed);
+      assert.throws(() => imageEvidence.verifyPortalWriterCompose(changed, expected), /scope_writer_compose_unproven/);
+    }
   });
 
   it('qualifies the exact portal launch recipe and derives an order-independent recipe digest', async () => {
@@ -229,6 +274,7 @@ describe('scope writer actuator observations', () => {
     const h = harness();
     h.advance();
     const portal = { ...launch(), ...launchIdentity, id: '3'.repeat(64), project: 'dpf', networkMode: 'dpf_default' };
+    portal.mounts[0].name = 'dpf_portal_actuator';
     const identity = { id: portal.id, image: launchImage, project: portal.project };
     const launchProof = await imageEvidence.observeScopeWriterLaunch({ ...identity, runDocker: async () => JSON.stringify(portal) });
     const retirement = { runId: 'SUR-CLOSED', targetSha: 'a'.repeat(40), project: portal.project, daemonId: 'daemon-example',
@@ -265,6 +311,7 @@ describe('scope writer actuator observations', () => {
     h.advance();
     const retirement = await finishMaintenanceEpoch({ baseline, secret, expected: identity, runDocker: h.runDocker, now: finishAt });
     const portal = { ...launch(), id: '3'.repeat(64), project: 'dpf', networkMode: 'dpf_default' };
+    portal.mounts[0].name = 'dpf_portal_actuator';
     const runDocker = async args => {
       if (args[0] === 'inspect') return JSON.stringify(portal);
       if (args[0] === 'image') return launchImage;
@@ -309,14 +356,22 @@ describe('scope writer actuator observations', () => {
     ['a root user', o => { o.user = '0:0'; }],
     ['a privileged writer', o => { o.privileged = true; }],
     ['an added capability', o => { o.capAdd = ['SYS_PTRACE']; }],
+    ['a supplementary group', o => { o.groupAdd = ['120']; }],
+    ['an injected device', o => { o.deviceRequests = [{ Driver: 'cdi' }]; }],
+    ['an added device rule', o => { o.deviceRules = ['c 1:3 rwm']; }],
+    ['a host user namespace override', o => { o.usernsMode = 'host'; }],
+    ['a host cgroup namespace override', o => { o.cgroupnsMode = 'host'; }],
     ['a shared PID namespace', o => { o.pidMode = 'host'; }],
     ['an unconfined filter', o => { o.securityOpt.push('seccomp=unconfined'); }],
     ['a loader override', o => { o.loaderOverrides = ['NODE_OPTIONS']; }],
+    ['a path override', o => { o.pathMatches = [false]; }],
     ['a shell command override', o => { o.args = ['sh', '-c', 'true']; }],
     ['an executable temporary directory', o => { o.tmpfs['/tmp'] = 'rw,nosuid,nodev,size=512m'; }],
     ['a loader path mount', o => { o.mounts.push({ type: 'bind', target: '/app/apps/web/.next', write: false }); }],
     ['the raw Docker socket', o => { o.mounts.push({ type: 'bind', target: '/var/run/docker.sock', write: false }); }],
     ['a writable actuator socket directory', o => { o.mounts[0].write = true; }],
+    ['another actuator volume', o => { o.mounts[0].name = 'peer_portal_actuator'; }],
+    ['shared bind propagation', o => { o.mounts[1].propagation = 'rshared'; }],
     ['an absent actuator socket directory', o => { o.mounts.shift(); }],
   ]) it(`refuses ${name} as a canonical scope writer launch`, async () => {
     const observed = launch();
