@@ -1044,14 +1044,19 @@ if [[ $_dry_run -eq 0 ]]; then
     *) printf 'error: unsupported scope writer launch recipe\n' >&2; exit 78 ;;
   esac
   if [[ $_promote_phase == all ]]; then
-    _reassessment_candidate_override="$PROMOTE_BACKUP_PATH/reassessment-candidate-$$.yml"
+    _reassessment_candidate_override="$(mktemp /tmp/dpf-reassessment-candidate.XXXXXX)" || exit 78
     _assert_reassessment_image "$_reassessment_candidate_digest" "$_built_sha" "$_reassessment_candidate_override" >/dev/null || exit 78
     _assert_scope_writer_image "$_reassessment_candidate_digest" "$_built_sha" >/dev/null || exit 78
     _f_args+=(-f "$_reassessment_candidate_override")
     if [[ "$_scope_writer_profile" == portal-immutable-v1 ]]; then
-      # Use the same already resolved image for the private actuator. Do not
-      # resolve an independent mutable service tag after the writer is checked.
-      printf '  portal-actuator:\n    image: "%s"\n    pull_policy: never\n' "$_reassessment_candidate_digest" >>"$_reassessment_candidate_override"
+      # Keep the override on the promoter's private filesystem. Its content
+      # binds mounts and launch fields without storing expanded credentials.
+      _scope_writer_override="$(mktemp /tmp/dpf-scope-writer-compose.XXXXXX)" || exit 78
+      docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$_compose_root" -p "$_project" \
+        "${_f_args[@]}" config --format json \
+        | node "$_promoter_dir/promoter-epoch-evidence.mjs" --phase scope-compose-override --project "$_project" \
+          --image "$_reassessment_candidate_digest" >"$_scope_writer_override" || exit 78
+      _f_args+=(-f "$_scope_writer_override")
       docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$_compose_root" -p "$_project" \
         "${_f_args[@]}" config --format json \
         | node "$_promoter_dir/promoter-epoch-evidence.mjs" --phase scope-compose --project "$_project" \
@@ -1361,7 +1366,7 @@ if [[ $_release_mode -eq 1 && $_dry_run -eq 0 ]]; then
     printf 'error: release identity commit failed; restoring the prior portal tag\n' >&2
     _rollback_f_args=()
     for _f in "${_compose_files[@]}"; do _rollback_f_args+=(-f "$PROMOTE_SOURCE/$_f"); done
-    _reassessment_fallback_override="$PROMOTE_BACKUP_PATH/reassessment-fallback-$$.yml"
+    _reassessment_fallback_override="$(mktemp /tmp/dpf-reassessment-fallback.XXXXXX)" || exit 78
     _assert_reassessment_image "${_reassessment_baseline_config:-}" "" "$_reassessment_fallback_override" >/dev/null || exit 78
     node "$_promoter_dir/promoter-epoch-evidence.mjs" --phase scope-fallback --image "$_reassessment_baseline_config" >/dev/null || exit 78
     _rollback_f_args+=(-f "$_reassessment_fallback_override")

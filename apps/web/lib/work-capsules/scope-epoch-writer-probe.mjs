@@ -106,7 +106,7 @@ const readOnlyInputs = new Set([
 ]);
 const dataMounts = new Set([
   "/etc/hostname", "/etc/hosts", "/etc/resolv.conf", "/sandbox-workspace",
-  "/var/lib/dpf/maps", "/backups", "/dpf-federation",
+  "/var/lib/dpf/maps", "/var/lib/dpf/uploads", "/backups", "/dpf-federation",
 ]);
 const systemSharedObject = /^\/(?:app|lib|usr\/lib|usr\/local\/lib)\//;
 
@@ -122,6 +122,7 @@ export async function attestScopeWriterProcess({ readFile = readPackagedFile, re
   try {
     if (execPath !== "/usr/local/bin/node" || argv.length !== 1 || argv[0] !== "--disable-sigusr1"
       || env.PATH !== "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+      || (env.DPF_MANAGED_SCRIPT_DIR !== undefined && env.DPF_MANAGED_SCRIPT_DIR !== "/app/scripts")
       || Object.keys(env).some(name => /^(?:NODE_OPTIONS$|NODE_PATH$|NODE_CHANNEL_FD$|LD_|DYLD_|BASH_ENV$|ENV$|DPF_APP_DIR$)/.test(name))) {
       refuse("process_unproven");
     }

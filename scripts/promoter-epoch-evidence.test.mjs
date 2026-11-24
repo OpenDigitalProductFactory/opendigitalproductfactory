@@ -188,13 +188,36 @@ describe('scope writer actuator observations', () => {
     { type: 'bind', target: '/dpf-state', write: false, name: null, source: '/install/state', propagation: 'rprivate' }],
   });
 
+  it('renders a hardened Compose override without copying portal secrets into a file', () => {
+    const base = { name: 'fixture', services: { portal: {
+      environment: { DATABASE_URL: 'private-test-value', UPLOAD_STORAGE_PATH: '/host-dpf/data/uploads' },
+      volumes: [
+        { type: 'bind', source: '/var/run/docker.sock', target: '/var/run/docker.sock' },
+        { type: 'bind', source: '/install/state', target: '/dpf-state', read_only: true },
+        { type: 'bind', source: '/install/source', target: '/host-dpf' },
+        { type: 'bind', source: '/install/worktrees', target: '/host-worktrees' },
+        { type: 'volume', source: 'map_data', target: '/var/lib/dpf/maps' },
+      ],
+    } } };
+    const overlay = imageEvidence.renderScopeWriterComposeOverride(base, { project: 'fixture', image: launchImage });
+    assert.match(overlay, /volumes: !override/);
+    assert.match(overlay, /user: "1000:1000"/);
+    assert.match(overlay, /"source":"\/install\/source","target":"\/host-dpf","read_only":true/);
+    assert.equal(overlay.split('/var/run/docker.sock').length - 1, 2);
+    assert.doesNotMatch(overlay, /private-test-value/);
+    const refused = structuredClone(base);
+    refused.services.portal.volumes.push({ type: 'bind', source: '/untrusted', target: '/app' });
+    assert.throws(() => imageEvidence.renderScopeWriterComposeOverride(refused, { project: 'fixture', image: launchImage }),
+      /scope_writer_compose_unproven/);
+  });
+
   it('qualifies only the canonical generated portal and actuator services before launch', () => {
     const actuatorImage = `sha256:${'d'.repeat(64)}`;
     const recipe = {
       name: 'fixture',
       volumes: { portal_actuator: { name: 'fixture_portal_actuator' } },
       services: {
-        portal: { image: launchImage, pull_policy: 'never', user: '1000:1000', read_only: true,
+        portal: { image: launchImage, pull_policy: 'never', user: '1000:1000', read_only: true, entrypoint: null, command: null,
           cap_drop: ['ALL'], security_opt: ['no-new-privileges:true'], tmpfs: ['/tmp:rw,noexec,nosuid,nodev,size=512m,mode=1777'],
           networks: { default: null }, volumes: [
             { type: 'volume', source: 'portal_actuator', target: '/run/dpf-actuator', read_only: true },

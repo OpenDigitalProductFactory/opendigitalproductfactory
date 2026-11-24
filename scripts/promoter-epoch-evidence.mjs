@@ -137,6 +137,7 @@ const portalMountPolicy = new Map([
   ['/workspace', { type: 'volume', write: false, name: 'dpf-source-code' }],
   ['/sandbox-workspace', { type: 'volume', write: true, name: 'sandbox_workspace' }],
   ['/var/lib/dpf/maps', { type: 'volume', write: true, name: 'map_data' }],
+  ['/var/lib/dpf/uploads', { type: 'bind', write: true }],
   ['/backups', { type: 'bind', write: true }],
   ['/dpf-federation', { type: 'bind', write: true }],
   ['/etc/dpf/pki/root_ca.crt', { type: 'bind', write: false }],
@@ -166,6 +167,60 @@ const actuatorSecretOptions = [
 const actuatorEnvKeys = new Set([...actuatorSecretOptions, 'PROMOTE_COMPOSE_PROJECT', 'TSX_TSCONFIG_PATH',
   'TSX_DISABLE_CACHE', 'DPF_RUNTIME_SECRET_NAMES']);
 
+/** Render mounts and fixed launch fields only. Keep credentials on the
+ * original Compose interpolation path and verify the merged result again. */
+export function renderScopeWriterComposeOverride(recipe, { project, image }) {
+  const refuse = () => { throw new Error('scope_writer_compose_unproven'); };
+  const portal = recipe?.services?.portal;
+  if (!/^[a-z0-9][a-z0-9_-]{0,99}$/.test(project ?? '') || recipe?.name !== project
+    || !/^sha256:[a-f0-9]{64}$/.test(image ?? '') || !Array.isArray(portal?.volumes)) refuse();
+  const mounts = new Map();
+  for (const { type, source, target, bind } of portal.volumes) {
+    if (target === dockerSocketMount && type === 'bind' && source === dockerSocketMount) continue;
+    const policy = portalMountPolicy.get(target);
+    if (!policy || mounts.has(target) || type !== policy.type || target === shareMount
+      || (policy.name ? source !== policy.name : !isAbsolute(source))
+      || (bind?.propagation && !['private', 'rprivate'].includes(bind.propagation))) refuse();
+    mounts.set(target, { type, source, target, read_only: !policy.write, ...(type === 'bind' ? { bind: { create_host_path: false } } : {}) });
+  }
+  const source = mounts.get('/host-dpf')?.source, state = mounts.get(stateMount)?.source;
+  if (!source || !state) refuse();
+  const oldUploads = portal.environment?.UPLOAD_STORAGE_PATH || '/host-dpf/data/uploads';
+  if (!/^\/host-dpf\/[a-zA-Z0-9_.-]+(?:\/[a-zA-Z0-9_.-]+)*$/.test(oldUploads)
+    || oldUploads.split('/').some(path => path === '.' || path === '..') || mounts.has('/var/lib/dpf/uploads')) refuse();
+  mounts.set('/var/lib/dpf/uploads', { type: 'bind', source: join(source, oldUploads.slice('/host-dpf/'.length)),
+    target: '/var/lib/dpf/uploads', read_only: false, bind: { create_host_path: false } });
+  mounts.set(shareMount, { type: 'volume', source: 'portal_actuator', target: shareMount, read_only: true });
+  const encodeMounts = list => JSON.stringify(list.map(mount => ({ ...mount, source: mount.source.replaceAll('$', '$$$$') })));
+  const actorMounts = [
+    { type: 'volume', source: 'portal_actuator', target: shareMount },
+    { ...mounts.get(stateMount) },
+    { type: 'bind', source: dockerSocketMount, target: dockerSocketMount, bind: { create_host_path: false } },
+  ];
+  const secretDefaults = { DATABASE_URL: 'postgresql://dpf:dpf_dev@postgres:5432/dpf', DPF_SECRET_PROVIDER: 'environment' };
+  const secretLine = key => '      ' + key + ': "' + '$' + '{' + key + ':-' + (secretDefaults[key] ?? '') + '}"';
+  return [
+    'services:',
+    '  portal:',
+    `    image: "${image}"`, '    pull_policy: never', '    user: "1000:1000"', '    working_dir: /app', '    read_only: true',
+    '    cap_drop: !override [ALL]', '    security_opt: !override ["no-new-privileges:true"]',
+    '    tmpfs: !override ["/tmp:rw,noexec,nosuid,nodev,size=512m,mode=1777"]',
+    '    volumes: !override ' + encodeMounts([...mounts.values()]),
+    '    environment:', '      HOME: /tmp', '      TMPDIR: /tmp', '      XDG_CACHE_HOME: /tmp/.cache',
+    '      UPLOAD_STORAGE_PATH: /var/lib/dpf/uploads', '      DPF_MANAGED_SCRIPT_DIR: /app/scripts',
+    '  portal-actuator:',
+    `    image: "${image}"`, '    pull_policy: never', '    restart: unless-stopped',
+    '    user: "0:0"', '    working_dir: /app', '    read_only: true', '    cap_drop: [ALL]', '    cap_add: [CHOWN]',
+    '    security_opt: ["no-new-privileges:true"]',
+    '    entrypoint: ["/usr/local/bin/node", "/usr/local/bin/runtime-secret-bootstrap.mjs", "--", "/usr/local/bin/node", "--import", "/app/packages/db/node_modules/tsx/dist/loader.mjs"]',
+    '    command: ["/app/apps/web-src/lib/platform-runtime/portal-actuator-entry.ts"]',
+    '    volumes: ' + encodeMounts(actorMounts),
+    '    environment:', ...actuatorSecretOptions.map(secretLine), `      PROMOTE_COMPOSE_PROJECT: "${project}"`,
+    '      TSX_TSCONFIG_PATH: /app/apps/web-src/tsconfig.json', '      TSX_DISABLE_CACHE: "1"', '      DPF_RUNTIME_SECRET_NAMES: DATABASE_URL',
+    'volumes:', '  portal_actuator:', '',
+  ].join('\n');
+}
+
 /** Check the fully interpolated, merged Compose service plans without exposing
  * environment values. An exact Docker inspection is still required at boot. */
 export function verifyPortalWriterCompose(recipe, { project, image, actuatorImage }) {
@@ -178,7 +233,8 @@ export function verifyPortalWriterCompose(recipe, { project, image, actuatorImag
       .every(key => service[key] === undefined || isEmptyList(service[key]));
   const safeEnvironment = environment => Object.entries(environment ?? {}).every(([key, value]) =>
     !loaderPrefixes.some(prefix => `${key}=${String(value)}`.startsWith(prefix))
-    && (key !== 'PATH' || `PATH=${value}` === trustedPath) && !['DOCKER_HOST', 'DOCKER_CONTEXT'].includes(key));
+    && (key !== 'PATH' || `PATH=${value}` === trustedPath)
+    && (key !== 'DPF_MANAGED_SCRIPT_DIR' || value === '/app/scripts') && !['DOCKER_HOST', 'DOCKER_CONTEXT'].includes(key));
   const privateBinds = mount => mount.type !== 'bind'
     || (!mount.bind?.propagation || ['private', 'rprivate'].includes(mount.bind.propagation));
   const pinned = (service, id) => /^sha256:[a-f0-9]{64}$/.test(id ?? '') && service.image === id && service.pull_policy === 'never';
@@ -188,7 +244,7 @@ export function verifyPortalWriterCompose(recipe, { project, image, actuatorImag
       || portal.read_only !== true || portal.user !== '1000:1000' || !exactArguments(portal.cap_drop, ['ALL'])
       || (portal.cap_add !== undefined && !isEmptyList(portal.cap_add))
       || !exactArguments(portal.security_opt, ['no-new-privileges:true'])
-      || portal.entrypoint !== undefined || portal.command !== undefined
+      || portal.entrypoint != null || portal.command != null
       || (portal.working_dir !== undefined && portal.working_dir !== '/app') || !safeEnvironment(portal.environment)
       || !exactArguments(Object.keys(portal.networks ?? {}), ['default']) || !Array.isArray(portal.tmpfs) || portal.tmpfs.length !== 1
       || !portal.tmpfs[0].startsWith('/tmp:') || !normalizePortalTmpfs({ '/tmp': portal.tmpfs[0].slice(5) })
@@ -626,6 +682,11 @@ if (isEntryModule(import.meta.url)) {
       verifyPortalWriterCompose(await readComposePlan(process.stdin), {
         project: values.project, image: values.image, actuatorImage: values['actuator-image'],
       });
+    }
+    else if (values.phase === 'scope-compose-override') {
+      process.stdout.write(renderScopeWriterComposeOverride(await readComposePlan(process.stdin), {
+        project: values.project, image: values.image,
+      }));
     }
     else if (values.phase === 'scope-launch') {
       const observation = await observeScopeWriterLaunch({ id: values.container, image: values.image, project: values.project });
