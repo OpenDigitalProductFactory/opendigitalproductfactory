@@ -149,6 +149,32 @@ export const CLIENT_CAPABILITY_PROFILE: ClientCapabilityProfile = {
               "lease-punt-guard.mjs",
               "decision-routing-guard.mjs"
             ]
+          },
+          "harness": {
+            "status": "verified",
+            "verifiedAt": "2026-11-24",
+            "verifiedVersion": "2.1.330",
+            "evidence": "BI-95665E9B live observation 2026-11-24: T3 Code 0.1.11 started Claude Code 2.1.330 through the Agent SDK (CLAUDE_CODE_ENTRYPOINT=t3-code, --permission-mode=bypassPermissions) in the root clone. The SessionStart hooks returned their context to the session, and `npx tsc --version` was denied by raw-tool-guard (PreToolUse on Bash). Which of the two delivery planes fired was not isolated. Write/Edit, the ask tool, UserPromptSubmit, Stop and SessionEnd were not probed.",
+            "delivery": "plugin hooks/hooks.json plus project .claude/settings.json",
+            "denyEnvelope": "hookSpecificOutput",
+            "permissionModes": [
+              "bypassPermissions"
+            ],
+            "events": {
+              "SessionStart": "fires",
+              "PreToolUse:Bash": "fires",
+              "PreToolUse:AskUserQuestion": "unproven",
+              "PreToolUse:Write|Edit|MultiEdit": "unproven",
+              "UserPromptSubmit": "unproven",
+              "Stop": "unproven",
+              "SessionEnd": "unproven"
+            },
+            "probes": [
+              "compose-guard.mjs",
+              "raw-tool-guard.mjs",
+              "lease-punt-guard.mjs",
+              "decision-routing-guard.mjs"
+            ]
           }
         }
       }
@@ -248,7 +274,7 @@ export const CLIENT_CAPABILITY_PROFILE: ClientCapabilityProfile = {
             "status": "unproven",
             "verifiedAt": null,
             "verifiedVersion": null,
-            "evidence": "No probe recorded for the Codex desktop host. BI-80B5E939 (2026-11-19): the T3 Code / Codex host names its ask tool request_user_input_async (title + plain-string options), now covered by the AskUserQuestion|request_user_input|request_user_input_async matcher and the shared question reader. Delivery to that host stays unproven: a live T3 probe (2026-11-15) ran a harmless docker compose command with no compose-guard denial, and Codex hooks/list reported every DPF plugin hook trustStatus=modified (skipped until the operator reviews trust). Direct unit calls and an installed hooks file are not live proof; the closed prior items BI-383668B9, BI-271B8EEC and BI-B22DE548 do not cover this host.",
+            "evidence": "No probe recorded for the Codex desktop host.",
             "delivery": "plugin hooks/hooks.json from the plugin cache",
             "denyEnvelope": "hookSpecificOutput",
             "permissionModes": [],
@@ -270,6 +296,27 @@ export const CLIENT_CAPABILITY_PROFILE: ClientCapabilityProfile = {
             "verifiedAt": null,
             "verifiedVersion": null,
             "evidence": "No probe recorded for the Codex IDE extension host.",
+            "delivery": "plugin hooks/hooks.json from the plugin cache",
+            "denyEnvelope": "hookSpecificOutput",
+            "permissionModes": [],
+            "events": {
+              "SessionStart": "unproven",
+              "PreToolUse:Bash": "unproven",
+              "PreToolUse:AskUserQuestion": "unproven",
+              "PreToolUse:Write|Edit|MultiEdit": "unproven",
+              "UserPromptSubmit": "unproven",
+              "Stop": "unproven",
+              "SessionEnd": "unproven"
+            },
+            "probes": [
+              "lease-punt-guard.mjs"
+            ]
+          },
+          "harness": {
+            "status": "unproven",
+            "verifiedAt": null,
+            "verifiedVersion": null,
+            "evidence": "T3 Code driving Codex. BI-80B5E939 (2026-11-19): this host names its ask tool request_user_input_async (title + plain-string options), now covered by the AskUserQuestion|request_user_input|request_user_input_async matcher and the shared question reader. Delivery stays unproven: a live T3 probe (2026-11-15) ran a harmless docker compose command with no compose-guard denial, and Codex hooks/list reported every DPF plugin hook trustStatus=modified (skipped until the operator reviews trust). Direct unit calls and an installed hooks file are not live proof; the closed prior items BI-383668B9, BI-271B8EEC and BI-B22DE548 do not cover this host. Moved here from the desktop row by BI-95665E9B.",
             "delivery": "plugin hooks/hooks.json from the plugin cache",
             "denyEnvelope": "hookSpecificOutput",
             "permissionModes": [],
@@ -418,6 +465,27 @@ export const CLIENT_CAPABILITY_PROFILE: ClientCapabilityProfile = {
               "SessionEnd": "unproven"
             },
             "probes": []
+          },
+          "harness": {
+            "status": "unproven",
+            "verifiedAt": null,
+            "verifiedVersion": null,
+            "evidence": "No probe recorded for this client started by an orchestrating harness such as T3 Code.",
+            "delivery": "global ~/.grok/hooks/dpf-guards.json only, written by update_agent_toolchain.py install_grok_hooks",
+            "denyEnvelope": "dual",
+            "permissionModes": [],
+            "events": {
+              "SessionStart": "unproven",
+              "PreToolUse:Bash": "unproven",
+              "PreToolUse:AskUserQuestion": "unproven",
+              "PreToolUse:Write|Edit|MultiEdit": "unproven",
+              "UserPromptSubmit": "unproven",
+              "Stop": "unproven",
+              "SessionEnd": "unproven"
+            },
+            "probes": [
+              "lease-punt-guard.mjs"
+            ]
           }
         }
       }
@@ -539,6 +607,25 @@ export const CLIENT_CAPABILITY_PROFILE: ClientCapabilityProfile = {
               "SessionEnd": "unproven"
             },
             "probes": []
+          },
+          "harness": {
+            "status": "unproven",
+            "verifiedAt": null,
+            "verifiedVersion": null,
+            "evidence": "No probe recorded for this client started by an orchestrating harness such as T3 Code.",
+            "delivery": null,
+            "denyEnvelope": null,
+            "permissionModes": [],
+            "events": {
+              "SessionStart": "unproven",
+              "PreToolUse:Bash": "unproven",
+              "PreToolUse:AskUserQuestion": "unproven",
+              "PreToolUse:Write|Edit|MultiEdit": "unproven",
+              "UserPromptSubmit": "unproven",
+              "Stop": "unproven",
+              "SessionEnd": "unproven"
+            },
+            "probes": []
           }
         }
       }
@@ -643,6 +730,25 @@ export const CLIENT_CAPABILITY_PROFILE: ClientCapabilityProfile = {
             "probes": []
           },
           "ide": {
+            "status": "unproven",
+            "verifiedAt": null,
+            "verifiedVersion": null,
+            "evidence": "VS Code has no DPF hook plane.",
+            "delivery": null,
+            "denyEnvelope": null,
+            "permissionModes": [],
+            "events": {
+              "SessionStart": "unproven",
+              "PreToolUse:Bash": "unproven",
+              "PreToolUse:AskUserQuestion": "unproven",
+              "PreToolUse:Write|Edit|MultiEdit": "unproven",
+              "UserPromptSubmit": "unproven",
+              "Stop": "unproven",
+              "SessionEnd": "unproven"
+            },
+            "probes": []
+          },
+          "harness": {
             "status": "unproven",
             "verifiedAt": null,
             "verifiedVersion": null,

@@ -98,9 +98,31 @@ test("prose outside the markers is the tracker's own and is kept", () => {
 
 test("the matrix shows hook gaps beside auth gaps", () => {
   const matrix = renderMatrix(profile());
-  assert.match(matrix, /\| Antigravity \(`antigravity`\) \| none \|.*\| cli: hooks unproven; desktop: hooks unproven; ide: hooks unproven \|/);
+  assert.match(matrix, /\| Antigravity \(`antigravity`\) \| none \|.*\| cli: hooks unproven; desktop: hooks unproven; ide: hooks unproven; harness: hooks unproven \|/);
   assert.match(matrix, /\| `codex` \| cli \| fires: PreToolUse shell; does not fire: PreToolUse ask;/);
   assert.match(matrix, /\| `claude-code` \| desktop \| fires: PreToolUse shell, PreToolUse ask;.*\| bypassPermissions \| 2026-10-13, v2\.1\.295 \|/);
+});
+
+// BI-95665E9B: a client started by an orchestrating harness (T3 Code) is its
+// own host. Its evidence must not sit in the desktop row.
+test("every client states its harness host, and T3 Code evidence lives there", () => {
+  const data = profile();
+  for (const [kind, row] of Object.entries(data.clients)) {
+    assert.ok(row.capabilities.hookPlane.harness, `${kind} has no harness host`);
+  }
+  const claude = data.clients["claude-code"].capabilities.hookPlane.harness;
+  assert.equal(claude.status, "verified");
+  assert.equal(claude.events.SessionStart, "fires");
+  assert.equal(claude.events["PreToolUse:Bash"], "fires");
+  assert.equal(claude.events["PreToolUse:AskUserQuestion"], "unproven");
+  assert.deepEqual(claude.permissionModes, ["bypassPermissions"]);
+  const codex = data.clients.codex.capabilities.hookPlane;
+  assert.equal(codex.harness.status, "unproven");
+  assert.match(codex.harness.evidence, /T3 Code/);
+  assert.doesNotMatch(codex.desktop.evidence, /T3/);
+  assert.deepEqual(validateProfile(data, { knownProbes: probes() }), []);
+  const matrix = renderMatrix(data);
+  assert.match(matrix, /\| `claude-code` \| harness \| fires: SessionStart, PreToolUse shell;.*\| bypassPermissions \| 2026-11-24, v2\.1\.330 \|/);
 });
 
 test("validation refuses what the profile must never say", () => {
