@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { GithubReaderResult } from "@/lib/contributor-change-lanes/github-rest-reader";
 import { createPullRequestObservation } from "@/lib/contributor-change-lanes/pull-request-observation";
 import { reconcileInventoryPullRequestBindings } from "./pull-request-binding-runtime";
 
@@ -23,6 +24,14 @@ const room = {
   id: "room-row", capsuleId: "WC-TEST", repositoryFullName: repository, headBranch: "fix/review",
   headSha: observation.headSha, pullRequestNumber: null, pullRequestUrl: null, updatedAt: now,
 };
+const openRow = {
+  sourceKey: String(observation.number),
+  payload: observation,
+  custodySource: {
+    baseBranch: "main", baseSha: "1".repeat(40), headRepositoryFullName: repository,
+    authorLogin: "dependabot[bot]", authorType: "Bot",
+  },
+};
 
 beforeEach(() => {
   vi.resetAllMocks();
@@ -34,6 +43,73 @@ beforeEach(() => {
 });
 
 describe("inventory Workroom binding", () => {
+  it("binds an old open PR missing from the recent inventory to its exact room", async () => {
+    mocks.run.mockResolvedValue({ completedAt: now, perSourceResult: { "github-pr": { ok: false } } });
+    mocks.rooms.mockResolvedValue([{ ...room, baseBranch: "main" }]);
+    expect(await reconcileInventoryPullRequestBindings("current-run", now, {
+      ok: true, rows: [openRow],
+    })).toMatchObject({ bound: 1, openCoverage: { status: "complete", count: 1 } });
+    expect(mocks.journal).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({
+      payload: expect.objectContaining({ confirmedAt: now.toISOString(), headRepositoryFullName: repository, baseBranch: "main" }),
+    }) }));
+  });
+
+  it("does not bind a fork with the same branch and head from either open list", async () => {
+    mocks.rooms.mockResolvedValue([{ ...room, baseBranch: "main" }]);
+    expect(await reconcileInventoryPullRequestBindings("current-run", now, {
+      ok: true, rows: [{ ...openRow, custodySource: { ...openRow.custodySource, headRepositoryFullName: "fork/platform" } }],
+    })).toMatchObject({ bound: 0, openCoverage: { status: "complete", count: 1 } });
+    expect(mocks.update).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { ...room, baseBranch: "release" },
+    { ...room, baseBranch: "main", headSha: "b".repeat(40) },
+    { ...room, baseBranch: "main", headSha: null },
+  ])("does not bind an open PR to a room whose base or authored head differs", async (candidate) => {
+    mocks.rooms.mockResolvedValue([candidate]);
+    expect(await reconcileInventoryPullRequestBindings("current-run", now, {
+      ok: true, rows: [openRow],
+    })).toMatchObject({ bound: 0, openCoverage: { status: "complete", count: 1 } });
+  });
+
+  it.each([
+    { ok: false, error: "page incomplete", state: "error" },
+    { ok: true, rows: [], unchanged: true },
+    { ok: true, rows: [openRow, openRow] },
+    { ok: true, rows: [{ ...openRow, payload: { ...observation, number: 99 } }] },
+  ] satisfies GithubReaderResult[])("reports unknown open coverage without binding from cached open observations", async (scan) => {
+    expect(await reconcileInventoryPullRequestBindings("current-run", now, scan)).toMatchObject({
+      bound: 0, openCoverage: { status: "unknown" },
+    });
+    expect(mocks.update).not.toHaveBeenCalled();
+  });
+
+  it("distinguishes a confirmed empty open population from unknown coverage", async () => {
+    expect(await reconcileInventoryPullRequestBindings("current-run", now, { ok: true, rows: [] }))
+      .toMatchObject({ bound: 0, openCoverage: { status: "complete", count: 0 } });
+  });
+
+  it("waits for another observation when the fresh and recent sources disagree on state", async () => {
+    const closed = createPullRequestObservation({ ...observation, state: "closed" });
+    mocks.snapshots.mockResolvedValue([{ payload: closed }]);
+    mocks.rooms.mockResolvedValue([{ ...room, baseBranch: "main" }]);
+    expect(await reconcileInventoryPullRequestBindings("current-run", now, { ok: true, rows: [openRow] }))
+      .toMatchObject({ bound: 0 });
+    expect(mocks.update).not.toHaveBeenCalled();
+  });
+
+  it("does not replace a current PR from a closed snapshot when open coverage is unknown", async () => {
+    const closed = createPullRequestObservation({ ...observation, state: "closed", number: 41,
+      url: `https://github.com/${repository}/pull/41` });
+    mocks.snapshots.mockResolvedValue([{ payload: closed }]);
+    mocks.rooms.mockResolvedValue([{ ...room, pullRequestNumber: observation.number, pullRequestUrl: observation.url }]);
+    expect(await reconcileInventoryPullRequestBindings("current-run", now, {
+      ok: false, error: "incomplete page", state: "error",
+    })).toMatchObject({ bound: 0, openCoverage: { status: "unknown" } });
+    expect(mocks.update).not.toHaveBeenCalled();
+  });
+
   it("binds a room whose head is still its claim-time base (BI-A7797C2C)", async () => {
     const base = "1".repeat(40);
     mocks.rooms.mockResolvedValue([{ ...room, headSha: base, baseSha: base }]);
