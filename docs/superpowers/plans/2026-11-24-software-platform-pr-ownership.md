@@ -40,4 +40,10 @@ If activation causes a regression, suspend the new adoption and repair effects t
 
 ## Backlog coverage
 
-Proposed atomic coverage for BI-C3EBDCEC spans AC-PR-1 through AC-PR-4 and the contracts, flows, and verification scenarios above. The immutable plan receipt and independent approval are pending.
+The phases below deliver BI-C3EBDCEC as one change. The independent design review approved the objectives and acceptance criteria. The plan coverage receipt is pending.
+
+| Phase | Objective | Acceptance | Contract | Flow | Verification |
+| --- | --- | --- | --- | --- | --- |
+| Inventory and ownership | OBJ-PR-OWN | AC-PR-1 | CONTRACT-PR-IDENTITY | FLOW-PR-1 | VERIFY-PR-1 |
+| Bounded repair and protected publication | OBJ-PR-REPAIR | AC-PR-2, AC-PR-3 | CONTRACT-PR-REPAIR | FLOW-PR-2 | VERIFY-PR-2 |
+| Closeout and installed verification | OBJ-PR-CLOSE | AC-PR-4 | CONTRACT-PR-CLOSE | FLOW-PR-3 | VERIFY-PR-3 |
