@@ -2,6 +2,7 @@ import { adoptionScopePatch, scopeWriteWhere } from "./scope-input";
 import type { ToolResult } from "@/lib/mcp-tool-types";
 import { assessDeliverySensitivity } from "@/lib/backlog/initiative-readiness/delivery-sensitivity";
 import { WORK_INTENTS, type WorkIntent } from "@/lib/work-capsules";
+import { HARNESS_REF_REQUIRES_HARNESS, parseExecutorHarnessRef, recordedExecutorHarnessRef, type ExecutorHarnessRef } from "./executor-harness-ref";
 import {
   DELIVERY_SHAPE_PICK_LIST,
   buildDeliveryShapeClaim,
@@ -91,14 +92,19 @@ export function isHarnessOnlyProvider(provider: string): boolean {
   return /^t3(?:[-_ ]?code)?$/.test(normalized);
 }
 
-/** Record which harness runs the room's executor, keyed to the session it ran. */
-export async function persistExecutorHarness(db: CapsuleDb, capsuleId: string, harness: ExecutorHarness, sessionRef: string): Promise<void> {
+/**
+ * Record which harness runs the room's executor, keyed to the session it ran.
+ * `ref` is the harness's own thread reference (BI-75AB446B); a later claim by
+ * the same session that omits it keeps the one already recorded.
+ */
+export async function persistExecutorHarness(db: CapsuleDb, capsuleId: string, harness: ExecutorHarness, sessionRef: string, ref: ExecutorHarnessRef | null = null): Promise<void> {
   const row = await db.workroom.findUnique({ where: { capsuleId }, select: { workspaceState: true } }) as { workspaceState?: unknown } | null;
   if (!row) return;
   const state = row.workspaceState && typeof row.workspaceState === "object" && !Array.isArray(row.workspaceState)
     ? row.workspaceState as Record<string, unknown> : {};
+  const kept = ref ?? recordedExecutorHarnessRef(state, harness, sessionRef);
   await db.workroom.update({ where: { capsuleId },
-    data: { workspaceState: { ...state, executorHarness: { harness, executorRef: sessionRef, recordedAt: new Date().toISOString() } } } });
+    data: { workspaceState: { ...state, executorHarness: { harness, executorRef: sessionRef, recordedAt: new Date().toISOString(), ...(kept ? { ref: kept } : {}) } } } });
 }
 
 export async function persistClaimShape(db: CapsuleDb, capsuleId: string, resolution: DeliveryShapeResolution | null): Promise<void> {
@@ -184,6 +190,9 @@ export async function claimBacklogItemForWork(args: {
     return { success: false, error: "provider_harness_only",
       message: `"${provider}" names the harness, not the model client. Pass provider "codex" or "claude" (whichever T3 is driving) and harness "t3-code", with sessionRef set to the client thread id (CODEX_THREAD_ID or CLAUDE_CODE_SESSION_ID).` };
   }
+  if (params["harnessRef"] != null && !harness) return { success: false, error: "harness_ref_requires_harness", message: HARNESS_REF_REQUIRES_HARNESS };
+  const harnessRef = parseExecutorHarnessRef(params["harnessRef"]);
+  if (!harnessRef.ok) return { success: false, error: "invalid_harness_ref", message: harnessRef.error };
   const executorKind = providerToExecutorKind(provider);
   const shape = await resolveClaimShape({
     db: args.db,
@@ -250,7 +259,7 @@ export async function claimBacklogItemForWork(args: {
       dependencies: {
         afterClaimInTx: async (tx, claim) => {
           await persistClaimShape(tx, claim.capsuleId, shape.resolution);
-          if (harness) await persistExecutorHarness(tx, claim.capsuleId, harness as ExecutorHarness, sessionRef);
+          if (harness) await persistExecutorHarness(tx, claim.capsuleId, harness as ExecutorHarness, sessionRef, harnessRef.data);
           const room = await tx.workroom.findUnique({ where: { capsuleId: claim.capsuleId }, select: { id: true } }) as { id: string } | null;
           if (room && "$queryRaw" in tx) {
             await oweRoomSetup(tx as never, { roomRowId: room.id, capsuleId: claim.capsuleId, backlogItemId: claim.backlogItemId,
@@ -306,6 +315,7 @@ export async function claimBacklogItemForWork(args: {
         readiness: governed.data.readiness,
         readback: governed.data.readback,
         ...(harness ? { executorHarness: harness } : {}),
+        ...(harnessRef.data ? { executorHarnessRef: harnessRef.data } : {}),
       },
     };
   } catch (error) {

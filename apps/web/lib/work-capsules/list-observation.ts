@@ -28,7 +28,11 @@ export async function listWorkroomObservation(db: Db, params: Record<string, unk
     ...(Number.isInteger(params.pullRequestNumber) && (params.pullRequestNumber as number) > 0 ? { pullRequestNumber: params.pullRequestNumber } : {}),
   };
   Object.assign(where, lookup);
-  const isLookup = Object.keys(lookup).length > 0;
+  // The harness thread recorded on the claim (BI-75AB446B) is the same kind of
+  // handle: the thread a person is looking at, asking which room it works in.
+  const harnessThreadId = typeof params.harnessThreadId === "string" ? params.harnessThreadId.trim() : "";
+  if (harnessThreadId) where.workspaceState = { path: ["executorHarness", "ref", "threadId"], equals: harnessThreadId };
+  const isLookup = Object.keys(lookup).length > 0 || Boolean(harnessThreadId);
   let assistantPrincipalId: string | null = null;
   const identity = {
     principal: userId,

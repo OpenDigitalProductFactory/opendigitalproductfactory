@@ -23,6 +23,15 @@ describe("Workroom observation loading and transport", () => {
       { OR: [{ leaseHolderPrincipalId: "assistant" }, { createdByPrincipalId: "assistant" }, { requestedByPrincipalId: "assistant" }] },
     ] } }));
   });
+  it("finds a room by the harness thread recorded on its claim (BI-75AB446B)", async () => {
+    const tx = { $executeRawUnsafe: vi.fn(), workroom: { findMany: vi.fn().mockResolvedValue([]) }, featureBuild: { findMany: vi.fn().mockResolvedValue([]) } };
+    const db = { $transaction: vi.fn(async (fn: (arg: typeof tx) => Promise<unknown>) => fn(tx)) };
+    await listWorkroomObservation(db as never, { harnessThreadId: " 0f0ea8be-7956 " }, "u", { ...context, authSource: "oauth", agentId: "claude" }, new WorkroomObservations());
+    const where = tx.workroom.findMany.mock.calls[0]![0].where;
+    expect(where.workspaceState).toEqual({ path: ["executorHarness", "ref", "threadId"], equals: "0f0ea8be-7956" });
+    // A lookup: the person's rooms another assistant created are matched too.
+    expect(where.AND).toHaveLength(1);
+  });
   it("finds the person's room by PR or branch even when another assistant created it, disclosing only the handover (BI-679D2BF6)", async () => {
     const own = { ...fixture()[0], capsuleId: "WC-OWN", createdByPrincipalId: "assistant", requestedByPrincipalId: "human-u", pullRequestNumber: 6275 };
     const other = { ...fixture()[1], capsuleId: "WC-CODEX", title: "Secret title", worktreePath: "/private/path",
