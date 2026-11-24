@@ -25,10 +25,10 @@
 //
 //   node scripts/check-docker-authority-cutover.mjs
 
-import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { gitText } from "./lib/git.mjs";
 
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const SCOPES = ["apps/web/lib", "apps/web/app", "packages/db/src"];
@@ -132,7 +132,7 @@ export function checkDockerAuthority({ observed, registry, recipeOn }) {
 }
 
 export function runInRepo(root = REPO_ROOT) {
-  const files = execFileSync("git", ["ls-files", ...SCOPES], { cwd: root, encoding: "utf8" })
+  const files = gitText(["ls-files", ...SCOPES], { cwd: root })
     .split("\n")
     .filter((file) => /\.(?:ts|tsx|mjs|js)$/.test(file) && !/\.d\.ts$|\.test\.|test-support|__tests__/.test(file));
   const observed = {};
