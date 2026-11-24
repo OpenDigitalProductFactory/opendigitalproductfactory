@@ -17,7 +17,7 @@
 // mirror agent-grants.ts TOOL_TO_GRANTS, which stays the gating source.
 
 import { prisma } from "@dpf/db";
-import { ACTUATOR_SERVICE_LOG_NAMES, hasPrivateActuatorMount, readActuatorServiceLogs } from "../../../../../scripts/lib/scope-writer-observation.mjs";
+import { ACTUATOR_SERVICE_LOG_NAMES, hasPrivateActuatorMount, readActuatorProjectContainers, readActuatorServiceLogs } from "../../../../../scripts/lib/scope-writer-observation.mjs";
 
 import { lazyFsPromises, lazyPath, lazyChildProcess, lazyUtil, getCwd } from "@/lib/shared/lazy-node";
 import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
@@ -345,7 +345,11 @@ async function adminRunCommand(params: Record<string, unknown>, userId: string):
     const { promisify } = lazyUtil();
     await logAdminActivity(userId, "admin_run_command", { command }, "success", 1, `Running: ${command.slice(0, 200)}`);
     const options = { cwd: composeCwd(), timeout: 60_000 };
-    const { stdout, stderr } = await promisify(execFileCb)(diagnostic.file, diagnostic.args, options);
+    const usesActuator = diagnostic.file === "docker"
+      && await lazyFsPromises().readFile("/proc/self/mountinfo").then(hasPrivateActuatorMount, () => false);
+    const { stdout, stderr } = usesActuator
+      ? { stdout: await runActuatorDiagnostic(diagnostic.args), stderr: "" }
+      : await promisify(execFileCb)(diagnostic.file, diagnostic.args, options);
     const output = (stdout + "\n" + stderr).trim();
     return { success: true, message: `Command completed.`, data: { command, output: output.slice(0, 15000), exitCode: 0 } };
   } catch (err) {
@@ -359,6 +363,30 @@ async function adminRunCommand(params: Record<string, unknown>, userId: string):
     if (output) return { success: false, error: "command_failed", message: "Command exited with error.", data };
     return { success: false, error: (execErr.message ?? "Command failed").slice(0, 1000), message: `Failed: ${command.slice(0, 80)}`, data };
   }
+}
+
+async function runActuatorDiagnostic([, action, ...flags]: string[]): Promise<string> {
+  if (action === "logs") {
+    const tail = flags.lastIndexOf("--tail");
+    const lines = tail < 0 ? 100 : Math.min(Number(flags[tail + 1]), 500);
+    const named = flags.filter(flag => ACTUATOR_SERVICE_LOG_NAMES.includes(flag));
+    const services = named.length ? named : (await readActuatorProjectContainers()).containers
+      .map(({ Service }: { Service: string }) => Service).filter((service: string) => ACTUATOR_SERVICE_LOG_NAMES.includes(service));
+    const logs = await Promise.all([...new Set<string>(services)].map(async service => {
+      const { output } = await readActuatorServiceLogs(service, lines, { timestamps: flags.includes("--timestamps") });
+      if (typeof output !== "string") throw new Error("actuator_log_service_unavailable");
+      return output;
+    }));
+    return logs.join("\n");
+  }
+  const { containers } = await readActuatorProjectContainers() as {
+    containers: Array<{ ID: string; Name: string; Service: string; State: string; Status: string }>;
+  };
+  const shown = flags.includes("--all") ? containers : containers.filter(row => ["running", "paused", "restarting"].includes(row.State));
+  if (flags.includes("--quiet")) return shown.map(row => row.ID).join("\n");
+  if (flags.includes("--services")) return [...new Set(shown.map(row => row.Service))].join("\n");
+  if (flags.includes("--format")) return JSON.stringify(shown);
+  return ["NAME\tSERVICE\tSTATUS", ...shown.map(row => `${row.Name}\t${row.Service}\t${row.Status}`)].join("\n");
 }
 
 const handlers: Record<string, ToolPackHandler> = {

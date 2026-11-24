@@ -765,24 +765,12 @@ import {
 } from "@/lib/shared/run-process-with-budget";
 
 export async function runPromoter(params: PromoterParams): Promise<PromoterResult> {
+  const build = (input: PromoterParams) => buildCompatiblePromoterCommand(input, buildPromoterCommand, createPromoterDockerRunner(input));
   if (params.launchOwner && !params.runtimeTransitionAuthorityOperation && !params.dryRun && params.phase !== "build") {
-    const owner = params.launchOwner;
-    const reference = params.promoterImage || DEFAULT_PROMOTER_IMAGE;
-    if (!IMAGE_CONFIG_DIGEST.test(reference)) {
-      const image = await runProcessWithBudget("docker", ["image", "inspect", "--format", "{{.Id}}", reference], {
-        timeoutMs: 5_000, maxStdoutBytes: 1024,
-      }).catch(() => null);
-      if (image?.exitCode !== 0 || !IMAGE_CONFIG_DIGEST.test(image.stdout.trim())) {
-        return { exitCode: owner.kind === "runtime-capability" ? 75 : PROMOTER_ALREADY_RUNNING_EXIT_CODE,
-          stdout: "", stderr: "The approved promoter image is unavailable for immutable launch." };
-      }
-      params = { ...params, promoterImage: image.stdout.trim() };
-    }
-    const { args } = await buildCompatiblePromoterCommand(params, buildPromoterCommand, createPromoterDockerRunner(params));
-    const { launchDurablePromoter } = await import("./promoter-launch");
-    return launchDurablePromoter(params, args, owner);
+    const { runAdmittedPromoter } = await import("./promoter-launch");
+    return runAdmittedPromoter(params, params.launchOwner, params.promoterImage || DEFAULT_PROMOTER_IMAGE, build);
   }
-  const { command, args } = await buildCompatiblePromoterCommand(params, buildPromoterCommand, createPromoterDockerRunner(params));
+  const { command, args } = await build(params);
   // Idempotency guard (SUR-E2BF265E). The container name is deterministic
   // (`dpf-promoter-<runId>`), so a concurrent or retried dispatch of the SAME
   // run reaching here would issue a second `docker run --name <name>` and hit
@@ -799,16 +787,10 @@ export async function runPromoter(params: PromoterParams): Promise<PromoterResul
       };
     }
     if (action === "reclaim") {
-      // A prior promoter for this run exists but is no longer running — a
-      // crash/daemon-restart corpse `--rm` never cleaned. Remove it so the fresh
-      // launch below doesn't collide on the name.
+      // Release the name held by a stopped legacy promoter before relaunch.
       await forceRemovePromoterContainer(name);
     }
   }
-  // Hard wall-clock bound. Without it a stalled `docker build` (SUR-756751D1: an
-  // `apk add` fetch that crawled for 52 min) never closes, so `await runPromoter`
-  // blocks the orchestrator until the 30-min DB watchdog — and the orphaned
-  // container keeps building, risking a late unexpected swap.
   return runProcessWithBudget(command, args, {
     timeoutMs: resolvePromoterTimeoutMs(params),
     containerName: params.containerName,

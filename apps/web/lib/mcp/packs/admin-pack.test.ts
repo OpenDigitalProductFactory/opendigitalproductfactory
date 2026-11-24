@@ -12,10 +12,21 @@ vi.mock("@dpf/db", () => ({
 }));
 
 const execution = vi.hoisted(() => ({ exec: vi.fn(), execFile: vi.fn() }));
+const actuator = vi.hoisted(() => ({ active: false, containers: vi.fn(), logs: vi.fn() }));
+vi.mock("../../../../../scripts/lib/scope-writer-observation.mjs", async importOriginal => ({
+  ...await importOriginal<object>(),
+  hasPrivateActuatorMount: () => actuator.active,
+  readActuatorProjectContainers: actuator.containers,
+  readActuatorServiceLogs: actuator.logs,
+}));
 vi.mock("@/lib/shared/lazy-node", async (importOriginal) => ({
   ...await importOriginal<object>(),
   lazyChildProcess: () => execution,
   lazyUtil: () => ({ promisify: (fn: unknown) => fn }),
+  lazyFsPromises: () => ({ readFile: async (path: string) => {
+    if (path === "/proc/self/mountinfo") return Buffer.from("mount fixture");
+    throw new Error("unreadable fixture");
+  } }),
 }));
 
 import { adminPack, composeCwd } from "./admin-pack";
@@ -48,6 +59,7 @@ const EXPECTED_SIDE_EFFECT: Record<string, boolean> = {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  actuator.active = false;
   db.adminActivityCreate.mockResolvedValue({});
 });
 
@@ -157,6 +169,21 @@ describe("admin pack — handler behavior (delegation preserved)", () => {
     expect(execution.execFile).toHaveBeenCalledWith("docker", ["compose", "ps", "--format", "json"], expect.objectContaining({ cwd: composeCwd() }));
     expect(execution.exec).not.toHaveBeenCalled();
     expect(db.adminActivityCreate).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ tier: 1 }) }));
+  });
+
+  it("reads project diagnostics and logs through typed paths in the qualified portal", async () => {
+    actuator.active = true;
+    const sandbox = { ID: "a".repeat(64), Name: "dpf-sandbox-1", Service: "sandbox", State: "running", Status: "Up" };
+    const init = { ID: "b".repeat(64), Name: "dpf-init-1", Service: "portal-init", State: "exited", Status: "Exited" };
+    actuator.containers.mockResolvedValue({ containers: [sandbox, init] });
+    actuator.logs.mockResolvedValue({ output: "sandbox log" });
+    const command = (value: string) => adminPack.handlers.admin_run_command({ command: value }, "u1");
+    expect(await command("docker compose ps --format json")).toMatchObject({ success: true, data: { output: JSON.stringify([sandbox]) } });
+    expect(await command("docker compose ps --all --services")).toMatchObject({ success: true, data: { output: "sandbox\nportal-init" } });
+    expect(await command("docker compose logs sandbox --tail 50 --timestamps")).toMatchObject({ success: true, data: { output: "sandbox log" } });
+    expect(actuator.logs).toHaveBeenCalledWith("sandbox", 50, { timestamps: true });
+    expect(execution.execFile).not.toHaveBeenCalled();
+    expect(execution.exec).not.toHaveBeenCalled();
   });
 
   it("admin_view_logs rejects an unknown service without shelling out", async () => {

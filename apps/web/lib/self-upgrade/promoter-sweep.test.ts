@@ -100,4 +100,15 @@ describe("sweepOrphanedPromoterContainers", () => {
     expect(underSettledOwner).toHaveBeenCalledTimes(2);
     expect(calls.filter(args => args[0] === "rm")).toEqual([["rm", "-f", "c".repeat(64)]]);
   });
+
+  it("holds containers outside the actuator's exact install project", async () => {
+    const id = "a".repeat(64);
+    const run = vi.fn<DockerRun>().mockResolvedValue({
+      stdout: `${id}\tdpf-promoter-SUR-OTHER\t2026-07-11 11:41:26 +0000 UTC\texited\tSUR-OTHER\t${"b".repeat(64)}\tother\n`,
+    });
+    const underSettledOwner = vi.fn();
+    expect(await sweepOrphanedPromoterContainers({ project: "owned", run, now, underSettledOwner }, logger())).toEqual({ removed: 0 });
+    expect(run).toHaveBeenCalledTimes(1);
+    expect(underSettledOwner).not.toHaveBeenCalled();
+  });
 });

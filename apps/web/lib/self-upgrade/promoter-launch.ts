@@ -18,6 +18,7 @@ export type GuardedPromoterPorts = {
 const containerId = /^[a-f0-9]{64}$/;
 const bindingLabel = "dpf.promoter-binding";
 const ownerLabel = "dpf.promoter-owner";
+const projectLabel = "dpf.promoter-project";
 const absent = /^Error: No such (?:object|container)(?::|\s*$)/m;
 const pending = (): PromoterResult => ({
   exitCode: PROMOTER_ALREADY_RUNNING_EXIT_CODE,
@@ -28,15 +29,15 @@ const pending = (): PromoterResult => ({
 /** Only the checked admission owner can submit an exact-ID start. Once the
  * daemon acknowledges start, the existing active-row and canonical actor
  * observations fence subsequent requests while its work runs. */
-export async function launchCheckedPromoter(input: { name: string; binding: string; ownerKey?: string; argv: string[]; timeoutMs: number },
+export async function launchCheckedPromoter(input: { name: string; binding: string; ownerKey?: string; project?: string; argv: string[]; timeoutMs: number },
   ports: GuardedPromoterPorts): Promise<PromoterResult> {
-  const { name, binding, ownerKey, argv, timeoutMs } = input;
+  const { name, binding, ownerKey, project, argv, timeoutMs } = input;
   const nameIndex = argv.indexOf("--name");
   if (!/^dpf-promoter-[A-Za-z0-9-]{1,110}$/.test(name) || !containerId.test(binding)
     || argv[0] !== "run" || argv[1] !== "--rm" || nameIndex < 2 || argv[nameIndex + 1] !== name) return pending();
   const deadline = Date.now() + timeoutMs;
   const read = async (target: string) => ports.run(["inspect", "--type", "container", "--format",
-    `{"id":{{json .Id}},"binding":{{json (index .Config.Labels "${bindingLabel}")}},"owner":{{json (index .Config.Labels "${ownerLabel}")}},"startedAt":{{json .State.StartedAt}},"running":{{json .State.Running}}}`, target],
+    `{"id":{{json .Id}},"binding":{{json (index .Config.Labels "${bindingLabel}")}},"owner":{{json (index .Config.Labels "${ownerLabel}")}},"project":{{json (index .Config.Labels "${projectLabel}")}},"startedAt":{{json .State.StartedAt}},"running":{{json .State.Running}}}`, target],
   { timeoutMs: 3_000, maxStdoutBytes: 8192 });
   let id: string | null;
   try {
@@ -46,13 +47,15 @@ export async function launchCheckedPromoter(input: { name: string; binding: stri
       if (inspected.exitCode === 0) {
         const actual: unknown = JSON.parse(inspected.stdout);
         if (!isRecord(actual) || typeof actual.id !== "string" || !containerId.test(actual.id)
-          || actual.binding !== binding || (ownerKey && actual.owner !== ownerKey) || typeof actual.startedAt !== "string") return null;
+          || actual.binding !== binding || (ownerKey && actual.owner !== ownerKey) || (project && actual.project !== project)
+          || typeof actual.startedAt !== "string") return null;
         ownedId = actual.id;
         if (actual.startedAt !== "0001-01-01T00:00:00Z") return Date.parse(actual.startedAt) > 0 ? ownedId : null;
       } else {
         if (!absent.test(inspected.stderr)) return null;
         const labels = ["--label", `${bindingLabel}=${binding}`];
         if (ownerKey) labels.push("--label", `${ownerLabel}=${ownerKey}`);
+        if (project) labels.push("--label", `${projectLabel}=${project}`);
         const created = await ports.run(["create", ...labels, ...argv.slice(2)],
           { timeoutMs: 5_000, maxStdoutBytes: 1024 });
         ownedId = created.stdout.trim();
@@ -90,17 +93,37 @@ export async function launchCheckedPromoter(input: { name: string; binding: stri
 
 const digest = (value: unknown) => createHash("sha256").update(canonicalJson(value)).digest("hex");
 const hash = /^[a-f0-9]{64}$/;
+const imageId = /^sha256:[a-f0-9]{64}$/;
+
+export async function runAdmittedPromoter(
+  params: PromoterParams, owner: PromoterLaunchOwner, reference: string,
+  build: (params: PromoterParams) => Promise<{ args: string[] }>,
+): Promise<PromoterResult> {
+  if (!imageId.test(reference)) {
+    const inspected = await runProcessWithBudget("docker", ["image", "inspect", "--format", "{{.Id}}", reference], {
+      timeoutMs: 5_000, maxStdoutBytes: 1024,
+    }).catch(() => null);
+    if (inspected?.exitCode !== 0 || !imageId.test(inspected.stdout.trim())) {
+      return { ...pending(), exitCode: owner.kind === "runtime-capability" ? 75 : PROMOTER_ALREADY_RUNNING_EXIT_CODE };
+    }
+    reference = inspected.stdout.trim();
+  }
+  const pinned = { ...params, promoterImage: reference };
+  return launchDurablePromoter(pinned, (await build(pinned)).args, owner);
+}
 
 /** The action identity selects its existing row. A request cannot supply a
  * different runtime envelope or restart an already terminal action. */
 export async function launchDurablePromoter(params: PromoterParams, argv: string[], owner: PromoterLaunchOwner): Promise<PromoterResult> {
   const runtime = owner.kind === "runtime-capability";
   const name = params.containerName ?? "";
-  const binding = digest({ owner, target: params.targetSha, image: params.promoterImage ?? "",
+  const project = params.composeProject || "dpf";
+  if (!/^[a-z0-9][a-z0-9_-]{0,99}$/.test(project)) return { ...pending(), exitCode: runtime ? 75 : PROMOTER_ALREADY_RUNNING_EXIT_CODE };
+  const binding = digest({ owner, project, target: params.targetSha, image: params.promoterImage ?? "",
     action: params.runtimeCapabilityTransitionId ?? "", signature: params.runtimeCapabilitySignature ?? "",
     recoveryPoint: params.maintenanceRecoveryPointDigest ?? "" });
   const ownerKey = owner.kind === "self-upgrade" ? owner.runId : owner.transitionId;
-  const result = await launchCheckedPromoter({ name, binding, ownerKey, argv, timeoutMs: resolvePromoterTimeoutMs(params) }, {
+  const result = await launchCheckedPromoter({ name, binding, ownerKey, project, argv, timeoutMs: resolvePromoterTimeoutMs(params) }, {
     run: (args, options) => runProcessWithBudget("docker", args, options),
     underAdmission: async work => {
       const { prisma } = await import("@dpf/db");

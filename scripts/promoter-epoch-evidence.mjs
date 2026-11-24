@@ -490,10 +490,11 @@ export async function readScopeWriterObserverBinding({ stateDir, secret, now = n
 /** Run only in the canonical actuator, with the installation's named owners.
  * @param {Record<string, string|undefined>} env
  * @param {{ fencePreviews: () => Promise<unknown>, observeCiCapacity: () => Promise<unknown>,
- *   reconcileSubstrate: () => Promise<unknown> }} owners
+ *   reconcileSubstrate: () => Promise<unknown>, sweepPromoters: () => Promise<unknown> }} owners
  */
-export async function serveScopeWriterObserver(env, { fencePreviews, observeCiCapacity, reconcileSubstrate }) {
-  const { createScopeWriterObserver, observeActuatorProjectServices, publishActuatorSocket } = await import('./lib/scope-writer-observation.mjs');
+export async function serveScopeWriterObserver(env, { fencePreviews, observeCiCapacity, reconcileSubstrate, sweepPromoters }) {
+  const { createScopeWriterObserver, observeActuatorProjectServices, observeActuatorProjectContainers, publishActuatorSocket } =
+    await import('./lib/scope-writer-observation.mjs');
   const stateDir = '/dpf-state';
   const project = env.PROMOTE_COMPOSE_PROJECT;
   if (process.getuid() !== 0 || typeof project !== 'string' || !/^[a-z0-9][a-z0-9_-]{0,99}$/.test(project))
@@ -515,12 +516,14 @@ export async function serveScopeWriterObserver(env, { fencePreviews, observeCiCa
       return { ...await observeClosedScopeWriterCohort({ launch, retirement, runDocker }), served, retirementDigest };
     },
     observeServices: () => observeActuatorProjectServices(project),
+    observeProjectContainers: () => observeActuatorProjectContainers(project),
     observeCiCapacity,
-    readServiceLogs: async (service, lines) => {
+    readServiceLogs: async (service, lines, timestamps = false) => {
       const ids = (await runDocker(['ps', '--all', '--no-trunc', '--filter', `label=com.docker.compose.project=${project}`,
         '--filter', `label=com.docker.compose.service=${service}`, '--format', '{{.ID}}'], { timeoutMs: 3_000 })).trim();
       if (!/^[a-f0-9]{64}$/.test(ids)) throw new Error('actuator_log_service_unproven');
-      const output = (await runDocker(['logs', '--tail', String(lines), ids], { timeoutMs: 10_000, includeStderr: true })).slice(0, 30_000);
+      const output = (await runDocker(['logs', ...(timestamps ? ['--timestamps'] : []), '--tail', String(lines), ids],
+        { timeoutMs: 10_000, includeStderr: true })).slice(0, 30_000);
       return { output };
     },
     readRetirement: async () => {
@@ -529,6 +532,7 @@ export async function serveScopeWriterObserver(env, { fencePreviews, observeCiCa
     },
     fencePreviews,
     reconcileSubstrate,
+    sweepPromoters,
   });
   process.umask(0o117);
   await publishActuatorSocket(server);

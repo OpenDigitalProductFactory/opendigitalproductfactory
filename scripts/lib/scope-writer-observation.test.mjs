@@ -159,3 +159,29 @@ it('dispatches only bounded logs for a named canonical service', unixOnly, async
     assert.deepEqual(calls, [['sandbox', 50]]);
   });
 });
+
+it('routes fixed project diagnostics and promoter reconciliation without caller targets', unixOnly, async () => {
+  const { createScopeWriterObserver, readActuatorProjectContainers, reconcileActuatorPromoters } = await load();
+  const rows = { containers: [{ ID: 'a'.repeat(64), Service: 'sandbox', State: 'running' }] };
+  let sweeps = 0;
+  await withServer(observe => createScopeWriterObserver({ observe, observeProjectContainers: async () => rows,
+    sweepPromoters: async () => ({ removed: ++sweeps }) }), async () => ({}), async socketPath => {
+    assert.deepEqual(await readActuatorProjectContainers({ socketPath }), rows);
+    assert.equal(await call(socketPath, { method: 'GET', path: '/v1/runtime/project-containers?project=peer' }), 404);
+    assert.equal(await call(socketPath, { method: 'POST', path: '/v1/runtime/sweep-promoters?action=peer' }), 404);
+    assert.deepEqual(await reconcileActuatorPromoters({ socketPath }), { removed: 1 });
+    assert.equal(sweeps, 1);
+  });
+});
+
+it('omits peer containers and private Docker fields from project diagnostics', async () => {
+  const { observeActuatorProjectContainers } = await load();
+  const owner = { 'com.docker.compose.project': 'owned', 'com.docker.compose.service': 'portal' };
+  const portal = { Id: 'a'.repeat(64), Names: ['/owned-portal-1'], State: 'running', Status: 'Up',
+    Labels: { ...owner, private: 'value' }, Mounts: ['/private'], Command: 'private args' };
+  const result = await observeActuatorProjectContainers('owned', async () => [portal,
+    { ...portal, Labels: { ...owner, 'com.docker.compose.project': 'peer' } },
+    { ...portal, Labels: { ...owner, 'com.docker.compose.oneoff': 'True' } },
+  ]);
+  assert.deepEqual(result, { containers: [{ ID: portal.Id, Name: 'owned-portal-1', Service: 'portal', State: 'running', Status: 'Up' }] });
+});

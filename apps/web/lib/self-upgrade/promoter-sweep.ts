@@ -53,24 +53,28 @@ async function underSettledPromoterOwner(owner: string, remove: () => Promise<vo
 
 /** Remove old promoters by immutable Docker ID. Legacy running containers
  * retain their original age gate. Any ownership label requires settled proof. */
-export async function sweepOrphanedPromoterContainers(
-  opts: { maxAgeMs?: number; now?: () => Date; run?: DockerRun; underSettledOwner?: typeof underSettledPromoterOwner } = {},
+export async function sweepOrphanedPromoterContainersAtDaemon(
+  opts: { project?: string; maxAgeMs?: number; now?: () => Date; run?: DockerRun; underSettledOwner?: typeof underSettledPromoterOwner } = {},
   logger: Pick<Console, "log" | "error"> = console,
 ): Promise<{ removed: number } | null> {
   const maxAgeMs = opts.maxAgeMs ?? 30 * 60 * 1000;
   const now = opts.now?.() ?? new Date();
   try {
     const run = opts.run ?? (await defaultDockerRun());
+    const project = opts.project;
+    if (project !== undefined && !/^[a-z0-9][a-z0-9_-]{0,99}$/.test(project)) return null;
     const { stdout } = await run(
       "docker",
-      ["ps", "--all", "--no-trunc", "--filter", "name=dpf-promoter-", "--format",
-        '{{.ID}}\t{{.Names}}\t{{.CreatedAt}}\t{{.State}}\t{{.Label "dpf.promoter-owner"}}\t{{.Label "dpf.promoter-binding"}}'],
+      ["ps", "--all", "--no-trunc", "--filter", "name=dpf-promoter-",
+        ...(project ? ["--filter", `label=dpf.promoter-project=${project}`] : []), "--format",
+        '{{.ID}}\t{{.Names}}\t{{.CreatedAt}}\t{{.State}}\t{{.Label "dpf.promoter-owner"}}\t{{.Label "dpf.promoter-binding"}}\t{{.Label "dpf.promoter-project"}}'],
       { timeout: 15_000 },
     );
     let removed = 0;
     for (const line of stdout.split("\n")) {
-      const [id, name, createdAt, state, owner, binding] = line.split("\t");
+      const [id, name, createdAt, state, owner, binding, installedProject] = line.split("\t");
       if (!/^[a-f0-9]{64}$/.test(id) || !/^dpf-promoter-[A-Za-z0-9-]+$/.test(name)) continue;
+      if (project && (project !== installedProject || !owner || !binding)) continue;
       if (!isPromoterContainerStale(createdAt ?? "", now, maxAgeMs)) continue;
       try {
         const remove = async () => { await run("docker", ["rm", "-f", id], { timeout: 15_000 }); };
@@ -102,4 +106,16 @@ export async function sweepOrphanedPromoterContainers(
     logger.error("[promoter-sweep] failed (non-fatal):", err);
     return null;
   }
+}
+import { readFile } from "node:fs/promises";
+import { hasPrivateActuatorMount, reconcileActuatorPromoters } from "../../../../scripts/lib/scope-writer-observation.mjs";
+
+
+export async function sweepOrphanedPromoterContainers(opts: Parameters<typeof sweepOrphanedPromoterContainersAtDaemon>[0] = {},
+  logger: Pick<Console, "log" | "error"> = console): Promise<{ removed: number } | null> {
+  if (!opts.run && await readFile("/proc/self/mountinfo").then(hasPrivateActuatorMount, () => false)) {
+    try { return await reconcileActuatorPromoters() as { removed: number }; }
+    catch (error) { logger.error("[promoter-sweep] private actuator unavailable:", error); return null; }
+  }
+  return sweepOrphanedPromoterContainersAtDaemon(opts, logger);
 }

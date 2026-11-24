@@ -1,6 +1,7 @@
 import { pathToFileURL } from "node:url";
 import { observeCiCapacityAtDaemon } from "../nonprod/local-ci-capacity-broker";
 import { fenceEndedPreviewRuntimesAtDaemon } from "../nonprod/preview-runtime-fence";
+import { sweepOrphanedPromoterContainersAtDaemon } from "../self-upgrade/promoter-sweep";
 
 async function main() {
   // Use the same immutable promoter closure shipped for this image's
@@ -11,9 +12,12 @@ async function main() {
       fencePreviews: typeof fenceEndedPreviewRuntimesAtDaemon;
       observeCiCapacity: typeof observeCiCapacityAtDaemon;
       reconcileSubstrate: () => Promise<unknown>;
+      sweepPromoters: () => Promise<unknown>;
     }): Promise<void>;
   };
   let previewPass: ReturnType<typeof fenceEndedPreviewRuntimesAtDaemon> | undefined;
+  let promoterPass: ReturnType<typeof sweepOrphanedPromoterContainersAtDaemon> | undefined;
+  const project = process.env.PROMOTE_COMPOSE_PROJECT;
   await serveScopeWriterObserver(process.env, {
     fencePreviews: () => {
       previewPass ??= fenceEndedPreviewRuntimesAtDaemon().finally(() => { previewPass = undefined; });
@@ -22,7 +26,11 @@ async function main() {
     observeCiCapacity: observeCiCapacityAtDaemon,
     reconcileSubstrate: async () => {
       const { reconcileSubstrateAtDaemon } = await import("../queue/functions/substrate-reconciler");
-      return reconcileSubstrateAtDaemon(process.env.PROMOTE_COMPOSE_PROJECT);
+      return reconcileSubstrateAtDaemon(project);
+    },
+    sweepPromoters: () => {
+      promoterPass ??= sweepOrphanedPromoterContainersAtDaemon({ project }).finally(() => { promoterPass = undefined; });
+      return promoterPass;
     },
   });
 }

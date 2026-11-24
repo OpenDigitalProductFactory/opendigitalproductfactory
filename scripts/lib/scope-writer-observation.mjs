@@ -9,10 +9,12 @@ export const SCOPE_WRITER_OBSERVER_SOCKET = '/run/dpf-actuator/scope-observer.so
 const cohortPath = '/v1/scope-writer/cohort';
 const retirementPath = '/v1/scope-writer/retirement';
 const projectServicesPath = '/v1/runtime/project-services';
+const projectContainersPath = '/v1/runtime/project-containers';
 const ciCapacityPath = '/v1/runtime/ci-capacity';
 const serviceLogsPath = '/v1/runtime/service-logs';
 const fencePreviewsPath = '/v1/runtime/fence-ended-previews';
 const reconcileSubstratePath = '/v1/runtime/reconcile-substrate';
+const sweepPromotersPath = '/v1/runtime/sweep-promoters';
 const responseLimit = 8192;
 const serviceLogResponseLimit = 180 * 1024;
 export const ACTUATOR_SERVICE_LOG_NAMES = Object.freeze(['portal', 'sandbox', 'postgres', 'portal-init', 'browser-use']);
@@ -22,22 +24,24 @@ export function hasPrivateActuatorMount(mountinfo) {
   return mountinfo.toString().split('\n').some(line => line.split(' ')[4] === dirname(SCOPE_WRITER_OBSERVER_SOCKET));
 }
 
-/** Serve one read operation. The Unix directory belongs to the actuator.
+/** Serve the fixed local operations. The Unix directory belongs to the actuator.
  * The observer derives scope from host-owned state, never from the request. */
 export function createScopeWriterObserver({ observe, observeServices, observeCiCapacity, readRetirement, fencePreviews,
-  reconcileSubstrate, readServiceLogs }) {
+  reconcileSubstrate, readServiceLogs, observeProjectContainers, sweepPromoters }) {
   const operations = new Map([
     [`GET ${cohortPath}`, observe], [`GET ${projectServicesPath}`, observeServices],
     [`GET ${ciCapacityPath}`, observeCiCapacity],
     [`GET ${retirementPath}`, readRetirement], [`POST ${fencePreviewsPath}`, fencePreviews],
     [`POST ${reconcileSubstratePath}`, reconcileSubstrate],
+    [`GET ${projectContainersPath}`, observeProjectContainers], [`POST ${sweepPromotersPath}`, sweepPromoters],
   ]);
   const server = createServer({ headersTimeout: 2_000, requestTimeout: 2_000, maxHeaderSize: 1024 }, async (req, res) => {
     res.setHeader('Connection', 'close');
     const requestedLog = req.method === 'GET' && req.url?.startsWith(`${serviceLogsPath}?`)
-      ? /^service=([a-z-]+)&tail=([1-9][0-9]{0,2})$/.exec(req.url.slice(serviceLogsPath.length + 1)) : null;
+      ? /^service=([a-z-]+)&tail=([1-9][0-9]{0,2})(&timestamps=1)?$/.exec(req.url.slice(serviceLogsPath.length + 1)) : null;
     const log = requestedLog && readServiceLogs && ACTUATOR_SERVICE_LOG_NAMES.includes(requestedLog[1]) && Number(requestedLog[2]) <= 500
-      ? () => readServiceLogs(requestedLog[1], Number(requestedLog[2])) : null;
+      ? () => requestedLog[3] ? readServiceLogs(requestedLog[1], Number(requestedLog[2]), true)
+        : readServiceLogs(requestedLog[1], Number(requestedLog[2])) : null;
     const call = log ?? operations.get(`${req.method} ${req.url}`);
     if (!call || req.headers['transfer-encoding'] !== undefined
       || (req.headers['content-length'] !== undefined && req.headers['content-length'] !== '0')) {
@@ -46,7 +50,8 @@ export function createScopeWriterObserver({ observe, observeServices, observeCiC
     }
     try {
       const body = JSON.stringify(await call());
-      if (!body || Buffer.byteLength(body) > (log ? serviceLogResponseLimit : responseLimit)) throw unavailable();
+      const limit = log || req.url === projectContainersPath ? serviceLogResponseLimit : responseLimit;
+      if (!body || Buffer.byteLength(body) > limit) throw unavailable();
       res.writeHead(200, { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) }).end(body);
     } catch { res.writeHead(503).end(); }
   });
@@ -125,9 +130,9 @@ export function readActuatorCiCapacity({ socketPath = SCOPE_WRITER_OBSERVER_SOCK
   return requestActuator(ciCapacityPath, socketPath, { timeoutMs: 12_000 });
 }
 
-export async function readActuatorServiceLogs(service, lines, { socketPath = SCOPE_WRITER_OBSERVER_SOCKET } = {}) {
+export async function readActuatorServiceLogs(service, lines, { socketPath = SCOPE_WRITER_OBSERVER_SOCKET, timestamps = false } = {}) {
   if (!ACTUATOR_SERVICE_LOG_NAMES.includes(service) || !Number.isInteger(lines) || lines < 1 || lines > 500) throw unavailable();
-  return requestActuator(`${serviceLogsPath}?service=${service}&tail=${lines}`, socketPath,
+  return requestActuator(`${serviceLogsPath}?service=${service}&tail=${lines}${timestamps ? '&timestamps=1' : ''}`, socketPath,
     { timeoutMs: 15_000, maxBytes: serviceLogResponseLimit });
 }
 
@@ -139,19 +144,40 @@ export function reconcileActuatorSubstrate({ socketPath = SCOPE_WRITER_OBSERVER_
   return requestActuator(reconcileSubstratePath, socketPath, { method: 'POST', timeoutMs: 60_000 });
 }
 
-/** Only the installation binding selects the project. Daemon metadata is
- * projected on the actuator side before it crosses the socket. */
-export async function observeActuatorProjectServices(project, get = dockerSocketGet) {
+export function reconcileActuatorPromoters({ socketPath = SCOPE_WRITER_OBSERVER_SOCKET } = {}) {
+  return requestActuator(sweepPromotersPath, socketPath, { method: 'POST', timeoutMs: 45_000 });
+}
+
+export function readActuatorProjectContainers({ socketPath = SCOPE_WRITER_OBSERVER_SOCKET } = {}) {
+  return requestActuator(projectContainersPath, socketPath, { timeoutMs: 6_000, maxBytes: serviceLogResponseLimit });
+}
+
+async function ownProjectContainers(project, get) {
   if (typeof project !== 'string' || !/^[a-z0-9][a-z0-9_-]{0,99}$/.test(project)) throw unavailable();
   const filters = new URLSearchParams({ all: '1', filters: JSON.stringify({ label: [`com.docker.compose.project=${project}`] }) });
   const containers = await get(`/containers/json?${filters}`);
   if (!Array.isArray(containers) || containers.length > 256) throw unavailable();
+  return containers.filter(item => item?.Labels?.['com.docker.compose.project'] === project
+    && item.Labels['com.docker.compose.oneoff']?.toLowerCase() !== 'true'
+    && /^[a-z0-9][a-z0-9_-]{0,99}$/.test(item.Labels['com.docker.compose.service'] ?? ''));
+}
+
+export async function observeActuatorProjectContainers(project, get = dockerSocketGet) {
+  const containers = (await ownProjectContainers(project, get)).map(item => {
+    const name = Array.isArray(item.Names) ? item.Names[0] : null;
+    if (!/^[a-f0-9]{64}$/.test(item.Id ?? '') || !/^\/[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}$/.test(name ?? '')
+      || typeof item.Status !== 'string' || item.Status.length > 200 || !/^[a-z]{1,32}$/.test(item.State ?? '')) throw unavailable();
+    return { ID: item.Id, Name: name.slice(1), Service: item.Labels['com.docker.compose.service'], State: item.State, Status: item.Status };
+  });
+  return { containers };
+}
+
+/** Only the installation binding selects the project. Daemon metadata is
+ * projected on the actuator side before it crosses the socket. */
+export async function observeActuatorProjectServices(project, get = dockerSocketGet) {
   const services = new Map();
-  for (const item of containers) {
-    const labels = item?.Labels;
-    if (labels?.['com.docker.compose.project'] !== project || labels['com.docker.compose.oneoff'] === 'True') continue;
-    const service = labels['com.docker.compose.service'];
-    if (typeof service !== 'string' || !/^[a-z0-9][a-z0-9_-]{0,99}$/.test(service)) continue;
+  for (const item of await ownProjectContainers(project, get)) {
+    const service = item.Labels['com.docker.compose.service'];
     if (typeof item.State !== 'string' || typeof item.Status !== 'string' || services.has(service)) throw unavailable();
     const status = item.Status.toLowerCase();
     services.set(service, { composePresent: true, healthy: item.State.toLowerCase() === 'running'
