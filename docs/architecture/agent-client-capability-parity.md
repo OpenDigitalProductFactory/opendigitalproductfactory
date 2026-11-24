@@ -50,7 +50,7 @@ The sections after the matrix are the dated prose history. They stay as the reco
 
 <!-- BEGIN GENERATED: client-capability-matrix (node packages/dpf-skill-pack/scripts/gen-client-capabilities.mjs) -->
 
-Rendered from [`packages/dpf-skill-pack/client-capabilities.json`](../../packages/dpf-skill-pack/client-capabilities.json). Edit the profile, never this block. "unproven" means no live probe is recorded, so every rule treats the capability as absent. Server-side controls stay the guarantee; a missing hook is a missing accelerator, shown here so it is not silent.
+Rendered from [`packages/dpf-skill-pack/client-capabilities.json`](../../packages/dpf-skill-pack/client-capabilities.json). Edit the profile, never this block. "unproven" means no live probe is recorded, so every rule treats the capability as absent. Server-side controls stay the guarantee; a missing hook is a missing accelerator, shown here so it is not silent. The `harness` host is a client started by an orchestrating harness such as T3 Code; a session started that way is read under `harness`, not under `cli`, `desktop` or `ide`. A verified host proves only the events listed as firing; its other events stay unproven.
 
 | Client | Verified version | OAuth https | OAuth loopback http | Static headers | Declaration carrier | Plugin scopes | Reload required | Skills load | Hook plane |
 |---|---|---|---|---|---|---|---|---|---|
