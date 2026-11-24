@@ -2612,6 +2612,9 @@
     "scripts/check-no-unclassified-compose-services.mjs": [
       "docs/architecture/capability-driven-runtime-profiles.md"
     ],
+    "scripts/check-no-unfiltered-organization-findfirst.mjs": [
+      "docs/architecture/data-model-stewardship-runbook.md"
+    ],
     "scripts/check-no-unlocalized-ui.mjs": [
       "docs/architecture/localization-runbook.md"
     ],
@@ -3090,6 +3093,9 @@
     "scripts/tts/setup-chatterbox-tts-macos.sh": [
       "docs/install/macos.md",
       "docs/user-guide/operations/self-upgrade.md"
+    ],
+    "scripts/unfiltered-organization-findfirst-baseline.json": [
+      "docs/architecture/data-model-stewardship-runbook.md"
     ],
     "scripts/verify-edge-node-air-gap.sh": [
       "docs/edge-node/security-and-sovereignty.md",
@@ -3702,11 +3708,13 @@
       "scripts/check-no-local-slugify.mjs",
       "scripts/check-no-new-closed-set-strings.mjs",
       "scripts/check-no-new-notactive-conventions.mjs",
+      "scripts/check-no-unfiltered-organization-findfirst.mjs",
       "scripts/lib/canonical-json.mjs",
       "scripts/lib/is-record.mjs",
       "scripts/notactive-conventions-baseline.json",
       "scripts/platform-substrate-baseline.json",
-      "scripts/portal-migrate-boot.sh"
+      "scripts/portal-migrate-boot.sh",
+      "scripts/unfiltered-organization-findfirst-baseline.json"
     ],
     "docs/architecture/decision-vectors.md": [
       "apps/web/lib/decision-perspective/material.ts",
