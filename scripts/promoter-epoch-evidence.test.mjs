@@ -310,6 +310,12 @@ describe('scope writer actuator observations', () => {
     await assert.rejects(imageEvidence.observeClosedScopeWriterCohort({ ...binding, runDocker: async (args, options) =>
       args.includes('name=dpf-promoter') ? 'an-active-actuator' : runDocker(args, options),
     }), /scope_writer_cohort_unproven/);
+    await assert.rejects(imageEvidence.observeClosedScopeWriterCohort({ ...binding, runDocker: async (args, options) =>
+      args.includes('name=dpf-promoter') ? `${'5'.repeat(64)}\tcreated` : runDocker(args, options),
+    }), /scope_writer_cohort_unproven/);
+    await assert.doesNotReject(imageEvidence.observeClosedScopeWriterCohort({ ...binding, runDocker: async (args, options) =>
+      args.includes('name=dpf-promoter') ? `${'5'.repeat(64)}\texited` : runDocker(args, options),
+    }));
     h.fail('compose-promoter');
     await assert.rejects(imageEvidence.observeClosedScopeWriterCohort(binding), /scope_writer_cohort_unproven/);
   });

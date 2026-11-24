@@ -7,7 +7,7 @@ import { canonicalJson } from "@dpf/integration-shared/canonical-json";
 import { isRecord } from "@/lib/shared/coerce";
 import { runProcessWithBudget } from "@/lib/shared/run-process-with-budget";
 import { attachMaintenanceEpochEvidence } from "@/lib/self-upgrade/maintenance-epoch-evidence";
-import { lockRuntimeTransitionAdmission } from "@/lib/platform-runtime/work-admission";
+import { lockCanonicalRuntimeAdmission } from "@/lib/platform-runtime/work-admission";
 import { verifyMaintenanceEpoch, readAttestedMaintenanceRetirement, observeMaintenanceEnvironments, assertNoCanonicalActuators, hasContinuousMaintenanceStarts } from "../../../../scripts/lib/maintenance-epoch-receipt.mjs";
 import { hasPrivateActuatorMount, readScopeWriterObservation, readScopeWriterRetirement } from "../../../../scripts/lib/scope-writer-observation.mjs";
 import { SCOPE_EPOCH_WRITER_PATHS, validateScopeEpochWriterContract, type ScopeEpochWriterContract } from "./scope-epoch-contract";
@@ -198,7 +198,7 @@ export async function assertScopeEpochEnrollmentReady(ports: ScopeEpochEnrollmen
 
 /** Existing durable admission protocol, reused by the qualified scope writer. */
 export async function lockScopeEpochEnrollmentAdmission(tx: CapsuleDb): Promise<void> {
-  const admission = tx as unknown as Partial<Parameters<typeof lockRuntimeTransitionAdmission>[0]> & {
+  const admission = tx as unknown as Partial<Parameters<typeof lockCanonicalRuntimeAdmission>[0]> & {
     selfUpgradeRun?: { findFirst(args: unknown): Promise<unknown> };
     runtimeCapabilityTransition?: { findFirst(args: unknown): Promise<unknown> };
   };
@@ -206,10 +206,9 @@ export async function lockScopeEpochEnrollmentAdmission(tx: CapsuleDb): Promise<
     || !admission.runtimeCapabilityTransition?.findFirst) refuse("transaction-admission-unavailable");
   // Share the producer's table-before-advisory order to avoid inversion with
   // transition settlement. The Workroom row is still taken afterwards.
-  await lockRuntimeTransitionAdmission(admission as Parameters<typeof lockRuntimeTransitionAdmission>[0]);
-  await admission.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('self-upgrade-admission'))`;
+  await lockCanonicalRuntimeAdmission(admission as Parameters<typeof lockCanonicalRuntimeAdmission>[0]);
   if (await admission.runtimeCapabilityTransition.findFirst({ where: { OR: [{ status: { in: ["pending", "applying", "host_applied", "compensating"] } }, { status: "rollback_failed", failure: { path: ["recoveryRequired"], equals: true } }] }, select: { id: true } })
-    || await admission.selfUpgradeRun.findFirst({ where: { status: { in: ["pending", "queued", "running"] } }, select: { id: true } })) refuse("canonical-transition-active");
+    || await admission.selfUpgradeRun.findFirst({ where: { status: { in: ["pending", "queued", "running", "completing"] } }, select: { id: true } })) refuse("canonical-transition-active");
   // A terminal history row is not a global revision. Continuing actuator
   // and actual portal compatibility floors, not a history heuristic, exclude
   // later unaware writers. Active/recovery admissions remain serialized.

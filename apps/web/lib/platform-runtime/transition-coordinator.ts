@@ -411,6 +411,7 @@ export async function coordinateRuntimeCapabilityTransition(
   const encodedEnvelope = Buffer.from(JSON.stringify(envelope)).toString("base64url");
   try { result = await deps.runPromoter({
     ...deps.promoterParams,
+    launchOwner: { kind: "runtime-capability", transitionId: request.transitionId },
     runtimeCapabilityTransitionId: request.transitionId,
     containerName: `dpf-promoter-${request.transitionId}`,
     timeoutMs: 10 * 60 * 1000,
@@ -472,7 +473,12 @@ export async function coordinateRuntimeCapabilityTransition(
         if (!deps.receipts.assertCompensationOwnership) throw new Error("runtime_transition_compensation_ownership_unavailable");
         await deps.receipts.assertCompensationOwnership(request.transitionId);
       }
-      const rollback = await deps.runPromoter({ ...deps.promoterParams, runtimeCapabilityTransitionId: rollbackTransitionId, containerName: `dpf-promoter-${rollbackTransitionId}`, timeoutMs: 600_000, runtimeCapabilityEnvelope: Buffer.from(JSON.stringify(rollbackEnvelope)).toString("base64url"), runtimeCapabilitySignature: compensation.envelopeSignature, runtimeCapabilitySecretFileHostPath: deps.protocolSecretFileHostPath });
+      const rollback = await deps.runPromoter({ ...deps.promoterParams,
+        launchOwner: { kind: "runtime-capability", transitionId: request.transitionId },
+        runtimeCapabilityTransitionId: rollbackTransitionId, containerName: `dpf-promoter-${rollbackTransitionId}`,
+        timeoutMs: 600_000, runtimeCapabilityEnvelope: Buffer.from(JSON.stringify(rollbackEnvelope)).toString("base64url"),
+        runtimeCapabilitySignature: compensation.envelopeSignature, runtimeCapabilitySecretFileHostPath: deps.protocolSecretFileHostPath });
+      if (rollback.exitCode === 75) return { status: "transition_in_progress" as const };
       if (rollback.exitCode !== 0) throw new Error("rollback_host_apply_failed");
       const receipt = await deps.readHostReceipt(rollbackTransitionId);
       if (verifyTransitionReceipt(receipt, deps.protocolSecret, rollbackEnvelope, deps.now?.() ?? Date.now()) !== "applied") throw new Error("rollback_host_receipt_not_applied");

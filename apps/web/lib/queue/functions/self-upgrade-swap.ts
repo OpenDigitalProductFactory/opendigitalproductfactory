@@ -211,6 +211,7 @@ export async function finishSelfUpgrade(ctx: SelfUpgradeSwapContext): Promise<Re
       installStateMigrationEnvelope: migrationHandoff ? Buffer.from(JSON.stringify(migrationHandoff.envelope)).toString("base64url") : undefined,
       installStateMigrationSignature: migrationHandoff?.signature,
       installStateMigrationRunId: migrationHandoff?.envelope.runId,
+      ...(migrationHandoff && resolvedPromoterDigest && !dryRun ? { launchOwner: { kind: "self-upgrade", runId } as const } : {}),
       maintenanceRecoveryPointDigest: createHash("sha256").update(canonicalJson(recoveryPoint)).digest("hex"),
       installStateMigrationHandoff: migrationHandoff,
       // Deterministic name so a stalled build can be force-removed by name on

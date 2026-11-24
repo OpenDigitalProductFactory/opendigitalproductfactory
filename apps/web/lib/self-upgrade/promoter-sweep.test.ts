@@ -65,8 +65,8 @@ describe("sweepOrphanedPromoterContainers", () => {
       if (args[0] === "ps") {
         return {
           stdout:
-            "dpf-promoter-stale\t2026-07-11 11:41:26 +0000 UTC\n" + // ~39 min → stale
-            "dpf-promoter-live\t2026-07-11 12:10:00 +0000 UTC\n", // ~10 min → keep
+            `${"a".repeat(64)}\tdpf-promoter-stale\t2026-07-11 11:41:26 +0000 UTC\trunning\n` +
+            `${"b".repeat(64)}\tdpf-promoter-live\t2026-07-11 12:10:00 +0000 UTC\trunning\n`,
         };
       }
       return { stdout: "" };
@@ -79,6 +79,25 @@ describe("sweepOrphanedPromoterContainers", () => {
 
     expect(result).toEqual({ removed: 1 });
     const rmCalls = calls.filter((a) => a[0] === "rm");
-    expect(rmCalls).toEqual([["rm", "-f", "dpf-promoter-stale"]]);
+    expect(rmCalls).toEqual([["rm", "-f", "a".repeat(64)]]);
+  });
+
+  it("keeps a stale guarded reservation while its owner is active", async () => {
+    const calls: string[][] = [];
+    const run: DockerRun = async (_file, args) => {
+      calls.push(args);
+      return { stdout: args[0] === "ps"
+        ? `${"a".repeat(64)}\tdpf-promoter-SUR-ACTIVE\t2026-07-11 11:41:26 +0000 UTC\tcreated\tSUR-ACTIVE\t${"b".repeat(64)}\n` +
+          `${"c".repeat(64)}\tdpf-promoter-SUR-ENDED\t2026-07-11 11:41:26 +0000 UTC\texited\tSUR-ENDED\t${"d".repeat(64)}\n`
+        : "" };
+    };
+    const underSettledOwner = vi.fn(async (owner: string, remove: () => Promise<void>) => {
+      if (owner !== "SUR-ENDED") return false;
+      await remove();
+      return true;
+    });
+    expect(await sweepOrphanedPromoterContainers({ run, now, underSettledOwner }, logger())).toEqual({ removed: 1 });
+    expect(underSettledOwner).toHaveBeenCalledTimes(2);
+    expect(calls.filter(args => args[0] === "rm")).toEqual([["rm", "-f", "c".repeat(64)]]);
   });
 });

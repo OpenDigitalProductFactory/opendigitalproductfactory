@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
+import type { PromoterLaunchOwner } from "./promoter-launch";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 import type { SelfUpgradeHostIdentity } from "./config";
 import type { InstallStateMigrationHandoff } from "./preflight";
@@ -173,6 +174,8 @@ export type PromoterParams = {
    * targeted for cleanup (SUR-756751D1). Convention: `dpf-promoter-<runId>`.
    */
   containerName?: string;
+  /** Canonical durable owner for launches that can change the live runtime. */
+  launchOwner?: PromoterLaunchOwner;
   /**
    * BI-F9EE05E5 plan item 0: "build" runs promote.sh's prepare and image build
    * only (PROMOTE_PHASE=build), before the drain, so admission is not closed
@@ -762,6 +765,23 @@ import {
 } from "@/lib/shared/run-process-with-budget";
 
 export async function runPromoter(params: PromoterParams): Promise<PromoterResult> {
+  if (params.launchOwner && !params.runtimeTransitionAuthorityOperation && !params.dryRun && params.phase !== "build") {
+    const owner = params.launchOwner;
+    const reference = params.promoterImage || DEFAULT_PROMOTER_IMAGE;
+    if (!IMAGE_CONFIG_DIGEST.test(reference)) {
+      const image = await runProcessWithBudget("docker", ["image", "inspect", "--format", "{{.Id}}", reference], {
+        timeoutMs: 5_000, maxStdoutBytes: 1024,
+      }).catch(() => null);
+      if (image?.exitCode !== 0 || !IMAGE_CONFIG_DIGEST.test(image.stdout.trim())) {
+        return { exitCode: owner.kind === "runtime-capability" ? 75 : PROMOTER_ALREADY_RUNNING_EXIT_CODE,
+          stdout: "", stderr: "The approved promoter image is unavailable for immutable launch." };
+      }
+      params = { ...params, promoterImage: image.stdout.trim() };
+    }
+    const { args } = await buildCompatiblePromoterCommand(params, buildPromoterCommand, createPromoterDockerRunner(params));
+    const { launchDurablePromoter } = await import("./promoter-launch");
+    return launchDurablePromoter(params, args, owner);
+  }
   const { command, args } = await buildCompatiblePromoterCommand(params, buildPromoterCommand, createPromoterDockerRunner(params));
   // Idempotency guard (SUR-E2BF265E). The container name is deterministic
   // (`dpf-promoter-<runId>`), so a concurrent or retried dispatch of the SAME

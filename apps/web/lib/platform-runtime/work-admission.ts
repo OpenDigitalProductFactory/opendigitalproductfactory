@@ -46,6 +46,11 @@ export async function lockRuntimeTransitionAdmission(tx: Pick<AdmissionTx, "$exe
   fencedTransactions.add(tx);
 }
 
+export async function lockCanonicalRuntimeAdmission(tx: Pick<AdmissionTx, "$executeRaw" | "$queryRaw">): Promise<void> {
+  await lockRuntimeTransitionAdmission(tx);
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('self-upgrade-admission'))`;
+}
+
 /**
  * Admission half of the transition/drain protocol. Call inside the same DB
  * transaction that creates the guarded row. The shared transaction lock makes

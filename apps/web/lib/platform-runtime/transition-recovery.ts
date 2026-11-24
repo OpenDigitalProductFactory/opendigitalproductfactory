@@ -44,6 +44,7 @@ function promoterParams(row: RuntimeTransitionReconcileRow, envelope: RuntimeTra
     targetSha: identity?.sourceSha ?? process.env.DEPLOYED_SHA ?? "runtime-capability-transition", ...(identity ? { promoterImage: identity.promoterDigest } : {}), backupPath: "/backups/runtime-capability-transition",
     healthUrl: `${process.env.APP_URL ?? "http://localhost:3000"}/api/health`,
     runtimeCapabilityTransitionId: envelope.transitionId,
+    launchOwner: { kind: "runtime-capability" as const, transitionId: row.transitionId },
     runtimeCapabilityEnvelope: Buffer.from(JSON.stringify(envelope)).toString("base64url"), runtimeCapabilitySignature: signature,
     containerName: `dpf-promoter-${envelope.transitionId}`, timeoutMs: 600_000,
   };
@@ -86,6 +87,7 @@ export async function createProductionRuntimeTransitionHost() {
       if (!receipt) {
         if (Date.parse(reverse.expiresAt) < Date.now()) throw new Error("runtime_transition_compensation_expired");
         const result = await runPromoter(promoterParams(row, reverse, packet.envelopeSignature));
+        if (result.exitCode === 75) return;
         if (result.exitCode !== 0) throw new Error("runtime_transition_compensation_failed");
         receipt = await readReceipt(reverse.transitionId);
       }

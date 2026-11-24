@@ -104,7 +104,7 @@ export function readAttestedMaintenanceRetirement(observation, expected) {
 }
 
 
-const INSPECT_TEMPLATE = '{"Id":{{json .Id}},"State":{"Running":{{json .State.Running}},"StartedAt":{{json .State.StartedAt}}},"Config":{"Labels":{{json .Config.Labels}}}}';
+const INSPECT_TEMPLATE = '{"Id":{{json .Id}},"State":{"Running":{{json .State.Running}},"Status":{{json .State.Status}},"StartedAt":{{json .State.StartedAt}}},"Config":{"Labels":{{json .Config.Labels}}}}';
 const observationInvalid = () => { throw new Error("maintenance_epoch_observation_unavailable"); };
 
 /** Read-only observer. It never starts, stops, signals or removes a container. */
@@ -133,7 +133,7 @@ export async function observeMaintenanceEnvironments({ project, runDocker }) {
     const id = projectIds[index], labels = inspected?.Config?.Labels;
     if (inspected?.Id !== id || labels?.['com.docker.compose.project'] !== project) observationInvalid();
     const service = labels['com.docker.compose.service'];
-    if (service === 'promoter' && inspected.State?.Running !== false) activeProjectPromoter = true;
+    if (service === 'promoter' && !['exited', 'dead'].includes(inspected.State?.Status)) activeProjectPromoter = true;
     if (!SERVICES.includes(service)) continue;
     if (environments[service] || inspected.State?.Running !== true) observationInvalid();
     environments[service] = { id, startedAt: inspected.State.StartedAt };
@@ -148,6 +148,9 @@ export async function observeMaintenanceEnvironments({ project, runDocker }) {
 /** Existing canonical launchers name rollback-capable actuators dpf-promoter-*.
  * Final portal/sandbox retirement alone does not prove those actuators exited. */
 export async function assertNoCanonicalActuators({ runDocker }) {
-  const output = await runDocker(['ps', '--no-trunc', '--filter', 'name=dpf-promoter', '--format', '{{.ID}}']);
-  if (output.trim()) observationInvalid();
+  const output = await runDocker(['ps', '--all', '--no-trunc', '--filter', 'name=dpf-promoter', '--format', '{{.ID}}\t{{.State}}']);
+  const rows = output.trim().split(/\r?\n/).filter(Boolean);
+  // A created container may represent a lost start reply. Preserve the hold
+  // until a verified terminal exit or exact removal closes that reservation.
+  if (rows.length > 256 || rows.some(row => !/^[a-f0-9]{64}\t(?:exited|dead)$/.test(row))) observationInvalid();
 }

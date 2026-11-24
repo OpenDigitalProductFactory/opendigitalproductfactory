@@ -95,7 +95,7 @@ function models(tx: Raw): CapsuleDb {
     // Scope admission reads through this real transaction client below.
     ...({ selfUpgradeRun: { findFirst: async (args: unknown) => {
       expect(rec(args).where).toHaveProperty("status");
-      return (await tx.$queryRaw`SELECT id FROM "SelfUpgradeRun" WHERE status IN ('pending','queued','running') LIMIT 1` as Array<{ id: string }>)[0] ?? null;
+      return (await tx.$queryRaw`SELECT id FROM "SelfUpgradeRun" WHERE status IN ('pending','queued','running','completing') LIMIT 1` as Array<{ id: string }>)[0] ?? null;
     } }, $executeRaw: tx.$executeRaw.bind(tx) } as object),
   };
 }
