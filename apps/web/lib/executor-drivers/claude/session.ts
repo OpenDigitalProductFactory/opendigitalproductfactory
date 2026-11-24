@@ -78,13 +78,16 @@ export function createClaudeSessionDriver(deps: {
       const credential = claudeCredential(await deps.auth(config.account));
       const sessionId = config.resumeThreadId && SESSION_ID.test(config.resumeThreadId) ? config.resumeThreadId : randomUUID();
       const mcpConfig = { mcpServers: { dpf: { type: "http", url: config.mcp.url, headers: { Authorization: `Bearer ${config.mcp.bearerToken}` } } } };
+      const flags = claudeSessionFlags(config, sessionId);
       const proc = deps.launch({
         script: CLAUDE_SESSION_SCRIPT,
         cwd: config.cwd,
+        actuatorOwner: { provider: "claude", capsuleId: config.capsuleId, token: config.mcp.bearerToken, cwd: config.cwd,
+          flags, credential: { name: credential.envVar, value: credential.value } },
         env: {
           DPF_RUNTIME_DIR: `${config.cwd}/.dpf-runtime/${config.capsuleId}`,
           DPF_MCP_CONFIG: JSON.stringify(mcpConfig),
-          DPF_SESSION_FLAGS: claudeSessionFlags(config, sessionId),
+          DPF_SESSION_FLAGS: flags,
           [credential.envVar]: credential.value,
         },
       });

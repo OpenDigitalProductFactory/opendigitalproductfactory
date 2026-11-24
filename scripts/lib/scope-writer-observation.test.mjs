@@ -220,3 +220,60 @@ it('projects the running portal image from the bound project and refuses ambigui
     await assert.rejects(observeActuatorPortalImage('owned', async () => rows), { message: 'scope_writer_observation_unavailable' });
   }
 });
+
+it('admits only the isolated canonical sandbox for Docker-side operations', async () => {
+  const { observeActuatorSandbox } = await load();
+  const id = 'c'.repeat(64);
+  const labels = { 'com.docker.compose.project': 'owned', 'com.docker.compose.service': 'sandbox' };
+  const sandbox = {
+    Id: id, Image: `sha256:${'d'.repeat(64)}`, Name: '/owned-sandbox-1', Config: { Labels: labels,
+      Env: ['PATH=/usr/bin', 'DPF_ENVIRONMENT=sandbox', 'DATABASE_URL=postgresql://dpf:dpf_sandbox@sandbox-postgres:5432/dpf'] },
+    HostConfig: { Privileged: false, NetworkMode: 'owned_sandbox-runtime', PidMode: '', IpcMode: 'private', CgroupnsMode: 'private' },
+    NetworkSettings: { Networks: { 'owned_sandbox-runtime': { NetworkID: 'e'.repeat(64) } } },
+    Mounts: [{ Type: 'volume', Name: 'owned_sandbox_workspace', Propagation: '', Destination: '/workspace', RW: true }],
+    State: { Running: true },
+  };
+  const observe = (actual, volumeOptions = {}) => observeActuatorSandbox('owned', async path => {
+    if (path.startsWith('/containers/json?')) return [{ Id: id, Labels: labels }];
+    if (path === `/containers/${id}/json`) return actual;
+    if (path === '/volumes/owned_sandbox_workspace') return { Name: 'owned_sandbox_workspace', Driver: 'local', Options: volumeOptions,
+      Labels: { 'com.docker.compose.project': 'owned', 'com.docker.compose.volume': 'sandbox_workspace' } };
+    throw new Error('unexpected lookup');
+  }, id);
+  assert.deepEqual(await observe(sandbox), { containerId: id, name: 'owned-sandbox-1', image: sandbox.Image, running: true });
+  for (const changed of [
+    { Id: '9'.repeat(64) },
+    { HostConfig: { ...sandbox.HostConfig, Privileged: true } },
+    { HostConfig: { ...sandbox.HostConfig, NetworkMode: 'owned_default' } },
+    { HostConfig: { ...sandbox.HostConfig, PidMode: 'host' } },
+    { Config: { ...sandbox.Config, Env: [...sandbox.Config.Env, 'AUTH_SECRET=wrong'] } },
+    { Config: { ...sandbox.Config, Env: sandbox.Config.Env.map(value => value.replace('sandbox-postgres', 'postgres')) } },
+    { Mounts: [...sandbox.Mounts, { Type: 'bind', Source: '/var/run/docker.sock', Destination: '/local.sock', RW: false }] },
+    { NetworkSettings: { Networks: { ...sandbox.NetworkSettings.Networks, 'owned_default': { NetworkID: '9'.repeat(64) } } } },
+  ]) await assert.rejects(observe({ ...sandbox, ...changed }), { message: 'scope_writer_observation_unavailable' });
+  await assert.rejects(observe(sandbox, { type: 'none', o: 'bind', device: '/untrusted' }), { message: 'scope_writer_observation_unavailable' });
+});
+
+it('binds a bidirectional runtime stream before forwarding input and kills it on disconnect', unixOnly, async () => {
+  const { createScopeWriterObserver, openActuatorRuntimeSession } = await load();
+  const starts = [], input = [], kills = [];
+  let disconnected;
+  const disconnect = new Promise(resolve => { disconnected = resolve; });
+  let out;
+  await withServer(observe => createScopeWriterObserver({ observe, openRuntimeSession: async owner => {
+    starts.push(owner);
+    return { write: data => { input.push(data); out(Buffer.from(data)); }, onData: fn => { out = fn; },
+      onStderr: () => {}, onClose: () => {}, end: () => {}, kill: () => { kills.push(true); disconnected(); } };
+  } }), async () => ({}), async socketPath => {
+    const owner = { provider: 'codex', capsuleId: 'WC-RUNTIME', token: 'fixture-only', cwd: '/workspace' };
+    const stream = openActuatorRuntimeSession(owner, { socketPath });
+    const received = new Promise(resolve => stream.onData(resolve));
+    stream.write('ready\n');
+    assert.equal(String(await received), 'ready\n');
+    stream.kill();
+    await disconnect;
+    assert.deepEqual(starts, [owner]);
+    assert.deepEqual(input.map(String), ['ready\n']);
+    assert.equal(kills.length, 1);
+  });
+});

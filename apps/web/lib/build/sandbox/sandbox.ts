@@ -5,6 +5,7 @@
 import { lazyChildProcess, lazyExec } from "@/lib/shared/lazy-node";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 import { ensureGlobalSafeDirectoryCommand } from "@/lib/shared/git-safe-directory";
+import { readActuatorSandbox, readActuatorServiceLogs, usesPrivateActuator } from "../../../../../scripts/lib/scope-writer-observation.mjs";
 
 const exec = lazyExec();
 
@@ -601,6 +602,13 @@ server.listen(3000, '0.0.0.0', () => console.log('Preview server on :3000'));
 }
 
 export async function getSandboxLogs(containerId: string, tail: number = 50): Promise<string> {
+  if (await usesPrivateActuator()) {
+    const selected = await readActuatorSandbox() as { containerId?: string; name?: string };
+    if (containerId !== selected.containerId && containerId !== selected.name) throw new Error("sandbox_target_unproven");
+    const { output } = await readActuatorServiceLogs("sandbox", tail) as { output?: unknown };
+    if (typeof output !== "string") throw new Error("sandbox_logs_unavailable");
+    return output;
+  }
   const { stdout } = await exec(`docker logs --tail ${tail} ${containerId}`);
   return stdout;
 }
@@ -664,6 +672,10 @@ export async function destroyFullSandboxStack(
 
 export async function isSandboxRunning(containerId: string): Promise<boolean> {
   try {
+    if (await usesPrivateActuator()) {
+      const selected = await readActuatorSandbox() as { containerId?: string; name?: string; running?: boolean };
+      return (containerId === selected.containerId || containerId === selected.name) && selected.running === true;
+    }
     const { stdout } = await exec(`docker inspect -f "{{.State.Running}}" ${containerId}`);
     return stdout.trim() === "true";
   } catch {

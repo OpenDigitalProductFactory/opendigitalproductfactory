@@ -3,6 +3,7 @@ import { observeCiCapacityAtDaemon } from "../nonprod/local-ci-capacity-broker";
 import { fenceEndedPreviewRuntimesAtDaemon } from "../nonprod/preview-runtime-fence";
 import { sweepOrphanedPromoterContainersAtDaemon } from "../self-upgrade/promoter-sweep";
 import { createDoctoolsActuator } from "../documents/conversion/doctools-actuator";
+import { createSandboxSessionActuator } from "../workroom-runtime/sandbox-session-actuator";
 
 async function main() {
   // Use the same immutable promoter closure shipped for this image's
@@ -15,6 +16,7 @@ async function main() {
       reconcileSubstrate: () => Promise<unknown>;
       sweepPromoters: () => Promise<unknown>;
       doctools: ReturnType<typeof createDoctoolsActuator>;
+      openRuntimeSession: ReturnType<typeof createSandboxSessionActuator>;
     }): Promise<void>;
   };
   let previewPass: ReturnType<typeof fenceEndedPreviewRuntimesAtDaemon> | undefined;
@@ -36,6 +38,7 @@ async function main() {
       return promoterPass;
     },
     doctools: createDoctoolsActuator(project),
+    openRuntimeSession: createSandboxSessionActuator(),
   });
 }
 

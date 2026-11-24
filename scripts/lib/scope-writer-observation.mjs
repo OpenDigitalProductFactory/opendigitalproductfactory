@@ -1,8 +1,9 @@
 import { createServer, request } from 'node:http';
 import { randomBytes } from 'node:crypto';
-import { once } from 'node:events';
+import { EventEmitter, once } from 'node:events';
 import { chmod, chown, lstat, readFile, rename } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
+import { StringDecoder } from 'node:string_decoder';
 import { dockerSocketGet } from './docker-socket.mjs';
 
 export const SCOPE_WRITER_OBSERVER_SOCKET = '/run/dpf-actuator/scope-observer.sock';
@@ -11,6 +12,7 @@ const retirementPath = '/v1/scope-writer/retirement';
 const projectServicesPath = '/v1/runtime/project-services';
 const projectContainersPath = '/v1/runtime/project-containers';
 const portalImagePath = '/v1/runtime/portal-image';
+const sandboxPath = '/v1/runtime/sandbox';
 const ciCapacityPath = '/v1/runtime/ci-capacity';
 const serviceLogsPath = '/v1/runtime/service-logs';
 const fencePreviewsPath = '/v1/runtime/fence-ended-previews';
@@ -18,6 +20,10 @@ const reconcileSubstratePath = '/v1/runtime/reconcile-substrate';
 const sweepPromotersPath = '/v1/runtime/sweep-promoters';
 const doctoolsPath = '/v1/runtime/doctools/';
 const doctoolsHealthPath = '/v1/runtime/doctools-health';
+const runtimeSessionPath = '/v1/runtime/workroom-session';
+const runtimeStreamProtocol = 'dpf-workroom-stream';
+const frameLimit = 256 * 1024;
+const pendingStreamLimit = 1024 * 1024;
 const responseLimit = 8192;
 const serviceLogResponseLimit = 180 * 1024;
 export const ACTUATOR_SERVICE_LOG_NAMES = Object.freeze(['portal', 'sandbox', 'postgres', 'portal-init', 'browser-use']);
@@ -56,7 +62,8 @@ async function readBoundedStream(stream, bytes) {
 /** Serve the fixed local operations. The Unix directory belongs to the actuator.
  * The observer derives scope from host-owned state, never from the request. */
 export function createScopeWriterObserver({ observe, observeServices, observeCiCapacity, readRetirement, fencePreviews,
-  reconcileSubstrate, readServiceLogs, observeProjectContainers, observePortalImage, sweepPromoters, doctools }) {
+  reconcileSubstrate, readServiceLogs, observeProjectContainers, observePortalImage, observeSandbox, sweepPromoters,
+  doctools, openRuntimeSession }) {
   const operations = new Map([
     [`GET ${cohortPath}`, observe], [`GET ${projectServicesPath}`, observeServices],
     [`GET ${ciCapacityPath}`, observeCiCapacity],
@@ -64,6 +71,7 @@ export function createScopeWriterObserver({ observe, observeServices, observeCiC
     [`POST ${reconcileSubstratePath}`, reconcileSubstrate],
     [`GET ${projectContainersPath}`, observeProjectContainers], [`POST ${sweepPromotersPath}`, sweepPromoters],
     [`GET ${portalImagePath}`, observePortalImage],
+    [`GET ${sandboxPath}`, observeSandbox],
     [`GET ${doctoolsHealthPath}`, doctools?.health],
   ]);
   let doctoolsInFlight = 0;
@@ -111,8 +119,150 @@ export function createScopeWriterObserver({ observe, observeServices, observeCiC
       res.writeHead(200, { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) }).end(body);
     } catch { res.writeHead(503).end(); }
   });
+  bindRuntimeSessionStreams(server, openRuntimeSession);
   server.maxConnections = 8;
   return server;
+}
+
+function readFrames(socket, head, receive) {
+  const decoder = new StringDecoder('utf8');
+  let pending = '';
+  const read = chunk => {
+    pending += decoder.write(chunk);
+    try {
+      let end;
+      while ((end = pending.indexOf('\n')) >= 0) {
+        if (Buffer.byteLength(pending.slice(0, end)) > frameLimit) throw unavailable();
+        const frame = JSON.parse(pending.slice(0, end));
+        pending = pending.slice(end + 1);
+        if (!Array.isArray(frame) || frame.length !== 2 || typeof frame[0] !== 'string') throw unavailable();
+        receive(frame);
+      }
+      if (Buffer.byteLength(pending) > frameLimit) throw unavailable();
+    } catch { socket.destroy(); }
+  };
+  socket.on('data', read);
+  if (head.length) read(head);
+}
+
+function writeFrame(socket, frame) {
+  const bytes = `${JSON.stringify(frame)}\n`;
+  const length = Buffer.byteLength(bytes);
+  if (length > frameLimit || socket.writableLength + length > pendingStreamLimit) throw unavailable();
+  socket.write(bytes);
+}
+
+function writeStreamBytes(socket, direction, data) {
+  const bytes = Buffer.isBuffer(data) ? data : Buffer.from(data, 'utf8');
+  for (let offset = 0; offset < bytes.length; offset += 65536) {
+    writeFrame(socket, [direction, bytes.subarray(offset, offset + 65536).toString('base64')]);
+  }
+}
+
+function streamBytes(payload) {
+  if (typeof payload !== 'string' || payload.length > 87384 || !/^[a-zA-Z0-9+/]*={0,2}$/.test(payload)) throw unavailable();
+  return Buffer.from(payload, 'base64');
+}
+
+function bindRuntimeSessionStreams(server, open) {
+  let sessions = 0;
+  server.on('upgrade', (req, socket, head) => {
+    if (!open || req.url !== runtimeSessionPath || req.method !== 'POST' || req.headers.upgrade !== runtimeStreamProtocol
+      || (req.headers['content-length'] !== undefined && req.headers['content-length'] !== '0')
+      || req.headers['transfer-encoding'] || sessions >= 4) {
+      socket.end('HTTP/1.1 404 Not Found\r\nConnection: close\r\nContent-Length: 0\r\n\r\n');
+      return;
+    }
+    sessions++;
+    let requested = false, process;
+    const handshake = setTimeout(() => socket.destroy(), 15_000);
+    const lifetime = setTimeout(() => socket.destroy(), 24 * 60 * 60_000);
+    socket.on('error', () => socket.destroy());
+    socket.once('end', () => socket.destroy());
+    socket.once('close', () => { sessions--; clearTimeout(handshake); clearTimeout(lifetime); process?.kill(); });
+    socket.write(`HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: ${runtimeStreamProtocol}\r\n\r\n`);
+    readFrames(socket, head, ([kind, payload]) => {
+      if (!requested && kind === 'open') {
+        requested = true;
+        void Promise.resolve().then(() => open(payload)).then(child => {
+          if (socket.destroyed) { child.kill(); return; }
+          process = child;
+          const send = (kind, bytes) => { try { writeStreamBytes(socket, kind, bytes); } catch { socket.destroy(); } };
+          child.onData(bytes => send('stdout', bytes));
+          child.onStderr(bytes => send('stderr', bytes));
+          child.onClose(code => {
+            try { writeFrame(socket, ['exit', code]); socket.end(); } catch { socket.destroy(); }
+          });
+          clearTimeout(handshake);
+          writeFrame(socket, ['ready', null]);
+        }).catch(() => socket.destroy());
+        return;
+      }
+      if (process && kind === 'stdin') { process.write(streamBytes(payload)); return; }
+      if (process && kind === 'end' && payload === null) { process.end(); return; }
+      socket.destroy();
+    });
+  });
+}
+
+/** The transport sends an owner request and STDIO only. The actuator chooses
+ * and launches the provider recipe before accepting the client's first input. */
+export function openActuatorRuntimeSession(owner, { socketPath = SCOPE_WRITER_OBSERVER_SOCKET } = {}) {
+  const events = new EventEmitter();
+  const pending = [];
+  let buffered = 0, socket, closed = false, ready = false;
+  const stop = (code = null) => {
+    if (closed) return;
+    closed = true;
+    socket?.destroy();
+    pending.length = 0;
+    clearTimeout(handshake);
+    events.emit('close', code);
+  };
+  const handshake = setTimeout(() => stop(), 16_000);
+  const send = (kind, bytes) => {
+    if (closed) return;
+    if (!ready) {
+      buffered += bytes?.length ?? 1;
+      if (buffered > pendingStreamLimit) { stop(); return; }
+      pending.push([kind, bytes]);
+      return;
+    }
+    try {
+      if (kind === 'stdin') writeStreamBytes(socket, kind, bytes);
+      else writeFrame(socket, [kind, null]);
+    } catch { stop(); }
+  };
+  void verifyActuatorSocket(socketPath).then(() => {
+    if (closed) return;
+    const req = request({ socketPath, method: 'POST', path: runtimeSessionPath, agent: false,
+      headers: { Connection: 'Upgrade', Upgrade: runtimeStreamProtocol } });
+    req.on('response', res => { res.resume(); stop(); });
+    req.on('error', () => stop());
+    req.on('upgrade', (res, connection, head) => {
+      socket = connection;
+      if (closed || res.headers.upgrade !== runtimeStreamProtocol) { socket.destroy(); stop(); return; }
+      socket.once('close', () => stop());
+      socket.on('error', () => stop());
+      try { writeFrame(socket, ['open', owner]); } catch { stop(); return; }
+      readFrames(socket, head, ([kind, payload]) => {
+        if (kind === 'ready' && !ready && payload === null) {
+          ready = true;
+          clearTimeout(handshake);
+          for (const [kind, bytes] of pending) send(kind, bytes);
+          pending.length = 0;
+        } else if (ready && (kind === 'stdout' || kind === 'stderr')) events.emit(kind, streamBytes(payload));
+        else if (ready && kind === 'exit' && (payload === null || Number.isInteger(payload))) stop(payload);
+        else throw unavailable();
+      });
+    });
+    req.end();
+  }).catch(() => stop());
+  return {
+    write: line => send('stdin', Buffer.from(line, 'utf8')), onData: listener => { events.on('stdout', listener); },
+    onStderr: listener => { events.on('stderr', listener); }, onClose: listener => { events.on('close', listener); },
+    end: () => send('end', null), kill: () => stop(),
+  };
 }
 
 /** Bind a new inode in the actuator-owned directory before publishing its
@@ -216,6 +366,10 @@ export function readActuatorPortalImage({ socketPath = SCOPE_WRITER_OBSERVER_SOC
   return requestActuator(portalImagePath, socketPath, { timeoutMs: 6_000 });
 }
 
+export function readActuatorSandbox({ socketPath = SCOPE_WRITER_OBSERVER_SOCKET } = {}) {
+  return requestActuator(sandboxPath, socketPath, { timeoutMs: 12_000 });
+}
+
 export function readActuatorDoctoolsHealth({ socketPath = SCOPE_WRITER_OBSERVER_SOCKET } = {}) {
   return requestActuator(doctoolsHealthPath, socketPath, { timeoutMs: 12_000 });
 }
@@ -266,6 +420,48 @@ export async function observeActuatorPortalImage(project, get = dockerSocketGet)
   if (portals.length !== 1 || portal.State !== 'running' || !/^[a-f0-9]{64}$/.test(portal.Id ?? '')
     || !/^sha256:[a-f0-9]{64}$/.test(portal.ImageID ?? '')) throw unavailable();
   return { image: portal.ImageID, containerId: portal.Id };
+}
+
+const sandboxEnvironment = new Set(['APP_URL', 'AUTH_TRUST_HOST', 'DATABASE_URL', 'DPF_BUILD_WORKTREE_ISOLATION', 'DPF_ENVIRONMENT',
+  'DPF_JEST_MAX_WORKERS', 'DPF_SANDBOX_TEST_SCOPE', 'DPF_TTS_URL', 'NODE_ENV', 'NODE_VERSION', 'PATH', 'SHELL', 'TTS_PROVIDER',
+  'VITEST_MAX_WORKERS', 'YARN_VERSION']);
+const noDockerDevices = value => value == null || (Array.isArray(value) && value.length === 0);
+
+/** Resolve only the isolated Compose sandbox. The actuator may additionally
+ * bind the full ID to its signed installation cohort for qualified callers. */
+export async function observeActuatorSandbox(project, get = dockerSocketGet, expectedId) {
+  const service = 'com.docker.compose.service', owner = 'com.docker.compose.project';
+  const ids = (await ownProjectContainers(project, get)).filter(item => item.Labels[service] === 'sandbox');
+  const containerId = ids[0]?.Id;
+  if (ids.length !== 1 || !/^[a-f0-9]{64}$/.test(containerId ?? '') || (expectedId && expectedId !== containerId)) throw unavailable();
+  const inspected = await get(`/containers/${containerId}/json`);
+  const { Id, Image, Name, Config, HostConfig, NetworkSettings, Mounts, State } = inspected ?? {};
+  const network = `${project}_sandbox-runtime`, volume = `${project}_sandbox_workspace`;
+  if (Id !== containerId || Name !== `/${project}-sandbox-1` || !/^sha256:[a-f0-9]{64}$/.test(Image ?? '')
+    || Config?.Labels?.[owner] !== project || Config?.Labels?.[service] !== 'sandbox'
+    || Config?.Labels?.['com.docker.compose.oneoff']?.toLowerCase() === 'true'
+    || HostConfig?.Privileged !== false || HostConfig.NetworkMode !== network || HostConfig.PidMode !== ''
+    || HostConfig.IpcMode !== 'private' || HostConfig.CgroupnsMode !== 'private' || (HostConfig.UsernsMode ?? '') !== ''
+    || !['CapAdd', 'Devices', 'DeviceRequests', 'DeviceCgroupRules', 'GroupAdd', 'VolumesFrom'].every(key => noDockerDevices(HostConfig[key]))
+    || Object.keys(NetworkSettings?.Networks ?? {}).length !== 1
+    || !/^[a-f0-9]{64}$/.test(NetworkSettings.Networks[network]?.NetworkID ?? '')
+    || !Array.isArray(Mounts) || Mounts.length !== 1 || Mounts[0].Type !== 'volume' || Mounts[0].Name !== volume
+    || Mounts[0].Destination !== '/workspace' || Mounts[0].RW !== true || Mounts[0].Propagation !== ''
+    || typeof State?.Running !== 'boolean' || !Array.isArray(Config.Env) || Config.Env.length > sandboxEnvironment.size) throw unavailable();
+  const environment = new Map();
+  for (const assignment of Config.Env) {
+    if (typeof assignment !== 'string' || assignment.length > 2048) throw unavailable();
+    const delimiter = assignment.indexOf('=');
+    const key = assignment.slice(0, delimiter);
+    if (delimiter < 1 || !sandboxEnvironment.has(key) || environment.has(key)) throw unavailable();
+    environment.set(key, assignment.slice(delimiter + 1));
+  }
+  if (environment.get('DPF_ENVIRONMENT') !== 'sandbox'
+    || environment.get('DATABASE_URL') !== 'postgresql://dpf:dpf_sandbox@sandbox-postgres:5432/dpf') throw unavailable();
+  const workspace = await get(`/volumes/${volume}`);
+  if (workspace?.Name !== volume || workspace.Driver !== 'local' || Object.keys(workspace.Options ?? {}).length !== 0
+    || workspace.Labels?.[owner] !== project || workspace.Labels?.['com.docker.compose.volume'] !== 'sandbox_workspace') throw unavailable();
+  return { containerId, name: Name.slice(1), image: Image, running: State.Running };
 }
 
 export async function observeActuatorProjectContainers(project, get = dockerSocketGet) {

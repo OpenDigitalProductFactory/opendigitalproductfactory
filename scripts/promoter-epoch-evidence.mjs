@@ -490,10 +490,13 @@ export async function readScopeWriterObserverBinding({ stateDir, secret, now = n
 /** Run only in the canonical actuator, with the installation's named owners.
  * @param {Record<string, string|undefined>} env
  * @param {{ fencePreviews: () => Promise<unknown>, observeCiCapacity: () => Promise<unknown>,
- *   reconcileSubstrate: () => Promise<unknown>, sweepPromoters: () => Promise<unknown>, doctools: object }} owners
+ *   reconcileSubstrate: () => Promise<unknown>, sweepPromoters: () => Promise<unknown>, doctools: object,
+ *   openRuntimeSession: (owner: unknown, resolveSandbox: () => Promise<unknown>) => Promise<unknown> }} owners
  */
-export async function serveScopeWriterObserver(env, { fencePreviews, observeCiCapacity, reconcileSubstrate, sweepPromoters, doctools }) {
-  const { createScopeWriterObserver, observeActuatorProjectServices, observeActuatorProjectContainers, observeActuatorPortalImage, publishActuatorSocket } =
+export async function serveScopeWriterObserver(env, { fencePreviews, observeCiCapacity, reconcileSubstrate, sweepPromoters,
+  doctools, openRuntimeSession }) {
+  const { createScopeWriterObserver, observeActuatorProjectServices, observeActuatorProjectContainers, observeActuatorPortalImage,
+    observeActuatorSandbox, publishActuatorSocket } =
     await import('./lib/scope-writer-observation.mjs');
   const stateDir = '/dpf-state';
   const project = env.PROMOTE_COMPOSE_PROJECT;
@@ -510,6 +513,10 @@ export async function serveScopeWriterObserver(env, { fencePreviews, observeCiCa
     if (binding.retirement.project !== project) throw new Error('scope_writer_observer_installation_invalid');
     return binding;
   };
+  const observeSandbox = async () => {
+    const { retirement } = await readBinding();
+    return observeActuatorSandbox(project, undefined, retirement.after.sandbox.id);
+  };
   const server = createScopeWriterObserver({
     observe: async () => {
       const { launch, retirement, served, retirementDigest } = await readBinding();
@@ -518,6 +525,8 @@ export async function serveScopeWriterObserver(env, { fencePreviews, observeCiCa
     observeServices: () => observeActuatorProjectServices(project),
     observeProjectContainers: () => observeActuatorProjectContainers(project),
     observePortalImage: () => observeActuatorPortalImage(project),
+    observeSandbox,
+    openRuntimeSession: owner => openRuntimeSession(owner, observeSandbox),
     observeCiCapacity,
     readServiceLogs: async (service, lines, timestamps = false) => {
       const ids = (await runDocker(['ps', '--all', '--no-trunc', '--filter', `label=com.docker.compose.project=${project}`,

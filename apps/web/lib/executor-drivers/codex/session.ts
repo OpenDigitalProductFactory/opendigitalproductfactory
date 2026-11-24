@@ -26,7 +26,7 @@ import type {
 
 /** Runs inside the sandbox. Credentials stay in memory (ephemeral store); threads persist in CODEX_HOME. */
 export const CODEX_SESSION_SCRIPT = [
-  'mkdir -p "$CODEX_HOME"',
+  'mkdir -p "$CODEX_HOME" &&',
   'exec codex -c cli_auth_credentials_store="ephemeral"',
   '-c "mcp_servers.dpf.url=\\"$DPF_MCP_URL\\""',
   '-c "mcp_servers.dpf.bearer_token_env_var=\\"DPF_MCP_TOKEN\\""',
@@ -119,6 +119,7 @@ export function createCodexSessionDriver(deps: {
       const proc = deps.launch({
         script: CODEX_SESSION_SCRIPT,
         cwd: config.cwd,
+        actuatorOwner: { provider: "codex", capsuleId: config.capsuleId, token: config.mcp.bearerToken, cwd: config.cwd },
         env: { DPF_MCP_URL: config.mcp.url, DPF_MCP_TOKEN: config.mcp.bearerToken, CODEX_HOME: `${config.cwd}/.dpf-runtime/${config.capsuleId}/codex-home` },
       });
       proc.onStderr(() => {}); // Drained, never surfaced: it can carry provider detail.
