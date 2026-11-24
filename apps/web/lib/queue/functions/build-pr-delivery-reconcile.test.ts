@@ -14,6 +14,8 @@ const mocks = vi.hoisted(() => ({
   publish: vi.fn(),
   dispatch: vi.fn(),
   buildLookup: vi.fn(),
+  playbookMode: vi.fn(() => "off" as "off" | "shadow" | "enforce"),
+  eligibility: vi.fn(),
 }));
 
 vi.mock("@dpf/db", () => ({
@@ -38,7 +40,10 @@ vi.mock("@/lib/quality/platform-issue-reports", () => ({
   createPlatformIssueReport: mocks.createIssue,
 }));
 vi.mock("@/lib/build/build-studio-config", () => ({
-  getAutonomousPlaybookMode: () => "off",
+  getAutonomousPlaybookMode: () => mocks.playbookMode(),
+}));
+vi.mock("@/lib/build/autonomous-build-phase-runtime", () => ({
+  resolveAutonomousBuildPhaseEligibility: (...args: unknown[]) => mocks.eligibility(...args),
 }));
 vi.mock("@/lib/jobs", () => ({ jobs: { createFunction: () => ({}) } }));
 vi.mock("@/lib/jobs/triggers", () => ({ cron: () => ({}) }));
@@ -495,6 +500,119 @@ describe("runBuildPrDeliveryReconcile — re-evaluating stopped rooms (BI-0EDCF2
       dedupeKey: "build-pr-delivery:9:merge-state-undecided:sha1:routed",
     }));
     expect(mocks.createIssue.mock.calls[0][0].selfFixClass).toBeUndefined();
+  });
+});
+
+describe("autonomous eligibility withhold", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    process.env.DPF_BUILD_PR_DELIVERY_RECONCILER_MODE = "enforce";
+    mocks.playbookMode.mockReturnValue("enforce");
+    mocks.updateMany.mockResolvedValue({ count: 1 });
+    mocks.jobUpsert.mockResolvedValue({ id: "pr-job", runCursor: null, enabled: true });
+    mocks.jobUpdateMany.mockResolvedValue({ count: 1 });
+    mocks.activityCreate.mockResolvedValue({});
+    mocks.createIssue.mockResolvedValue({ reportId: "PIR-1" });
+    mocks.postureDefault.mockResolvedValue(null);
+    mocks.buildLookup.mockResolvedValue({ buildId: "FB-1" });
+  });
+  afterEach(() => {
+    mocks.playbookMode.mockReturnValue("off");
+    delete process.env.DPF_BUILD_PR_DELIVERY_RECONCILER_MODE;
+  });
+
+  function withheldRoom(blockers: string[]) {
+    mocks.eligibility.mockResolvedValue({ mayAct: false, eligibility: { eligible: false, blockers } });
+    mocks.findMany.mockResolvedValue([room({
+      id: "withheld",
+      capsuleId: "WC-WITHHELD",
+      featureBuildId: "fb-row",
+    })]);
+  }
+
+  it("routes a first withhold once and parks the room", async () => {
+    withheldRoom(["active_pattern_binding_missing"]);
+
+    const result = await runBuildPrDeliveryReconcile();
+
+    expect(result).toMatchObject({ observed: 0, actuated: 0, escalated: 1 });
+    expect(mocks.observe).not.toHaveBeenCalled();
+    expect(mocks.eligibility).toHaveBeenCalledTimes(1);
+    expect(mocks.createIssue).toHaveBeenCalledTimes(1);
+    const write = mocks.updateMany.mock.calls[0]?.[0];
+    expect(write.data.workspaceState.prDelivery).toMatchObject({
+      status: "escalated",
+      escalationKey: "build-pr-delivery:9:autonomous-eligibility-withheld",
+      lastError: "active_pattern_binding_missing",
+    });
+    expect(write.data.workspaceState.prDelivery.lastObservedAt).toEqual(expect.any(String));
+  });
+
+  function parkedRoom(lastObservedAt: string) {
+    return room({
+      id: "withheld",
+      capsuleId: "WC-WITHHELD",
+      featureBuildId: "fb-row",
+      workspaceState: writeBuildPrDeliveryState({}, {
+        ...createBuildPrDeliveryState({ repository: "o/r", prNumber: 9, prUrl: "https://github.com/o/r/pull/9" }),
+        status: "escalated",
+        escalationKey: "build-pr-delivery:9:autonomous-eligibility-withheld",
+        lastError: "active_pattern_binding_missing",
+        lastObservedAt,
+      }),
+    });
+  }
+
+  it("stays quiet inside the recheck interval and does not route again", async () => {
+    mocks.findMany.mockResolvedValue([parkedRoom(new Date().toISOString())]);
+
+    const result = await runBuildPrDeliveryReconcile();
+
+    expect(result).toMatchObject({ observed: 0, escalated: 0 });
+    expect(mocks.eligibility).not.toHaveBeenCalled();
+    expect(mocks.createIssue).not.toHaveBeenCalled();
+    expect(mocks.updateMany).not.toHaveBeenCalled();
+    expect(mocks.observe).not.toHaveBeenCalled();
+  });
+
+  it("looks again after the interval and resumes when eligibility clears", async () => {
+    const stale = new Date(Date.now() - 31 * 60 * 1000).toISOString();
+    mocks.eligibility.mockResolvedValueOnce({ mayAct: false, eligibility: { eligible: false, blockers: ["active_pattern_binding_missing"] } });
+    mocks.findMany.mockResolvedValueOnce([parkedRoom(stale)]);
+    await runBuildPrDeliveryReconcile();
+    expect(mocks.createIssue).not.toHaveBeenCalled();
+    expect(mocks.eligibility).toHaveBeenCalledTimes(1);
+    const looked = mocks.updateMany.mock.calls[0]?.[0];
+    expect(looked.data.workspaceState.prDelivery).toMatchObject({
+      status: "escalated",
+      escalationKey: "build-pr-delivery:9:autonomous-eligibility-withheld",
+    });
+    expect(looked.data.workspaceState.prDelivery.lastObservedAt).not.toBe(stale);
+
+    mocks.eligibility.mockResolvedValueOnce({ mayAct: true, eligibility: { eligible: true, blockers: [] } });
+    mocks.findMany.mockResolvedValueOnce([parkedRoom(stale)]);
+    mocks.observe.mockResolvedValue(observation([{ name: "ci", status: "IN_PROGRESS", conclusion: null }]));
+    const resumed = await runBuildPrDeliveryReconcile();
+    expect(resumed.observed).toBe(1);
+    expect(mocks.createIssue).not.toHaveBeenCalled();
+    const write = mocks.updateMany.mock.calls.at(-1)?.[0];
+    expect(write.data.workspaceState.prDelivery).toMatchObject({
+      status: "checking",
+      escalationKey: null,
+      lastError: null,
+    });
+  });
+
+  it("sends a high-sensitivity withhold to the owner", async () => {
+    withheldRoom(["high_sensitivity_requires_human"]);
+
+    await runBuildPrDeliveryReconcile();
+
+    expect(mocks.createIssue).toHaveBeenCalledWith(expect.objectContaining({
+      type: "build-stall-escalation",
+      selfFixClass: "needs-human",
+      dedupeKey: "build-pr-delivery:9:autonomous-eligibility-withheld",
+    }));
   });
 });
 
