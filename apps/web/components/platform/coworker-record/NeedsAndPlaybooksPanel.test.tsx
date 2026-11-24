@@ -113,4 +113,80 @@ describe("ActivePlaybookBindingCard", () => {
       markup.indexOf("<summary"),
     );
   });
+
+  it("renders Approve/Defer/Reject controls for a proposed experiment candidate when canWrite is true", () => {
+    const basePattern = {
+      patternKey: "build.implement:dpf-standard",
+      agentId: "build-specialist",
+      routeContext: "/platform/ai/agent/build-specialist",
+      riskClass: "internal-reversible",
+      status: "candidate" as const,
+      scope: "activity" as const,
+      version: 2,
+      source: "human-review" as const,
+      decisionScope: "platform-wwmd" as const,
+      observedRuns: 0,
+      completedRuns: 0,
+      failedRuns: 0,
+      outcomeCounts: {},
+      latestObservedAt: null,
+      latestTaskRunId: null,
+      evidenceRefs: [{ capabilityNeedId: "CWN-1" }],
+      candidate: {
+        kind: "skill" as const,
+        need: "Prove standard dogfood implementation loop",
+        blocks: "Unblocks autonomous build eligibility",
+        fingerprint: "fp-1",
+        evaluationMethod: "governed-work-pattern-experiment",
+      },
+      candidateNeedKinds: ["skill" as const],
+      linkedNeedIds: ["CWN-1"],
+      openNeedCount: 1,
+      readiness: {
+        readyForReview: true,
+        readyForCaseActivation: false,
+        blockers: ["pattern-status-not-approved-or-active"],
+      },
+      activationProposed: true,
+      reviewState: null,
+      activationCandidate: null,
+      caseStaging: null,
+      shadowEvaluation: null,
+      experiment: null,
+      experimentCandidateProposed: true,
+    };
+    const emptyNeeds = {
+      summary: { total: 0, byStatus: {}, bySeverity: {}, byKind: {} },
+      filterOptions: { statuses: [], severities: [], kinds: [] },
+      needs: [],
+    };
+    const workPatterns = {
+      generatedAt: new Date("2026-11-24T01:00:00.000Z"),
+      window: {
+        since: new Date("2026-10-25T01:00:00.000Z"),
+        until: new Date("2026-11-24T01:00:00.000Z"),
+      },
+      summary: {
+        totalPatterns: 1,
+        totalObservedRuns: 0,
+        openNeedCount: 1,
+        readyForReviewCount: 1,
+        candidateOnlyCount: 1,
+      },
+      bindings: [],
+      patterns: [basePattern],
+    };
+
+    const writable = renderToStaticMarkup(
+      <NeedsAndPlaybooksPanel canWrite={true} needs={emptyNeeds} workPatterns={workPatterns} />,
+    );
+    expect(writable).toContain("Approve candidate");
+    expect(writable).toContain("Defer");
+    expect(writable).toContain("Reject");
+
+    const readonly = renderToStaticMarkup(
+      <NeedsAndPlaybooksPanel canWrite={false} needs={emptyNeeds} workPatterns={workPatterns} />,
+    );
+    expect(readonly).not.toContain("Approve candidate");
+  });
 });

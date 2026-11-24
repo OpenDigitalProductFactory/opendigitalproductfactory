@@ -427,11 +427,13 @@ function PlaybookReviewRow({ pattern, canWrite }: { pattern: WorkPatternSummary;
   }
 
   const needId = pattern.linkedNeedIds[0];
-  if (!canWrite || !needId || !pattern.shadowEvaluation) {
+  const hasExperimentCandidate = Boolean(pattern.experimentCandidateProposed);
+  if (!canWrite || !needId || (!pattern.shadowEvaluation && !hasExperimentCandidate)) {
     return null;
   }
 
-  const approvalEligible = pattern.shadowEvaluation.decision === "approve-narrower-scope";
+  const approvalEligible =
+    pattern.shadowEvaluation?.decision === "approve-narrower-scope" || hasExperimentCandidate;
   return (
     <div
       style={{

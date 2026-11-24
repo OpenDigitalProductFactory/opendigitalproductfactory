@@ -55,7 +55,12 @@ risk. Experiment worktrees are removed after success or failure. They never adva
 Build, create a pull request, enter the merge queue, release, or mutate the live portal.
 
 A reviewed build candidate may carry its bounded replay fixture through the existing AI Workforce
-Living Playbook review. Approval does not leave the fixture inline in TaskRun metadata: under the
+Living Playbook review. Candidates enter that review queue through the governed
+`propose_work_pattern_experiment_candidate` MCP tool (requiring `manage_platform` and
+`registry_write`), which validates the 2x2 shadow experiment definition, promotion-policy ceiling,
+and `build-replay-v1` fixture, deduplicates by deterministic fingerprint, and writes one
+reviewable `CoworkerCapabilityNeed` without mutating any `AuthorityBinding` or starting an
+experiment. Approval does not leave the fixture inline in TaskRun metadata: under the
 experiment-definition lock, Build Studio validates the safe source/test paths and full 2x2
 method-model matrix, writes one immutable `TaskArtifact`, and stamps its artifact reference into
 each child execution request before dispatch. Automatic replicates reuse that artifact. Repeating
