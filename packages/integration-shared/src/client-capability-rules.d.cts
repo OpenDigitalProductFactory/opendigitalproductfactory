@@ -8,7 +8,7 @@ export type CapabilityField<T> = {
   evidence: string;
 };
 
-export type HookHost = "cli" | "desktop" | "ide";
+export type HookHost = "cli" | "desktop" | "ide" | "harness";
 export type HookEventState = "fires" | "not-fired" | "unproven";
 
 export type HookHostRecord = {
