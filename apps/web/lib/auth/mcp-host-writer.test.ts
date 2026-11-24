@@ -16,6 +16,7 @@ const BASE = "http://localhost:3000";
 describe("writeMcpJsonToHost", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(fs.readFileSync).mockReset();
   });
 
   afterEach(() => {
@@ -24,6 +25,15 @@ describe("writeMcpJsonToHost", () => {
 
   it("no-ops when /host-dpf does not exist", () => {
     vi.mocked(fs.existsSync).mockReturnValue(false);
+    writeMcpJsonToHost(TOKEN, BASE);
+    expect(fs.writeFileSync).not.toHaveBeenCalled();
+    expect(fs.mkdirSync).not.toHaveBeenCalled();
+  });
+
+  it("keeps host setup files under their existing host owner in the qualified portal", () => {
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.readFileSync).mockImplementation((path) => path === "/proc/self/mountinfo"
+      ? "10 8 0:1 / /run/dpf-actuator ro - tmpfs tmpfs rw\n" : "");
     writeMcpJsonToHost(TOKEN, BASE);
     expect(fs.writeFileSync).not.toHaveBeenCalled();
     expect(fs.mkdirSync).not.toHaveBeenCalled();

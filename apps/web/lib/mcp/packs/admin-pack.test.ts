@@ -186,6 +186,19 @@ describe("admin pack — handler behavior (delegation preserved)", () => {
     expect(execution.exec).not.toHaveBeenCalled();
   });
 
+  it("runs only the packaged database maintenance commands in the qualified portal", async () => {
+    actuator.active = true;
+    execution.execFile.mockResolvedValue({ stdout: "complete", stderr: "" });
+    for (const [tool, args] of [
+      ["admin_run_migration", ["--filter", "@dpf/db", "exec", "prisma", "migrate", "deploy"]],
+      ["admin_run_seed", ["--filter", "@dpf/db", "run", "seed"]],
+    ] as const) {
+      expect(await adminPack.handlers[tool]({}, "u1")).toMatchObject({ success: true });
+      expect(execution.execFile).toHaveBeenLastCalledWith("/usr/local/bin/pnpm", args, expect.objectContaining({ cwd: "/app" }));
+    }
+    expect(execution.exec).not.toHaveBeenCalled();
+  });
+
   it("admin_view_logs rejects an unknown service without shelling out", async () => {
     const res = await adminPack.handlers.admin_view_logs({ service: "not-a-service" }, "u1");
     expect(res.success).toBe(false);

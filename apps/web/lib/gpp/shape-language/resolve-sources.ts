@@ -44,6 +44,7 @@
 // OFFLINE TOOLING in Phase 3b: nothing in the running app imports this module.
 
 import { join } from "node:path";
+import { realpath } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 
 import { HARDCODED_COWORKER_GRANTS } from "@dpf/db/workforce-seed";
@@ -96,7 +97,9 @@ export function defaultResolveSources(): GppResolveSources {
     async importResolver(module, exportName) {
       if (!RESOLVER_MODULE_PATTERN.test(module) || !EXPORT_NAME_PATTERN.test(exportName)) return false;
       try {
-        const loaded = (await import(pathToFileURL(join(WEB_ROOT, `${module}.ts`)).href)) as Record<string, unknown>;
+        const candidate = join(await realpath(WEB_ROOT), `${module}.ts`);
+        if (await realpath(candidate) !== candidate) return false;
+        const loaded = (await import(pathToFileURL(candidate).href)) as Record<string, unknown>;
         return typeof loaded[exportName] === "function";
       } catch {
         return false;

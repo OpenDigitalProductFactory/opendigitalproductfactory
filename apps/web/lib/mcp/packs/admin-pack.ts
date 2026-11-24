@@ -144,6 +144,10 @@ function logAdminActivity(
   }).then(() => {}).catch(() => {});
 }
 
+function hasPortalActuator(): Promise<boolean> {
+  return lazyFsPromises().readFile("/proc/self/mountinfo").then(hasPrivateActuatorMount, () => false);
+}
+
 async function adminViewLogs(params: Record<string, unknown>, userId: string): Promise<ToolResult> {
   const service = String(params.service ?? "");
   const lines = Math.max(1, Math.min(Math.trunc(Number(params.lines) || 100), 500));
@@ -151,8 +155,7 @@ async function adminViewLogs(params: Record<string, unknown>, userId: string): P
     return { success: false, error: `Invalid service. Allowed: ${ACTUATOR_SERVICE_LOG_NAMES.join(", ")}`, message: `Unknown service "${service}".` };
   }
   try {
-    const { readFile } = lazyFsPromises();
-    const usesActuator = await readFile("/proc/self/mountinfo").then(hasPrivateActuatorMount, () => false);
+    const usesActuator = await hasPortalActuator();
     let stdout: string;
     if (usesActuator) {
       const logs = await readActuatorServiceLogs(service, lines) as { output?: unknown };
@@ -296,14 +299,8 @@ async function adminRestartService(params: Record<string, unknown>, userId: stri
 
 async function adminRunMigration(_params: Record<string, unknown>, userId: string): Promise<ToolResult> {
   try {
-    const { exec: execCb } = lazyChildProcess();
-    const { promisify } = lazyUtil();
-    const execAsync = promisify(execCb);
     await logAdminActivity(userId, "admin_run_migration", {}, "success", 2, "Running prisma migrate deploy");
-    const { stdout, stderr } = await execAsync(
-      `docker compose exec -T portal pnpm --filter @dpf/db exec prisma migrate deploy 2>&1`,
-      { cwd: composeCwd(), timeout: 120_000 },
-    );
+    const { stdout, stderr } = await runAdminDatabaseMaintenance("migrate");
     const output = (stdout + "\n" + stderr).trim();
     return { success: true, message: "Migration deploy complete.", data: { output: output.slice(0, 5000) } };
   } catch (err) {
@@ -314,20 +311,24 @@ async function adminRunMigration(_params: Record<string, unknown>, userId: strin
 
 async function adminRunSeed(_params: Record<string, unknown>, userId: string): Promise<ToolResult> {
   try {
-    const { exec: execCb } = lazyChildProcess();
-    const { promisify } = lazyUtil();
-    const execAsync = promisify(execCb);
     await logAdminActivity(userId, "admin_run_seed", {}, "success", 2, "Running seed");
-    const { stdout, stderr } = await execAsync(
-      `docker compose exec -T portal pnpm --filter @dpf/db run seed 2>&1`,
-      { cwd: composeCwd(), timeout: 300_000 },
-    );
+    const { stdout, stderr } = await runAdminDatabaseMaintenance("seed");
     const output = (stdout + "\n" + stderr).trim();
     return { success: true, message: "Seed complete.", data: { output: output.slice(0, 5000) } };
   } catch (err) {
     const msg = (err as Error).message?.slice(0, 1000) ?? "Seed failed";
     return { success: false, error: msg, message: `Seed failed: ${msg}` };
   }
+}
+
+async function runAdminDatabaseMaintenance(action: "migrate" | "seed") {
+  const { exec, execFile } = lazyChildProcess();
+  const { promisify } = lazyUtil();
+  const migrate = action === "migrate";
+  const args = ["--filter", "@dpf/db", ...(migrate ? ["exec", "prisma", "migrate", "deploy"] : ["run", "seed"])];
+  const timeout = migrate ? 120_000 : 300_000;
+  if (await hasPortalActuator()) return promisify(execFile)("/usr/local/bin/pnpm", args, { cwd: "/app", timeout });
+  return promisify(exec)(`docker compose exec -T portal pnpm ${args.join(" ")} 2>&1`, { cwd: composeCwd(), timeout });
 }
 
 async function adminRunCommand(params: Record<string, unknown>, userId: string): Promise<ToolResult> {
@@ -345,8 +346,7 @@ async function adminRunCommand(params: Record<string, unknown>, userId: string):
     const { promisify } = lazyUtil();
     await logAdminActivity(userId, "admin_run_command", { command }, "success", 1, `Running: ${command.slice(0, 200)}`);
     const options = { cwd: composeCwd(), timeout: 60_000 };
-    const usesActuator = diagnostic.file === "docker"
-      && await lazyFsPromises().readFile("/proc/self/mountinfo").then(hasPrivateActuatorMount, () => false);
+    const usesActuator = diagnostic.file === "docker" && await hasPortalActuator();
     const { stdout, stderr } = usesActuator
       ? { stdout: await runActuatorDiagnostic(diagnostic.args), stderr: "" }
       : await promisify(execFileCb)(diagnostic.file, diagnostic.args, options);
