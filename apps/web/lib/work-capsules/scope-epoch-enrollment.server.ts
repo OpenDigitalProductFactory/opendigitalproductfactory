@@ -7,6 +7,7 @@ import { canonicalJson } from "@dpf/integration-shared/canonical-json";
 import { isRecord } from "@/lib/shared/coerce";
 import { runProcessWithBudget } from "@/lib/shared/run-process-with-budget";
 import { attachMaintenanceEpochEvidence } from "@/lib/self-upgrade/maintenance-epoch-evidence";
+import { lockRuntimeTransitionAdmission } from "@/lib/platform-runtime/work-admission";
 import { verifyMaintenanceEpoch, observeMaintenanceEnvironments, assertNoCanonicalActuators } from "../../../../scripts/lib/maintenance-epoch-receipt.mjs";
 import { SCOPE_EPOCH_WRITER_PATHS, validateScopeEpochWriterContract, type ScopeEpochWriterContract } from "./scope-epoch-contract";
 import type { CapsuleDb } from "./work-capsule-store-types";
@@ -128,14 +129,15 @@ export async function assertScopeEpochEnrollmentReady(ports: ScopeEpochEnrollmen
 
 /** Existing durable admission protocol, reused by the qualified scope writer. */
 export async function lockScopeEpochEnrollmentAdmission(tx: CapsuleDb): Promise<void> {
-  const admission = tx as unknown as {
-    $executeRaw?: (strings: TemplateStringsArray, ...values: unknown[]) => Promise<unknown>;
+  const admission = tx as unknown as Partial<Parameters<typeof lockRuntimeTransitionAdmission>[0]> & {
     selfUpgradeRun?: { findFirst(args: unknown): Promise<unknown> };
     runtimeCapabilityTransition?: { findFirst(args: unknown): Promise<unknown> };
   };
-  if (!admission.$executeRaw || !admission.selfUpgradeRun?.findFirst || !admission.runtimeCapabilityTransition?.findFirst) refuse("transaction-admission-unavailable");
-  // Existing admission keys, one order, no Docker or filesystem I/O here.
-  await admission.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('runtime-capability-transition'))`;
+  if (!admission.$executeRaw || !admission.$queryRaw || !admission.selfUpgradeRun?.findFirst
+    || !admission.runtimeCapabilityTransition?.findFirst) refuse("transaction-admission-unavailable");
+  // Share the producer's table-before-advisory order to avoid inversion with
+  // transition settlement. The Workroom row is still taken afterwards.
+  await lockRuntimeTransitionAdmission(admission as Parameters<typeof lockRuntimeTransitionAdmission>[0]);
   await admission.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('self-upgrade-admission'))`;
   if (await admission.runtimeCapabilityTransition.findFirst({ where: { OR: [{ status: { in: ["pending", "applying", "host_applied", "compensating"] } }, { status: "rollback_failed", failure: { path: ["recoveryRequired"], equals: true } }] }, select: { id: true } })
     || await admission.selfUpgradeRun.findFirst({ where: { status: { in: ["pending", "queued", "running"] } }, select: { id: true } })) refuse("canonical-transition-active");

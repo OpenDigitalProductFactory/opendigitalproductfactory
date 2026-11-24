@@ -609,4 +609,4 @@ EXPOSE 3000
 # restart) can never leave the DB drifted. It is fail-closed: if migrations
 # can't apply, the portal does not start. portal-init is unaffected — it
 # overrides CMD with /docker-entrypoint.sh.
-CMD ["node", "/usr/local/bin/runtime-secret-bootstrap.mjs", "--", "/usr/local/bin/portal-migrate-boot.sh", "sh", "-c", "if [ -z \"$DEPLOYED_SHA\" ] && [ -s /app/.dpf-image-version ]; then DEPLOYED_SHA=\"$(tr -d '[:space:]' < /app/.dpf-image-version)\"; export DEPLOYED_SHA; fi; exec node apps/web/server.js"]
+CMD ["node", "/usr/local/bin/runtime-secret-bootstrap.mjs", "--", "/usr/local/bin/portal-migrate-boot.sh", "/usr/local/bin/node", "--disable-sigusr1", "/app/apps/web/server.js"]

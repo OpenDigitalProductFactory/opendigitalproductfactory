@@ -52,6 +52,10 @@ function fixture() {
   };
   const locks: string[] = [];
   const tx = { $executeRaw: async (strings: TemplateStringsArray) => { locks.push(strings.join("?")); },
+    $queryRaw: async (strings: TemplateStringsArray) => {
+      expect(strings.join("?")).toBe("SHOW transaction_isolation");
+      return [{ transaction_isolation: "read committed" }];
+    },
     runtimeCapabilityTransition: { findFirst: vi.fn(async (): Promise<unknown> => null) },
     selfUpgradeRun: { findFirst: vi.fn(async (): Promise<unknown> => null) } };
   return { ports, proof, run, state, commands, locks, tx };
@@ -61,7 +65,8 @@ describe("canonical scope epoch enrollment", () => {
   it("joins packaged bytes, authenticated final retirement and fresh exact cohort", async () => {
     const f = fixture(), proof = await assertScopeEpochEnrollmentReady(f.ports), observations = f.commands.length;
     await proof.assertCurrent(f.tx as never);
-    expect(f.locks).toEqual([expect.stringContaining("runtime-capability-transition"), expect.stringContaining("self-upgrade-admission")]);
+    expect(f.locks).toEqual([expect.stringContaining('LOCK TABLE "RuntimeCapabilityTransition"'),
+      expect.stringContaining("runtime-capability-transition"), expect.stringContaining("self-upgrade-admission")]);
     expect(f.commands).toHaveLength(observations);
     expect(f.commands.find(args => args[0] === "run")).toEqual(expect.arrayContaining(["--read-only", "--network", "none", "--pull", "never", image]));
   });

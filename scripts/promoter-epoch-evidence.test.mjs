@@ -161,6 +161,93 @@ describe('canonical promoter retirement observation', () => {
 
 
 describe('scope writer actuator observations', () => {
+  const launchImage = `sha256:${'b'.repeat(64)}`;
+  const launchId = 'c'.repeat(64);
+  const launchIdentity = { id: launchId, image: launchImage, project: 'fixture' };
+  const launch = () => ({
+    ...launchIdentity, service: 'portal', running: true,
+    path: 'docker-entrypoint.sh',
+    args: ['node', '/usr/local/bin/runtime-secret-bootstrap.mjs', '--', '/usr/local/bin/portal-migrate-boot.sh',
+      '/usr/local/bin/node', '--disable-sigusr1', '/app/apps/web/server.js'],
+    user: '1000:1000', workingDir: '/app', loaderOverrides: [],
+    rootReadOnly: true, privileged: false, capAdd: null, capDrop: ['ALL'],
+    pidMode: '', ipcMode: 'private', networkMode: 'fixture_default',
+    securityOpt: ['no-new-privileges:true'], devices: [], volumesFrom: null,
+    tmpfs: { '/tmp': 'rw,noexec,nosuid,nodev,size=512m,mode=1777' },
+    mounts: [{ type: 'volume', target: '/run/dpf-actuator', write: false },
+      { type: 'bind', target: '/dpf-state', write: false }],
+  });
+
+  it('qualifies the exact portal launch recipe and derives an order-independent recipe digest', async () => {
+    const calls = [];
+    const read = observed => imageEvidence.observeScopeWriterLaunch({ ...launchIdentity,
+      runDocker: async args => { calls.push(args); return JSON.stringify(observed); },
+    });
+    const proof = await read(launch());
+    const reordered = launch();
+    reordered.mounts.reverse();
+    assert.deepEqual(proof, await read(reordered));
+    assert.deepEqual(Object.keys(proof), ['id', 'image', 'recipeDigest']);
+    assert.equal(proof.id, launchId);
+    assert.equal(proof.image, launchImage);
+    assert.match(proof.recipeDigest, /^[a-f0-9]{64}$/);
+    for (const args of calls) {
+      assert.deepEqual(args.slice(0, 3), ['inspect', '--type', 'container']);
+      assert.equal(args.at(-1), launchId);
+      assert.ok(!args[4].includes('json .Config.Env'));
+    }
+  });
+
+  it('exposes the scoped post-launch observation through the promoter executable', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'dpf-scope-launch-'));
+    const docker = join(dir, 'docker.mjs');
+    const launcher = new URL('./promoter-epoch-evidence.mjs', import.meta.url);
+    const { fileURLToPath } = await import('node:url');
+    const { spawnSync } = await import('node:child_process');
+    try {
+      await writeFile(docker, 'if (process.argv[2] !== "inspect") process.exit(42);\nprocess.stdout.write(process.env.DPF_TEST_LAUNCH_REPORT);\n');
+      const args = [fileURLToPath(launcher), '--phase', 'scope-launch', '--container', launchId,
+        '--image', launchImage, '--project', launchIdentity.project];
+      const env = { ...process.env, DPF_DOCKER_BIN: process.execPath, DPF_DOCKER_PREFIX_ARGS: JSON.stringify([docker]),
+        DPF_TEST_LAUNCH_REPORT: JSON.stringify(launch()) };
+      const child = spawnSync(process.execPath, args, { env, encoding: 'utf8', timeout: 5_000 });
+      assert.equal(child.status, 0, child.stderr);
+      assert.deepEqual(JSON.parse(child.stdout), await imageEvidence.observeScopeWriterLaunch({ ...launchIdentity,
+        runDocker: async () => env.DPF_TEST_LAUNCH_REPORT }));
+      const unsafe = spawnSync(process.execPath, args, { env: { ...env,
+        DPF_TEST_LAUNCH_REPORT: JSON.stringify({ ...launch(), privileged: true }) }, encoding: 'utf8', timeout: 5_000 });
+      assert.equal(unsafe.status, 78);
+      assert.equal(unsafe.stdout, '');
+    } finally { await rm(dir, { recursive: true, force: true }); }
+  });
+
+  for (const [name, change] of [
+    ['a different image', o => { o.image = `sha256:${'d'.repeat(64)}`; }],
+    ['a replacement ID', o => { o.id = 'd'.repeat(64); }],
+    ['a different project', o => { o.project = 'other'; }],
+    ['a stopped writer', o => { o.running = false; }],
+    ['a writable root', o => { o.rootReadOnly = false; }],
+    ['a root user', o => { o.user = '0:0'; }],
+    ['a privileged writer', o => { o.privileged = true; }],
+    ['an added capability', o => { o.capAdd = ['SYS_PTRACE']; }],
+    ['a shared PID namespace', o => { o.pidMode = 'host'; }],
+    ['an unconfined filter', o => { o.securityOpt.push('seccomp=unconfined'); }],
+    ['a loader override', o => { o.loaderOverrides = ['NODE_OPTIONS']; }],
+    ['a shell command override', o => { o.args = ['sh', '-c', 'true']; }],
+    ['an executable temporary directory', o => { o.tmpfs['/tmp'] = 'rw,nosuid,nodev,size=512m'; }],
+    ['a loader path mount', o => { o.mounts.push({ type: 'bind', target: '/app/apps/web/.next', write: false }); }],
+    ['the raw Docker socket', o => { o.mounts.push({ type: 'bind', target: '/var/run/docker.sock', write: false }); }],
+    ['a writable actuator socket directory', o => { o.mounts[0].write = true; }],
+    ['an absent actuator socket directory', o => { o.mounts.shift(); }],
+  ]) it(`refuses ${name} as a canonical scope writer launch`, async () => {
+    const observed = launch();
+    change(observed);
+    assert.equal(typeof imageEvidence.observeScopeWriterLaunch, 'function');
+    await assert.rejects(imageEvidence.observeScopeWriterLaunch({ ...launchIdentity,
+      runDocker: async () => JSON.stringify(observed),
+    }), /scope_writer_launch_unproven/);
+  });
+
   it('keeps unknown or malformed probe failures distinct from positive legacy absence', async () => {
     const { classifyInitialScopeEpochFallback } = await import('./promoter-epoch-evidence.mjs');
     const image = 'sha256:' + 'a'.repeat(64);

@@ -20,6 +20,7 @@ try {
   await client.query("BEGIN");
   await client.query(`SET LOCAL search_path TO "${schema}"`);
   await lockScopeEpochEnrollmentAdmission({
+    $queryRaw: async (parts: TemplateStringsArray) => (await client.query(parts.join(""))).rows,
     $executeRaw: async (parts: TemplateStringsArray, ...values: unknown[]) => {
       const text = parts.reduce((sql, part, index) => sql + (index ? `$${index}` : "") + part, "");
       await client.query(text, values);

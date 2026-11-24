@@ -76,6 +76,7 @@ function run(opts: {
   subprocessTimeoutMs?: number;
   forcePortableWatchdog?: boolean;
   startupDelayMs?: number;
+  deployedSha?: string;
 }) {
   const pnpmLog = join(opts.appDir, "pnpm.log");
   const exports = [
@@ -85,6 +86,7 @@ function run(opts: {
     `export PNPM_LOG=${q(toBashPath(pnpmLog))}`,
     `export PNPM_FAIL_MATCH=${q(opts.pnpmFailMatch ?? "")}`,
     `export PNPM_HANG_MATCH=${q(opts.pnpmHangMatch ?? "")}`,
+    `export DEPLOYED_SHA=${q(opts.deployedSha ?? "")}`,
     `export DPF_TEST_FORCE_PORTABLE_WATCHDOG=${opts.forcePortableWatchdog ? "1" : "0"}`,
   ].join("\n");
   // A synchronous child blocks Vitest's timer, so the shell owns the primary
@@ -92,7 +94,7 @@ function run(opts: {
   // fail-safe for a broken/missing `timeout` binary, not the normal path.
   const subprocessTimeoutMs = opts.subprocessTimeoutMs ?? BOOT_SUBPROCESS_TIMEOUT_MS;
   const timeoutSeconds = (subprocessTimeoutMs / 1_000).toFixed(3);
-  const bootCommand = `bash ${q(toBashPath(SCRIPT))} sh -c 'echo BOOT_MARKER'`;
+  const bootCommand = `bash ${q(toBashPath(SCRIPT))} sh -c 'echo BOOT_MARKER:"$DEPLOYED_SHA"'`;
   // Git Bash and Linux have GNU timeout. Stock macOS does not, so retain a
   // process-group watchdog fallback rather than baking a GNU-only command into
   // a cross-platform test. Both paths normalize a deadline to status 124.
@@ -152,6 +154,24 @@ function bootDiagnostics(r: ReturnType<typeof run>): string {
 }
 
 describe.skipIf(!BASH_OK)("portal-migrate-boot.sh (BI-5322D025)", () => {
+  it("supplies the baked source identity to the server and preserves a deployment override", () => {
+    const root = mkdtempSync(join(tmpdir(), "dpf-pmb-"));
+    try {
+      const appDir = join(root, "app");
+      mkdirSync(appDir);
+      writeFileSync(join(appDir, ".dpf-image-version"), "baked-source\n");
+      const opts = { appDir, fakeBin: makeFakeBin(root), pnpmExit: 0 };
+      const baked = run(opts);
+      expect(baked.status, bootDiagnostics(baked)).toBe(0);
+      expect(baked.stdout).toContain("BOOT_MARKER:baked-source");
+      const overridden = run({ ...opts, deployedSha: "deployment-source" });
+      expect(overridden.status, bootDiagnostics(overridden)).toBe(0);
+      expect(overridden.stdout).toContain("BOOT_MARKER:deployment-source");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  }, TIMEOUT_MS);
+
   it("applies migrations then execs the server command", () => {
     const root = mkdtempSync(join(tmpdir(), "dpf-pmb-"));
     try {

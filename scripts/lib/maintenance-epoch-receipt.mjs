@@ -10,6 +10,32 @@ const SERVICES = ['portal', 'sandbox'];
 const BASE_KEYS = ['schemaVersion', 'runId', 'targetSha', 'promoterDigest', 'recoveryPointDigest', 'project', 'daemonId', 'capturedAt', 'before'];
 const FINAL_KEYS = [...BASE_KEYS, 'completedAt', 'after', 'retiredContainerIds', 'inventoryDigest'];
 
+function dockerStartNanoseconds(value) {
+  if (typeof value !== 'string') return null;
+  const match = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.(\d{1,9}))?Z$/.exec(value);
+  if (!match) return null;
+  const milliseconds = Date.parse(`${match[1]}Z`);
+  if (!Number.isFinite(milliseconds) || milliseconds <= 0
+    || new Date(milliseconds).toISOString() !== `${match[1]}.000Z`) return null;
+  return BigInt(milliseconds) * 1_000_000n + BigInt((match[2] ?? '').padEnd(9, '0'));
+}
+
+/** Compare exact replacement IDs and Docker's full fractional timestamps.
+ * Callers separately authenticate retirement and qualify the writer lifetime. */
+export function hasContinuousMaintenanceStarts(retired, current, observedAtMs) {
+  if (!exact(retired, SERVICES) || !exact(current, SERVICES)
+    || !Number.isSafeInteger(observedAtMs) || observedAtMs <= 0) return false;
+  const observedAt = BigInt(observedAtMs) * 1_000_000n;
+  return SERVICES.every(service => {
+    const previous = retired[service], observed = current[service];
+    if (!exact(previous, ['id', 'startedAt']) || !exact(observed, ['id', 'startedAt'])
+      || typeof previous.id !== 'string' || !HEX.test(previous.id) || observed.id !== previous.id) return false;
+    const originalStart = dockerStartNanoseconds(previous.startedAt);
+    const currentStart = dockerStartNanoseconds(observed.startedAt);
+    return originalStart !== null && currentStart !== null && currentStart >= originalStart && currentStart <= observedAt;
+  });
+}
+
 function validatePayload(value, expected, checkpoint) {
   if (!exact(value, checkpoint ? BASE_KEYS : FINAL_KEYS) || value.schemaVersion !== 1
     || !/^SUR-[A-Za-z0-9-]{1,100}$/.test(value.runId)

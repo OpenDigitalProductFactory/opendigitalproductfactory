@@ -83,6 +83,82 @@ export async function inspectScopeEpochWriterImage({ image, expectedSource = '',
   return config;
 }
 
+const servedPortalArgs = ['node', '/usr/local/bin/runtime-secret-bootstrap.mjs', '--',
+  '/usr/local/bin/portal-migrate-boot.sh', '/usr/local/bin/node', '--disable-sigusr1', '/app/apps/web/server.js'];
+const loaderPrefixes = ['NODE_OPTIONS=', 'NODE_PATH=', 'NODE_CHANNEL_FD=', 'LD_', 'DYLD_', 'BASH_ENV=', 'ENV='];
+// Report names of forbidden overrides, never container environment values.
+const loaderChecks = loaderPrefixes.map(prefix =>
+  `{{if ge (len .) ${prefix.length}}}{{if eq (slice . 0 ${prefix.length}) ${JSON.stringify(prefix)}}}"${prefix}",{{end}}{{end}}`,
+).join('');
+const portalLaunchTemplate = '{"id":{{json .Id}},"image":{{json .Image}},"running":{{json .State.Running}},'
+  + '"project":{{json (index .Config.Labels "com.docker.compose.project")}},"service":{{json (index .Config.Labels "com.docker.compose.service")}},'
+  + '"path":{{json .Path}},"args":{{json .Args}},"user":{{json .Config.User}},"workingDir":{{json .Config.WorkingDir}},'
+  + `"loaderOverrides":[{{range .Config.Env}}${loaderChecks}{{end}}null],`
+  + '"rootReadOnly":{{json .HostConfig.ReadonlyRootfs}},"privileged":{{json .HostConfig.Privileged}},'
+  + '"capAdd":{{json (index .HostConfig "CapAdd")}},"capDrop":{{json (index .HostConfig "CapDrop")}},"securityOpt":{{json (index .HostConfig "SecurityOpt")}},'
+  + '"pidMode":{{json .HostConfig.PidMode}},"ipcMode":{{json .HostConfig.IpcMode}},"networkMode":{{json .HostConfig.NetworkMode}},'
+  + '"devices":{{json (index .HostConfig "Devices")}},"volumesFrom":{{json (index .HostConfig "VolumesFrom")}},"tmpfs":{{json (index .HostConfig "Tmpfs")}},'
+  + '"mounts":[{{range $i, $m := .Mounts}}{{if $i}},{{end}}{"type":{{json $m.Type}},"target":{{json $m.Destination}},"write":{{json $m.RW}}}{{end}}]}';
+
+const portalMountPolicy = new Map([
+  ['/run/dpf-actuator', { type: 'volume', write: false }],
+  ['/dpf-state', { type: 'bind', write: false }],
+  ['/host-dpf', { type: 'bind', write: false }],
+  ['/host-worktrees', { type: 'bind', write: false }],
+  ['/evidence', { type: 'volume', write: false }],
+  ['/workspace', { type: 'volume', write: false }],
+  ['/sandbox-workspace', { type: 'volume', write: true }],
+  ['/var/lib/dpf/maps', { type: 'volume', write: true }],
+  ['/backups', { type: 'bind', write: true }],
+  ['/dpf-federation', { type: 'bind', write: true }],
+  ['/etc/dpf/pki/root_ca.crt', { type: 'bind', write: false }],
+  ['/run/secrets/dpf-edge-action-signing-password', { type: 'bind', write: false }],
+  ['/run/secrets/dpf-edge-action-signing-private.pem', { type: 'bind', write: false }],
+  ['/run/secrets/dpf-edge-mtls-proxy-secret', { type: 'bind', write: false }],
+]);
+
+const isEmptyList = value => value === null || (Array.isArray(value) && value.length === 0);
+const exactArguments = (value, expected) => Array.isArray(value) && value.length === expected.length
+  && value.every((item, index) => item === expected[index]);
+
+function normalizePortalTmpfs(value) {
+  if (!value || Object.keys(value).length !== 1 || typeof value['/tmp'] !== 'string') return null;
+  const tokens = value['/tmp'].split(',').sort();
+  const expected = ['mode=1777', 'nodev', 'noexec', 'nosuid', 'rw', 'size=512m'];
+  return exactArguments(tokens, expected) ? { '/tmp': tokens } : null;
+}
+
+/** Observe the effective container recipe. The caller still owns trust in the
+ * Docker/actuator transport, initial attestation and process generation. */
+export async function observeScopeWriterLaunch({ id, image, project, runDocker = runEpochDocker }) {
+  const refuse = () => { throw new Error('scope_writer_launch_unproven'); };
+  if (!/^[a-f0-9]{64}$/.test(id) || !/^sha256:[a-f0-9]{64}$/.test(image)
+    || !/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,99}$/.test(project)) refuse();
+  try {
+    const bytes = await runDocker(['inspect', '--type', 'container', '--format', portalLaunchTemplate, id]);
+    if (Buffer.byteLength(bytes) > 32768) refuse();
+    const value = JSON.parse(bytes), tmpfs = normalizePortalTmpfs(value?.tmpfs);
+    if (!value || value.id !== id || value.image !== image || value.project !== project || value.service !== 'portal'
+      || value.running !== true || value.path !== 'docker-entrypoint.sh' || !exactArguments(value.args, servedPortalArgs)
+      || value.user !== '1000:1000' || value.workingDir !== '/app'
+      || !Array.isArray(value.loaderOverrides) || value.loaderOverrides.some(name => name !== null)
+      || value.rootReadOnly !== true || value.privileged !== false || !isEmptyList(value.capAdd)
+      || !exactArguments(value.capDrop, ['ALL']) || !exactArguments(value.securityOpt, ['no-new-privileges:true'])
+      || value.pidMode !== '' || value.ipcMode !== 'private' || value.networkMode !== `${project}_default`
+      || !isEmptyList(value.devices) || !isEmptyList(value.volumesFrom) || !tmpfs || !Array.isArray(value.mounts)) refuse();
+    const targets = new Set();
+    for (const mount of value.mounts) {
+      const policy = portalMountPolicy.get(mount?.target);
+      if (!policy || targets.has(mount.target) || mount.type !== policy.type || mount.write !== policy.write) refuse();
+      targets.add(mount.target);
+    }
+    if (!targets.has('/run/dpf-actuator') || !targets.has('/dpf-state')) refuse();
+    const recipe = { ...value, loaderOverrides: [], tmpfs,
+      mounts: value.mounts.toSorted((left, right) => left.target.localeCompare(right.target)) };
+    return { id, image, recipeDigest: createHash('sha256').update(canonicalJson(recipe)).digest('hex') };
+  } catch { return refuse(); }
+}
+
 const serviceImageInvalid = () => { throw new Error('runtime_service_image_unproven'); };
 const serviceImageId = value => typeof value === 'string' && /^sha256:[a-f0-9]{64}$/.test(value);
 const serviceImageKeys = (value, keys) => value && typeof value === 'object' && !Array.isArray(value)
@@ -222,8 +298,15 @@ export async function persistMaintenanceEpoch({ phase, env = process.env, secret
 
 if (isEntryModule(import.meta.url)) {
   try {
-    const { values } = parseArgs({ args: scriptArgv(), options: { phase: { type: 'string' }, image: { type: 'string' }, source: { type: 'string' } }, allowPositionals: false });
+    const { values } = parseArgs({ args: scriptArgv(), options: {
+      phase: { type: 'string' }, image: { type: 'string' }, source: { type: 'string' },
+      container: { type: 'string' }, project: { type: 'string' },
+    }, allowPositionals: false });
     if (values.phase === 'scope-image') process.stdout.write(`${await inspectScopeEpochWriterImage({ image: values.image, expectedSource: values.source })}\n`);
+    else if (values.phase === 'scope-launch') {
+      const observation = await observeScopeWriterLaunch({ id: values.container, image: values.image, project: values.project });
+      process.stdout.write(`${JSON.stringify(observation)}\n`);
+    }
     else if (values.phase === 'scope-fallback') process.stdout.write(`${JSON.stringify(await classifyInitialScopeEpochFallback({ image: values.image }))}\n`);
     else await persistMaintenanceEpoch({ phase: values.phase });
   } catch {
