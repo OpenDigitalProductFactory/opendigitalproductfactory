@@ -34,9 +34,9 @@ All four phases implement a single repair on BI-224F56F1. The authority migratio
 
 The schema-v2 plan coverage receipt needs the baseline minted by independent spec approval and an immutable plan artifact. No receipt or plan-review result exists yet. On admission, bind AC-1 through AC-4 and the phase contracts, flows and verification to the exact provider plan blob before requesting plan review.
 
-| Phase | Requirements | Contract | Flow | Verification |
+| Phase | Objectives | Contract | Flow | Acceptance evidence |
 | --- | --- | --- | --- | --- |
-| qualify-portal | AC-2, AC-3 | Immutable served launch recipe | Resolve image → validate recipe → attest full portal ID | Boot and rollback under the leased runtime, with native-load and mutation refusal evidence |
-| constrain-docker | AC-2, AC-3 | Typed actuator operation policy | Recheck existing authority → resolve exact target → execute owned operation | Positive entry points and negative target, mount, argument and network checks |
-| bind-claim | AC-1, AC-2, AC-3 | Existing claim, receipt and admission transaction | Acquire locks → observe current cohort → settle effect and receipt | Real restart, incompatible runtime, lock races, crash, lost reply and rollback |
-| deliver-repair | AC-4 | Protected release and canonical self-upgrade | Review exact source → merge → upgrade → acquire live scope | Governed gate evidence and live successful and refused claims |
+| qualify-portal | OBJ-WRITER | Immutable served launch recipe | Resolve image → validate recipe → attest full portal ID | AC-2 and AC-3. Boot and rollback under the leased runtime, with native-load and mutation refusal evidence. |
+| constrain-docker | OBJ-WRITER | Typed actuator operation policy | Recheck existing authority → resolve exact target → execute owned operation | AC-2 and AC-3. Positive entry points and negative target, mount, argument and network checks. |
+| bind-claim | OBJ-CONTINUITY, OBJ-WRITER | Existing claim, receipt and admission transaction | Acquire locks → observe current cohort → settle effect and receipt | AC-1, AC-2 and AC-3. Real restart, incompatible runtime, lock races, crash, lost reply and rollback. |
+| deliver-repair | OBJ-DELIVERY | Protected release and canonical self-upgrade | Review exact source → merge → upgrade → acquire live scope | AC-4. Governed gate evidence and live successful and refused claims. |
