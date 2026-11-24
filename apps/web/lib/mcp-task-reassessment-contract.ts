@@ -3,6 +3,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { hostname } from "node:os";
 import { readFile } from "node:fs/promises";
 import { readCurrentContainerConfigDigest } from "./self-upgrade/runtime-image-identity";
+import { readActuatorReassessmentProof, usesPrivateActuator } from "../../../scripts/lib/scope-writer-observation.mjs";
 import { runProcessWithBudget } from "./shared/run-process-with-budget";
 import { currentReassessmentExecution } from "./routing/reassessment-execution-scope";
 import { REASSESSMENT_OWNERS, REASSESSMENT_OWNER_PATHS, REASSESSMENT_OWNER_VERSIONS,
@@ -23,7 +24,7 @@ const defaultRunDocker: ReassessmentContractPorts["runDocker"] = async args => {
   return result;
 };
 const defaultPorts: ReassessmentContractPorts = {
-  readCurrentConfigDigest: () => readCurrentContainerConfigDigest(defaultRunDocker), readFile, runDocker: defaultRunDocker,
+  readCurrentConfigDigest: () => readCurrentContainerConfigDigest(), readFile, runDocker: defaultRunDocker,
 };
 function sameInfo(left: ReassessmentCapabilityInfo, right: ReassessmentCapabilityInfo): boolean {
   return left.sourceSha === right.sourceSha && left.sourceContentHash === right.sourceContentHash && left.contractSha256 === right.contractSha256
@@ -83,8 +84,11 @@ export async function readCurrentReassessmentContract(ports: ReassessmentContrac
     const expected = validateReassessmentCapabilityInfo({ schemaVersion: 1, sourceSha: version.toString().trim(),
       sourceContentHash: source.toString().trim(), contractSha256: digest(contract), owners: Object.fromEntries(REASSESSMENT_OWNERS.map((owner, index) =>
         [owner, { version: REASSESSMENT_OWNER_VERSIONS[owner], sourceSha256: digest(ownerBytes[index]!) }])) });
-    const observed = await readReassessmentImageContract(configDigest, expected.sourceSha, ports.runDocker);
-    if (!sameInfo(expected, observed) || await ports.readCurrentConfigDigest() !== configDigest) refuseReassessmentCompatibility();
+    const observed = ports === defaultPorts && await usesPrivateActuator()
+      ? validateReassessmentRuntimeCompatibility(await readActuatorReassessmentProof())
+      : await readReassessmentImageContract(configDigest, expected.sourceSha, ports.runDocker);
+    if (observed.configDigest !== configDigest || !sameInfo(expected, observed)
+      || await ports.readCurrentConfigDigest() !== configDigest) refuseReassessmentCompatibility();
     for (const owner of REASSESSMENT_OWNERS) Object.freeze(observed.owners[owner]);
     Object.freeze(observed.owners); Object.freeze(observed); brands.add(observed);
     retained = { pid: process.pid, hostname: hostname(), proof: observed };

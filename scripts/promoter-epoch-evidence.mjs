@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { parseArgs, promisify } from 'node:util';
 import { constants } from 'node:fs';
+import { hostname } from 'node:os';
 import { mkdtemp, open, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { isAbsolute, join } from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -526,6 +527,21 @@ export async function serveScopeWriterObserver(env, { fencePreviews, observeCiCa
     observeProjectContainers: () => observeActuatorProjectContainers(project),
     observePortalImage: () => observeActuatorPortalImage(project),
     observeSandbox,
+    readReassessmentProof: async () => {
+      const current = await observeActuatorPortalImage(project);
+      const local = hostname();
+      if (!/^[a-f0-9]{12}$/.test(local)) throw new Error('actuator_image_identity_unproven');
+      const self = JSON.parse((await runDocker(['inspect', '--type', 'container', '--format',
+        '{"id":{{json .Id}},"image":{{json .Image}},"project":{{json (index .Config.Labels "com.docker.compose.project")}},"service":{{json (index .Config.Labels "com.docker.compose.service")}}}',
+        local], { timeoutMs: 3_000 })).trim());
+      if (!/^[a-f0-9]{64}$/.test(self.id ?? '') || !self.id.startsWith(local)
+        || self.project !== project || self.service !== 'portal-actuator' || self.image !== current.image) {
+        throw new Error('actuator_image_identity_unproven');
+      }
+      const { stdout } = await exec('/usr/local/bin/node', ['/app/scripts/reassessment-capability-probe.mjs'],
+        { cwd: '/app', env: { PATH: trustedPath.slice(5) }, timeout: 4_000, maxBuffer: 8192, encoding: 'utf8' });
+      return { ...JSON.parse(stdout), configDigest: self.image };
+    },
     openRuntimeSession: owner => openRuntimeSession(owner, observeSandbox),
     observeCiCapacity,
     readServiceLogs: async (service, lines, timestamps = false) => {

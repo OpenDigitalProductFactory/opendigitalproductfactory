@@ -40,6 +40,8 @@ import {
 } from "./types";
 import { resolveManagedScriptPath, runManagedScript } from "./managed-script-path";
 import type { AnyBackupManifest, BackupEngineSpec } from "./engine-specs";
+import { managedPostgresConnection } from "./managed-postgres-connection";
+import { usesPrivateActuator } from "../../../../../scripts/lib/scope-writer-observation.mjs";
 import type { BackupPreflightResult } from "./extension-preflight";
 
 const BACKUPS_ROOT = "/backups";
@@ -365,7 +367,13 @@ export async function runManagedBackup(
   // is created by the shell script.
   await fs.mkdir(path.posix.join(backupsRoot, spec.subdir), { recursive: true });
 
-  const env = spec.buildEnv({ targetDir: absoluteTargetDir, composeProject });
+  let env = spec.buildEnv({ targetDir: absoluteTargetDir, composeProject });
+  if (spec.target === "postgres" && !args.scriptPath && await usesPrivateActuator()) {
+    try {
+      env = { ...managedPostgresConnection(), TARGET_DIR: absoluteTargetDir, DPF_MANAGED_POSTGRES_DIRECT: "1",
+        DPF_VERSION: env.DPF_VERSION, NODE_ENV: "production", PATH: "/usr/local/bin:/usr/bin:/bin" };
+    } catch { return recordFailure("The configured PostgreSQL backup connection could not be verified."); }
+  }
 
   // Routes through the shared /bin/sh chokepoint so the script need not carry
   // the executable bit (which git-on-Windows + the Docker COPY both strip).

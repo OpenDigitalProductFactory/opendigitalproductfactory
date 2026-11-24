@@ -277,3 +277,15 @@ it('binds a bidirectional runtime stream before forwarding input and kills it on
     assert.equal(kills.length, 1);
   });
 });
+
+it('serves only the actuator-owned current reassessment proof', unixOnly, async () => {
+  const { createScopeWriterObserver, readActuatorReassessmentProof } = await load();
+  const proof = { configDigest: 'sha256:' + 'a'.repeat(64), sourceSha: 'b'.repeat(40) };
+  let calls = 0;
+  await withServer(observe => createScopeWriterObserver({ observe, readReassessmentProof: async () => { calls++; return proof; } }),
+    async () => ({}), async socketPath => {
+      assert.equal(await call(socketPath, { method: 'GET', path: '/v1/runtime/reassessment-proof?image=peer' }), 404);
+      assert.deepEqual(await readActuatorReassessmentProof({ socketPath }), proof);
+      assert.equal(calls, 1);
+    });
+});

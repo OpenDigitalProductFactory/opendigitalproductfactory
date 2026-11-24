@@ -5,9 +5,8 @@
 # Plan: docs/superpowers/plans/2026-05-17-postgres-daily-backup-slice-1.md
 #
 # The TypeScript orchestrator in apps/web/lib/operate/backups/postgres-backup-runner.ts
-# spawns this script. It runs INSIDE the portal container, where /var/run/docker.sock
-# is mounted so we can exec into the postgres container, and where the host-bound
-# /backups directory is mounted at /backups.
+# spawns this script with the installed database connection. Legacy installs
+# use the configured container for the same PostgreSQL commands.
 #
 # Per the never-ask-user-to-run-commands kernel principle, this script is
 # never invoked by the operator. It is platform plumbing.
@@ -53,10 +52,26 @@ POSTGRES_USER="${POSTGRES_USER:-dpf}"
 POSTGRES_DB="${POSTGRES_DB:-dpf}"
 DB_CONTAINER="${DPF_PRODUCTION_DB_CONTAINER:-dpf-postgres-1}"
 DPF_VERSION_VALUE="${DPF_VERSION:-}"
+DIRECT="${DPF_MANAGED_POSTGRES_DIRECT:-0}"
 
 [ -n "$TARGET_DIR" ] || fail "TARGET_DIR not set" 2
-command -v docker >/dev/null 2>&1 || fail "docker CLI not available in runner image" 2
+if [ "$DIRECT" = 1 ]; then
+  [ -n "${PGDATABASE:-}" ] || fail "managed database connection missing" 2
+  command -v pg_dump >/dev/null 2>&1 || fail "pg_dump not available in runner image" 2
+  DB_CONTAINER="configured-postgres"
+else
+  command -v docker >/dev/null 2>&1 || fail "docker CLI not available in runner image" 2
+fi
 command -v sha256sum >/dev/null 2>&1 || fail "sha256sum not available" 2
+
+database_command() {
+  program="$1"; shift
+  if [ "$DIRECT" = 1 ]; then
+    "$program" "$@"
+  else
+    docker exec "$DB_CONTAINER" "$program" -U "$POSTGRES_USER" -d "$POSTGRES_DB" "$@"
+  fi
+}
 
 mkdir -p "$TARGET_DIR" || fail "could not create target directory $TARGET_DIR" 2
 
@@ -72,7 +87,7 @@ log "starting pg_dump container=$DB_CONTAINER user=$POSTGRES_USER db=$POSTGRES_D
 
 # Capture pg_version BEFORE we exec the dump so a dump failure doesn't deny us
 # the version info for diagnostics.
-PG_VERSION="$(docker exec "$DB_CONTAINER" psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -t -A -c "SHOW server_version" 2>/dev/null || echo "unknown")"
+PG_VERSION="$(database_command psql -X -t -A -c "SHOW server_version" 2>/dev/null || echo "unknown")"
 log "pg_version=$PG_VERSION"
 
 # Run pg_dump inside the postgres container; stream output to a host file.
@@ -80,7 +95,7 @@ log "pg_version=$PG_VERSION"
 # the existing promoter script uses (scripts/promote.sh:157).
 # Append (2>>) rather than truncate so the [backup-trace] lines already mirrored
 # into log.txt survive; pg_dump's stderr (empty on success) is added after them.
-if docker exec "$DB_CONTAINER" pg_dump -U "$POSTGRES_USER" -Fc "$POSTGRES_DB" > "$DUMP_FILE" 2>> "$LOG_FILE"; then
+if database_command pg_dump -Fc > "$DUMP_FILE" 2>> "$LOG_FILE"; then
   log "pg_dump succeeded size=$(wc -c < "$DUMP_FILE")"
 else
   EXIT=$?

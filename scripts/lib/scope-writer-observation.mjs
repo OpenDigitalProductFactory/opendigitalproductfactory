@@ -13,6 +13,7 @@ const projectServicesPath = '/v1/runtime/project-services';
 const projectContainersPath = '/v1/runtime/project-containers';
 const portalImagePath = '/v1/runtime/portal-image';
 const sandboxPath = '/v1/runtime/sandbox';
+const reassessmentPath = '/v1/runtime/reassessment-proof';
 const ciCapacityPath = '/v1/runtime/ci-capacity';
 const serviceLogsPath = '/v1/runtime/service-logs';
 const fencePreviewsPath = '/v1/runtime/fence-ended-previews';
@@ -63,7 +64,7 @@ async function readBoundedStream(stream, bytes) {
  * The observer derives scope from host-owned state, never from the request. */
 export function createScopeWriterObserver({ observe, observeServices, observeCiCapacity, readRetirement, fencePreviews,
   reconcileSubstrate, readServiceLogs, observeProjectContainers, observePortalImage, observeSandbox, sweepPromoters,
-  doctools, openRuntimeSession }) {
+  doctools, openRuntimeSession, readReassessmentProof }) {
   const operations = new Map([
     [`GET ${cohortPath}`, observe], [`GET ${projectServicesPath}`, observeServices],
     [`GET ${ciCapacityPath}`, observeCiCapacity],
@@ -72,6 +73,7 @@ export function createScopeWriterObserver({ observe, observeServices, observeCiC
     [`GET ${projectContainersPath}`, observeProjectContainers], [`POST ${sweepPromotersPath}`, sweepPromoters],
     [`GET ${portalImagePath}`, observePortalImage],
     [`GET ${sandboxPath}`, observeSandbox],
+    [`GET ${reassessmentPath}`, readReassessmentProof],
     [`GET ${doctoolsHealthPath}`, doctools?.health],
   ]);
   let doctoolsInFlight = 0;
@@ -368,6 +370,10 @@ export function readActuatorPortalImage({ socketPath = SCOPE_WRITER_OBSERVER_SOC
 
 export function readActuatorSandbox({ socketPath = SCOPE_WRITER_OBSERVER_SOCKET } = {}) {
   return requestActuator(sandboxPath, socketPath, { timeoutMs: 12_000 });
+}
+
+export function readActuatorReassessmentProof({ socketPath = SCOPE_WRITER_OBSERVER_SOCKET } = {}) {
+  return requestActuator(reassessmentPath, socketPath, { timeoutMs: 20_000 });
 }
 
 export function readActuatorDoctoolsHealth({ socketPath = SCOPE_WRITER_OBSERVER_SOCKET } = {}) {

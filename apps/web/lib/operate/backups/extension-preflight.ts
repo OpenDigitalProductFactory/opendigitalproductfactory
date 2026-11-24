@@ -31,6 +31,7 @@
 
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import { usesPrivateActuator } from "../../../../../scripts/lib/scope-writer-observation.mjs";
 
 const execFileAsync = promisify(execFile);
 
@@ -151,6 +152,13 @@ export async function postgresExtensionPreflight(
   ctx: { composeProject: string },
   psql?: ContainerPsql,
 ): Promise<BackupPreflightResult> {
+  if (!psql && await usesPrivateActuator()) {
+    return detectMissingExtensions(async () => {
+      const { Prisma, prisma } = await import("@dpf/db");
+      const [row] = await prisma.$queryRaw<Array<{ string_agg: string | null }>>(Prisma.raw(DB_EXTENSION_AVAILABILITY_SQL));
+      return { stdout: row?.string_agg ?? "", exitCode: 0 };
+    });
+  }
   const container =
     process.env.DPF_PRODUCTION_DB_CONTAINER ??
     `${ctx.composeProject}-postgres-1`;
