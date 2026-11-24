@@ -3,14 +3,14 @@
   "selectionCliff": null,
   "entries": {
     "registry.toolDefinitions": {
-      "value": 465,
-      "reason": "BI-0C0B0836 adds record_owner_ruling: the only way a coworker can carry a ruling THE OWNER gave in chat onto an escalated decision review. record_decision_outcome cannot, because it records agreement with a kernel recommendation and an escalated review has none (refused no-recommendation on the COO, 2026-11-14), and the portal Answer controls are browser-session server actions. It is a declared proposal, so the escalation gate puts every call to a person, and it writes through the same core as the Answer controls, attributed to the human. Reuses decision_record_create; no new grant, core-tier entry or provider. Claim to check: owner-ruling-pack.test.ts proves the real gate returns human/declared-proposal even for a graduated, steered coworker, and that refusals (gate-resolved, unknown, foreign build, option not offered) write nothing. The prior 464-tool justification remains in the parent version.",
-      "recordedAt": "2026-11-15"
+      "value": 466,
+      "reason": "BI-5A17505E adds propose_work_pattern_experiment_candidate: the governed origination seam that submits a validated 2x2 shadow Living Playbook experiment candidate as a deduplicated CoworkerCapabilityNeed so an operator can review and launch the hermetic experiment that legally promotes a work-pattern AuthorityBinding. submit_coworker_capability_need cannot carry it because that tool is caller-scoped view_platform self-assessment without manage_platform/registry_write authority, consequence:'authority' classification, promotion-policy ceiling enforcement, or build-replay-v1 fixture validation. Reuses registry_write; adds no new grant, core-tier entry, route, or DB table. Claim to check: work-pattern-experiment-candidate.test.ts and work-pattern-experiment-pack.test.ts prove invalid/inadmissible/fixtureless candidates are rejected and valid proposals write only CoworkerSelfAssessment + CoworkerCapabilityNeed, never AuthorityBinding or TaskRun. The prior 465-tool justification remains in the parent version.",
+      "recordedAt": "2026-11-23"
     },
     "registry.packFiles": {
-      "value": 110,
-      "reason": "BI-0C0B0836: owner-ruling-pack.ts holds the single record_owner_ruling definition and handler. It is its own pack because it belongs to neither decision-outcome (agreement with a kernel recommendation) nor founder-review (read-only queue); it registers once in pack-registry.ts with grants matching agent-grants.ts. The prior 109-file justification remains in the parent version.",
-      "recordedAt": "2026-11-15"
+      "value": 111,
+      "reason": "BI-5A17505E: work-pattern-experiment-pack.ts holds the single propose_work_pattern_experiment_candidate definition and handler. It is its own pack because coworker-capability-pack.ts serves caller-scoped view_platform self-assessment tools whereas experiment candidate origination is a manage_platform, consequence:'authority' Living Playbook governance seam; it registers once in pack-registry.ts with grants matching coworker-capability-tool-grants.ts spread into agent-grants.ts. The prior 110-file justification remains in the parent version.",
+      "recordedAt": "2026-11-23"
     },
     "tier.coreToolNames": {
       "value": 35,

@@ -89,6 +89,13 @@ export const TOOL_TO_GRANTS_SOURCES = Object.freeze([
     path: "apps/web/lib/tak/workbook-tool-grants.ts",
     pattern: /WORKBOOK_TOOL_GRANTS[^=]*= \{([\s\S]*?)\n\}/,
   },
+  {
+    // Coworker capability self-assessment and Living Playbook experiment
+    // candidate origination tools (BI-5A17505E), spread into TOOL_TO_GRANTS;
+    // honors approval_probe_read, registry_read, and registry_write.
+    path: "apps/web/lib/tak/coworker-capability-tool-grants.ts",
+    pattern: /COWORKER_CAPABILITY_TOOL_GRANTS[^=]*= \{([\s\S]*?)\n\}/,
+  },
 ]);
 
 const BUDGET = Object.freeze({ owner: "platform-architecture", expiry: "2026-11-16" });

@@ -41,7 +41,7 @@ import {
   listWorkPatternBindingsForAgent,
   type WorkPatternBindingRecord,
 } from "./work-pattern-binding-reader";
-import { parseReviewedExperimentCandidate } from "./work-pattern-experiment-scheduler";
+import { parseReviewedExperimentCandidate } from "./work-pattern-experiment-candidate-schema";
 import { isRecord } from "@/lib/shared/coerce";
 
 const DEFAULT_WINDOW_DAYS = 30;

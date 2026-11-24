@@ -17,7 +17,7 @@ import {
   isPromotionPolicyAdmissible,
   parseReviewedExperimentCandidate,
   type ReviewedExperimentCandidate,
-} from "./work-pattern-experiment-scheduler";
+} from "./work-pattern-experiment-candidate-schema";
 import {
   WORK_PATTERN_DECISION_SCOPES,
   mergeWorkPatternMetadata,

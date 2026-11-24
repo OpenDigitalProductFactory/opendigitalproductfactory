@@ -73,7 +73,6 @@ const definitions: ToolDefinition[] = [
     sideEffect: true,
     // Enters the authority-review pipeline for Living Playbook activation (TAK §8.4.1).
     consequence: "authority",
-    buildPhases: ["ideate", "plan", "build", "review", "ship"],
     annotations: {
       destructiveHint: false,
       idempotentHint: true,
