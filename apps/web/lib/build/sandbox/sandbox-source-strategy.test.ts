@@ -8,7 +8,7 @@ import {
   buildSandboxGitWorkspaceReadyCommand,
   buildWorkspaceAppsWebCopyCommand,
   buildWorkspacePackagesCopyCommand,
-  buildWorkspaceRootProbeCommand,
+  pickSandboxSourceRoot,
   buildWorkspaceScriptsCopyCommand,
   LocalSourceStrategy,
   getSourceStrategy,
@@ -106,13 +106,14 @@ describe("buildSourcePaths", () => {
   });
 });
 
-describe("buildWorkspaceRootProbeCommand", () => {
-  it("keeps PROJECT_ROOT as a shell variable instead of JS interpolation", () => {
-    expect(buildWorkspaceRootProbeCommand("dpf-portal-1")).toContain("${PROJECT_ROOT}");
+describe("pickSandboxSourceRoot", () => {
+  it("uses bundled sources whenever the private actuator is mounted", () => {
+    expect(pickSandboxSourceRoot("/custom/root", true, () => true)).toBeNull();
   });
 
-  it("targets the requested portal container", () => {
-    expect(buildWorkspaceRootProbeCommand("portal-123")).toContain("docker exec portal-123 sh -lc");
+  it("preserves legacy configured and shared-workspace source selection", () => {
+    expect(pickSandboxSourceRoot("/custom/root", false, path => path === "/custom/root/package.json")).toBe("/custom/root");
+    expect(pickSandboxSourceRoot("/missing", false, path => path === "/workspace/package.json")).toBe("/workspace");
   });
 });
 
@@ -128,14 +129,14 @@ describe("buildSandboxGitWorkspaceReadyCommand", () => {
 
 describe("workspace copy commands", () => {
   it("copies packages into /workspace/packages", () => {
-    const command = buildWorkspacePackagesCopyCommand("portal-1", "sandbox-1", "/workspace/packages");
+    const command = buildWorkspacePackagesCopyCommand("sandbox-1", "/workspace/packages");
 
-    expect(command).toContain("docker exec portal-1 tar -cf - -C /workspace/packages .");
+    expect(command).toMatch(/^tar -cf - -C '\/workspace\/packages' \./);
     expect(command).toContain("mkdir -p /workspace/packages");
   });
 
   it("copies apps/web without node_modules or .next artifacts", () => {
-    const command = buildWorkspaceAppsWebCopyCommand("portal-1", "sandbox-1", "/workspace/apps/web");
+    const command = buildWorkspaceAppsWebCopyCommand("sandbox-1", "/workspace/apps/web");
 
     expect(command).toContain("--exclude='node_modules'");
     expect(command).toContain("--exclude='.next'");
@@ -144,10 +145,10 @@ describe("workspace copy commands", () => {
   });
 
   it("copies root scripts from the active source root", () => {
-    const command = buildWorkspaceScriptsCopyCommand("portal-1", "sandbox-1", "/workspace");
+    const command = buildWorkspaceScriptsCopyCommand("sandbox-1", "/workspace");
 
-    expect(command).toContain("tar -cf - -C /workspace scripts");
-    expect(command).toContain("docker exec -i sandbox-1 tar -xf - -C /workspace");
+    expect(command).toMatch(/^tar -cf - -C '\/workspace' scripts/);
+    expect(command).toContain("docker exec -i 'sandbox-1' tar -xf - -C /workspace");
   });
 });
 

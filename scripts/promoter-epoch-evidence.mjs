@@ -2,9 +2,8 @@ import { createHash } from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { parseArgs, promisify } from 'node:util';
 import { constants } from 'node:fs';
-import { once } from 'node:events';
-import { chmod, chown, lstat, mkdtemp, open, readFile, rename, rm, writeFile } from 'node:fs/promises';
-import { dirname, isAbsolute, join } from 'node:path';
+import { mkdtemp, open, readFile, rename, rm, writeFile } from 'node:fs/promises';
+import { isAbsolute, join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { canonicalJson } from './lib/canonical-json.mjs';
 import { signMaintenanceEpoch, verifyMaintenanceEpoch } from './lib/maintenance-epoch-receipt.mjs';
@@ -98,7 +97,7 @@ export async function inspectServedScopeWriterImage({ image, runDocker = runEpoc
   try {
     if (!/^sha256:[a-f0-9]{64}$/.test(image)) throw new Error();
     const { bytes, config } = await runScopeWriterImageProbe({ image, runDocker, served: true });
-    const proof = JSON.parse(bytes), keys = ['serverSha256', 'routeSha256', 'manifestSha256'];
+    const proof = JSON.parse(bytes), keys = ['serverSha256', 'routeSha256', 'manifestSha256', 'closureSha256'];
     if (config !== image || !proof || proof.schemaVersion !== 1 || Object.keys(proof).length !== keys.length + 1
       || keys.some(key => typeof proof[key] !== 'string' || !/^[a-f0-9]{64}$/.test(proof[key]))) throw new Error();
     return { image, ...proof };
@@ -159,15 +158,19 @@ function normalizePortalTmpfs(value) {
 const shareMount = '/run/dpf-actuator';
 const stateMount = '/dpf-state';
 const dockerSocketMount = '/var/run/docker.sock';
-const admissionNetwork = 'runtime-admission';
+const actuatorSecretOptions = [
+  'DATABASE_URL', 'DPF_SECRET_PROVIDER', 'DPF_ONEPASSWORD_CONNECT_HOST', 'DPF_ONEPASSWORD_CONNECT_TOKEN_FILE',
+  'DPF_ONEPASSWORD_CONNECT_TOKEN', 'DPF_ONEPASSWORD_VAULT_ID', 'DPF_ONEPASSWORD_ITEM_ID', 'DPF_SECRET_PROVIDER_TIMEOUT_MS',
+];
+const actuatorEnvKeys = new Set([...actuatorSecretOptions, 'PROMOTE_COMPOSE_PROJECT', 'TSX_TSCONFIG_PATH', 'DPF_RUNTIME_SECRET_NAMES']);
 
 /** Check the fully interpolated, merged Compose service plans without exposing
  * environment values. An exact Docker inspection is still required at boot. */
 export function verifyPortalWriterCompose(recipe, { project, image, actuatorImage }) {
   const refuse = () => { throw new Error('scope_writer_compose_unproven'); };
   const portal = recipe?.services?.portal, actuator = recipe?.services?.['portal-actuator'];
-  const network = recipe?.networks?.[admissionNetwork], volume = recipe?.volumes?.portal_actuator;
-  const safeProfiles = service => !service.privileged && !service.pid && !service.ipc && !service.userns_mode
+  const volume = recipe?.volumes?.portal_actuator;
+  const safeProfiles = service => !service.privileged && !service.pid && (!service.ipc || service.ipc === 'private') && !service.userns_mode
     && !service.network_mode && (!service.cgroup || service.cgroup === 'private')
     && ['devices', 'device_cgroup_rules', 'group_add', 'volumes_from', 'configs', 'secrets', 'profiles']
       .every(key => service[key] === undefined || isEmptyList(service[key]));
@@ -189,15 +192,17 @@ export function verifyPortalWriterCompose(recipe, { project, image, actuatorImag
       || !portal.tmpfs[0].startsWith('/tmp:') || !normalizePortalTmpfs({ '/tmp': portal.tmpfs[0].slice(5) })
       || actuator.read_only !== true || actuator.user !== '0:0' || !exactArguments(actuator.cap_drop, ['ALL'])
       || !exactArguments(actuator.cap_add, ['CHOWN']) || !exactArguments(actuator.security_opt, ['no-new-privileges:true'])
-      || !exactArguments(actuator.entrypoint, ['node', '/app/scripts/promoter-epoch-evidence.mjs'])
-      || !exactArguments(actuator.command, ['--phase', 'scope-serve']) || !safeEnvironment(actuator.environment)
+      || !exactArguments(actuator.entrypoint, ['/usr/local/bin/node', '/usr/local/bin/runtime-secret-bootstrap.mjs', '--',
+        '/usr/local/bin/node', '--import', 'tsx'])
+      || !exactArguments(actuator.command, ['/app/apps/web-src/lib/platform-runtime/portal-actuator-entry.ts'])
+      || !safeEnvironment(actuator.environment)
       || actuator.environment?.PROMOTE_COMPOSE_PROJECT !== project
+      || actuator.environment.TSX_TSCONFIG_PATH !== '/app/apps/web-src/tsconfig.json'
+      || actuator.environment.DPF_RUNTIME_SECRET_NAMES !== 'DATABASE_URL'
+      || Object.keys(actuator.environment).some(key => !actuatorEnvKeys.has(key))
+      || actuatorSecretOptions.some(key => (actuator.environment[key] ?? '') !== (portal.environment?.[key] ?? ''))
       || (actuator.ports !== undefined && !isEmptyList(actuator.ports))
-      || !exactArguments(Object.keys(actuator.networks ?? {}), [admissionNetwork])
-      || network?.name !== `${project}_${admissionNetwork}` || network.internal !== true || network.external || network.driver_opts
-      || Object.keys(recipe.services).some(service => !['portal-actuator', 'postgres'].includes(service)
-        && Object.hasOwn(recipe.services[service].networks ?? {}, admissionNetwork))
-      || !Object.hasOwn(recipe.services.postgres?.networks ?? {}, admissionNetwork)
+      || !exactArguments(Object.keys(actuator.networks ?? {}), ['default'])
       || volume?.name !== `${project}_portal_actuator` || volume.external || volume.driver_opts
       || (volume.driver !== undefined && volume.driver !== 'local')) refuse();
     const portalMounts = new Map();
@@ -320,8 +325,8 @@ export function verifyScopeWriterLaunchEvidence({ evidence, retirement, secret, 
     const { launch, served } = payload;
     if (payload.project !== signed.project || launch.id !== signed.after.portal.id || !evidenceHash(launch.recipeDigest)
       || !/^sha256:[a-f0-9]{64}$/.test(launch.image) || served.image !== launch.image || served.schemaVersion !== 1
-      || ![served.serverSha256, served.routeSha256, served.manifestSha256].every(evidenceHash)) throw new Error();
-    return { launch, served, retirement: signed, retirementDigest: payload.retirementDigest };
+      || ![served.serverSha256, served.routeSha256, served.manifestSha256, served.closureSha256].every(evidenceHash)) throw new Error();
+    return { launch, served, retirement: signed, envelope: retirement, retirementDigest: payload.retirementDigest };
   } catch { throw new Error('scope_writer_launch_evidence_invalid'); }
 }
 
@@ -480,26 +485,47 @@ export async function readScopeWriterObserverBinding({ stateDir, secret, now = n
   } catch { throw new Error('scope_writer_launch_evidence_invalid'); }
 }
 
-async function serveScopeWriterObserver(env) {
-  const { createScopeWriterObserver, observeActuatorProjectServices, SCOPE_WRITER_OBSERVER_SOCKET } = await import('./lib/scope-writer-observation.mjs');
+/** Run only in the canonical actuator, with the installation's named owners.
+ * @param {Record<string, string|undefined>} env
+ * @param {() => Promise<unknown>} fencePreviews
+ */
+export async function serveScopeWriterObserver(env, fencePreviews) {
+  const { createScopeWriterObserver, observeActuatorProjectServices, publishActuatorSocket } = await import('./lib/scope-writer-observation.mjs');
   const stateDir = env.DPF_PROMOTER_STATE_DIR ?? '/dpf-state';
   const project = env.PROMOTE_COMPOSE_PROJECT;
-  const directory = await lstat(dirname(SCOPE_WRITER_OBSERVER_SOCKET));
-  if (process.getuid() !== 0 || !directory.isDirectory() || directory.uid !== 0 || (directory.mode & 0o022) !== 0
-    || typeof project !== 'string' || !/^[a-z0-9][a-z0-9_-]{0,99}$/.test(project)) throw new Error('scope_writer_observer_installation_invalid');
+  if (process.getuid() !== 0 || typeof project !== 'string' || !/^[a-z0-9][a-z0-9_-]{0,99}$/.test(project))
+    throw new Error('scope_writer_observer_installation_invalid');
   const secret = await readMigrationSecret({ env });
-  const server = createScopeWriterObserver(async () => {
-    const { launch, retirement, served, retirementDigest } = await readScopeWriterObserverBinding({ stateDir, secret });
-    if (retirement.project !== project) throw new Error('scope_writer_observer_installation_invalid');
-    return { ...await observeClosedScopeWriterCohort({ launch, retirement }), served, retirementDigest };
-  }, () => observeActuatorProjectServices(project));
+  const readBinding = async () => {
+    const binding = await readScopeWriterObserverBinding({ stateDir, secret });
+    if (binding.retirement.project !== project) throw new Error('scope_writer_observer_installation_invalid');
+    return binding;
+  };
+  const server = createScopeWriterObserver({
+    observe: async () => {
+      const { launch, retirement, served, retirementDigest } = await readBinding();
+      return { ...await observeClosedScopeWriterCohort({ launch, retirement }), served, retirementDigest };
+    },
+    observeServices: () => observeActuatorProjectServices(project),
+    readRetirement: async () => {
+      const { envelope, retirementDigest } = await readBinding();
+      return { envelope, retirementDigest };
+    },
+    fencePreviews,
+  });
   process.umask(0o117);
-  server.listen(SCOPE_WRITER_OBSERVER_SOCKET);
-  await once(server, 'listening');
-  try {
-    await chown(SCOPE_WRITER_OBSERVER_SOCKET, 0, 1000);
-    await chmod(SCOPE_WRITER_OBSERVER_SOCKET, 0o660);
-  } catch (error) { server.close(); throw error; }
+  await publishActuatorSocket(server);
+}
+
+async function readComposePlan(input) {
+  const chunks = [];
+  let size = 0;
+  for await (const chunk of input) {
+    size += chunk.length;
+    if (size > 512 * 1024) throw new Error('scope_writer_compose_unproven');
+    chunks.push(chunk);
+  }
+  return JSON.parse(Buffer.concat(chunks).toString('utf8'));
 }
 
 /** Called only around the existing canonical swap, never a maintenance actuator. */
@@ -541,12 +567,17 @@ if (isEntryModule(import.meta.url)) {
   try {
     const { values } = parseArgs({ args: scriptArgv(), options: {
       phase: { type: 'string' }, image: { type: 'string' }, source: { type: 'string' },
-      container: { type: 'string' }, project: { type: 'string' },
+      container: { type: 'string' }, project: { type: 'string' }, 'actuator-image': { type: 'string' },
     }, allowPositionals: false });
     if (values.phase === 'scope-image') process.stdout.write(`${await inspectScopeEpochWriterImage({ image: values.image, expectedSource: values.source })}\n`);
     else if (values.phase === 'scope-served-image') {
       const observation = await inspectServedScopeWriterImage({ image: values.image });
       process.stdout.write(`${JSON.stringify(observation)}\n`);
+    }
+    else if (values.phase === 'scope-compose') {
+      verifyPortalWriterCompose(await readComposePlan(process.stdin), {
+        project: values.project, image: values.image, actuatorImage: values['actuator-image'],
+      });
     }
     else if (values.phase === 'scope-launch') {
       const observation = await observeScopeWriterLaunch({ id: values.container, image: values.image, project: values.project });
@@ -560,7 +591,6 @@ if (isEntryModule(import.meta.url)) {
           promoterDigest: env.DPF_PROMOTER_DIGEST, recoveryPointDigest: env.DPF_MAINTENANCE_RECOVERY_POINT_DIGEST,
         } });
     }
-    else if (values.phase === 'scope-serve') await serveScopeWriterObserver(process.env);
     else if (values.phase === 'scope-fallback') process.stdout.write(`${JSON.stringify(await classifyInitialScopeEpochFallback({ image: values.image }))}\n`);
     else await persistMaintenanceEpoch({ phase: values.phase });
   } catch {

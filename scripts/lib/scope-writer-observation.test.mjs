@@ -8,6 +8,7 @@ import { it } from 'node:test';
 
 // Import dynamically so the red test identifies the missing transport.
 const load = () => import('./scope-writer-observation.mjs');
+const unixOnly = { skip: process.platform === 'win32' };
 
 async function withServer(serve, observation, run) {
   const root = await mkdtemp(join(tmpdir(), 'sw-'));
@@ -29,11 +30,11 @@ const call = (socketPath, options) => new Promise((resolve, reject) => {
   req.end();
 });
 
-it('serves a single bound read without accepting caller-supplied verbs, queries or targets', async () => {
+it('serves a single bound read without accepting caller-supplied verbs, queries or targets', unixOnly, async () => {
   const { createScopeWriterObserver, readScopeWriterObservation } = await load();
   let calls = 0;
   const snapshot = { runId: 'SUR-TEST', sourceSha: 'a'.repeat(40) };
-  await withServer(createScopeWriterObserver, async () => { calls++; return snapshot; }, async socketPath => {
+  await withServer(observe => createScopeWriterObserver({ observe }), async () => { calls++; return snapshot; }, async socketPath => {
     assert.deepEqual(await readScopeWriterObservation({ socketPath }), snapshot);
     assert.equal(await call(socketPath, { method: 'POST', path: '/v1/scope-writer/cohort' }), 404);
     assert.equal(await call(socketPath, { method: 'GET', path: '/v1/scope-writer/cohort?project=other' }), 404);
@@ -42,10 +43,10 @@ it('serves a single bound read without accepting caller-supplied verbs, queries 
   });
 });
 
-it('returns a bounded refusal for missing and oversized observations', async () => {
+it('returns a bounded refusal for missing and oversized observations', unixOnly, async () => {
   const { createScopeWriterObserver, readScopeWriterObservation } = await load();
   for (const observe of [() => ({ oversized: 'z'.repeat(16_384) }), () => { throw new Error('private details'); }]) {
-    await withServer(createScopeWriterObserver, observe, async socketPath => {
+    await withServer(probe => createScopeWriterObserver({ observe: probe }), observe, async socketPath => {
       await assert.rejects(readScopeWriterObservation({ socketPath }), { message: 'scope_writer_observation_unavailable' });
     });
   }
@@ -73,17 +74,51 @@ it('projects only service health in the actuator-owned project', async () => {
   assert.deepEqual(lookups, { portal: { composePresent: true, healthy: true }, postgres: { composePresent: true, healthy: false } });
 });
 
-it('binds the typed service health request to the actuator project', async () => {
+it('binds the typed service health request to the actuator project', unixOnly, async () => {
   const { createScopeWriterObserver, readActuatorProjectServices } = await load();
   let dispatched = 0;
   const services = { portal: { composePresent: true, healthy: true } };
-  await withServer(observe => createScopeWriterObserver(observe, async () => {
+  await withServer(observe => createScopeWriterObserver({ observe, observeServices: async () => {
     dispatched++;
     return services;
-  }), async () => ({}), async socketPath => {
+  } }), async () => ({}), async socketPath => {
     assert.equal(await call(socketPath, { method: 'GET', path: '/v1/runtime/project-services?project=peer' }), 404);
     assert.equal(dispatched, 0);
     assert.deepEqual(await readActuatorProjectServices({ socketPath }), services);
     assert.equal(dispatched, 1);
   });
+});
+
+it('atomically publishes a listening socket over an older generation', unixOnly, async () => {
+  const { createScopeWriterObserver, publishActuatorSocket, readScopeWriterObservation } = await load();
+  const root = await mkdtemp(join(tmpdir(), 'sw-restart-'));
+  const socketPath = join(root, 'obs.sock');
+  const servers = ['old', 'current'].map(generation => createScopeWriterObserver({ observe: async () => ({ generation }) }));
+  try {
+    for (const [index, server] of servers.entries()) {
+      await publishActuatorSocket(server, { socketPath, uid: process.getuid(), gid: process.getgid() });
+      assert.deepEqual(await readScopeWriterObservation({ socketPath }), { generation: index === 0 ? 'old' : 'current' });
+    }
+    await new Promise(resolve => servers[0].close(resolve));
+    assert.deepEqual(await readScopeWriterObservation({ socketPath }), { generation: 'current' });
+  } finally {
+    await Promise.all(servers.map(server => new Promise(resolve => server.close(resolve))));
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+it('accepts a preview reconciliation trigger without accepting any target, command or request body', unixOnly, async () => {
+  const { createScopeWriterObserver, reconcileEndedPreviewRuntimes } = await load();
+  const result = { checked: 1, stopped: 1, held: 0, pending: 0, truncated: false, outcomes: [] };
+  let calls = 0;
+  await withServer(observe => createScopeWriterObserver({ observe, fencePreviews: async () => { calls++; return result; } }),
+    async () => ({}), async socketPath => {
+      assert.equal(await call(socketPath, { method: 'GET', path: '/v1/runtime/fence-ended-previews' }), 404);
+      assert.equal(await call(socketPath, { method: 'POST', path: '/v1/runtime/fence-ended-previews?target=peer' }), 404);
+      assert.equal(await call(socketPath, { method: 'POST', path: '/v1/runtime/fence-ended-previews',
+        headers: { 'content-length': '1' } }), 404);
+      assert.equal(calls, 0);
+      assert.deepEqual(await reconcileEndedPreviewRuntimes({ socketPath }), result);
+      assert.equal(calls, 1);
+    });
 });

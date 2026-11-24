@@ -1028,16 +1028,35 @@ if [[ $_dry_run -eq 0 ]]; then
   fi
 fi
 
+_scope_writer_profile=""
 if [[ $_dry_run -eq 0 ]]; then
   _reassessment_candidate_ref="${_project}-portal"
   [[ $_release_mode -eq 0 ]] || _reassessment_candidate_ref="$_candidate_portal"
   _reassessment_candidate_digest="$(_assert_reassessment_image "$_reassessment_candidate_ref" "$_built_sha")" || exit 78
   _assert_scope_writer_image "$_reassessment_candidate_digest" "$_built_sha" >/dev/null || exit 78
+  _scope_writer_profile="$(docker image inspect "$_reassessment_candidate_digest" \
+    --format '{{with index .Config.Labels "com.opendpf.scope-writer.recipe"}}{{.}}{{end}}')" || exit 78
+  case "$_scope_writer_profile" in
+    "") ;;
+    portal-immutable-v1)
+      node "$_promoter_dir/promoter-epoch-evidence.mjs" --phase scope-served-image --image "$_reassessment_candidate_digest" >/dev/null || exit 78
+      ;;
+    *) printf 'error: unsupported scope writer launch recipe\n' >&2; exit 78 ;;
+  esac
   if [[ $_promote_phase == all ]]; then
     _reassessment_candidate_override="$PROMOTE_BACKUP_PATH/reassessment-candidate-$$.yml"
     _assert_reassessment_image "$_reassessment_candidate_digest" "$_built_sha" "$_reassessment_candidate_override" >/dev/null || exit 78
     _assert_scope_writer_image "$_reassessment_candidate_digest" "$_built_sha" >/dev/null || exit 78
     _f_args+=(-f "$_reassessment_candidate_override")
+    if [[ "$_scope_writer_profile" == portal-immutable-v1 ]]; then
+      # Use the same already resolved image for the private actuator. Do not
+      # resolve an independent mutable service tag after the writer is checked.
+      printf '  portal-actuator:\n    image: "%s"\n    pull_policy: never\n' "$_reassessment_candidate_digest" >>"$_reassessment_candidate_override"
+      docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$_compose_root" -p "$_project" \
+        "${_f_args[@]}" config --format json \
+        | node "$_promoter_dir/promoter-epoch-evidence.mjs" --phase scope-compose --project "$_project" \
+          --image "$_reassessment_candidate_digest" --actuator-image "$_reassessment_candidate_digest" || exit 78
+    fi
   fi
 fi
 
@@ -1209,6 +1228,10 @@ if [[ $_dry_run -eq 0 ]]; then
     docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$_compose_root" -p "$_project" \
       "${_f_args[@]}" up -d --no-deps --force-recreate inngest
   fi
+  if [[ "$_scope_writer_profile" == portal-immutable-v1 ]]; then
+    docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$_compose_root" -p "$_project" \
+      "${_f_args[@]}" up -d --no-build --no-deps --force-recreate portal-actuator
+  fi
   docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$_compose_root" -p "$_project" \
     "${_f_args[@]}" up -d --no-build --no-deps --force-recreate portal
 fi  # DPF_PLATFORM_VERSION stays exported from above so any rebuild keeps the stamp
@@ -1307,6 +1330,12 @@ if [[ $_dry_run -eq 0 ]]; then
       "${_running_hash:-unknown}" "$_built_hash" >&2
     exit 1
   }
+  if [[ "$_scope_writer_profile" == portal-immutable-v1 ]]; then
+    _scope_writer_id="$(docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$_compose_root" -p "$_project" \
+      "${_f_args[@]}" ps -q portal)" || exit 78
+    node "$_promoter_dir/promoter-epoch-evidence.mjs" --phase scope-launch --image "$_reassessment_candidate_digest" \
+      --container "$_scope_writer_id" --project "$_project" >/dev/null || exit 78
+  fi
 fi
 
 # A verified release runtime and its restart identity are one transaction. Only
@@ -1458,7 +1487,11 @@ fi
 # --- Step 7c: legacy-datastore decommission ---
 if [[ $_dry_run -eq 0 && ${_sandbox_ok:-0} -eq 1 && -f "$_promoter_dir/promoter-epoch-evidence.mjs" ]]; then
   node "$_promoter_dir/promoter-epoch-evidence.mjs" --phase finish \
-    || printf 'step=maintenance-epoch-retirement-unavailable\n'
+    || { printf 'step=maintenance-epoch-retirement-unavailable\n'; [[ "$_scope_writer_profile" != portal-immutable-v1 ]] || exit 78; }
+  if [[ "$_scope_writer_profile" == portal-immutable-v1 ]]; then
+    node "$_promoter_dir/promoter-epoch-evidence.mjs" --phase scope-record-launch \
+      --image "$_reassessment_candidate_digest" || exit 78
+  fi
 fi
 
 # BET-5 (BI-922EBB99 / BI-2A3BE4D7): the portal now runs on Postgres only (pgvector for

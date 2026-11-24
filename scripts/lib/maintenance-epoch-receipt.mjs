@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { canonicalJson } from './canonical-json.mjs';
 import { signTransitionPayload, verifyTransitionSignature } from './transition-signing.mjs';
 
@@ -71,17 +72,35 @@ export function signMaintenanceEpoch(payload, secret, checkpoint = false) {
   return { ...unsigned, signature: signTransitionPayload(unsigned, secret) };
 }
 
-export function verifyMaintenanceEpoch(envelope, secret, expected, checkpoint = false) {
+function inspectEnvelope(envelope, checkpoint) {
   if (!exact(envelope, ['version', 'kind', 'payload', 'signature']) || envelope.version !== 1
     || envelope.kind !== (checkpoint ? 'maintenance-epoch-checkpoint' : 'maintenance-epoch-retirement')
     || typeof envelope.payload !== 'string' || envelope.payload.length > 16_384
     || typeof envelope.signature !== 'string') refuse();
-  const { signature, ...unsigned } = envelope;
-  verifyTransitionSignature(unsigned, signature, secret);
+}
+
+function readEnvelopePayload(envelope, expected, checkpoint) {
   let payload;
   try { payload = JSON.parse(envelope.payload); } catch { refuse(); }
   if (canonicalJson(payload) !== envelope.payload) refuse();
   return validatePayload(payload, expected, checkpoint);
+}
+
+export function verifyMaintenanceEpoch(envelope, secret, expected, checkpoint = false) {
+  inspectEnvelope(envelope, checkpoint);
+  const { signature, ...unsigned } = envelope;
+  verifyTransitionSignature(unsigned, signature, secret);
+  return readEnvelopePayload(envelope, expected, checkpoint);
+}
+
+/** The private actuator has already authenticated this retirement. Bind the
+ * attested digest and exact run before importing the original envelope. */
+export function readAttestedMaintenanceRetirement(observation, expected) {
+  const { envelope, retirementDigest } = observation ?? {};
+  inspectEnvelope(envelope, false);
+  if (typeof retirementDigest !== 'string' || !HEX.test(retirementDigest)
+    || createHash('sha256').update(canonicalJson(envelope)).digest('hex') !== retirementDigest) refuse();
+  return readEnvelopePayload(envelope, expected, false);
 }
 
 

@@ -1,11 +1,15 @@
 import { createServer, request } from 'node:http';
-import { lstat } from 'node:fs/promises';
-import { dirname } from 'node:path';
+import { randomBytes } from 'node:crypto';
+import { once } from 'node:events';
+import { chmod, chown, lstat, rename } from 'node:fs/promises';
+import { dirname, join } from 'node:path';
 import { dockerSocketGet } from './docker-socket.mjs';
 
 export const SCOPE_WRITER_OBSERVER_SOCKET = '/run/dpf-actuator/scope-observer.sock';
 const cohortPath = '/v1/scope-writer/cohort';
+const retirementPath = '/v1/scope-writer/retirement';
 const projectServicesPath = '/v1/runtime/project-services';
+const fencePreviewsPath = '/v1/runtime/fence-ended-previews';
 const responseLimit = 8192;
 const unavailable = () => new Error('scope_writer_observation_unavailable');
 
@@ -15,12 +19,15 @@ export function hasPrivateActuatorMount(mountinfo) {
 
 /** Serve one read operation. The Unix directory belongs to the actuator.
  * The observer derives scope from host-owned state, never from the request. */
-export function createScopeWriterObserver(observe, observeServices) {
-  const operations = new Map([[cohortPath, observe], [projectServicesPath, observeServices]]);
+export function createScopeWriterObserver({ observe, observeServices, readRetirement, fencePreviews }) {
+  const operations = new Map([
+    [`GET ${cohortPath}`, observe], [`GET ${projectServicesPath}`, observeServices],
+    [`GET ${retirementPath}`, readRetirement], [`POST ${fencePreviewsPath}`, fencePreviews],
+  ]);
   const server = createServer({ headersTimeout: 2_000, requestTimeout: 2_000, maxHeaderSize: 1024 }, async (req, res) => {
     res.setHeader('Connection', 'close');
-    const call = operations.get(req.url);
-    if (req.method !== 'GET' || !call || req.headers['transfer-encoding'] !== undefined
+    const call = operations.get(`${req.method} ${req.url}`);
+    if (!call || req.headers['transfer-encoding'] !== undefined
       || (req.headers['content-length'] !== undefined && req.headers['content-length'] !== '0')) {
       res.writeHead(404).end();
       return;
@@ -35,8 +42,26 @@ export function createScopeWriterObserver(observe, observeServices) {
   return server;
 }
 
+/** Bind a new inode in the actuator-owned directory before publishing its
+ * stable name. A restart does not need to trust or clean up an older socket. */
+export async function publishActuatorSocket(server, { socketPath = SCOPE_WRITER_OBSERVER_SOCKET, uid = 0, gid = 1000 } = {}) {
+  const root = dirname(socketPath), directory = await lstat(root);
+  if (!directory.isDirectory() || directory.uid !== uid || (directory.mode & 0o022) !== 0) throw unavailable();
+  const unpublished = join(root, `.${randomBytes(6).toString('hex')}.sock`);
+  try {
+    server.listen(unpublished);
+    await once(server, 'listening');
+    await chown(unpublished, uid, gid);
+    await chmod(unpublished, 0o660);
+    await rename(unpublished, socketPath);
+  } catch (error) {
+    server.close();
+    throw error;
+  }
+}
+
 /** Close the connection on refused, stalled, oversized or malformed output. */
-async function readActuatorObservation(path, socketPath) {
+async function requestActuator(path, socketPath, { method = 'GET', timeoutMs = 2_500 } = {}) {
   if (socketPath === SCOPE_WRITER_OBSERVER_SOCKET) {
     try {
       const [directory, socket] = await Promise.all([lstat(dirname(socketPath)), lstat(socketPath)]);
@@ -47,7 +72,7 @@ async function readActuatorObservation(path, socketPath) {
     } catch { throw unavailable(); }
   }
   return new Promise((resolve, reject) => {
-    const req = request({ socketPath, method: 'GET', path, agent: false, signal: AbortSignal.timeout(2_500) }, res => {
+    const req = request({ socketPath, method, path, agent: false, signal: AbortSignal.timeout(timeoutMs) }, res => {
       const fail = () => { reject(unavailable()); res.destroy(); };
       if (res.statusCode !== 200 || res.headers['content-type'] !== 'application/json') return fail();
       const chunks = [];
@@ -73,11 +98,19 @@ async function readActuatorObservation(path, socketPath) {
 }
 
 export function readScopeWriterObservation({ socketPath = SCOPE_WRITER_OBSERVER_SOCKET } = {}) {
-  return readActuatorObservation(cohortPath, socketPath);
+  return requestActuator(cohortPath, socketPath);
+}
+
+export function readScopeWriterRetirement({ socketPath = SCOPE_WRITER_OBSERVER_SOCKET } = {}) {
+  return requestActuator(retirementPath, socketPath);
 }
 
 export function readActuatorProjectServices({ socketPath = SCOPE_WRITER_OBSERVER_SOCKET } = {}) {
-  return readActuatorObservation(projectServicesPath, socketPath);
+  return requestActuator(projectServicesPath, socketPath);
+}
+
+export function reconcileEndedPreviewRuntimes({ socketPath = SCOPE_WRITER_OBSERVER_SOCKET } = {}) {
+  return requestActuator(fencePreviewsPath, socketPath, { method: 'POST', timeoutMs: 30_000 });
 }
 
 /** Only the installation binding selects the project. Daemon metadata is

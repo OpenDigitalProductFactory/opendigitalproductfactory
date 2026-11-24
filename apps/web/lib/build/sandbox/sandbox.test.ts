@@ -265,13 +265,13 @@ describe("sandbox next dev helpers", () => {
 
 describe("sandbox workspace initialization helpers", () => {
   it("copies apps/web source without stale node_modules or build output", () => {
-    const command = buildSandboxAppsWebCopyCommand("portal-1", "sandbox-1");
+    const command = buildSandboxAppsWebCopyCommand("sandbox-1");
 
     expect(command).toContain("tar --exclude='apps/web/node_modules'");
     expect(command).toContain("--exclude='apps/web/.next'");
     expect(command).toContain("--exclude='apps/web/tsconfig.tsbuildinfo'");
-    expect(command).toContain("docker exec portal-1");
-    expect(command).toContain("docker exec -i sandbox-1");
+    expect(command).toMatch(/^tar /);
+    expect(command).toContain("docker exec -i 'sandbox-1'");
   });
 
   it("cleans any stale app-local dependencies and build artifacts before install", () => {
@@ -333,11 +333,11 @@ describe("sandbox workspace initialization helpers", () => {
   });
 
   it("copies root scripts so workspace postinstall hooks can run in the sandbox", () => {
-    const command = buildSandboxRootScriptsCopyCommand("portal-1", "sandbox-1");
+    const command = buildSandboxRootScriptsCopyCommand("sandbox-1");
 
     expect(command).toContain("tar -cf - -C /app scripts");
-    expect(command).toContain("docker exec portal-1");
-    expect(command).toContain("docker exec -i sandbox-1");
+    expect(command).toMatch(/^tar /);
+    expect(command).toContain("docker exec -i 'sandbox-1'");
   });
 });
 

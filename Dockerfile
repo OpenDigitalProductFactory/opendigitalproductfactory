@@ -436,6 +436,10 @@ ENV PORT=3000
 
 # Copy standalone Next.js output
 COPY --from=build /app/apps/web/.next/standalone ./
+# The served-writer probe validates the emitted dependency closure in the
+# runner, where the standalone files and their symlink targets are present.
+COPY --from=build /app/apps/web/.next/next-server.js.nft.json ./apps/web/.next/next-server.js.nft.json
+COPY --from=build /app/apps/web/.next/server/app/api/mcp/v1/route.js.nft.json ./apps/web/.next/server/app/api/mcp/v1/route.js.nft.json
 COPY --from=build /app/apps/web/.next/static ./apps/web/.next/static
 COPY --from=build /app/apps/web/public ./apps/web/public
 

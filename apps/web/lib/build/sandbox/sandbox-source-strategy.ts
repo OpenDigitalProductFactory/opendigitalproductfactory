@@ -5,7 +5,9 @@ import { lazyExec, lazyFs } from "@/lib/shared/lazy-node";
 import {
   buildSandboxWorkspaceCleanupCommand,
   execInSandbox,
+  quotePosixArg,
 } from "@/lib/sandbox";
+import { hasPrivateActuatorMount } from "../../../../../scripts/lib/scope-writer-observation.mjs";
 
 const exec = lazyExec();
 
@@ -54,9 +56,9 @@ export function buildSourcePaths(activeRoot: string | null | undefined): SourceP
   };
 }
 
-export function buildWorkspaceRootProbeCommand(portalContainer: string): string {
-  const projectRootVar = "${PROJECT_ROOT}";
-  return `docker exec ${portalContainer} sh -lc "if [ -n \\"${projectRootVar}\\" ] && [ -f \\"${projectRootVar}/package.json\\" ]; then printf %s \\"${projectRootVar}\\"; elif [ -f /workspace/package.json ]; then printf %s /workspace; fi"`;
+export function pickSandboxSourceRoot(configured: string | undefined, hardened: boolean, exists: (file: string) => boolean): string | null {
+  if (hardened) return null;
+  return [configured?.trim(), "/workspace"].find(root => root && exists(`${root}/package.json`)) ?? null;
 }
 
 export function buildSandboxGitWorkspaceReadyCommand(workspace: string = "/workspace"): string {
@@ -64,34 +66,31 @@ export function buildSandboxGitWorkspaceReadyCommand(workspace: string = "/works
 }
 
 export function buildWorkspacePackagesCopyCommand(
-  portalContainer: string,
   containerId: string,
   packagesDir: string,
 ): string {
-  return `docker exec ${portalContainer} tar -cf - -C ${packagesDir} . | docker exec -i ${containerId} sh -c 'mkdir -p /workspace/packages && tar -xf - -C /workspace/packages'`;
+  return `tar -cf - -C ${quotePosixArg(packagesDir)} . | docker exec -i ${quotePosixArg(containerId)} sh -c 'mkdir -p /workspace/packages && tar -xf - -C /workspace/packages'`;
 }
 
 export function buildWorkspaceAppsWebCopyCommand(
-  portalContainer: string,
   containerId: string,
   webAppDir: string,
 ): string {
   return [
-    `docker exec ${portalContainer} tar`,
+    "tar",
     "--exclude='node_modules'",
     "--exclude='.next'",
     "--exclude='tsconfig.tsbuildinfo'",
-    `-cf - -C ${webAppDir} .`,
-    `| docker exec -i ${containerId} sh -c 'mkdir -p /workspace/apps/web && tar -xf - -C /workspace/apps/web'`,
+    `-cf - -C ${quotePosixArg(webAppDir)} .`,
+    `| docker exec -i ${quotePosixArg(containerId)} sh -c 'mkdir -p /workspace/apps/web && tar -xf - -C /workspace/apps/web'`,
   ].join(" ");
 }
 
 export function buildWorkspaceScriptsCopyCommand(
-  portalContainer: string,
   containerId: string,
   rootConfigDir: string,
 ): string {
-  return `docker exec ${portalContainer} tar -cf - -C ${rootConfigDir} scripts | docker exec -i ${containerId} tar -xf - -C /workspace`;
+  return `tar -cf - -C ${quotePosixArg(rootConfigDir)} scripts | docker exec -i ${quotePosixArg(containerId)} tar -xf - -C /workspace`;
 }
 
 // ─── LocalSourceStrategy ──────────────────────────────────────────────────────
@@ -111,33 +110,19 @@ export class LocalSourceStrategy implements SandboxSourceStrategy {
       return;
     }
 
-    // Resolve the portal container to copy source from.
-    let portalContainer = "dpf-portal-1";
-    try {
-      const { readFileSync } = lazyFs();
-      const hostname = readFileSync("/etc/hostname", "utf-8").trim();
-      if (hostname && hostname !== "0.0.0.0") portalContainer = hostname;
-    } catch { /* fallback */ }
-
-    let activeWorkspaceRoot: string | null = null;
-    try {
-      const { stdout } = await exec(
-        buildWorkspaceRootProbeCommand(portalContainer),
-        { timeout: 10_000 },
-      );
-      activeWorkspaceRoot = stdout.trim() || null;
-    } catch {
-      activeWorkspaceRoot = null;
-    }
-
-    const sourcePaths = buildSourcePaths(activeWorkspaceRoot);
+    const { statSync, readFileSync } = lazyFs();
+    let hardened = false;
+    try { hardened = hasPrivateActuatorMount(readFileSync("/proc/self/mountinfo")); } catch { /* local host */ }
+    const sourcePaths = buildSourcePaths(pickSandboxSourceRoot(process.env.PROJECT_ROOT, hardened, path => {
+      try { return statSync(path).isFile(); } catch { return false; }
+    }));
 
     // 1. Copy root config files from the active workspace when available,
     //    otherwise fall back to the image-bundled source.
     const rootFiles = ["package.json", "pnpm-workspace.yaml", "pnpm-lock.yaml", "tsconfig.base.json"];
     for (const f of rootFiles) {
       await exec(
-        `docker exec ${portalContainer} tar -cf - -C ${sourcePaths.rootConfigDir} ${f} | docker exec -i ${containerId} tar -xf - -C /workspace`,
+        `tar -cf - -C ${quotePosixArg(sourcePaths.rootConfigDir)} ${f} | docker exec -i ${quotePosixArg(containerId)} tar -xf - -C /workspace`,
         { timeout: 10_000 },
       ).catch(() => console.log(`[source-strategy] ${f} not found, skipping`));
     }
@@ -148,15 +133,15 @@ export class LocalSourceStrategy implements SandboxSourceStrategy {
     //    (file-modified warnings, etc.) which exhausts Node's default 1 MB buffer.
     const LARGE_COPY_OPTS = { timeout: 60_000, maxBuffer: 100 * 1024 * 1024 };
     await exec(
-      buildWorkspacePackagesCopyCommand(portalContainer, containerId, sourcePaths.packagesDir),
+      buildWorkspacePackagesCopyCommand(containerId, sourcePaths.packagesDir),
       LARGE_COPY_OPTS,
     );
     await exec(
-      buildWorkspaceAppsWebCopyCommand(portalContainer, containerId, sourcePaths.webAppDir),
+      buildWorkspaceAppsWebCopyCommand(containerId, sourcePaths.webAppDir),
       LARGE_COPY_OPTS,
     );
     await exec(
-      buildWorkspaceScriptsCopyCommand(portalContainer, containerId, sourcePaths.rootConfigDir),
+      buildWorkspaceScriptsCopyCommand(containerId, sourcePaths.rootConfigDir),
       { timeout: 20_000, maxBuffer: 100 * 1024 * 1024 },
     ).catch(() => console.log("[source-strategy] scripts/ not found, skipping"));
 

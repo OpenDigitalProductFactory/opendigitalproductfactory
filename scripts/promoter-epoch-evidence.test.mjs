@@ -118,7 +118,10 @@ describe('canonical promoter retirement observation', () => {
     assert(script.indexOf('--phase capture') < script.indexOf('emit_step docker-up'));
     assert(script.indexOf('--phase finish') > script.indexOf('up -d --no-deps --force-recreate sandbox'));
     assert.match(script, /\$\{_sandbox_ok:-0\} -eq 1[^\n]*-f[^\n]*promoter-epoch-evidence/);
-    assert.match(script, /--phase finish \\\n\s*\|\| printf 'step=maintenance-epoch-retirement-unavailable/);
+    assert.match(script, /--phase finish \\\n\s*\|\| \{\s*printf 'step=maintenance-epoch-retirement-unavailable/);
+    assert(script.indexOf('--phase scope-compose') < script.indexOf('emit_step docker-up'));
+    assert(script.indexOf('--phase scope-launch') > script.indexOf('up -d --no-build --no-deps --force-recreate portal'));
+    assert(script.indexOf('--phase scope-record-launch') > script.indexOf('--phase finish'));
   });
   it('persists a signed checkpoint and final evidence without replacing a checkpoint', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'dpf-epoch-test-'));
@@ -189,7 +192,6 @@ describe('scope writer actuator observations', () => {
     const recipe = {
       name: 'fixture',
       volumes: { portal_actuator: { name: 'fixture_portal_actuator' } },
-      networks: { 'runtime-admission': { name: 'fixture_runtime-admission', internal: true } },
       services: {
         portal: { image: launchImage, pull_policy: 'never', user: '1000:1000', read_only: true,
           cap_drop: ['ALL'], security_opt: ['no-new-privileges:true'], tmpfs: ['/tmp:rw,noexec,nosuid,nodev,size=512m,mode=1777'],
@@ -197,11 +199,13 @@ describe('scope writer actuator observations', () => {
             { type: 'volume', source: 'portal_actuator', target: '/run/dpf-actuator', read_only: true },
             { type: 'bind', source: '/install/state', target: '/dpf-state', read_only: true },
           ] },
-        postgres: { networks: { default: null, 'runtime-admission': null } },
         'portal-actuator': { image: actuatorImage, pull_policy: 'never', user: '0:0', read_only: true,
-          networks: { 'runtime-admission': null }, cap_drop: ['ALL'], cap_add: ['CHOWN'], security_opt: ['no-new-privileges:true'],
-          entrypoint: ['node', '/app/scripts/promoter-epoch-evidence.mjs'], command: ['--phase', 'scope-serve'],
-          environment: { PROMOTE_COMPOSE_PROJECT: 'fixture' }, volumes: [
+          networks: { default: null }, cap_drop: ['ALL'], cap_add: ['CHOWN'], security_opt: ['no-new-privileges:true'],
+          entrypoint: ['/usr/local/bin/node', '/usr/local/bin/runtime-secret-bootstrap.mjs', '--',
+            '/usr/local/bin/node', '--import', 'tsx'],
+          command: ['/app/apps/web-src/lib/platform-runtime/portal-actuator-entry.ts'],
+          environment: { PROMOTE_COMPOSE_PROJECT: 'fixture', TSX_TSCONFIG_PATH: '/app/apps/web-src/tsconfig.json',
+            DPF_RUNTIME_SECRET_NAMES: 'DATABASE_URL' }, volumes: [
             { type: 'volume', source: 'portal_actuator', target: '/run/dpf-actuator' },
             { type: 'bind', source: '/install/state', target: '/dpf-state', read_only: true },
             { type: 'bind', source: '/var/run/docker.sock', target: '/var/run/docker.sock' },
@@ -219,6 +223,8 @@ describe('scope writer actuator observations', () => {
       value => { value.services['portal-actuator'].entrypoint.push('--inspect'); },
       value => { value.services['portal-actuator'].ports = [{ target: 80 }]; },
       value => { value.services['portal-actuator'].environment.PROMOTE_COMPOSE_PROJECT = 'peer'; },
+      value => { value.services['portal-actuator'].environment.DPF_DOCKER_BIN = '/tmp/docker'; },
+      value => { value.services['portal-actuator'].environment.DATABASE_URL = 'postgresql://peer/db'; },
       value => { value.volumes.portal_actuator.driver_opts = { type: 'none', device: '/tmp' }; },
     ]) {
       const changed = structuredClone(recipe);
@@ -316,7 +322,7 @@ describe('scope writer actuator observations', () => {
       if (args[0] === 'inspect') return JSON.stringify(portal);
       if (args[0] === 'image') return launchImage;
       if (args[0] === 'run') return JSON.stringify({ schemaVersion: 1, serverSha256: '4'.repeat(64),
-        routeSha256: '5'.repeat(64), manifestSha256: '6'.repeat(64) });
+        routeSha256: '5'.repeat(64), manifestSha256: '6'.repeat(64), closureSha256: '7'.repeat(64) });
       throw new Error('unexpected actuator operation');
     };
     const evidence = await imageEvidence.collectScopeWriterLaunchEvidence({ retirement, secret, image: launchImage,
@@ -426,9 +432,14 @@ describe('actual served writer bundle evidence', () => {
   const launcher = `${root}/apps/web/server.js`;
   const route = `${root}/apps/web/.next/server/app/api/mcp/v1/route.js`;
   const manifest = `${root}/apps/web/.next/server/app-paths-manifest.json`;
+  const dependency = `${root}/node_modules/native-holder/binding.node`;
+  const serverTrace = `${root}/apps/web/.next/next-server.js.nft.json`;
+  const routeTrace = `${route}.nft.json`;
   const fixture = () => {
     const files = new Map([[launcher, 'compiled standalone entrypoint'], [route, 'compiled MCP route'],
-      [manifest, JSON.stringify({ '/api/mcp/v1/route': 'app/api/mcp/v1/route.js' })]]);
+      [manifest, JSON.stringify({ '/api/mcp/v1/route': 'app/api/mcp/v1/route.js' })],
+      [dependency, 'native fixture'], [serverTrace, JSON.stringify({ version: 1, files: ['../../../node_modules/native-holder/binding.node'] })],
+      [routeTrace, JSON.stringify({ version: 1, files: [] })]]);
     return { files, root,
       readFile: async path => { if (!files.has(path)) throw new Error('missing'); return Buffer.from(files.get(path)); },
       stat: async path => ({ isFile: () => files.has(path), size: Buffer.byteLength(files.get(path) ?? '') }),
@@ -439,11 +450,19 @@ describe('actual served writer bundle evidence', () => {
   it('binds the standalone server and the actual MCP route independently of copied sources', async () => {
     const f = fixture();
     const before = await writerProbe.inspectServedScopeWriter(f);
-    assert.deepEqual(Object.keys(before), ['schemaVersion', 'serverSha256', 'routeSha256', 'manifestSha256']);
+    assert.deepEqual(Object.keys(before), ['schemaVersion', 'serverSha256', 'routeSha256', 'manifestSha256', 'closureSha256']);
     f.files.set(route, 'changed emitted route');
     const after = await writerProbe.inspectServedScopeWriter(f);
     assert.equal(after.serverSha256, before.serverSha256);
     assert.notEqual(after.routeSha256, before.routeSha256);
+  });
+
+  it('refuses a missing traced dependency or one resolved outside the immutable image', async () => {
+    const f = fixture();
+    await assert.rejects(writerProbe.inspectServedScopeWriter({ ...f,
+      realpath: async path => path === dependency ? '/tmp/overridden.node' : path }), /scope_writer_probe_served_bundle_unproven/);
+    f.files.delete(dependency);
+    await assert.rejects(writerProbe.inspectServedScopeWriter(f), /scope_writer_probe_served_bundle_unproven/);
   });
 
   it('refuses an external symlink or route manifest pointing outside the standalone server', async () => {

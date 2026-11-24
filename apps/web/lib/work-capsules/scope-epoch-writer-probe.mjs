@@ -1,7 +1,6 @@
-#!/usr/bin/env node
 import { createHash } from "node:crypto";
 import { readFile as readPackagedFile, readlink as readKernelLink, realpath as resolvePackagedPath, stat as statPackagedFile } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { isEntryModule } from "../../../../scripts/lib/entry-module.mjs";
 const sha256 = value => createHash("sha256").update(value).digest("hex");
@@ -41,7 +40,9 @@ export async function inspectScopeEpochWriters({ root = "/app", readFile = readP
 export async function inspectServedScopeWriter({ root = "/app", readFile = readPackagedFile,
   realpath = resolvePackagedPath, stat = statPackagedFile } = {}) {
   try {
-    const web = join(await realpath(root), "apps/web");
+    const imageRoot = await realpath(root);
+    if (imageRoot !== root) refuse("served_bundle_unproven");
+    const web = join(imageRoot, "apps/web");
     async function readEmitted(path, maxBytes) {
       // These three paths must live at the canonical standalone locations.
       // Reject symlinks into development sources and shared volumes.
@@ -56,11 +57,37 @@ export async function inspectServedScopeWriter({ root = "/app", readFile = readP
     const routePath = "app/api/mcp/v1/route.js";
     const manifest = await readEmitted(join(serverDir, "app-paths-manifest.json"), 1024 * 1024);
     if (JSON.parse(manifest.toString("utf8"))?.["/api/mcp/v1/route"] !== routePath) refuse("served_bundle_unproven");
-    const [server, route] = await Promise.all([
+    const traces = [join(web, ".next/next-server.js.nft.json"), join(serverDir, `${routePath}.nft.json`)];
+    const [server, route, ...traceBytes] = await Promise.all([
       readEmitted(join(web, "server.js"), 1024 * 1024),
       readEmitted(join(serverDir, routePath), 16 * 1024 * 1024),
+      ...traces.map(path => readEmitted(path, 4 * 1024 * 1024)),
     ]);
-    return { schemaVersion: 1, serverSha256: sha256(server), routeSha256: sha256(route), manifestSha256: sha256(manifest) };
+    const dependencies = new Set();
+    for (const [index, bytes] of traceBytes.entries()) {
+      const trace = JSON.parse(bytes.toString("utf8"));
+      if (trace?.version !== 1 || !Array.isArray(trace.files) || trace.files.length > 50_000) refuse("served_bundle_unproven");
+      for (const name of trace.files) {
+        if (typeof name !== "string" || name.length === 0 || name.length > 4096 || isAbsolute(name)) refuse("served_bundle_unproven");
+        const declared = resolve(dirname(traces[index]), name);
+        if (!declared.startsWith(`${imageRoot}/`)) refuse("served_bundle_unproven");
+        dependencies.add(declared);
+      }
+    }
+    const ordered = [...dependencies].sort(), closure = createHash("sha256");
+    for (const bytes of traceBytes) closure.update(sha256(bytes));
+    for (let offset = 0; offset < ordered.length; offset += 32) {
+      const batch = await Promise.all(ordered.slice(offset, offset + 32).map(async declared => {
+        const target = await realpath(declared);
+        if (!target.startsWith(`${imageRoot}/`)) refuse("served_bundle_unproven");
+        const info = await stat(target);
+        if (!info.isFile() && !(declared !== target && info.isDirectory())) refuse("served_bundle_unproven");
+        return [relative(imageRoot, declared), relative(imageRoot, target)];
+      }));
+      closure.update(JSON.stringify(batch));
+    }
+    return { schemaVersion: 1, serverSha256: sha256(server), routeSha256: sha256(route), manifestSha256: sha256(manifest),
+      closureSha256: closure.digest("hex") };
   } catch { return refuse("served_bundle_unproven"); }
 }
 
@@ -81,13 +108,16 @@ const dataMounts = new Set([
   "/etc/hostname", "/etc/hosts", "/etc/resolv.conf", "/sandbox-workspace",
   "/var/lib/dpf/maps", "/backups", "/dpf-federation",
 ]);
+const systemSharedObject = /^\/(?:app|lib|usr\/lib|usr\/local\/lib)\//;
 
 /** Inspect this process's generation and existing kernel protections.
  * @param {{ readFile?: (path: string) => Promise<Buffer|string>,
  *   readlink?: (path: string) => Promise<string>, pid?: number,
+ *   realpath?: (path: string) => Promise<string>, nativeObjects?: () => unknown,
  *   execPath?: string, argv?: string[], env?: Record<string, string|undefined> }} [options]
  */
 export async function attestScopeWriterProcess({ readFile = readPackagedFile, readlink = readKernelLink,
+  realpath = resolvePackagedPath, nativeObjects = () => process.report.getReport().sharedObjects,
   pid = process.pid, execPath = process.execPath, argv = process.execArgv, env = process.env } = {}) {
   try {
     if (execPath !== "/usr/local/bin/node" || argv.length !== 1 || argv[0] !== "--disable-sigusr1"
@@ -124,6 +154,15 @@ export async function attestScopeWriterProcess({ readFile = readPackagedFile, re
       } else if (!systemMounts.has(target) && !dataMounts.has(target)) refuse("process_unproven");
     }
     if (["/", "/tmp", "/run/dpf-actuator", "/proc"].some(target => !targets.has(target))) refuse("process_unproven");
+    // Process reports contain other diagnostic data. Read only the shared
+    // object paths here and never return or serialize the report.
+    const loaded = nativeObjects();
+    if (!Array.isArray(loaded) || loaded.length === 0 || loaded.length > 256) refuse("process_unproven");
+    for (const path of loaded) {
+      if (path === "linux-vdso.so.1" || path === "linux-gate.so.1") continue;
+      if (typeof path !== "string" || !systemSharedObject.test(path)
+        || !systemSharedObject.test(await realpath(path))) refuse("process_unproven");
+    }
     const processStat = stat.toString(), endOfName = processStat.lastIndexOf(") ");
     const startTicks = processStat.slice(endOfName + 2).trim().split(/\s+/)[19];
     if (!processStat.startsWith(`${pid} (`) || endOfName < 0 || !/^[1-9][0-9]*$/.test(startTicks ?? "")) refuse("process_unproven");
@@ -131,7 +170,7 @@ export async function attestScopeWriterProcess({ readFile = readPackagedFile, re
   } catch { return refuse("process_unproven"); }
 }
 
-if (isEntryModule(import.meta.url)) {
+async function runScopeWriterProbe() {
   try {
     const args = process.argv.slice(2);
     const proof = args.length === 0 ? await inspectScopeEpochWriters()
@@ -139,3 +178,4 @@ if (isEntryModule(import.meta.url)) {
     process.stdout.write(`${JSON.stringify(proof)}\n`);
   } catch { process.stderr.write("scope_writer_probe_unavailable\n"); process.exitCode = 78; }
 }
+if (typeof import.meta.url === "string" && isEntryModule(import.meta.url)) void runScopeWriterProbe();

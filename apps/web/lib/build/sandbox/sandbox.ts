@@ -2,7 +2,7 @@
 // Sandbox lifecycle management — creates, manages, and destroys Docker containers
 // for isolated code generation.
 
-import { lazyChildProcess, lazyExec, lazyFs } from "@/lib/shared/lazy-node";
+import { lazyChildProcess, lazyExec } from "@/lib/shared/lazy-node";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 import { ensureGlobalSafeDirectoryCommand } from "@/lib/shared/git-safe-directory";
 
@@ -117,7 +117,7 @@ export function prefixSafeWorkspaceCommand(command: string): string {
   ].join(" && ");
 }
 
-function quotePosixArg(value: string): string {
+export function quotePosixArg(value: string): string {
   return `'${value.replace(/'/g, `'\"'\"'`)}'`;
 }
 
@@ -198,24 +198,20 @@ export function buildSandboxNextDevReadinessCommand(workspace: string = SANDBOX_
 }
 
 export function buildSandboxAppsWebCopyCommand(
-  portalContainer: string,
   containerId: string,
 ): string {
   return [
-    `docker exec ${portalContainer} tar`,
+    "tar",
     "--exclude='apps/web/node_modules'",
     "--exclude='apps/web/.next'",
     "--exclude='apps/web/tsconfig.tsbuildinfo'",
     "-cf - -C /app apps/web",
-    `| docker exec -i ${containerId} sh -c 'mkdir -p /workspace/apps && tar -xf - -C /workspace'`,
+    `| docker exec -i ${quotePosixArg(containerId)} sh -c 'mkdir -p /workspace/apps && tar -xf - -C /workspace'`,
   ].join(" ");
 }
 
-export function buildSandboxRootScriptsCopyCommand(
-  portalContainer: string,
-  containerId: string,
-): string {
-  return `docker exec ${portalContainer} tar -cf - -C /app scripts | docker exec -i ${containerId} tar -xf - -C /workspace`;
+export function buildSandboxRootScriptsCopyCommand(containerId: string): string {
+  return `tar -cf - -C /app scripts | docker exec -i ${quotePosixArg(containerId)} tar -xf - -C /workspace`;
 }
 
 /**
@@ -386,17 +382,8 @@ export async function startSandbox(containerId: string): Promise<void> {
  * This runs AFTER startSandbox and typically takes 60-90 seconds.
  */
 export async function initializeSandboxWorkspace(containerId: string): Promise<void> {
-  // Resolve the portal container name — HOSTNAME is 0.0.0.0 (Next.js bind),
-  // so discover our actual container ID from /etc/hostname (Docker sets this).
-  let portalContainer = "dpf-portal-1";
-  try {
-    const { readFileSync } = lazyFs();
-    const hostname = readFileSync("/etc/hostname", "utf-8").trim();
-    if (hostname && hostname !== "0.0.0.0") portalContainer = hostname;
-  } catch { /* fallback to dpf-portal-1 */ }
-
-  // Start the container first — both docker exec and tar pipe need it running
-  console.log(`[sandbox-init] portal=${portalContainer} sandbox=${containerId}`);
+  // Start only the destination. The source tar reads this portal's image.
+  console.log(`[sandbox-init] sandbox=${containerId}`);
   await exec(`docker start ${containerId}`);
   console.log(`[sandbox-init] container started`);
 
@@ -406,26 +393,26 @@ export async function initializeSandboxWorkspace(containerId: string): Promise<v
   const rootFiles = ["package.json", "pnpm-workspace.yaml", "pnpm-lock.yaml", "tsconfig.base.json"];
   for (const f of rootFiles) {
     await exec(
-      `docker exec ${portalContainer} tar -cf - -C /app ${f} | docker exec -i ${containerId} tar -xf - -C /workspace`,
+      `tar -cf - -C /app ${f} | docker exec -i ${quotePosixArg(containerId)} tar -xf - -C /workspace`,
       { timeout: 10_000 },
     ).catch(() => console.log(`[sandbox-init] ${f} not found, skipping`));
   }
   console.log("[sandbox-init] root files done");
 
   await exec(
-    `docker exec ${portalContainer} tar -cf - -C /app packages | docker exec -i ${containerId} tar -xf - -C /workspace`,
+    `tar -cf - -C /app packages | docker exec -i ${quotePosixArg(containerId)} tar -xf - -C /workspace`,
     { timeout: 60_000 },
   );
   console.log("[sandbox-init] packages/ copied");
 
   await exec(
-    buildSandboxRootScriptsCopyCommand(portalContainer, containerId),
+    buildSandboxRootScriptsCopyCommand(containerId),
     { timeout: 20_000 },
   ).catch(() => console.log("[sandbox-init] scripts/ not found, skipping"));
   console.log("[sandbox-init] scripts/ copied");
 
   await exec(
-    buildSandboxAppsWebCopyCommand(portalContainer, containerId),
+    buildSandboxAppsWebCopyCommand(containerId),
     { timeout: 60_000 },
   );
   console.log("[sandbox-init] apps/web/ copied");

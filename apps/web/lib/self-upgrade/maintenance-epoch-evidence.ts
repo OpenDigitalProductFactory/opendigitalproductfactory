@@ -3,7 +3,8 @@ import { readFile } from "node:fs/promises";
 import { prisma } from "@dpf/db";
 import { canonicalJson } from "@dpf/integration-shared/canonical-json";
 import { isRecord } from "@/lib/shared/coerce";
-import { verifyMaintenanceEpoch } from "../../../../scripts/lib/maintenance-epoch-receipt.mjs";
+import { readAttestedMaintenanceRetirement, verifyMaintenanceEpoch } from "../../../../scripts/lib/maintenance-epoch-receipt.mjs";
+import { hasPrivateActuatorMount, readScopeWriterRetirement } from "../../../../scripts/lib/scope-writer-observation.mjs";
 
 export const MAINTENANCE_EPOCH_RECEIPT_PATH = "/dpf-state/maintenance-epoch-retirement.json";
 type EpochRun = {
@@ -21,13 +22,21 @@ export async function attachMaintenanceEpochEvidence(deps: {
   db?: EpochDb; now?: Date;
   readEnvelope?: () => Promise<string | null>;
   readSecret?: () => Promise<string>;
+  readAttested?: () => Promise<unknown>;
 } = {}): Promise<ImportResult> {
   const unavailable: ImportResult = { status: "unavailable" };
-  const bytes = await (deps.readEnvelope ?? (() => readFile(MAINTENANCE_EPOCH_RECEIPT_PATH, "utf8").catch(() => null)))();
-  if (!bytes || bytes.length > 32_768) return unavailable;
-  let envelope: unknown, payload: unknown;
+  const actuator = deps.readAttested ?? (!deps.readEnvelope
+    && await readFile("/proc/self/mountinfo").then(hasPrivateActuatorMount, () => false) ? readScopeWriterRetirement : undefined);
+  let envelope: unknown, payload: unknown, attested: unknown;
   try {
-    envelope = JSON.parse(bytes);
+    if (actuator) {
+      attested = await actuator();
+      envelope = isRecord(attested) ? attested.envelope : null;
+    } else {
+      const bytes = await (deps.readEnvelope ?? (() => readFile(MAINTENANCE_EPOCH_RECEIPT_PATH, "utf8")))();
+      if (!bytes || bytes.length > 32_768) return unavailable;
+      envelope = JSON.parse(bytes);
+    }
     payload = isRecord(envelope) && typeof envelope.payload === "string" ? JSON.parse(envelope.payload) : null;
   } catch { return unavailable; }
   // This untrusted identity selects one existing row only. No mutation precedes authentication.
@@ -50,12 +59,13 @@ export async function attachMaintenanceEpochEvidence(deps: {
     || readiness.targetSha !== run.targetSha || typeof readiness.imageDigest !== "string") return unavailable;
   let verified: { capturedAt: string };
   try {
-    const secret = await (deps.readSecret ?? (() => readFile("/dpf-state/runtime-transition.secret", "utf8")))();
-    verified = verifyMaintenanceEpoch(envelope, secret.trim(), {
+    const expected = {
       runId: run.runId, targetSha: run.targetSha, promoterDigest: readiness.imageDigest,
       recoveryPointDigest: createHash("sha256").update(canonicalJson(recovery)).digest("hex"),
       now: (deps.now ?? new Date()).getTime(),
-    });
+    };
+    verified = actuator ? readAttestedMaintenanceRetirement(attested, expected)
+      : verifyMaintenanceEpoch(envelope, (await (deps.readSecret ?? (() => readFile("/dpf-state/runtime-transition.secret", "utf8")))()).trim(), expected);
   } catch { return unavailable; }
   const captured = Date.parse(verified.capturedAt), recovered = Date.parse(recovery.createdAt);
   if (!Number.isFinite(recovered) || recovered > captured || run.startedAt.getTime() > captured) return unavailable;

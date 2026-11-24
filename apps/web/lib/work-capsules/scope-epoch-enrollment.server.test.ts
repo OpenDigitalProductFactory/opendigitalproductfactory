@@ -102,11 +102,14 @@ describe("canonical scope epoch enrollment", () => {
   function hardenedFixture() {
     const f = fixture();
     const read = f.ports.readFile;
-    f.ports.readFile = async path => path === "/proc/self/mountinfo"
-      ? `${await read(path)}2 1 0:2 / /run/dpf-actuator ro - ext4 /dev/sdb rw\n`
-      : await read(path);
+    f.ports.readFile = async path => {
+      if (path === "/dpf-state/runtime-transition.secret") throw new Error("the writer has no signing key");
+      return path === "/proc/self/mountinfo"
+        ? `${await read(path)}2 1 0:2 / /run/dpf-actuator ro - ext4 /dev/sdb rw\n`
+        : await read(path);
+    };
     const served = { schemaVersion: 1, serverSha256: hash("server"), routeSha256: hash("route"),
-      manifestSha256: hash("manifest") };
+      manifestSha256: hash("manifest"), closureSha256: hash("closure") };
     const observation = { runId: f.run.runId, sourceSha: source, retirementDigest: hash(canonicalJson(f.receipt)),
       project: "dpf", daemonId: "daemon-test", observedAt: now.getTime(),
       launch: { id: after.portal.id, image, recipeDigest: hash("recipe"), startedAt: "2026-10-16T01:01:59.987654321Z" },
@@ -119,7 +122,8 @@ describe("canonical scope epoch enrollment", () => {
       expect(f.tx.selfUpgradeRun.findFirst).toHaveBeenCalledTimes(1);
       return observation;
     });
-    return { ...f, ports: { ...f.ports, attestProcess, inspectServed, readClosing }, observation };
+    const readAttested = async () => ({ envelope: f.receipt, retirementDigest: hash(canonicalJson(f.receipt)) });
+    return { ...f, ports: { ...f.ports, attestProcess, inspectServed, readClosing, readAttested }, observation };
   }
   it("uses the closing host observation once inside the actual admission locks after a same-ID restart", async () => {
     const f = hardenedFixture(), proof = await assertScopeEpochEnrollmentReady(f.ports);
@@ -171,7 +175,9 @@ describe("served scope writer process qualification", () => {
     };
     return { readFile: async (path: string) => Buffer.from(kernel[path] ?? ""),
       readlink: async () => "/usr/local/bin/node", pid: 1, execPath: "/usr/local/bin/node",
-      argv: ["--disable-sigusr1"], env: { NODE_ENV: "production" as const, PATH: "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" } };
+      argv: ["--disable-sigusr1"], env: { NODE_ENV: "production" as const, PATH: "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" },
+      nativeObjects: () => ["/app/node_modules/sharp/sharp.node", "/lib/ld-musl-x86_64.so.1", "linux-vdso.so.1"],
+      realpath: async (path: string) => path };
   }
   it("binds Linux process start to an unprivileged immutable loader namespace", async () => {
     await expect(attestScopeWriterProcess(input())).resolves.toEqual({ pid: 1, startTicks: "7654321" });
@@ -192,6 +198,8 @@ describe("served scope writer process qualification", () => {
     { env: { ...input().env, NODE_PATH: "/tmp" } },
     { env: { ...input().env, PATH: "/tmp:/usr/local/bin" } },
     { readlink: async () => "/tmp/node" },
+    { nativeObjects: () => ["/tmp/sharp.node"] },
+    { realpath: async () => "/tmp/replaced.so" },
   ])("refuses loader, inspector or interpreter substitution", async change => {
     await expect(attestScopeWriterProcess({ ...input(), ...change })).rejects.toThrow("scope_writer_probe_process_unproven");
   });

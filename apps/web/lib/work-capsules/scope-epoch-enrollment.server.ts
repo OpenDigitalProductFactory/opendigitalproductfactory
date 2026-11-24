@@ -8,12 +8,12 @@ import { isRecord } from "@/lib/shared/coerce";
 import { runProcessWithBudget } from "@/lib/shared/run-process-with-budget";
 import { attachMaintenanceEpochEvidence } from "@/lib/self-upgrade/maintenance-epoch-evidence";
 import { lockRuntimeTransitionAdmission } from "@/lib/platform-runtime/work-admission";
-import { verifyMaintenanceEpoch, observeMaintenanceEnvironments, assertNoCanonicalActuators, hasContinuousMaintenanceStarts } from "../../../../scripts/lib/maintenance-epoch-receipt.mjs";
-import { hasPrivateActuatorMount, readScopeWriterObservation } from "../../../../scripts/lib/scope-writer-observation.mjs";
+import { verifyMaintenanceEpoch, readAttestedMaintenanceRetirement, observeMaintenanceEnvironments, assertNoCanonicalActuators, hasContinuousMaintenanceStarts } from "../../../../scripts/lib/maintenance-epoch-receipt.mjs";
+import { hasPrivateActuatorMount, readScopeWriterObservation, readScopeWriterRetirement } from "../../../../scripts/lib/scope-writer-observation.mjs";
 import { SCOPE_EPOCH_WRITER_PATHS, validateScopeEpochWriterContract, type ScopeEpochWriterContract } from "./scope-epoch-contract";
-import { attestScopeWriterProcess, inspectServedScopeWriter } from "./scope-epoch-writer-probe.mjs";
 import type { CapsuleDb } from "./work-capsule-store-types";
 
+type WriterProbe = typeof import("./scope-epoch-writer-probe.mjs");
 type Run = { runId: string; status: string; targetSha: string | null; deployedSha: string | null;
   startedAt: Date | null; completionEvidence: unknown };
 export type ScopeEpochEnrollmentPorts = {
@@ -22,9 +22,10 @@ export type ScopeEpochEnrollmentPorts = {
   attachRetirement: typeof attachMaintenanceEpochEvidence;
   readRun: (runId: string) => Promise<Run | null>;
   now: () => Date;
-  attestProcess?: typeof attestScopeWriterProcess;
-  inspectServed?: typeof inspectServedScopeWriter;
+  attestProcess?: WriterProbe["attestScopeWriterProcess"];
+  inspectServed?: WriterProbe["inspectServedScopeWriter"];
   readClosing?: () => Promise<unknown>;
+  readAttested?: () => Promise<unknown>;
 };
 export type ScopeEpochEnrollmentProof = { assertCurrent(tx: CapsuleDb): Promise<void> };
 const prepared = new WeakMap<object, ScopeEpochEnrollmentProof>();
@@ -36,12 +37,15 @@ function refuse(detail: string): never { throw new Error(`scope-epoch-enrollment
 const record = (value: unknown) => isRecord(value) ? value : null;
 const brands = new WeakSet<object>();
 const currentInspect = '{"id":{{json .Id}},"image":{{json .Image}},"running":{{json .State.Running}},"hostname":{{json .Config.Hostname}},"labels":{{json .Config.Labels}}}';
-let installedWriter: Promise<Awaited<ReturnType<typeof inspectServedScopeWriter>>> | undefined;
+let installedWriter: ReturnType<WriterProbe["inspectServedScopeWriter"]> | undefined;
 
 // Cache the emitted bytes only after proving the loader namespace for the
 // lifetime of this process. A failed initial qualification can be retried.
 function inspectInstalledWriter() {
-  installedWriter ??= attestScopeWriterProcess().then(() => inspectServedScopeWriter()).catch(error => {
+  installedWriter ??= import("./scope-epoch-writer-probe.mjs").then(async probe => {
+    await probe.attestScopeWriterProcess();
+    return probe.inspectServedScopeWriter();
+  }).catch(error => {
     installedWriter = undefined;
     throw error;
   });
@@ -73,8 +77,8 @@ function defaults(): ScopeEpochEnrollmentPorts {
     } };
 }
 
-async function authenticatedRetirement(ports: ScopeEpochEnrollmentPorts, sourceSha: string) {
-  const imported = await ports.attachRetirement();
+async function authenticatedRetirement(ports: ScopeEpochEnrollmentPorts, sourceSha: string, attested?: Record<string, unknown>) {
+  const imported = await ports.attachRetirement(attested ? { readAttested: async () => attested } : undefined);
   if (imported.status !== "attached" && imported.status !== "replayed") refuse("final-retirement-unavailable");
   const run = await ports.readRun(imported.runId);
   const evidence = record(run?.completionEvidence), recovery = record(evidence?.recoveryPoint), readiness = record(evidence?.readiness);
@@ -83,12 +87,15 @@ async function authenticatedRetirement(ports: ScopeEpochEnrollmentPorts, sourceS
     || recovery.selfUpgradeRunId !== run.runId || typeof recovery.createdAt !== "string" || !Array.isArray(recovery.members)
     || !recovery.members.length || recovery.members.some(member => !isRecord(member) || member.target !== "postgres" || member.status !== "ok" || typeof member.runId !== "string" || !member.runId.trim())
     || readiness?.result !== "ready" || readiness.mode !== "enforced" || readiness.targetSha !== sourceSha || typeof readiness.imageDigest !== "string") refuse("matching-canonical-run-unproven");
-  const secret = (await ports.readFile("/dpf-state/runtime-transition.secret")).toString().trim();
   const envelope = evidence!.maintenanceEpochRetirement;
-  const retired = verifyMaintenanceEpoch(envelope, secret, { runId: run.runId, targetSha: sourceSha, promoterDigest: readiness.imageDigest,
-    recoveryPointDigest: hash(canonicalJson(recovery)), now: ports.now().getTime() });
+  const expected = { runId: run.runId, targetSha: sourceSha, promoterDigest: readiness.imageDigest,
+    recoveryPointDigest: hash(canonicalJson(recovery)), now: ports.now().getTime() };
+  const retirementDigest = hash(canonicalJson(envelope));
+  if (attested && attested.retirementDigest !== retirementDigest) refuse("final-retirement-unavailable");
+  const retired = attested ? readAttestedMaintenanceRetirement(attested, expected)
+    : verifyMaintenanceEpoch(envelope, (await ports.readFile("/dpf-state/runtime-transition.secret")).toString().trim(), expected);
   if (Date.parse(recovery.createdAt) > Date.parse(retired.capturedAt) || run.startedAt.getTime() > Date.parse(retired.capturedAt)) refuse("retirement-order-unproven");
-  return { retired, retirementDigest: hash(canonicalJson(envelope)) };
+  return { retired, retirementDigest };
 }
 
 function createEnrollmentProof(close?: () => Promise<void>): ScopeEpochEnrollmentProof {
@@ -108,12 +115,13 @@ function createEnrollmentProof(close?: () => Promise<void>): ScopeEpochEnrollmen
 }
 
 async function prepareHardenedEnrollment(ports: ScopeEpochEnrollmentPorts, containerId: string) {
-  const observedBundle = ports.inspectServed
-    ? (ports.attestProcess ?? attestScopeWriterProcess)().then(() => ports.inspectServed!())
-    : inspectInstalledWriter();
-  const [bundle, version] = await Promise.all([observedBundle, ports.readFile("/app/.dpf-image-version")]);
+  const observedBundle = ports.attestProcess && ports.inspectServed
+    ? ports.attestProcess().then(() => ports.inspectServed!()) : inspectInstalledWriter();
+  const [bundle, version, attested] = await Promise.all([observedBundle, ports.readFile("/app/.dpf-image-version"),
+    (ports.readAttested ?? readScopeWriterRetirement)().then(record)]);
   const source = version.toString().trim();
-  const { retired, retirementDigest } = await authenticatedRetirement(ports, source);
+  if (!attested) refuse("final-retirement-unavailable");
+  const { retired, retirementDigest } = await authenticatedRetirement(ports, source, attested);
   if (retired.after.portal.id !== containerId) refuse("current-portal-unproven");
   return createEnrollmentProof(async () => {
     try {
