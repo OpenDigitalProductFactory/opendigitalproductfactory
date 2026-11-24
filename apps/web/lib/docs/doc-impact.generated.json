@@ -2431,6 +2431,9 @@
     "scripts/backup-postgres.sh": [
       "docs/operations/disaster-recovery.md"
     ],
+    "scripts/backup-uploads.mjs": [
+      "docs/operations/disaster-recovery.md"
+    ],
     "scripts/branch-reaper.mjs": [
       "docs/architecture/branch-and-worktree-runbook.md"
     ],
@@ -4343,6 +4346,7 @@
       "dpf-reinstall.ps1",
       "packages/db/src/seed-platform-backup.ts",
       "scripts/backup-postgres.sh",
+      "scripts/backup-uploads.mjs",
       "scripts/fresh-install.ps1",
       "scripts/restore-postgres.sh"
     ],

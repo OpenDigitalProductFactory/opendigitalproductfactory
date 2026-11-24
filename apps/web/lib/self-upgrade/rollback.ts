@@ -1,11 +1,5 @@
 import type { BackupTarget } from "@/lib/operate/backups/types";
 
-/**
- * The targets a self-upgrade recovery point restores. Only Postgres today; the
- * upload-store engine (BI-1C6BF6B6) is backed up daily but not yet part of the
- * pre-upgrade recovery point, so rollback must not expect an uploads member.
- */
-type RecoveryTarget = Extract<BackupTarget, "postgres">;
 import { prisma as defaultPrisma, type Prisma } from "@dpf/db";
 
 import {
@@ -16,6 +10,13 @@ import {
 } from "@/lib/operate/backups/postgres-restore-runner";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 import { getSelfUpgradeRecoveryState, type SelfUpgradeRecoveryPointSnapshot } from "./recovery-eligibility";
+
+/**
+ * The targets a self-upgrade recovery point restores. Only Postgres today; the
+ * upload-store engine (BI-1C6BF6B6) is backed up daily but not yet part of the
+ * pre-upgrade recovery point, so rollback must not expect an uploads member.
+ */
+type RecoveryTarget = Extract<BackupTarget, "postgres">;
 
 export const SELF_UPGRADE_ROLLBACK_CONFIRMATION_TEXT = "ROLLBACK";
 const ROLLBACK_TRIGGER = "self-upgrade-rollback";
