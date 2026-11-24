@@ -127,7 +127,7 @@ export type ReverifyResult = {
 
 function describeValue(row: ClientCapabilityRow, field: ProfileField): string {
   const record = field === "hookPlane"
-    ? { value: (["cli", "desktop", "ide"] as const).filter((host) => row.capabilities.hookPlane[host].status === "verified").join("+") || null, status: "per host" }
+    ? { value: (["cli", "desktop", "ide", "harness"] as const).filter((host) => row.capabilities.hookPlane[host].status === "verified").join("+") || null, status: "per host" }
     : row.capabilities[field];
   const value = Array.isArray(record.value) ? record.value.join(", ") : String(record.value);
   return `${value} (${record.status})`;

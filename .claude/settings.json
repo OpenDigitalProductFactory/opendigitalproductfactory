@@ -198,13 +198,5 @@
   },
   "enabledPlugins": {
     "dpf-platform@dpf-platform-local": true
-  },
-  "extraKnownMarketplaces": {
-    "dpf-platform-local": {
-      "source": {
-        "source": "directory",
-        "path": "."
-      }
-    }
   }
 }

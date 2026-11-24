@@ -535,6 +535,7 @@ enum WorkroomEffectKind {
   announce_supervision_lost @map("announce-supervision-lost")
   record_plan_limit         @map("record-plan-limit")
   ensure_workitem_anchor    @map("ensure-workitem-anchor")
+  dispatch_build            @map("dispatch-build")
 }
 
 enum WorkroomEffectStatus {
@@ -1003,6 +1004,11 @@ model WorkItemPresence {
   principalId   String
   displayLabel  String?
   lastSeenAt    DateTime @default(now())
+  // BI-31E0C874 / DI-87225C71AAE4: this principal's read position in the room,
+  // the newest message handed to it (design 2026-11-11-room-read-cursor §3).
+  // Both null (never read with unreadForMe) or both set; moved forward only.
+  readCursorAt        DateTime?
+  readCursorMessageId String?
 
   @@unique([workItemId, principalType, principalId])
   @@index([workItemId, lastSeenAt])

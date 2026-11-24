@@ -458,6 +458,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "scripts/lib/pregate-preflight-receipt.test.mjs",
         "scripts/gate-context.test.mjs",
         "scripts/gate-wait.test.mjs",
+        "scripts/check-staged-scope.test.mjs",
         // The landing orchestrator and the obligation banner that replaced a
         // pointer nobody followed. Listed here so CI runs them: an automation
         // whose own test does not run is the manual process with extra steps.
@@ -933,6 +934,9 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "scripts/lib/worktree-janitor-core.test.mjs",
         "scripts/worktree-janitor.test.mjs",
         "scripts/worktree-janitor-sh.test.mjs",
+        // Temporary T3 on-create/on-settle bridge. Host-only, but its test
+        // still has to run in CI or the inventory guard fails closed.
+        "scripts/t3-worktree-bridge.test.mjs",
         "scripts/lib/worktree-session-heartbeat.test.mjs",
         // BI-DBAD1A1B: SessionEnd process matching accepts only the canonical
         // worktree itself or descendants, never sibling worktrees/CI runners.

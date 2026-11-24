@@ -39,6 +39,21 @@ export type SemanticReviewRoomDeps = {
   readRoom?: (capsuleId: string) => Promise<RoomRow | null>;
   ceiling?: (room: RoomRow) => Promise<string>;
   visibility?: (repositoryFullName: string | null) => Promise<RepositoryVisibility>;
+  /** The tree of a commit the public forge serves to anyone, or null. */
+  servedTree?: (repositoryFullName: string, sha: string) => Promise<string | null>;
+};
+
+/**
+ * A reviewed diff the server read from its own source for exact base and head
+ * commits (BI-FC2AF393). It becomes published text only when the public forge
+ * serves both commits with these trees (BI-3D5AC133).
+ */
+export type ServerReadReviewArtifact = {
+  artifact: string;
+  baseSha: string;
+  headSha: string;
+  baseTreeHash: string;
+  headTreeHash: string;
 };
 
 /**
@@ -56,6 +71,7 @@ export type SemanticReviewRoute = {
 export async function resolveSemanticReviewRoute(
   capsuleId: string | undefined,
   deps: SemanticReviewRoomDeps = {},
+  serverRead?: ServerReadReviewArtifact,
 ): Promise<SemanticReviewRoute> {
   if (!capsuleId) return { sensitivity: "internal" };
   try {
@@ -68,12 +84,65 @@ export async function resolveSemanticReviewRoute(
     const repository = room.repositoryFullName?.trim();
     if (!repository) return { sensitivity: semanticReviewRouteSensitivity(ceiling, "unknown") };
     const visibility = await (deps.visibility ?? repositoryVisibility)(repository);
+    const published = visibility === "public" && serverRead
+      && await forgeServesReviewedTrees(repository, serverRead, deps.servedTree ?? publicCommitTree);
     return {
       sensitivity: semanticReviewRouteSensitivity(ceiling, visibility),
-      sourceCodeProvenance: { repository, visibility },
+      sourceCodeProvenance: { repository, visibility, ...(published ? { publishedText: [serverRead.artifact] } : {}) },
     };
   } catch {
     return { sensitivity: "internal" };
+  }
+}
+
+/**
+ * Is the reviewed diff already published (BI-3D5AC133)? Only when the public
+ * forge, read without credentials, serves both its base and head commits with
+ * the reviewed trees: then every line of the diff is fetchable by anyone, and
+ * sending it to a reviewer discloses nothing new. Any failure is "no".
+ */
+async function forgeServesReviewedTrees(
+  repository: string,
+  serverRead: ServerReadReviewArtifact,
+  servedTree: (repositoryFullName: string, sha: string) => Promise<string | null>,
+): Promise<boolean> {
+  try {
+    const [baseTree, headTree] = await Promise.all([
+      servedTree(repository, serverRead.baseSha), servedTree(repository, serverRead.headSha),
+    ]);
+    return baseTree === serverRead.baseTreeHash && headTree === serverRead.headTreeHash;
+  } catch {
+    return false;
+  }
+}
+
+const COMMIT_SHA = /^[a-f0-9]{40}$/;
+type CommitFetch = (url: string, init: { headers: Record<string, string> }) =>
+  Promise<{ ok: boolean; json(): Promise<unknown> }>;
+
+/**
+ * The tree of `sha` as the public forge serves it to an anonymous reader, or
+ * null. Deliberately unauthenticated: a credentialed read would also succeed
+ * for a private repository, and only what anyone can fetch is published.
+ */
+export async function publicCommitTree(
+  repositoryFullName: string,
+  sha: string,
+  fetchImpl: CommitFetch = fetch as unknown as CommitFetch,
+): Promise<string | null> {
+  const { parseManagedRepositoryInput } = await import("@/lib/forge/managed-repository-access");
+  const repository = parseManagedRepositoryInput(repositoryFullName);
+  if (!repository || !COMMIT_SHA.test(sha)) return null;
+  try {
+    const response = await fetchImpl(
+      `https://api.github.com/repos/${encodeURIComponent(repository.owner)}/${encodeURIComponent(repository.repo)}/git/commits/${sha}`,
+      { headers: { Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28" } },
+    );
+    if (!response.ok) return null;
+    const tree = (await response.json() as { tree?: { sha?: unknown } } | null)?.tree?.sha;
+    return typeof tree === "string" && COMMIT_SHA.test(tree) ? tree : null;
+  } catch {
+    return null;
   }
 }
 

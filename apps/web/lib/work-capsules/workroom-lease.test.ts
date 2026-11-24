@@ -80,6 +80,21 @@ describe("heartbeatWorkCapsule", () => {
     expect(db.workroom.update.mock.calls[0][0].data).not.toHaveProperty("workspaceState");
   });
 
+  it("records the limit and stages an offer with the same live renewal", async () => {
+    db.workroom.findUnique
+      .mockResolvedValueOnce(room("principal-owner", LIVE))
+      .mockResolvedValueOnce({ workspaceState: {} });
+    const resetAt = "2026-10-10T00:00:00.000Z";
+    const renewed = await heartbeatWorkCapsule({ db: capsuleDb(), capsuleId: "WC-LEASE", now: NOW,
+      actor: { ...owner, agentId: "AGT-EXT-CLAUDE", agentPrincipalId: "claude" },
+      checkpoint: { capacity: { provider: "anthropic-sub", resetAt, recordedAt: "2026-01-01T00:00:00Z" } } });
+    expect(renewed.leaseExpiresAt).toEqual(new Date("2026-10-07T12:30:00Z"));
+    expect(renewed.workspaceState.executorCheckpoint.capacity.recordedAt).toBe(NOW.toISOString());
+    const [, ...values] = db.$queryRaw.mock.calls[1];
+    expect(values).toContain("record-plan-limit");
+    expect(values).toContainEqual(expect.stringContaining('"observedAt":"2026-10-07T12:00:00.000Z"'));
+  });
+
   it("renews the holder's own live lease", async () => {
     db.workroom.findUnique.mockResolvedValueOnce(room("principal-owner", LIVE));
     await heartbeatWorkCapsule({ db: capsuleDb(), capsuleId: "WC-LEASE", actor: owner, now: NOW });

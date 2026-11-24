@@ -1,0 +1,30 @@
+{
+  "version": "1",
+  "decidedOption": "per-run-approve-and-record-paid-inside-run-disclosure",
+  "scope": {
+    "files": [
+      "apps/web/app/(shell)/finance/payroll/PayrollPanel.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "sweep-measurement",
+    "baselineComparison": "new-route",
+    "measured": {
+      "/finance/payroll": {
+        "defaultVisibleWords": 236,
+        "leadBandWords": 9,
+        "primaryActions": 1,
+        "visibleFields": 0,
+        "maxChoicesPerControl": 0,
+        "subLegibleControls": 0,
+        "buriedPrimaryAction": 0,
+        "axeViolations": 2
+      }
+    },
+    "sourceSha": "c15d5419f750cee0823a817bacd8dfffa990408d",
+    "workflowRun": 43698242022,
+    "artifactId": 14156205000,
+    "artifactSha256": "cd25948f654ff9d3cb6a1fb527d69c943db9a13675ce9a37290e1ab0fd7ddcdc",
+    "rationale": "Measured by this PR's cloud UX route sweep. The approve control, the record-paid form, net pay and taxes to remit sit inside each pay run's collapsed disclosure, so words and fields on arrival are unchanged from the merged page (236 words, no visible fields) and every net-new budget passes. /finance/payroll is not yet in the committed baseline, so it is judged as a new route. The two axe findings match the shared Finance shell."
+  }
+}

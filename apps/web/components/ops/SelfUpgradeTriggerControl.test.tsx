@@ -39,7 +39,7 @@ vi.mock("@/lib/actions/promotions", () => ({
   abortActiveRun: vi.fn(),
 }));
 
-import SelfUpgradeTriggerControl from "./SelfUpgradeTriggerControl";
+import SelfUpgradeTriggerControl, { buildInstallConfirmation } from "./SelfUpgradeTriggerControl";
 
 const baseProps = {
   enabled: true,
@@ -87,11 +87,11 @@ describe("SelfUpgradeTriggerControl – disabled", () => {
     expect(html).toContain('data-upgrade-status="unavailable"');
   });
 
-  it("does not render the Upgrade now button when disabled", () => {
+  it("does not render the Install now button when disabled", () => {
     const html = renderToStaticMarkup(
       <SelfUpgradeTriggerControl {...baseProps} enabled={false} />,
     );
-    expect(html).not.toContain("Upgrade now");
+    expect(html).not.toContain("Install now");
   });
 
   it("shows the disabled notice copy", () => {
@@ -105,6 +105,22 @@ describe("SelfUpgradeTriggerControl – disabled", () => {
 // ─── Enabled ──────────────────────────────────────────────────────────────────
 
 describe("SelfUpgradeTriggerControl – enabled", () => {
+  it("moves consequence, duration, recovery and undo into the invocation-time confirmation", () => {
+    const confirmation = buildInstallConfirmation({
+      consequence: "The portal restarts briefly.",
+      duration: "Usually a few minutes.",
+      recovery: "DPF checks the new version and uses its recorded recovery path.",
+      reversibility: "The retained history determines whether the prior version is compatible.",
+    });
+    expect(confirmation.title).toBe("Install this platform update?");
+    expect(confirmation.confirmLabel).toBe("Install");
+    expect(confirmation.cancelLabel).toBe("Not now");
+    expect(confirmation.message).toContain("The portal restarts briefly.");
+    expect(confirmation.message).toContain("Usually a few minutes.");
+    expect(confirmation.message).toContain("Recovery:");
+    expect(confirmation.message).toContain("Undo:");
+  });
+
   it("shows Enabled label with channel", () => {
     const html = renderToStaticMarkup(<SelfUpgradeTriggerControl {...baseProps} />);
     expect(html).toContain("Enabled");
@@ -116,7 +132,7 @@ describe("SelfUpgradeTriggerControl – enabled", () => {
       <SelfUpgradeTriggerControl {...baseProps} actionState="no-update" />,
     );
     expect(html).toContain("No update is ready");
-    expect(html).not.toContain('aria-label="Upgrade now"');
+    expect(html).not.toContain('aria-label="Install now"');
     expect(html).not.toContain("Emergency override");
   });
 
@@ -125,14 +141,15 @@ describe("SelfUpgradeTriggerControl – enabled", () => {
       <SelfUpgradeTriggerControl {...baseProps} actionState="unavailable" />,
     );
     expect(html).toContain("Update status unavailable");
-    expect(html).not.toContain('aria-label="Upgrade now"');
+    expect(html).not.toContain('aria-label="Install now"');
     expect(html).not.toContain("Emergency override");
     expect(html).not.toContain("Upgrade queued.");
   });
 
-  it("renders the Upgrade now button, marked as the primary / next action (BI-D77BF495)", () => {
+  it("renders one calm Install now action without an arrival-time emergency override", () => {
     const html = renderToStaticMarkup(<SelfUpgradeTriggerControl {...baseProps} />);
-    expect(html).toContain("Upgrade now");
+    expect(html).toContain("Install now");
+    expect(html).not.toContain("Emergency override");
     // The UX budget reachability axis keys off these markers.
     expect(html).toContain("data-dpf-primary-action");
     expect(html).toContain("data-owner-first-next-action");
@@ -140,7 +157,7 @@ describe("SelfUpgradeTriggerControl – enabled", () => {
 
   it("renders solid primary-button styling, not a faint text-xs ghost button (BI-D77BF495)", () => {
     const html = renderToStaticMarkup(<SelfUpgradeTriggerControl {...baseProps} />);
-    expect(html).toMatch(/aria-label="Upgrade now"[^>]*class="[^"]*bg-\[var\(--dpf-accent\)\][^"]*text-white/);
+    expect(html).toMatch(/aria-label="Install now"[^>]*class="[^"]*bg-\[var\(--dpf-accent\)\][^"]*text-white/);
   });
 });
 
@@ -156,7 +173,7 @@ describe("SelfUpgradeTriggerControl – running", () => {
     );
     expect(html).toContain("Upgrade queued");
     expect(html).toContain("waiting for the worker");
-    expect(html).not.toContain('aria-label="Upgrade now"');
+    expect(html).not.toContain('aria-label="Install now"');
   });
 
   it("shows an in-flight indicator (not a disabled trigger) when a run is running", () => {
@@ -164,7 +181,7 @@ describe("SelfUpgradeTriggerControl – running", () => {
       <SelfUpgradeTriggerControl {...baseProps} latestRun={makeRun("running")} />,
     );
     expect(html).toContain("Upgrade in progress…");
-    expect(html).not.toContain('aria-label="Upgrade now"');
+    expect(html).not.toContain('aria-label="Install now"');
   });
 
   it.each([
@@ -180,7 +197,7 @@ describe("SelfUpgradeTriggerControl – running", () => {
     );
     expect(html).toContain("SUR-0001 admitted");
     expect(html).toContain(copy);
-    expect(html).not.toContain('aria-label="Upgrade now"');
+    expect(html).not.toContain('aria-label="Install now"');
   });
 
   it("projects a durable pre-dispatch failure with its run identity", () => {
@@ -240,7 +257,7 @@ describe("SelfUpgradeTriggerControl – trigger control", () => {
 
   it("button is not disabled when no run is active", () => {
     const html = renderToStaticMarkup(<SelfUpgradeTriggerControl {...baseProps} />);
-    expect(html).toContain("Upgrade now");
+    expect(html).toContain("Install now");
     expect(html).not.toContain('disabled=""');
   });
 });
@@ -251,8 +268,8 @@ describe("SelfUpgradeTriggerControl – loading", () => {
   it("shows durable admission text when pending", () => {
     shared.isPending = true;
     const html = renderToStaticMarkup(<SelfUpgradeTriggerControl {...baseProps} />);
-    expect(html).toContain("Admitting…");
-    expect(html).not.toContain(">Upgrade now<");
+    expect(html).toContain("Starting…");
+    expect(html).not.toContain(">Install now<");
   });
 
   it("button is disabled while pending", () => {
@@ -293,7 +310,7 @@ describe("SelfUpgradeTriggerControl – success feedback", () => {
     const html = renderToStaticMarkup(<SelfUpgradeTriggerControl {...baseProps} />);
     expect(html).toContain("Upgrade admitted");
     // BI-CE244260: admitted means there is nothing left to press.
-    expect(html).not.toContain('aria-label="Upgrade now"');
+    expect(html).not.toContain('aria-label="Install now"');
     expect(html).not.toMatch(/do not click again/i);
   });
 });

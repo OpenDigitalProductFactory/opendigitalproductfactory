@@ -32,6 +32,7 @@ export const ORCHESTRATION_SHAPES: Record<string, WorkShapeDefinition> = {
       {
         key: "survey",
         title: "Survey the evaluate stream",
+        effort: "low",
         accountablePrincipalRef: "agent:evaluate-orchestrator",
         advance: {
           kind: "status-change",
@@ -43,6 +44,7 @@ export const ORCHESTRATION_SHAPES: Record<string, WorkShapeDefinition> = {
       {
         key: "delegate",
         title: "Delegate what belongs to a specialist",
+        effort: "low",
         accountablePrincipalRef: "agent:evaluate-orchestrator",
         advance: {
           kind: "status-change",
@@ -94,6 +96,7 @@ export const ORCHESTRATION_SHAPES: Record<string, WorkShapeDefinition> = {
       {
         key: "survey",
         title: "Survey the explore stream",
+        effort: "low",
         accountablePrincipalRef: "agent:explore-orchestrator",
         advance: {
           kind: "status-change",
@@ -105,6 +108,7 @@ export const ORCHESTRATION_SHAPES: Record<string, WorkShapeDefinition> = {
       {
         key: "delegate",
         title: "Delegate what belongs to a specialist",
+        effort: "low",
         accountablePrincipalRef: "agent:explore-orchestrator",
         advance: {
           kind: "status-change",
@@ -156,6 +160,7 @@ export const ORCHESTRATION_SHAPES: Record<string, WorkShapeDefinition> = {
       {
         key: "survey",
         title: "Survey the integrate stream",
+        effort: "low",
         accountablePrincipalRef: "agent:integrate-orchestrator",
         advance: {
           kind: "status-change",
@@ -167,6 +172,7 @@ export const ORCHESTRATION_SHAPES: Record<string, WorkShapeDefinition> = {
       {
         key: "delegate",
         title: "Delegate what belongs to a specialist",
+        effort: "low",
         accountablePrincipalRef: "agent:integrate-orchestrator",
         advance: {
           kind: "status-change",
@@ -218,6 +224,7 @@ export const ORCHESTRATION_SHAPES: Record<string, WorkShapeDefinition> = {
       {
         key: "survey",
         title: "Survey the deploy stream",
+        effort: "low",
         accountablePrincipalRef: "agent:deploy-orchestrator",
         advance: {
           kind: "status-change",
@@ -229,6 +236,7 @@ export const ORCHESTRATION_SHAPES: Record<string, WorkShapeDefinition> = {
       {
         key: "delegate",
         title: "Delegate what belongs to a specialist",
+        effort: "low",
         accountablePrincipalRef: "agent:deploy-orchestrator",
         advance: {
           kind: "status-change",
@@ -280,6 +288,7 @@ export const ORCHESTRATION_SHAPES: Record<string, WorkShapeDefinition> = {
       {
         key: "survey",
         title: "Survey the release stream",
+        effort: "low",
         accountablePrincipalRef: "agent:release-orchestrator",
         advance: {
           kind: "status-change",
@@ -291,6 +300,7 @@ export const ORCHESTRATION_SHAPES: Record<string, WorkShapeDefinition> = {
       {
         key: "delegate",
         title: "Delegate what belongs to a specialist",
+        effort: "low",
         accountablePrincipalRef: "agent:release-orchestrator",
         advance: {
           kind: "status-change",
@@ -342,6 +352,7 @@ export const ORCHESTRATION_SHAPES: Record<string, WorkShapeDefinition> = {
       {
         key: "survey",
         title: "Survey the consume stream",
+        effort: "low",
         accountablePrincipalRef: "agent:consume-orchestrator",
         advance: {
           kind: "status-change",
@@ -353,6 +364,7 @@ export const ORCHESTRATION_SHAPES: Record<string, WorkShapeDefinition> = {
       {
         key: "delegate",
         title: "Delegate what belongs to a specialist",
+        effort: "low",
         accountablePrincipalRef: "agent:consume-orchestrator",
         advance: {
           kind: "status-change",
@@ -404,6 +416,7 @@ export const ORCHESTRATION_SHAPES: Record<string, WorkShapeDefinition> = {
       {
         key: "survey",
         title: "Survey the operate stream",
+        effort: "low",
         accountablePrincipalRef: "agent:operate-orchestrator",
         advance: {
           kind: "status-change",
@@ -415,6 +428,7 @@ export const ORCHESTRATION_SHAPES: Record<string, WorkShapeDefinition> = {
       {
         key: "delegate",
         title: "Delegate what belongs to a specialist",
+        effort: "low",
         accountablePrincipalRef: "agent:operate-orchestrator",
         advance: {
           kind: "status-change",
@@ -466,6 +480,7 @@ export const ORCHESTRATION_SHAPES: Record<string, WorkShapeDefinition> = {
       {
         key: "survey",
         title: "Survey the governance stream",
+        effort: "low",
         accountablePrincipalRef: "agent:governance-orchestrator",
         advance: {
           kind: "status-change",
@@ -477,6 +492,7 @@ export const ORCHESTRATION_SHAPES: Record<string, WorkShapeDefinition> = {
       {
         key: "delegate",
         title: "Delegate what belongs to a specialist",
+        effort: "low",
         accountablePrincipalRef: "agent:governance-orchestrator",
         advance: {
           kind: "status-change",
@@ -527,6 +543,7 @@ export const ORCHESTRATION_SHAPES: Record<string, WorkShapeDefinition> = {
       {
         key: "read",
         title: "Read the recorded position",
+        effort: "low",
         accountablePrincipalRef: "agent:finance-agent",
         advance: {
           kind: "status-change",
@@ -586,6 +603,7 @@ export const ORCHESTRATION_SHAPES: Record<string, WorkShapeDefinition> = {
       {
         key: "read-across",
         title: "Read across the streams",
+        effort: "low",
         accountablePrincipalRef: "agent:coo",
         advance: {
           kind: "status-change",
@@ -599,6 +617,7 @@ export const ORCHESTRATION_SHAPES: Record<string, WorkShapeDefinition> = {
       {
         key: "name-the-stalls",
         title: "Name what is not moving, and what is unowned",
+        effort: "low",
         accountablePrincipalRef: "agent:coo",
         advance: {
           kind: "status-change",

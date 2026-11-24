@@ -14,6 +14,7 @@ import { PROVIDER_MANAGEMENT_TOOL_GRANTS } from "./provider-management-tool-gran
 import { PLATFORM_UPDATE_TOOL_GRANTS } from "./platform-update-tool-grants";
 import { THREAD_TOOL_GRANTS } from "./thread-tool-grants";
 import { SURFACE_READINESS_TOOL_GRANTS } from "./surface-readiness-tool-grants";
+import { COWORKER_CAPABILITY_TOOL_GRANTS } from "./coworker-capability-tool-grants";
 const agentRegistry = agentRegistryData as { agents: Array<Record<string, unknown>> };
 /**
  * Implications between agent grant categories. A grant on the left of the
@@ -189,6 +190,7 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   set_portfolio_budget: ["backlog_write"],
   set_portfolio_owner: ["backlog_write"],
   get_investment_balance: ["backlog_read"], set_investment_balance: ["backlog_write"], bind_investment_funding: ["backlog_write"],
+  read_platform_funding_setup: ["admin_read"], confirm_platform_funding_owner: ["admin_write"],
   query_backlog: ["backlog_read"],
   report_quality_issue: ["backlog_write"],
   escalate_feedback_upstream: ["backlog_write"],
@@ -326,6 +328,10 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   // BI-F302B80E: appends what the caller did with a kernel recommendation.
   // Same grant as propose_improvement — it records, it never re-decides.
   record_decision_outcome: ["decision_record_create"],
+  // BI-0C0B0836: carries the owner's own ruling on an escalated review. Same
+  // grant as record_decision_outcome; it is a proposal, so the owner approves
+  // every call.
+  record_owner_ruling: ["decision_record_create"],
 
   // Two more doors sealed the same way as evaluate_profession_decision, found
   // by the registry-wide sweep the BI-88B77204 fix added. Both packs already
@@ -427,16 +433,7 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   extract_brand_design_system: ["web_search", "file_read", "admin_write"],
   search_integrations: ["external_registry_search", "registry_read"],
   search_tool_marketplace: ["registry_read"],
-  get_my_coworker_profile: ["registry_read"],
-  get_my_approval_status: ["registry_read"],
-  probe_pending_approval_conversion: ["approval_probe_read"], // BI-129EFFD1: read-only AC-PROBE, manage_platform
-  assess_my_capabilities: ["registry_read"],
-  submit_coworker_capability_need: ["registry_read"],
-  list_my_capability_needs: ["registry_read"],
-  // BI-F9E7B780: governance-surface variant — same grant tier (registry_read)
-  // because both surfaces are read-only over the same CoworkerCapabilityNeed
-  // model; the scope difference is "your needs" vs "everyone's needs", not a privilege difference.
-  list_all_capability_needs: ["registry_read"],
+  ...COWORKER_CAPABILITY_TOOL_GRANTS,
   list_coworker_services: ["coworker_catalog_read"],
   list_coworker_offers: ["coworker_catalog_read"],
   get_coworker_offer: ["coworker_catalog_read"],

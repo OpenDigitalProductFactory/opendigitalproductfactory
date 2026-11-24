@@ -260,6 +260,32 @@ export async function sendGuidanceSnapshotToPeer(
   return sendDeploymentDeclarationToPeer(target, activity, record, options);
 }
 
+/** Deliver one signed A2A request (BI-B45BBD8A) to the peer's federation A2A
+ *  ingress. Its receipt rides the response body; a peer that predates the route
+ *  answers 404 and the outbox retries until it upgrades. */
+export async function sendA2aRequestToPeer(
+  target: PeerLinkTarget,
+  activity: string,
+  record: unknown,
+  options: { eventId?: string; now?: Date } = {},
+): Promise<PeerPostResult> {
+  return postToPeer({
+    peerAuthorityUrl: target.peerAuthorityUrl,
+    linkToken: target.linkToken,
+    path: "/api/v1/federation/a2a",
+    cloudEvent: toCloudEvent({
+      id: options.eventId ?? `${target.linkId}:${activity}:${Date.now()}`,
+      source: "/dpf",
+      type: activity,
+      time: (options.now ?? new Date()).toISOString(),
+      linkId: target.linkId,
+      data: record,
+    }),
+    sameOrgLan: target.sameOrgLan ?? false,
+    ...(target.fetchImpl ? { fetchImpl: target.fetchImpl } : {}),
+  });
+}
+
 /** Compare bounded demand inventories so a lost send or acknowledgment self-heals. */
 export async function sendDemandDigestToPeer(
   target: PeerLinkTarget,
@@ -315,6 +341,17 @@ export async function getFromPeer(input: {
   } catch (err) {
     return { ok: false, status: 0, error: err instanceof Error ? err.message : "network error" };
   }
+}
+
+/** Pull a same-organization peer's own AI plan usage, hourly per provider (BI-6361A930). */
+export async function fetchAiUsageFromPeer(target: PeerLinkTarget): Promise<PeerPostResult> {
+  return getFromPeer({
+    peerAuthorityUrl: target.peerAuthorityUrl,
+    linkToken: target.linkToken,
+    path: "/api/v1/federation/ai-usage",
+    sameOrgLan: target.sameOrgLan ?? false,
+    ...(target.fetchImpl ? { fetchImpl: target.fetchImpl } : {}),
+  });
 }
 
 /** Pull one page of a same-organization peer's share-safe backlog (BI-FF8A57EF). */

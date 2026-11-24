@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { effectiveBacklogSensitivity } from "@/lib/federation/cross-org-sharing";
 import {
+  publicCommitTree,
   REPOSITORY_VISIBILITY_TTL_MS,
   repositoryVisibility,
   resetSemanticReviewVisibilityCache,
@@ -119,5 +120,61 @@ describe("repository visibility for review provenance", () => {
     await expect(repositoryVisibility(null, read)).resolves.toBe("unknown");
     await expect(repositoryVisibility("not a repo", read)).resolves.toBe("unknown");
     expect(read).not.toHaveBeenCalled();
+  });
+});
+
+describe("a server-read diff of commits the public forge serves is published text (BI-3D5AC133)", () => {
+  const room = async () => ({ scopeClaims: [], backlogItemId: "BI-3D5AC133", repositoryFullName: REPO });
+  const BASE = "a".repeat(40), HEAD = "b".repeat(40), BASE_TREE = "c".repeat(40), HEAD_TREE = "d".repeat(40);
+  const published = { artifact: "diff --git a/x b/x\n+token: sk-ant-oat01-x", baseSha: BASE, headSha: HEAD, baseTreeHash: BASE_TREE, headTreeHash: HEAD_TREE };
+  const forge = (trees: Record<string, string | null>) => vi.fn(async (_repository: string, sha: string) => trees[sha] ?? null);
+  const deps = (servedTree: SemanticReviewRoomDeps["servedTree"]): SemanticReviewRoomDeps =>
+    ({ readRoom: room, ceiling: async () => "public", visibility: async () => "public", servedTree });
+
+  it("names the diff as published when the forge serves base and head with the reviewed trees", async () => {
+    const servedTree = forge({ [BASE]: BASE_TREE, [HEAD]: HEAD_TREE });
+    await expect(resolveSemanticReviewRoute("WC-1", deps(servedTree), published)).resolves.toEqual({
+      sensitivity: "development",
+      sourceCodeProvenance: { repository: REPO, visibility: "public", publishedText: [published.artifact] },
+    });
+    expect(servedTree).toHaveBeenCalledWith(REPO, BASE);
+    expect(servedTree).toHaveBeenCalledWith(REPO, HEAD);
+  });
+
+  it.each([
+    ["the head is not served (unpushed or private)", { [BASE]: BASE_TREE }],
+    ["the base is not served", { [HEAD]: HEAD_TREE }],
+    ["the head tree differs from the reviewed tree", { [BASE]: BASE_TREE, [HEAD]: "e".repeat(40) }],
+  ])("names nothing published when %s", async (_case, trees) => {
+    await expect(resolveSemanticReviewRoute("WC-1", deps(forge(trees)), published))
+      .resolves.toEqual({ sensitivity: "development", sourceCodeProvenance: { repository: REPO, visibility: "public" } });
+  });
+
+  it("never asks the forge for a private repository, a non-public room or a pasted artifact", async () => {
+    const servedTree = forge({ [BASE]: BASE_TREE, [HEAD]: HEAD_TREE });
+    await resolveSemanticReviewRoute("WC-1", { ...deps(servedTree), visibility: async () => "private" }, published);
+    await resolveSemanticReviewRoute("WC-1", { ...deps(servedTree), ceiling: async () => "confidential" }, published);
+    await resolveSemanticReviewRoute("WC-1", deps(servedTree));
+    expect(servedTree).not.toHaveBeenCalled();
+  });
+
+  it("names nothing published when the forge read fails", async () => {
+    const servedTree = vi.fn(async () => { throw new Error("rate limited"); });
+    await expect(resolveSemanticReviewRoute("WC-1", deps(servedTree), published))
+      .resolves.toEqual({ sensitivity: "development", sourceCodeProvenance: { repository: REPO, visibility: "public" } });
+  });
+});
+
+describe("publicCommitTree reads the forge without credentials", () => {
+  it("returns the commit's tree from an unauthenticated read, and null for anything else", async () => {
+    const fetchImpl = vi.fn(async (_url: string, init?: { headers?: Record<string, string> }) => {
+      expect(init?.headers?.Authorization).toBeUndefined();
+      return { ok: true, status: 200, json: async () => ({ tree: { sha: "d".repeat(40) } }) };
+    });
+    await expect(publicCommitTree(REPO, "b".repeat(40), fetchImpl as never)).resolves.toBe("d".repeat(40));
+    expect(fetchImpl.mock.calls[0]?.[0]).toBe(`https://api.github.com/repos/OpenDigitalProductFactory/opendigitalproductfactory/git/commits/${"b".repeat(40)}`);
+    const missing = vi.fn(async () => ({ ok: false, status: 404, json: async () => ({}) }));
+    await expect(publicCommitTree(REPO, "b".repeat(40), missing as never)).resolves.toBeNull();
+    await expect(publicCommitTree(REPO, "not-a-sha", fetchImpl as never)).resolves.toBeNull();
   });
 });

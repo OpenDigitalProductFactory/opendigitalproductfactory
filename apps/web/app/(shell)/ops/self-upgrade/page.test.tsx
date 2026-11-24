@@ -167,7 +167,8 @@ beforeEach(() => {
   vi.clearAllMocks();
   // Default: install does not customise source — panel stays dormant.
   vi.mocked(getPlatformDevConfig).mockResolvedValue(null as never);
-  // Default nav-mode: no cookie → Full (operator) → Advanced expanded.
+  // Default nav-mode: no cookie → Full (operator). Operational detail still
+  // stays collapsed until the operator asks for it.
   mockCookieGet.mockReturnValue(undefined);
   vi.mocked(loadConnectedAgentClients).mockResolvedValue({ release: { packVersion: "0.4.0", fingerprint: "1111111111aa" }, clients: [], truncated: false });
 });
@@ -279,12 +280,11 @@ describe("SelfUpgradePage", () => {
 
     const html = renderToStaticMarkup(await SelfUpgradePage());
 
-    expect(html).toContain("Self-Upgrade");
+    expect(html).toContain("Platform updates");
     expect(html).toContain('data-testid="platform-tab-nav"');
     expect(html).toContain('data-testid="self-upgrade-client"');
     expect(html).not.toContain("plain-language status");
     expect(html).not.toContain("Run logs, runtime and security checks");
-    expect(html).toContain("Upgrade status.");
     expect(html).toContain("Details");
   });
 
@@ -568,15 +568,13 @@ describe("SelfUpgradePage", () => {
 
   // BI-D77BF495: now that the trigger is co-located with the release status
   // card (not gated by this disclosure), the Advanced section holding only
-  // history/ledgers/logs can go back to the ordinary owner-first pattern —
-  // open in Full (operator) mode, collapsed by default in Simple (worker)
-  // mode — instead of being force-held open as the BI-D77BF495 stopgap.
-  it("collapses the Advanced (history/ledgers/logs) section by default in Simple nav mode", async () => {
+  // history/ledgers/logs stay behind an explicit disclosure in both modes.
+  it("collapses operational history by default in both navigation modes", async () => {
     vi.mocked(getSelfUpgradeStatus).mockResolvedValue(baseStatus);
     vi.mocked(listSelfUpgradeRuns).mockResolvedValue({ runs: [], nextCursor: null });
 
     const fullHtml = renderToStaticMarkup(await SelfUpgradePage());
-    expect(fullHtml).toMatch(/<details[^>]*\sopen/);
+    expect(fullHtml).not.toMatch(/<details[^>]*\sopen/);
 
     mockCookieGet.mockReturnValue({ value: "worker" });
     const simpleHtml = renderToStaticMarkup(await SelfUpgradePage());

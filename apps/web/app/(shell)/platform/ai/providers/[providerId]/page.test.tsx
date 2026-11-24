@@ -6,8 +6,10 @@ import { ProviderDetailSections } from "@/components/platform/ProviderDetailSect
 import { ProviderCostSourcePanel } from "@/components/platform/ProviderCostSourcePanel";
 import { RecipePanel } from "@/components/platform/RecipePanel";
 import { shouldShowProviderAccountPosture } from "@/components/platform/local-models/provider-detail-policy";
+import { ProviderRoutingControlPanel } from "@/components/platform/ProviderRoutingControlPanel";
+import { ProviderQuotaDetails } from "@/components/platform/ProviderQuotaDetails";
 
-const fixture = vi.hoisted(() => ({ canWrite: true, financeError: false, recipeError: false, recipes: [] as Array<{
+const fixture = vi.hoisted(() => ({ recovery: false, canWrite: true, financeError: false, recipeError: false, recipes: [] as Array<{
   id: string; contractFamily: string; modelId: string; executionAdapter: string; status: string; version: number; origin: string;
 }> }));
 const recipe = { id: "recipe-one", contractFamily: "coding.refactor", modelId: "local-one", executionAdapter: "chat", status: "champion", version: 1, origin: "test" };
@@ -25,8 +27,10 @@ vi.mock("@/lib/ai-provider-data", () => ({
   getModelClassCounts: async () => [], getTokenSpendByProvider: async () => [],
 }));
 vi.mock("@/lib/inference/ai-provider-internals", () => ({ getProviderBearerToken: vi.fn() }));
-vi.mock("@/lib/inference/provider-routing-control-data", () => ({ loadProviderRoutingControls: async () => new Map() }));
-vi.mock("@/lib/inference/provider-account-overview.server", () => ({ getProviderAccountCopy: async () => ({
+vi.mock("@/lib/inference/provider-routing-control-data", () => ({ loadProviderRoutingControls: async () => fixture.recovery ? new Map([["codex", { restrictions: [] }]]) : new Map() }));
+vi.mock("@/lib/inference/provider-account-overview.server", () => ({
+  loadProviderAccountOverview: async () => [{ connectionId: "provider-default-codex", quotaRecovery: { canCheck: true, models: [{ modelId: "selected" }], limits: [] } }],
+  getProviderAccountCopy: async () => ({
   providerSettings: "Provider settings", usage: "Usage and billing", diagnostics: "Diagnostics and history",
   modelsExecution: "Models and execution", loadingRecipes: "Loading execution recipes", recipesUnavailable: "Recipes unavailable",
 }) }));
@@ -56,7 +60,16 @@ async function sectionOwners(value: unknown): Promise<ReactElement<Record<string
 }
 
 describe("local provider page preservation", () => {
-  beforeEach(() => { fixture.canWrite = true; fixture.financeError = false; fixture.recipeError = false; fixture.recipes = []; });
+  beforeEach(() => { fixture.recovery = false; fixture.canWrite = true; fixture.financeError = false; fixture.recipeError = false; fixture.recipes = []; });
+  it("places the existing account recovery control beside the Codex routing hold", async () => {
+    fixture.recovery = true;
+    const owners = await sectionOwners(await ProviderDetailPage({ params: Promise.resolve({ providerId: "codex" }), searchParams: Promise.resolve({}) }));
+    const panel = owners.find(owner => owner.type === ProviderRoutingControlPanel);
+    const recovery = panel?.props.recovery as ReactElement<{ connectionId: string; defaultOpen: boolean }>;
+    expect(recovery.type).toBe(ProviderQuotaDetails);
+    expect(recovery.props.connectionId).toBe("provider-default-codex");
+    expect(recovery.props.defaultOpen).toBe(true);
+  });
   it.each(["local", "ollama"])("places existing %s recipes under Models and execution, outside billing", async providerId => {
     fixture.recipes = [recipe];
     const owners = await sectionOwners(await ProviderDetailPage({ params: Promise.resolve({ providerId }), searchParams: Promise.resolve({}) }));

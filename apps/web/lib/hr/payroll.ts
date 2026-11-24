@@ -32,6 +32,14 @@ export type StatutoryResult = {
   employeeNI: number;
   /** Employer national insurance / social-security contribution (an employer cost). */
   employerNI: number;
+  /**
+   * The jurisdiction's own itemized lines (BI-099EAE30). When present they
+   * replace the generic TAX / NI / ERNI lines, so a US payslip shows federal
+   * withholding, Social Security and Medicare rather than "National insurance".
+   * Their totals must equal incomeTax + employeeNI and employerNI.
+   */
+  employeeLines?: PayComponent[];
+  employerLines?: PayComponent[];
 };
 
 /** Pluggable statutory-deduction calculation — supply your jurisdiction's rules. */
@@ -104,15 +112,22 @@ export function computePayslip(input: PayrollInput): Payslip {
   const employerNI = round2(Math.max(stat.employerNI, 0));
   const postTax = input.postTaxDeductions ?? [];
 
+  const statutoryEmployee: PayComponent[] = stat.employeeLines
+    ? stat.employeeLines.map((l) => ({ ...l, amount: round2(Math.max(l.amount, 0)) }))
+    : [
+        { code: "TAX", label: "Income tax", amount: incomeTax },
+        { code: "NI", label: "National insurance", amount: employeeNI },
+      ];
   const employeeDeductions: PayComponent[] = [
     ...preTax.map((d) => ({ ...d, amount: round2(d.amount) })),
-    { code: "TAX", label: "Income tax", amount: incomeTax },
-    { code: "NI", label: "National insurance", amount: employeeNI },
+    ...statutoryEmployee,
     ...postTax.map((d) => ({ ...d, amount: round2(d.amount) })),
   ];
 
   const netPay = round2(Math.max(grossPay - sum(employeeDeductions), 0));
-  const employerCosts: PayComponent[] = [{ code: "ERNI", label: "Employer NI", amount: employerNI }];
+  const employerCosts: PayComponent[] = stat.employerLines
+    ? stat.employerLines.map((l) => ({ ...l, amount: round2(Math.max(l.amount, 0)) }))
+    : [{ code: "ERNI", label: "Employer NI", amount: employerNI }];
   const totalEmployerCost = round2(grossPay + sum(employerCosts));
 
   return {

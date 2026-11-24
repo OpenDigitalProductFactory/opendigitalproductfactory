@@ -16,7 +16,7 @@
 
 import { prisma } from "@dpf/db";
 import { revalidatePath } from "next/cache";
-import { requireCapability, requireUser } from "@/lib/actions/shared/guards";
+import { requireCapability, requireCapabilityContext, requireUser } from "@/lib/actions/shared/guards";
 import { err, ok, type ActionResult } from "@/lib/shared/action-result";
 import { newId } from "@/lib/shared/new-id";
 import { employeeCountryOfRecord } from "@/lib/mileage/country-of-record";
@@ -27,6 +27,11 @@ import {
   type RecordTripPayload,
 } from "@/lib/mileage/trip-service";
 import type { ResolvableRate } from "@/lib/mileage/rates";
+import {
+  recordCompanyMileageRate,
+  recordManualDrive,
+  type ManualEntryDb,
+} from "@/lib/mileage/manual-entry";
 import type { TripClassification } from "@/lib/mileage/classification";
 
 const MILEAGE_PATH = "/finance/mileage";
@@ -219,5 +224,69 @@ export async function monetiseMileageAction(input: {
     total: outcome.pricing.totalAmount,
     skipped: outcome.pricing.skipped.length,
     alreadyClaimed: outcome.alreadyMonetised.length,
+  });
+}
+
+// ── Portal entry (BI-3DD6EFEB) ──────────────────────────────────────────────
+// Before these, no rate could be set and no drive could be typed in, so the
+// claim below always refused. The rules live in lib/mileage/manual-entry.ts.
+
+const manualEntryDb = prisma as unknown as ManualEntryDb;
+
+/**
+ * Set the company's per-mile reimbursement rate. Finance capability; the actor
+ * comes from the session so the automation persona is recognised and refused.
+ */
+export async function recordMileageRateAction(input: {
+  amountPerMile: number;
+  effectiveFrom: string;
+  sourceUrl: string;
+}): Promise<ActionResult<{ mileageRateId: string }>> {
+  const { userId, email } = await requireCapabilityContext("manage_finance");
+  const result = await recordCompanyMileageRate(
+    manualEntryDb,
+    { ...input, actor: { userId, email }, now: new Date() },
+    newId(),
+  );
+  if (result.ok) revalidatePath(MILEAGE_PATH);
+  return result;
+}
+
+/** Record a drive the signed-in driver typed in. The driver comes from the session. */
+export async function recordManualDriveAction(input: {
+  date: string;
+  fromLabel: string;
+  toLabel: string;
+  miles: number;
+  purpose: string;
+}): Promise<ActionResult<{ tripId: string }>> {
+  const employeeProfileId = await currentEmployeeProfileId();
+  if (!employeeProfileId) {
+    return err("Your user account is not linked to an employee record, so drives cannot be recorded.");
+  }
+  const result = await recordManualDrive(manualEntryDb, { ...input, employeeProfileId }, new Date(), newId());
+  if (result.ok) revalidatePath(MILEAGE_PATH);
+  return result;
+}
+
+/** Claim the signed-in driver's own business drives for a period. */
+export async function claimMyMileageAction(input: {
+  periodStart: string;
+  periodEnd: string;
+}): Promise<ActionResult<{ claimId: string; total: number; skipped: number; alreadyClaimed: number }>> {
+  // Stated here as well as inside monetiseMileageAction, so the authorization
+  // of this entry point is visible without reading the action it delegates to.
+  await requireCapability("manage_finance");
+  const employeeProfileId = await currentEmployeeProfileId();
+  if (!employeeProfileId) return err("No employee record is linked to your account.");
+  const day = /^\d{4}-\d{2}-\d{2}$/;
+  if (!day.test(input.periodStart) || !day.test(input.periodEnd) || input.periodEnd < input.periodStart) {
+    return err("Choose a start and end date, with the end on or after the start.");
+  }
+  // Whole days, in UTC like the drives themselves: the end day's drives count.
+  return monetiseMileageAction({
+    employeeProfileId,
+    periodStart: `${input.periodStart}T00:00:00.000Z`,
+    periodEnd: `${input.periodEnd}T23:59:59.999Z`,
   });
 }

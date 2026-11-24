@@ -74,7 +74,13 @@ export function sanitizeConfidentialRow(
 
 // -- Table Classification Helpers --
 
+// Migration-owned reference rows must stay with the destination's migration
+// ledger. Copying an older source dictionary can undo an already-applied
+// migration; clearing it on a failed clone makes the next migration fail.
+const MIGRATION_OWNED_TABLES = new Set(["_prisma_migrations", "graph_relation_type"]);
+
 export function shouldCopyTable(tableName: string): boolean {
+  if (MIGRATION_OWNED_TABLES.has(tableName)) return false;
   const s = getTableSensitivity(tableName);
   return s === "public" || s === "internal";
 }
@@ -84,7 +90,7 @@ export function shouldObfuscateTable(tableName: string): boolean {
 }
 
 export function shouldSkipTable(tableName: string): boolean {
-  return getTableSensitivity(tableName) === "restricted";
+  return MIGRATION_OWNED_TABLES.has(tableName) || getTableSensitivity(tableName) === "restricted";
 }
 
 // ── PostgreSQL Clone Pipeline ────────────────────────────────────────────────
@@ -142,7 +148,7 @@ export function buildSanitizedSelectList(
 }
 
 export function buildDestinationResetSql(tableNames: readonly string[]): string | null {
-  const applicationTables = tableNames.filter((name) => name !== "_prisma_migrations");
+  const applicationTables = tableNames.filter((name) => !MIGRATION_OWNED_TABLES.has(name));
   if (applicationTables.length === 0) return null;
   return `TRUNCATE TABLE ${applicationTables.map(quoteIdentifier).join(", ")} RESTART IDENTITY CASCADE`;
 }
@@ -329,8 +335,8 @@ export async function runSanitizedClone(): Promise<void> {
           }
           const sensitivity = getTableSensitivity(tablename);
 
-          if (sensitivity === "restricted") {
-            console.log(`  SKIP (restricted): ${tablename}`);
+          if (shouldSkipTable(tablename)) {
+            console.log(`  SKIP (${MIGRATION_OWNED_TABLES.has(tablename) ? "migration-owned" : "restricted"}): ${tablename}`);
             continue;
           }
 
@@ -421,7 +427,7 @@ async function resetDestinationData(
 ): Promise<void> {
   const resetSql = buildDestinationResetSql(tableNames);
   if (!resetSql) return;
-  console.log(`[sanitized-clone] Resetting ${tableNames.filter((name) => name !== "_prisma_migrations").length} destination tables`);
+  console.log(`[sanitized-clone] Resetting ${tableNames.filter((name) => !MIGRATION_OWNED_TABLES.has(name)).length} destination tables`);
   await client.$executeRawUnsafe(resetSql);
 }
 

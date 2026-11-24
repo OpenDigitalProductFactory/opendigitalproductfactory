@@ -665,8 +665,9 @@ describe("terminal initiative recovery", () => {
     ]);
   });
 
-  it("uses the provider-verified artifact already pinned by the current baseline", async () => {
-    const ports = deps([room], [{
+  // BI-05AFEB9A: a Build Studio room records no immutable base; a pinned baseline never reads one.
+  it.each([["with", room], ["without", { ...room, baseSha: null } as never]])("uses the provider-verified artifact already pinned by the current baseline (room %s a base)", async (_label, live) => {
+    const ports = deps([live], [{
       baselineId: "baseline-current",
       supersedesBaselineId: null,
       artifactRef: {
@@ -689,6 +690,13 @@ describe("terminal initiative recovery", () => {
       },
       expectedCurrentBaselineId: "baseline-current",
     }));
+  });
+
+  it("fails closed for a room with no base when the artifact must be discovered from it", async () => {
+    const ports = deps([{ ...room, baseSha: null } as never]);
+    const result = await resolveTerminalInitiativeRecovery({ decision, currentAgentId: null, refusedWorkroomId: room.capsuleId, ports });
+    expect(result.escalations).toMatchObject([{ reason: "workroom-identity-incomplete" }]);
+    expect(ports.discoverArtifact).not.toHaveBeenCalled();
   });
 
   it.each([

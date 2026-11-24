@@ -85,6 +85,7 @@ export async function readWorkroomDetail(params: Record<string, unknown>, userId
   // BI-53BED66C: a plan-limited executor's room says when it may return and who can take it now.
   const capacity = await import("./executor-capacity");
   const wait = capacity.capacityWaitFor({ executorKind: capsule.executorKind ?? null, leaseExpiresAt: capsule.leaseExpiresAt ?? null,
+    lastActivityAt: capacity.latestExecutorActivity(capsule.workspaceState, capsule.lastSyncedAt),
     now: new Date(), providerRows: await capacity.loadProviderCapacityRows(prisma as never), checkpoint: capacity.checkpointOf(capsule.workspaceState) });
   const capacityWait = wait ? { reason: capacity.describeCapacityWait(wait, new Date()), executorKind: wait.executorKind, provider: wait.provider,
     resetAt: wait.resetAt.toISOString(), source: wait.source, alternatives: wait.alternatives } : null;

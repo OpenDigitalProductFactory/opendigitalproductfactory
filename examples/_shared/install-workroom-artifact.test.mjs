@@ -4,7 +4,7 @@ import { lstat, mkdtemp, mkdir, readFile, writeFile, rm, symlink } from "node:fs
 import { basename, join } from "node:path";
 import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
-import { installWorkroomArtifact } from "./install-workroom-artifact.mjs";
+import { installWorkroomArtifact, installFoundationArtifact } from "./install-workroom-artifact.mjs";
 
 const identity = { name: "@opendigitalproductfactory/dpf-workroom", version: "0.1.0-candidate.2",
   path: "packages/validators/vendor/candidate.tgz", sha256: "0".repeat(64) };
@@ -109,4 +109,9 @@ test("inherited global and prefix settings cannot redirect writes outside the ow
     }
     await rm(root, { recursive: true, force: true });
   }
+});
+
+test("foundation installer refuses unknown packages and the Workroom wrapper stays specific", async () => {
+  await assert.rejects(installFoundationArtifact({artifact:{...identity,name:"unreviewed-package"}}), /Only reviewed dependency-free foundations/);
+  await assert.rejects(installWorkroomArtifact({artifact:{...identity,name:"@opendigitalproductfactory/dpf-scoped-judgment"}}), /Only the reviewed Workroom dependency/);
 });

@@ -136,11 +136,12 @@
   },
   "devDependencies": {
     "@axe-core/playwright": "catalog:",
-    "@playwright/test": "^1.64.0",
+    "@playwright/test": "^1.65.1",
     "tsx": "catalog:",
     "typescript7": "npm:typescript@7.0.2"
   },
   "dependencies": {
-    "@opendigitalproductfactory/dpf-workroom": "file:packages/validators/vendor/opendigitalproductfactory-dpf-workroom-0.1.0-candidate.5.tgz"
+    "@opendigitalproductfactory/dpf-workroom": "file:packages/validators/vendor/opendigitalproductfactory-dpf-workroom-0.1.0-candidate.5.tgz",
+    "@opendigitalproductfactory/dpf-scoped-judgment": "file:packages/validators/vendor/opendigitalproductfactory-dpf-scoped-judgment-0.1.0-candidate.3.tgz"
   }
 }

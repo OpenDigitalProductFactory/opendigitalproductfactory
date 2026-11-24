@@ -17,13 +17,16 @@ import type { WorkCapsuleActivityKind } from "@/lib/work-capsules";
 
 import { decideCodexRequest } from "./runtime-request-policy";
 import type { QueuedInput, StoredRuntimeSession, SupervisionActor } from "./supervised-session";
-import type { RuntimeDecision, RuntimeEvent, RuntimeProvider, RuntimeRequest } from "./types";
+import type { RuntimeDecision, RuntimeEvent, RuntimeProvider, RuntimeRequest } from "@/lib/executor-drivers/types";
 
 export const EFFECT_KINDS = [
   "start-turn", "steer-turn", "interrupt-turn", "answer-request", "hold-request",
   "close-session", "revoke-token", "announce-supervision-lost", "record-plan-limit",
   // PR 3 (AC-5): a room's setup owed by its claim or adoption (room-setup-effects.server.ts).
   "ensure-workitem-anchor",
+  // BI-EB4BB4A0: an approved Build Studio plan's build dispatch, committed with its plan→build write
+  // (lib/build/build-dispatch-effect.ts). Not process-bound: it survives a restart and runs after boot.
+  "dispatch-build",
 ] as const;
 export type EffectKind = (typeof EFFECT_KINDS)[number];
 
@@ -68,7 +71,7 @@ export type RoomSnapshot = { session: StoredRuntimeSession | null };
 export type RuntimeHandoff = { text: string; included: number; omitted: number; bytes: number; fromProvider: RuntimeProvider; fromThreadId: string | null };
 
 export type RuntimeCommand =
-  | { type: "session.open"; provider: RuntimeProvider; threadId: string; tokenId: string; cwd: string; actor: SupervisionActor;
+  | { type: "session.open"; provider: RuntimeProvider; connectionId?: string; threadId: string; tokenId: string; cwd: string; actor: SupervisionActor;
     addressedAs: string | null; generation: string; hostId: string; reattach: boolean; prompt: string | null; handoff?: RuntimeHandoff | null; at: string }
   | { type: "turn.request"; prompt: string; steer: boolean; supportsSteer: boolean }
   | { type: "room-message.deliver"; prompt: string; deliveredCursor: string; at: string; wake?: RoomMessageWakeWrite | null }
@@ -133,7 +136,13 @@ function decideEvent(s: StoredRuntimeSession, generation: string, event: Runtime
       return { activities: [runtime("action", `${provider} started a turn`, { turnId: event.turnId, provider })],
         session: { ...started(s, event.turnId), activeTurnId: event.turnId, lastHeartbeatAt: at }, effects: [], reply: {} };
     case "message":
-      return { activities: [runtime("response", event.text, { turnId: event.turnId, provider })], effects: [], reply: {} };
+      return { activities: [runtime("response", event.text, { turnId: event.turnId, provider })],
+        session: { ...s, lastHeartbeatAt: at }, effects: [], reply: {} };
+    case "usage":
+      // Recorded as the client reported it; unknown usage stays unknown (S4 feeds the per-instance window store).
+      return { activities: [runtime("action", event.usage.reported === "native"
+        ? `${provider} used ${event.usage.inputTokens} input and ${event.usage.outputTokens} output tokens`
+        : `${provider} did not report usage for this turn`, { turnId: event.turnId, provider, usage: event.usage })], effects: [], reply: {} };
     case "turn-completed": {
       const failed = event.status === "failed";
       const next = startNextQueued({ ...s, activeTurnId: null, lastHeartbeatAt: at });
@@ -141,7 +150,7 @@ function decideEvent(s: StoredRuntimeSession, generation: string, event: Runtime
         activities: [runtime(failed ? "error" : "response", failed ? `Turn failed: ${event.error ?? "no detail"}` : `Turn ${event.status}.`,
           { turnId: event.turnId, status: event.status, provider })],
         session: next.session,
-        effects: [...(failed ? [{ kind: "record-plan-limit" as const, payload: { provider, error: event.error ?? null } }] : []), ...next.effects],
+        effects: [...(failed ? [{ kind: "record-plan-limit" as const, payload: { provider, error: event.error ?? null, observedAt: at, generation } }] : []), ...next.effects],
         reply: {},
       };
     }
@@ -192,6 +201,12 @@ function decideSucceeded(s: StoredRuntimeSession | null, c: Settled, base: Decis
         : runtime("question", `Held for a room decision: ${request.summary} (${String(c.payload["reason"] ?? "")}).`,
           { requestId: request.requestId, kind: request.kind, reason: c.payload["reason"] ?? null, decideWith: "drive_workroom_runtime action=decide" })] };
     }
+    case "dispatch-build":
+      // The room log reads the dispatch back: started, adopted, skipped or refused, with its reason.
+      return typeof result["summary"] === "string"
+        ? { ...base, activities: [runtime(result["outcome"] === "refused" ? "error" : "action", result["summary"],
+          { kind: "build-dispatch", buildId: c.payload["buildId"] ?? null, outcome: result["outcome"] ?? null })] }
+        : base;
     case "record-plan-limit":
       return typeof result["summary"] === "string"
         ? { ...base, activities: [runtime("error", result["summary"], { kind: "executor-plan-limit", provider: result["provider"] ?? null, resetAt: result["resetAt"] ?? null })] }
@@ -247,6 +262,7 @@ function decideOpen(s: StoredRuntimeSession | null, commandId: string, c: Extrac
   const first = [handoff?.text ?? "", c.prompt?.trim() ?? ""].filter(Boolean).join("\n\n");
   const opened: StoredRuntimeSession = {
     provider: c.provider, threadId: c.threadId, tokenId: c.tokenId, status: "supervised", openedAt: c.at, cwd: c.cwd,
+    ...(c.connectionId ? { connectionId: c.connectionId } : {}),
     actor: c.actor, addressedAs: c.addressedAs, lastHeartbeatAt: c.at,
     // The session keeps its place in the room across a resume of its own thread.
     deliveredCursor: s?.provider === c.provider ? s.deliveredCursor ?? null : null,
@@ -308,7 +324,8 @@ export function decideRuntimeCommand(room: RoomSnapshot, commandId: string, comm
       }
       const turn = requestTurn(s, { commandId, prompt: command.prompt });
       return { activities: [], session: turn.session, effects: turn.effects,
-        reply: { outcome: turn.outcome, ...(turn.outcome === "queued" ? { queued: turn.session.queuedInputs?.length ?? 0 } : {}) } };
+        reply: { outcome: turn.outcome, ...(turn.outcome === "queued" ? { queued: turn.session.queuedInputs?.length ?? 0 } : {}),
+          ...(command.steer && !command.supportsSteer && s.activeTurnId ? { capability: "capability-unavailable" } : {}) } };
     }
     case "room-message.deliver": {
       if (s?.status !== "supervised") return none({ outcome: "no-session" });

@@ -32,35 +32,33 @@ const baseSummary: OwnerReleaseSummary = {
 };
 
 describe("OwnerReleaseCard – primary action slot", () => {
-  it("shows unavailable restoration and conditional recovery before the upgrade action", () => {
+  it("keeps speculative risk and recovery copy off the arrival surface", () => {
     const html = renderToStaticMarkup(<OwnerReleaseCard summary={baseSummary}
-      primaryAction={<button>Upgrade now</button>} />);
-    expect(html).toContain(baseSummary.rollback.detail);
-    expect(html).toContain(baseSummary.riskNotice!.recovery);
-    expect(html.indexOf(baseSummary.rollback.detail)).toBeLessThan(html.indexOf("Upgrade now"));
-    expect(html).not.toContain("Restore recovery point");
+      primaryAction={<button>Install now</button>} />);
+    expect(html).not.toContain("What could go wrong");
+    expect(html).not.toContain("Before you install");
+    expect(html).not.toContain(baseSummary.riskNotice!.recovery);
+    expect(html).toContain("Install now");
   });
   it("wraps the primaryAction in an owner-release-primary-action marker", () => {
     const html = renderToStaticMarkup(
       <OwnerReleaseCard
         summary={baseSummary}
-        primaryAction={<button data-testid="the-trigger">Upgrade now</button>}
+        primaryAction={<button data-testid="the-trigger">Install now</button>}
       />,
     );
     expect(html).toContain('data-component="owner-release-primary-action"');
     expect(html).toContain('data-testid="the-trigger"');
   });
 
-  it("positions the primary action after the risk notice (consequence/reversibility shown first)", () => {
+  it("positions the primary action directly after the concise status", () => {
     const html = renderToStaticMarkup(
       <OwnerReleaseCard
         summary={baseSummary}
-        primaryAction={<button data-testid="the-trigger">Upgrade now</button>}
+        primaryAction={<button data-testid="the-trigger">Install now</button>}
       />,
     );
-    expect(html.indexOf("Before you install")).toBeLessThan(
-      html.indexOf('data-testid="the-trigger"'),
-    );
+    expect(html.indexOf(baseSummary.headline)).toBeLessThan(html.indexOf('data-testid="the-trigger"'));
   });
 
   it("renders nothing extra when primaryAction is omitted (card stays usable without it)", () => {

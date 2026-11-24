@@ -45,6 +45,7 @@ import SelfUpgradeJobEngineHealthAlert, {
   type JobEngineHealth,
 } from "@/components/ops/SelfUpgradeJobEngineHealthAlert";
 import { useOptionalSelfUpgradeLive } from "@/components/ops/SelfUpgradeLiveProvider";
+import { confirmDialog } from "@/components/ui/Dialog";
 
 // A run in one of these states has finished; its outcome is on the page and a
 // fresh trigger is legitimate again (a skipped or failed run is exactly when
@@ -62,7 +63,27 @@ type Props = {
   quiescence?: QuiescenceActivity | null;
   jobEngine?: JobEngineHealth;
   targetBinding?: string | null;
+  confirmation?: {
+    consequence: string;
+    reversibility: string;
+    duration: string;
+    recovery: string;
+  } | null;
 };
+
+export function buildInstallConfirmation(confirmation: Props["confirmation"]) {
+  return {
+    title: "Install this platform update?",
+    message: [
+      confirmation?.consequence ?? "The portal restarts briefly while the new version is installed.",
+      confirmation?.duration ?? "This usually takes a few minutes.",
+      `Recovery: ${confirmation?.recovery ?? "DPF checks the new version and uses its recorded recovery path if activation cannot finish safely."}`,
+      `Undo: ${confirmation?.reversibility ?? "The available recovery option depends on the retained platform history."}`,
+    ].join(" "),
+    confirmLabel: "Install",
+    cancelLabel: "Not now",
+  } as const;
+}
 
 export default function SelfUpgradeTriggerControl({
   enabled,
@@ -73,6 +94,7 @@ export default function SelfUpgradeTriggerControl({
   quiescence: initialQuiescence,
   jobEngine: initialJobEngine,
   targetBinding,
+  confirmation,
 }: Props) {
   const router = useRouter();
   const live = useOptionalSelfUpgradeLive();
@@ -81,7 +103,6 @@ export default function SelfUpgradeTriggerControl({
   const jobEngine = live?.snapshot.jobEngine ?? initialJobEngine;
   const [isPending, startTransition] = useTransition();
   const t = useT("upgrade");
-  const [override, setOverride] = useState(false);
   const [triggerResult, setTriggerResult] = useState<{
     queued: boolean;
     reason?: string;
@@ -169,16 +190,17 @@ export default function SelfUpgradeTriggerControl({
     }
   }
 
-  function handleTrigger() {
+  async function handleTrigger() {
+    const confirmed = await confirmDialog(buildInstallConfirmation(confirmation));
+    if (!confirmed) return;
+
     setTriggerResult(null);
     setInFlightError(null);
-    const force = override;
     admissionBaselineRef.current = serverSignature();
     triggerBaselineRunIdRef.current = latestRun?.runId ?? null;
     startTransition(async () => {
       try {
         const result = await triggerSelfUpgrade({
-          ...(force ? { force: true } : {}),
           ...(targetBinding ? { targetBinding } : {}),
         });
         setTriggerResult(result);
@@ -449,36 +471,18 @@ export default function SelfUpgradeTriggerControl({
           ) : (
             <>
             {updateAvailable ? (
-              <>
-              <label className="flex items-center gap-1.5 text-xs text-[var(--dpf-muted)] cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={override}
-                  onChange={(e) => setOverride(e.target.checked)}
-                  aria-label="Emergency override: bypass the safety drain"
-                  title="Bypass the quiescence safety drain. Only for emergencies — it can interrupt in-flight work."
-                  className="accent-[var(--dpf-warning)]"
-                />
-                Emergency override
-              </label>
               <button
                 type="button"
-                onClick={handleTrigger}
+                onClick={() => { void handleTrigger(); }}
                 disabled={triggerBusy}
                 aria-busy={triggerBusy}
-                aria-label="Upgrade now"
-                data-override={override ? "true" : "false"}
+                aria-label="Install now"
                 data-owner-first-next-action
                 data-dpf-primary-action
                 className="px-4 py-2 text-sm font-semibold rounded-lg bg-[var(--dpf-accent)] text-white border border-[var(--dpf-accent)] shadow-sm hover:opacity-90 transition-opacity disabled:opacity-50"
               >
-                {isPending
-                  ? "Admitting…"
-                  : override
-                      ? "Force upgrade now"
-                      : "Upgrade now"}
+                {isPending ? "Starting…" : "Install now"}
               </button>
-              </>
             ) : (
               <span
                 className="text-xs text-[var(--dpf-muted)]"

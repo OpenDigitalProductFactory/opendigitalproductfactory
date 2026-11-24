@@ -11,8 +11,9 @@
  * Pure and synchronous.
  */
 import type { MessageKey } from "@dpf/i18n";
-import { projectWorkroomOperatorSummary } from "@/lib/work-capsules/workroom-operator-summary";
+import { projectWorkroomOperatorSummary, type WorkroomNextAction } from "@/lib/work-capsules/workroom-operator-summary";
 import { ATLAS_HEALTH_STATES, type AtlasHealth } from "@/lib/work-management/atlas-health";
+import type { AtlasPlacement } from "@/lib/work-management/atlas-layout";
 import type { RoomWorkforce } from "@/lib/work-management/room-workforce.server";
 
 /** Longest title carried in the overview; the room page has the full one. */
@@ -34,6 +35,11 @@ export type AtlasInventoryRoom = {
   stageKey: string | null;
   /** Declared delivery or activity shape key (`readDeclaredWorkShapeKey`), null when none. */
   shapeKey?: string | null;
+  executorKind?: string | null;
+  recovery?: unknown;
+  decisions?: ReadonlyArray<{ title: string; condition: string }>;
+  /** Where the room sits in a business layout (A6a), from `outcomeAnchor.atlasPlacement`. */
+  placement?: AtlasPlacement | null;
 };
 
 export type AtlasOwner = Pick<RoomWorkforce, "accountability" | "accountableDisplayName">;
@@ -47,9 +53,14 @@ export type AtlasRoom = {
   label: MessageKey<"workrooms">;
   /** Declared shape key; left out when the room declares none ("Unshaped"). */
   shape?: string;
+  /** Business-layout lane and slot; left out when the room records none. */
+  placement?: AtlasPlacement;
   owner?: string;
   stage?: string;
   lastSignalAt?: string;
+  /** Details on demand for the selected room only; raw inventory recovery stays server-side. */
+  action?: WorkroomNextAction | null;
+  nextAction?: MessageKey<"workrooms">;
 };
 
 export type AtlasPicture = {
@@ -65,7 +76,7 @@ function capTitle(title: string): string {
   return title.length <= ATLAS_TITLE_MAX ? title : `${title.slice(0, ATLAS_TITLE_MAX - 1)}…`;
 }
 
-export function projectAtlasRoom(room: AtlasInventoryRoom, owner: AtlasOwner | undefined): AtlasRoom {
+export function projectAtlasRoom(room: AtlasInventoryRoom, owner: AtlasOwner | undefined, includeAction = false): AtlasRoom {
   const summary = projectWorkroomOperatorSummary({
     capsuleId: room.capsuleId,
     status: room.status,
@@ -73,6 +84,9 @@ export function projectAtlasRoom(room: AtlasInventoryRoom, owner: AtlasOwner | u
     isLive: room.isLive,
     accountability: owner?.accountability,
     drive: room.drive ?? undefined,
+    executorKind: room.executorKind,
+    recovery: room.recovery,
+    decisions: room.decisions,
   });
   return {
     capsuleId: room.capsuleId,
@@ -81,9 +95,11 @@ export function projectAtlasRoom(room: AtlasInventoryRoom, owner: AtlasOwner | u
     health: summary.health,
     label: summary.label,
     ...(room.shapeKey ? { shape: room.shapeKey } : {}),
+    ...(room.placement ? { placement: room.placement } : {}),
     ...(owner?.accountableDisplayName ? { owner: owner.accountableDisplayName } : {}),
     ...(room.stageKey ? { stage: room.stageKey } : {}),
     ...(room.trueLivenessAt ? { lastSignalAt: room.trueLivenessAt } : {}),
+    ...(includeAction ? { action: summary.action, nextAction: summary.nextAction } : {}),
   };
 }
 
@@ -93,9 +109,10 @@ export function projectAtlas(input: {
   owners: ReadonlyMap<string, AtlasOwner>;
   limit: number;
   observedAt: Date;
+  selectedCapsuleId?: string;
 }): AtlasPicture {
   const read = input.rooms.slice(0, input.limit);
-  const rooms = read.map((room) => projectAtlasRoom(room, input.owners.get(room.capsuleId)));
+  const rooms = read.map((room) => projectAtlasRoom(room, input.owners.get(room.capsuleId), room.capsuleId === input.selectedCapsuleId));
   const counts = Object.fromEntries(ATLAS_HEALTH_STATES.map((state) => [state, 0])) as Record<AtlasHealth, number>;
   for (const room of rooms) counts[room.health] += 1;
   return {

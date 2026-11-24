@@ -104,6 +104,7 @@ import { buildEvidenceExtraPack } from "./packs/build-evidence-extra-pack";
 import { changeReviewPack } from "./packs/change-review-pack";
 import { principleDecidePack } from "./packs/principle-decide-pack";
 import { decisionOutcomePack } from "./packs/decision-outcome-pack";
+import { ownerRulingPack } from "./packs/owner-ruling-pack";
 import { decisionReverifyPack } from "./packs/decision-reverify-pack";
 import { productOutcomesPack } from "./packs/product-outcomes-pack";
 import { initiativeReadinessPack } from "./packs/initiative-readiness-pack";
@@ -116,6 +117,7 @@ import { buildChangePack } from "./packs/build-change-pack";
 import { gateContextPack } from "./packs/gate-context-pack";
 import { federationMembershipPack } from "./packs/federation-membership-pack";
 import { uxVerificationPack } from "./packs/ux-verification-pack";
+import { workPatternExperimentPack } from "./packs/work-pattern-experiment-pack";
 
 export const TOOL_PACK_REGISTRY = composeToolPacks([
   deliberationSiemPack,
@@ -210,10 +212,12 @@ export const TOOL_PACK_REGISTRY = composeToolPacks([
   changeReviewPack,
   principleDecidePack,
   decisionOutcomePack,
+  ownerRulingPack,
   decisionReverifyPack,
   productOutcomesPack,
   initiativeReadinessPack,
   surfaceReadinessPack,
+  workPatternExperimentPack,
 ].map(pack => pack === coworkerServiceCatalogPack ? withEngagementFulfillment((engagementId, locator, userId, context, rawParams) => fulfillCoworkerEngagement(engagementId, locator, userId, context, undefined, rawParams))
   : pack === sandboxPack ? withSandboxRepairDispatch(async (input) => {
     const { runGauntletRepairTask } = await import("@/lib/build/build-orchestrator");

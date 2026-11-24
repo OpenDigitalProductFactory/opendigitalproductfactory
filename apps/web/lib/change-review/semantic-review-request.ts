@@ -23,9 +23,14 @@ const inputSchema = z.object({
   surface: z.enum(["external", "build-studio"]), authorSurface: ref,
   artifactType: artifactTypeSchema, title: z.string().min(1).max(2_000),
   artifact: z.string().min(1), verificationEvidence: z.string().min(1),
+  // BI-3D5AC133: the range the server read the artifact from; absent for a paste.
+  artifactSource: z.object({ baseSha: z.string().regex(/^[a-f0-9]{40}$/), headSha: z.string().regex(/^[a-f0-9]{40}$/) }).strict().optional(),
   failureAnalysis: failureAnalysisSchema.optional(),
   resolvedFailureEvidence: z.array(z.object({ id: ref, capsuleId: ref, headTreeHash: ref, diffDigest: sha256,
-    status: ref, expected: z.string(), observed: z.string(), completedAt: ref }).strict()).optional(),
+    status: ref, expected: z.string(), observed: z.string(), completedAt: ref,
+    // BI-09FB398D: a platform-written risk-acceptance authority (failure-analysis.ts).
+    kind: z.enum(["verification", "risk-acceptance"]).optional(), scenarioKey: ref.optional(),
+    followUpReference: ref.optional() }).strict()).optional(),
   changedFiles: z.array(z.string().min(1).max(2_000)).min(1).max(10_000),
   identity: z.object({ capsuleId: ref, baseTreeHash: z.string().regex(/^[a-f0-9]{40}$/),
     artifactType: artifactTypeSchema.optional(),

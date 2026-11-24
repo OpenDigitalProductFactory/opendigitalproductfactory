@@ -1,6 +1,6 @@
 {
   "generator": "apps/web/scripts/build-route-manifest.ts",
-  "routeCount": 688,
+  "routeCount": 691,
   "routes": [
     {
       "routePath": "/",
@@ -2947,6 +2947,32 @@
       "file": "apps/web/app/api/v1/edge/metrics/route.ts"
     },
     {
+      "routePath": "/api/v1/federation/a2a",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "federation",
+        "a2a"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/v1/federation/a2a/route.ts",
+      "exposure": "private-mesh"
+    },
+    {
+      "routePath": "/api/v1/federation/ai-usage",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "federation",
+        "ai-usage"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/v1/federation/ai-usage/route.ts",
+      "exposure": "private-mesh"
+    },
+    {
       "routePath": "/api/v1/federation/approval-relay",
       "kind": "route",
       "segments": [
@@ -5526,6 +5552,16 @@
       ],
       "dynamicParams": [],
       "file": "apps/web/app/(shell)/finance/payments/page.tsx"
+    },
+    {
+      "routePath": "/finance/payroll",
+      "kind": "page",
+      "segments": [
+        "finance",
+        "payroll"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/finance/payroll/page.tsx"
     },
     {
       "routePath": "/finance/purchase-orders",

@@ -462,7 +462,7 @@ export async function reconcileDeployedShipBuilds(
     await (await import("@/lib/build/merged-ship-room-settlement")).settleMergedShipBuildRoomsNow()
       .catch((err: unknown) => logger.error("[auto-complete] merged-room settlement failed: %s", JSON.stringify(String(err))));
     const shipBuilds = await prisma.featureBuild.findMany({
-      where: { phase: "ship" },
+      where: { phase: "ship", waitingOnOwnerSince: null }, // a build parked on its owner waits (BI-B6894001)
       select: { id: true, buildId: true },
     });
     const { mayCompleteAutonomousBuild } = await import("@/lib/build/autonomous-build-completion-gate");
@@ -612,7 +612,7 @@ export async function resumeStrandedBuildsOnBoot(
     const candidates = await prisma.featureBuild.findMany({
       where: {
         phase: { in: ["ideate", "plan", "build", "review"] },
-        updatedAt: { lt: cutoff },
+        updatedAt: { lt: cutoff }, waitingOnOwnerSince: null, // parked on its owner: not resumed or aged out (BI-B6894001)
       },
       select: {
         buildId: true,
@@ -1014,7 +1014,7 @@ export async function register() {
       // Self-heal a quiescence level left stuck by a swap that killed the
       // coordinator mid-protocol — otherwise the portal refuses gated requests
       // ("portal_quiescing") forever. Must run before reconciliation.
-      void resetStuckQuiescenceLevelOnBoot();
+      void resetStuckQuiescenceLevelOnBoot(); void import("@/lib/build/build-dispatch-effect.server").then((m) => m.registerBuildDispatchExecutor()).catch((error) => console.error("[build-dispatch] executor registration failed", error)); // BI-EB4BB4A0: register the dispatch-build Workroom effect executor before the effect worker starts
       setTimeout(() => void import("@/lib/workroom-runtime/runtime-tools").then((m) => m.reattachSupervisedSessionsOnBoot()).catch((error) => console.error("[workroom-runtime] boot re-attach failed", error)), 60_000).unref(); // BI-F5D58F29: once the sandbox and this portal's MCP endpoint are up
 
       void reconcileSelfUpgradeAdmissions().catch((error) => console.error("[self-upgrade] admission reconcile failed", error)); void import("@/lib/jobs/postgres/start").then((m) => m.startPostgresJobWorker()).catch((error) => console.error("[jobs/postgres] worker failed to start", error)); // BI-85E6EF14: a no-op unless DPF_JOBS_ENGINE routes functions to the owned engine

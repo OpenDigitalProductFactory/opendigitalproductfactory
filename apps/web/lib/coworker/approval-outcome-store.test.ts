@@ -2,13 +2,54 @@ import { describe, expect, it, vi } from "vitest";
 vi.mock("server-only", () => ({}));
 vi.mock("@dpf/db", () => ({ prisma: {} }));
 const roomAccess = vi.hoisted(() => ({ human: vi.fn(), agent: vi.fn() }));
+const runtimeFiles = vi.hoisted(() => ({ readFile: vi.fn() }));
+vi.mock("node:fs/promises", async importOriginal => ({ ...await importOriginal<typeof import("node:fs/promises")>(), readFile: runtimeFiles.readFile }));
 vi.mock("@/lib/work-management/workroom-agent-access.server", () => ({
   resolveHumanWorkroomAccess: roomAccess.human, resolveAgentWorkroomAccess: roomAccess.agent,
 }));
 import { listPendingApprovalOutcomes, loadApprovalOutcomes, readApprovalOutcome, recordApprovalOutcome } from "./approval-outcome-store";
 import { fingerprintCoworkerInput } from "@/lib/govern/authority/coworker-authority-decision";
+import { prepareRuntimeReconciliationIntent, signTransitionPayload } from "@/lib/platform-runtime/transition-protocol";
+import { computeCapabilityStateVersion } from "../../../../scripts/lib/capability-state-hash.mjs";
 
 const now = new Date("2026-09-27T12:00:00Z");
+describe("owned saved service report", () => {
+  function savedReportFixture() {
+    const command = "docker compose exec -T portal cat /dpf-state/service-converge-outcome.json";
+    const inputFingerprint = fingerprintCoworkerInput({ command });
+    const envelope = { id: "saved-report", status: "executed", createdAt: now, expiresAt: now, delegatingUserId: "u1",
+      coworkerAgentId: "a1", threadId: "thread1", manifestActionId: "admin_run_command", inputFingerprint,
+      argsJson: { approvalBinding: { actingHumanUserId: "u1", actingAgentId: "a1", toolName: "admin_run_command",
+        inputFingerprint, taskRunId: null, chainId: null, routeContext: null } }, toolExecutions: [] };
+    const report = { mode: "shadow", targetSha: "a".repeat(40), at: "2026-09-27T11:00:00Z", outcome: "current",
+      wouldRecreate: [], unchanged: ["postgres"], skippedStopped: [], dataOwnerChanged: [], unclassified: [], failed: [], bindDrift: [] };
+    const execution = { id: "saved-report-execution", envelopeId: envelope.id, userId: "u1", agentId: "a1", threadId: "thread1",
+      taskRunId: null, toolName: "admin_run_command", executionMode: "external-mcp", createdAt: now, durationMs: 1,
+      parameters: { command }, success: true, result: { success: true, data: { command, output: JSON.stringify(report), exitCode: 0 } } };
+    const db = { coworkerActionEnvelope: { findFirst: vi.fn(async ({ where }: any) => where.delegatingUserId === "u1" && where.coworkerAgentId === "a1" ? envelope : null),
+      findMany: vi.fn(async () => [envelope]) }, toolExecution: { findMany: vi.fn(async () => [execution]) },
+      user: { findUnique: vi.fn(async () => ({ isActive: true, isSuperuser: true, groups: [] })) } };
+    return { db, envelope };
+  }
+  it("shares original safe evidence between owned Inbox and exact assistant read without replay", async () => {
+    const f = savedReportFixture();
+    const exact = await readApprovalOutcome(f.envelope.id, "u1", "a1", f.db as never, now);
+    const [owner] = await loadApprovalOutcomes("u1", f.envelope.id, f.db as never, now);
+    expect(exact).toMatchObject({ state: "executed", actionEvidence: { state: "available", operation: "service-convergence-shadow" },
+      serviceReportEvidence: { state: "available", executionId: "saved-report-execution", report: { classifications: { unchanged: ["postgres"] } } } });
+    expect(owner.serviceReportEvidence).toEqual(exact?.serviceReportEvidence);
+    expect(JSON.stringify(exact)).not.toContain("docker compose");
+  });
+  it("does not read diagnostic executions after current platform access is lost", async () => {
+    const f = savedReportFixture(); f.db.user.findUnique.mockResolvedValue({ isActive: true, isSuperuser: false, groups: [] });
+    expect(await readApprovalOutcome(f.envelope.id, "u1", "a1", f.db as never, now)).not.toHaveProperty("serviceReportEvidence");
+    expect(f.db.toolExecution.findMany).not.toHaveBeenCalled();
+  });
+  it.each([["u2", "a1"], ["u1", "a2"]])("does not expose another owner/assistant's result", async (userId, agentId) => {
+    const f = savedReportFixture(); expect(await readApprovalOutcome(f.envelope.id, userId, agentId, f.db as never, now)).toBeNull();
+    expect(f.db.toolExecution.findMany).not.toHaveBeenCalled();
+  });
+});
 it("reads the original provider test evidence after the approval replay window without running the action", async () => {
   const parameters = { operation: "test", providerId: "chatgpt", connectionId: "provider-default-chatgpt" };
   const inputFingerprint = fingerprintCoworkerInput(parameters);
@@ -218,6 +259,126 @@ describe("recorded handoff failure explanation (BI-A83A4188)", () => {
     const f = handoffFixture(); f.run.result.error = "SECRET unknown error";
     const result = await readApprovalOutcome("e1", "u1", "a1", f.db as never, now);
     expect(result?.failureEvidence).toMatchObject({ state: "missing", reason: "result-unproven" });
+    expect(JSON.stringify(result)).not.toContain("SECRET");
+  });
+});
+
+describe("owned original runtime result projection (BI-08B1B79B)", () => {
+  function runtimeFixture() {
+    const catalogHash = "a".repeat(64), capabilityIds = ["runtime:core"];
+    const stateHash = computeCapabilityStateVersion(catalogHash, capabilityIds, capabilityIds);
+    const sourceSha = "a".repeat(40), image = (c: string) => `sha256:${c.repeat(64)}`;
+    const reconciliation = { observedHost: { schemaVersion: 2, installerVersion: "fixture", platform: "linux", arch: "amd64",
+      capabilityCatalogHash: catalogHash, capabilityStateVersion: stateHash, enabledRuntimeCapabilities: capabilityIds },
+      observedDatabaseStates: { "runtime:core": "active" }, desiredHostEnabledKeys: capabilityIds,
+      desiredDatabaseStates: { "runtime:core": "active" }, touchedKeys: [] };
+    const parameters = { transitionId: "RCT-original-fixture", reconciliation, imageServices: ["browser-use"] };
+    const digest = fingerprintCoworkerInput(parameters), secret = "safe-test-secret".repeat(3);
+    const envelope = { ...row, status: "executed", manifestActionId: "reconcile_runtime_capabilities", inputFingerprint: digest,
+      argsJson: { approvalBinding: { actingHumanUserId: "u1", actingAgentId: "a1", toolName: "reconcile_runtime_capabilities",
+        inputFingerprint: digest, taskRunId: null, chainId: null, routeContext: null } }, toolExecutions: [] };
+    const run = { id: "original-runtime-execution", envelopeId: "e1", userId: "u1", agentId: "a1", threadId: "thread1",
+      taskRunId: null, toolName: "reconcile_runtime_capabilities", executionMode: "external-jsonrpc", createdAt: now,
+      durationMs: 10, parameters, success: true, result: { success: true, data: { status: "succeeded" }, message: "SECRET" } };
+    const signed = { version: 3, kind: "runtime-capability-transition", mode: "reconciliation", transitionId: parameters.transitionId,
+      issuedAt: now.toISOString(), expiresAt: new Date(now.getTime() + 600_000).toISOString(), catalogHash,
+      previousStateHash: stateHash, desiredStateHash: stateHash, previousKeys: capabilityIds, desiredKeys: capabilityIds,
+      previousProfiles: [], desiredProfiles: [], previousServices: ["browser-use", "portal", "postgres"], desiredServices: ["browser-use", "portal", "postgres"],
+      reconciliation: prepareRuntimeReconciliationIntent(reconciliation, { catalogHash, capabilityIds }),
+      protocolIdentity: { sourceSha, actuatorSha256: "b".repeat(64), signerSha256: "c".repeat(64), imageQualifierSha256: "d".repeat(64), promoterDigest: image("d") },
+      imagePlan: { schemaVersion: 1, sourceSha, platform: "linux/amd64", operation: "prepare", services: [{ service: "browser-use", source: { kind: "source", sourceSha } }] } };
+    const receipt = { ...signed, status: "applied", beforeHash: stateHash, afterHash: stateHash,
+      observedServices: signed.desiredServices, observedHealth: { "browser-use": "healthy", portal: "healthy", postgres: "healthy" },
+      completedAt: new Date(now.getTime() + 1_000).toISOString(), imageProof: { schemaVersion: 1, sourceSha,
+        services: [{ service: "browser-use", priorImageId: image("e"), intendedImageId: image("f"), observedImageId: image("f"),
+          priorContainerId: "1".repeat(64), observedContainerId: "2".repeat(64), resourcesBeforeHash: "a".repeat(64), resourcesAfterHash: "a".repeat(64),
+          source: { kind: "source", sourceSha, inputTreeOid: "3".repeat(40) } }],
+        untouchedBefore: { portal: "7".repeat(64), postgres: "4".repeat(64) }, untouchedAfter: { portal: "7".repeat(64), postgres: "4".repeat(64) } } };
+    const transition = { transitionId: parameters.transitionId, requestedById: "u1", status: "succeeded", createdAt: now,
+      completedAt: new Date(now.getTime() + 1_000), previousStates: reconciliation.observedDatabaseStates,
+      desiredStates: reconciliation.desiredDatabaseStates, catalogHash, previousStateHash: stateHash, desiredStateHash: stateHash,
+      envelope: signed, envelopeSignature: signTransitionPayload(signed, secret),
+      hostReceipt: { ...receipt, signature: signTransitionPayload(receipt, secret) }, failure: null as unknown };
+    const db = { coworkerActionEnvelope: { findFirst: vi.fn(async () => envelope), findMany: vi.fn(async () => [envelope]) },
+      toolExecution: { findMany: vi.fn(async () => [run]) }, user: { findUnique: vi.fn(async () => ({ isActive: true, isSuperuser: true, groups: [] })) },
+      runtimeCapabilityTransition: { findUnique: vi.fn(async () => transition), findFirst: vi.fn() } };
+    runtimeFiles.readFile.mockReset().mockResolvedValue(secret);
+    const readAt = new Date(now.getTime() + 2_000);
+    return { envelope, run, transition, db, readAt, read: () => readApprovalOutcome("e1", "u1", "a1", db as never, readAt) };
+  }
+  it("shares one bound runtime result across native readback and owner history with verified historical host proof", async () => {
+    const f = runtimeFixture();
+    const exact = await f.read();
+    expect(exact).toMatchObject({ runtimeEvidence: { state: "available", outcome: "succeeded",
+      hostEvidence: { state: "recorded", status: "succeeded", receiptVerification: "verified", receiptStatus: "applied" } } });
+    expect(f.db.toolExecution.findMany).toHaveBeenCalledTimes(1);
+    expect(f.db.runtimeCapabilityTransition.findUnique).toHaveBeenCalledWith(expect.objectContaining({ where: { transitionId: "RCT-original-fixture", requestedById: "u1" } }));
+    expect(f.db.runtimeCapabilityTransition.findFirst).not.toHaveBeenCalled();
+    const [owner] = await loadApprovalOutcomes("u1", "e1", f.db as never, f.readAt);
+    expect(owner.runtimeEvidence).toEqual(exact?.runtimeEvidence);
+    expect(owner.runtimeExplanation).toContain("verified");
+    expect(JSON.stringify(exact)).not.toContain("SECRET");
+    expect(JSON.stringify(exact)).not.toContain("signature");
+  });
+  it("does not read shared transition state after platform access is revoked", async () => {
+    const f = runtimeFixture(); f.db.user.findUnique.mockResolvedValue({ isActive: true, isSuperuser: false, groups: [] });
+    expect(await f.read()).toMatchObject({ runtimeEvidence: { hostEvidence: { state: "unavailable", receiptVerification: "unproven" } } });
+    expect(f.db.runtimeCapabilityTransition.findUnique).not.toHaveBeenCalled();
+    expect(runtimeFiles.readFile).not.toHaveBeenCalled();
+  });
+  it("reads the original v2 reconciliation receipt without requiring later image evidence", async () => {
+    const f = runtimeFixture();
+    const { imageServices: _images, ...parameters } = f.run.parameters;
+    f.run.parameters = parameters as typeof f.run.parameters;
+    const digest = fingerprintCoworkerInput(parameters);
+    f.envelope.inputFingerprint = digest;
+    f.envelope.argsJson.approvalBinding.inputFingerprint = digest;
+    const { imagePlan: _plan, protocolIdentity: _identity, ...original } = f.transition.envelope;
+    const envelope = { ...original, version: 2 };
+    const { beforeHash, afterHash, observedServices, observedHealth, completedAt } = f.transition.hostReceipt;
+    const receipt = { ...envelope, status: "applied", beforeHash, afterHash, observedServices, observedHealth, completedAt };
+    const secret = "safe-test-secret".repeat(3);
+    f.db.runtimeCapabilityTransition.findUnique.mockResolvedValue({ ...f.transition, envelope,
+      envelopeSignature: signTransitionPayload(envelope, secret),
+      hostReceipt: { ...receipt, signature: signTransitionPayload(receipt, secret) } } as never);
+    expect(await f.read()).toMatchObject({ runtimeEvidence: { state: "available", outcome: "succeeded",
+      hostEvidence: { state: "recorded", receiptVerification: "verified", receiptStatus: "applied" } } });
+    expect(f.db.runtimeCapabilityTransition.findUnique).toHaveBeenCalledTimes(1);
+  });
+  it("keeps a waiting approval actionable without inventing an execution failure", async () => {
+    const f = runtimeFixture(); f.envelope.status = "proposed"; f.envelope.expiresAt = new Date(now.getTime() + 600_000);
+    const result = await f.read();
+    expect(result).toMatchObject({ state: "waiting", actionEvidence: { state: "missing", reason: "not-settled" } });
+    expect(result).not.toHaveProperty("runtimeExplanation");
+    expect(result).not.toHaveProperty("runtimeEvidence");
+    expect(f.db.toolExecution.findMany).not.toHaveBeenCalled();
+    expect(f.db.runtimeCapabilityTransition.findUnique).not.toHaveBeenCalled();
+  });
+  it("does not turn an absent exact transition into no-effects proof", async () => {
+    const f = runtimeFixture(); f.db.runtimeCapabilityTransition.findUnique.mockResolvedValue(null as never);
+    expect(await f.read()).toMatchObject({ runtimeEvidence: { hostEvidence: { state: "not-recorded", receiptVerification: "unproven" } } });
+    expect(runtimeFiles.readFile).not.toHaveBeenCalled();
+  });
+  it.each(["owner", "intent", "image selection", "state hashes"])("refuses contradictory %s before inspecting a receipt", async kind => {
+    const f = runtimeFixture();
+    if (kind === "owner") f.transition.requestedById = "another-owner";
+    if (kind === "intent") f.transition.envelope.reconciliation = { ...f.transition.envelope.reconciliation,
+      desiredDatabaseStates: { ...f.transition.envelope.reconciliation.desiredDatabaseStates, "runtime:core": "disabled" } };
+    if (kind === "image selection") f.transition.envelope.imagePlan.services = [];
+    if (kind === "state hashes") {
+      f.transition.previousStateHash = f.transition.desiredStateHash = "9".repeat(64);
+      f.transition.envelope.previousStateHash = f.transition.envelope.desiredStateHash = "9".repeat(64);
+    }
+    expect(await f.read()).toMatchObject({ runtimeEvidence: { hostEvidence: { state: "conflicting", receiptVerification: "unproven" } } });
+    expect(runtimeFiles.readFile).not.toHaveBeenCalled();
+  });
+  it.each(["signature", "missing key", "partial image proof"])("keeps %s unverified instead of claiming host completion", async kind => {
+    const f = runtimeFixture();
+    if (kind === "signature") f.transition.hostReceipt.signature = "0".repeat(64);
+    if (kind === "missing key") runtimeFiles.readFile.mockRejectedValue(new Error("SECRET unreadable key"));
+    if (kind === "partial image proof") f.transition.hostReceipt.imageProof.services = [];
+    const result = await f.read();
+    expect(result).toMatchObject({ runtimeEvidence: { hostEvidence: { state: "recorded", receiptVerification: "unproven", receiptStatus: null } } });
     expect(JSON.stringify(result)).not.toContain("SECRET");
   });
 });

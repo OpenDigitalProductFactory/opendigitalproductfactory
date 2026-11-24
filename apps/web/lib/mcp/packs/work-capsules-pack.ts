@@ -388,7 +388,8 @@ const definitions: ToolDefinition[] = [
       properties: {
         capsuleId: { type: "string", description: "Semantic Workroom id (WC-*)." },
         action: { type: "string", enum: ["start", "turn", "steer", "interrupt", "stop", "decide", "status"] },
-        provider: { type: "string", enum: ["codex", "claude"], description: "start: which CLI to run." },
+        provider: { type: "string", enum: ["codex", "claude"], description: "start: choose a CLI default when connectionId is omitted." },
+        connectionId: { type: "string", description: "start: provider account connection id. Selects the CLI and credentials." },
         prompt: { type: "string", description: "start (optional first turn), turn, steer: the input." },
         model: { type: "string", description: "start: optional model id." },
         cwd: { type: "string", description: "start: working directory inside the sandbox (default /workspace)." },

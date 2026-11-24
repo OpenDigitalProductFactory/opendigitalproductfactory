@@ -71,3 +71,12 @@ The Street maps panel now names the pack each uncovered region needs, such as `u
 - **End to end, offline:** a synthetic clustered archive with leaf directories is served through a range-honouring fake `fetch`. The install runs plan, every chunk, a repeated chunk, and finalize. The pinned reader then returns each tile inside the bounds byte for byte and none outside. A changed ETag is refused.
 - **Action tests:** the permission check, recommended and uncovered packs only, and one install at a time.
 - **Runtime:** on a nonproduction install, install a small region from the real build and see it served and listed as covered.
+
+## 6. Resuming a staged install
+
+Before downloading a chunk, the installer checks its staged plan against the
+requested pack ID, archive version, trusted Protomaps origin and byte ranges.
+It reads the contents table from the binary index and checks chunk coverage
+before fetching or writing tile data. Archive requests reject redirects. When
+the plan contains an ETag, the chunk response must carry that same ETag.
+Staging plans from before the versioned format must be regenerated.

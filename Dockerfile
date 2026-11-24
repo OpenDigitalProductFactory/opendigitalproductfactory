@@ -221,6 +221,7 @@ COPY scripts/lib/seed-fit-mechanism.mjs ./scripts/lib/
 # never once reached its subject looked exactly like a quiet success.
 COPY scripts/worktree-janitor.mjs ./scripts/
 COPY scripts/lib/worktree-janitor-core.mjs ./scripts/lib/
+COPY scripts/lib/worktree-base.mjs ./scripts/lib/
 COPY scripts/lib/worktree-session-heartbeat.mjs ./scripts/lib/
 # The janitor logs path and reason text through sanitizeForLog. That module
 # has to be in the image or the daily queue dies with ERR_MODULE_NOT_FOUND.

@@ -56,3 +56,97 @@ describe("loadStageDispatchTimes", () => {
     expect(query).not.toHaveBeenCalled();
   });
 });
+
+// Phase G (proactivity & capacity allocation §6.1) — the dispatched stage's
+// declared effort reaches the scheduled task; an undeclared stage writes nothing.
+import { applyDrivePlan, type WorkroomDriveEffects } from "./workroom-drive";
+import { readWorkroomStageTaskConfig, withWorkroomStageTaskConfig } from "@/lib/scheduling/workroom-stage-task-config";
+import { resolveDrivePlan, workroomDriveTaskId } from "@/lib/work-management/drive-resolution";
+import { buildWorkShapeClaim } from "@/lib/work-management/workroom-shape-claim";
+import { getWorkShape, readWorkShapeDefinitionContract, type WorkShapeDefinitionContract } from "@/lib/work-management/work-shapes";
+
+describe("stage effort on dispatch (Phase G)", () => {
+  const NOW = new Date("2026-09-01T00:00:00.000Z");
+  const shape = getWorkShape("obligation-assurance-watch")!;
+
+  function effects() {
+    return {
+      persist: vi.fn<WorkroomDriveEffects["persist"]>(async () => {}),
+      acquireLease: vi.fn<WorkroomDriveEffects["acquireLease"]>(async () => "acquired"),
+      upsertAgentTask: vi.fn<WorkroomDriveEffects["upsertAgentTask"]>(async () => true),
+      deactivateAgentTask: vi.fn<WorkroomDriveEffects["deactivateAgentTask"]>(async () => {}),
+    };
+  }
+
+  async function dispatchStage(definition: WorkShapeDefinitionContract, stageKey: string) {
+    const fx = effects();
+    const base = resolveDrivePlan({
+      roomId: "WC-TEST", definition, collaborationShape: shape.collaborationShape,
+      postureLevel: "balanced", participants: [], currentStageKey: null, receipts: [],
+      budgetUsage: [], stopConditionHits: [], reviewDue: false, substrateReachable: true,
+      substrateEmpty: false, coordinatorHasProcessCoordinationAuthority: true,
+    });
+    await applyDrivePlan({
+      room: {
+        id: "row-1", capsuleId: "WC-TEST", scopeClaims: [buildWorkShapeClaim({ key: shape.key, version: shape.version })],
+        workspaceState: {}, leaseExpiresAt: null, leaseHolderPrincipalId: "prn", ownerUserId: "user-1",
+        participants: [], currentStageKey: null, receipts: [], budgetUsage: [], stopConditionHits: [],
+        reviewDue: false, substrateReachable: true, substrateEmpty: false,
+        coordinatorEligibility: { jsi: "eligible", authorityBinding: "eligible" },
+      },
+      plan: {
+        ...base, definition, action: "dispatch_agent", reason: "agent_stage", stageKey,
+        taskId: workroomDriveTaskId("WC-TEST", shape.key), agentId: "compliance-officer",
+      },
+      now: NOW,
+      effects: fx,
+    });
+    return fx.upsertAgentTask.mock.calls[0]?.[0];
+  }
+
+  it("carries the declared tier of the dispatched stage", async () => {
+    const call = await dispatchStage(readWorkShapeDefinitionContract(shape), "sweep");
+    expect(call?.stage).toMatchObject({ shapeKey: shape.key, stageKey: "sweep", effort: "low" });
+  });
+
+  it("carries high for a governed-decision stage whatever it declares", async () => {
+    const contract = readWorkShapeDefinitionContract(shape);
+    const demoted = {
+      ...contract,
+      stages: contract.stages.map((s) => (s.key === "decide" ? { ...s, effort: "low" as const } : s)),
+    };
+    const call = await dispatchStage(demoted, "decide");
+    expect(call?.stage.effort).toBe("high");
+  });
+
+  it("carries no effort for an undeclared stage", async () => {
+    const contract = readWorkShapeDefinitionContract(shape);
+    const undeclared = { ...contract, stages: contract.stages.map(({ effort: _e, ...s }) => s) };
+    const call = await dispatchStage(undeclared, "sweep");
+    expect(call).toBeDefined();
+    expect(call?.stage).not.toHaveProperty("effort");
+  });
+});
+
+// The scheduled task's taskConfig is written through withWorkroomStageTaskConfig
+// (workroom-drive-scheduling.ts); these pin what it keeps and drops.
+describe("stage taskConfig write (Phase G)", () => {
+  const stage = (effort?: "low" | "high") => ({ shapeKey: "s", shapeVersion: "1.0.0", stageKey: "sweep", tools: [], ...(effort ? { effort } : {}) });
+
+  it("persists the stage effort beside its tools under taskConfig.workroomStage", () => {
+    expect(withWorkroomStageTaskConfig(null, stage("low"))).toEqual({ workroomStage: stage("low") });
+    expect(readWorkroomStageTaskConfig(withWorkroomStageTaskConfig(null, stage("low")))?.effort).toBe("low");
+  });
+
+  it("merges into an existing taskConfig without disturbing a recorded trigger", () => {
+    expect(withWorkroomStageTaskConfig({ trigger: { kind: "time" } }, stage("high"))).toEqual({ trigger: { kind: "time" }, workroomStage: stage("high") });
+  });
+
+  it("drops a stale effort when the room moves to an undeclared stage", () => {
+    expect(withWorkroomStageTaskConfig({ trigger: { kind: "time" }, workroomStage: stage("low") }, stage())).toEqual({ trigger: { kind: "time" }, workroomStage: stage() });
+  });
+
+  it("reads an unknown tier as no tier", () => {
+    expect(readWorkroomStageTaskConfig({ workroomStage: { ...stage(), effort: "extreme" } })?.effort).toBeUndefined();
+  });
+});

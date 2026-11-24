@@ -8,6 +8,10 @@ import type { OwnerAttentionEntry } from "@/lib/attention/owner-projection";
 import { buildWeeklyDigest, WEEKLY_DIGEST_ACTIONS } from "@/lib/attention/weekly-digest";
 import type { WeeklyDigestDisposition } from "@/lib/attention/weekly-digest-preferences";
 import { OwnerDecisionCards } from "./OwnerDecisionCards";
+import { Button } from "@/components/ui/Button";
+import { SOURCE_CATALOG } from "@dpf/i18n";
+
+const COPY = SOURCE_CATALOG.approvals.weeklyReview;
 
 export function WeeklyDigestPanel({
   entries,
@@ -23,6 +27,7 @@ export function WeeklyDigestPanel({
     initialDisposition,
   );
   const [error, setError] = useState<string | null>(null);
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const [pending, startTransition] = useTransition();
   const router = useRouter();
   if (digest.count === 0 || digest.status !== "ready") return null;
@@ -88,7 +93,17 @@ export function WeeklyDigestPanel({
         </p>
       ) : null}
 
-      <OwnerDecisionCards entries={digest.entries} />
+      <Button
+        variant="secondary"
+        size="sm"
+        aria-expanded={detailsOpen}
+        onClick={() => setDetailsOpen((current) => !current)}
+        className="min-h-9"
+      >
+        {detailsOpen ? COPY.closeDeferred : COPY.openDeferred}
+      </Button>
+
+      {detailsOpen ? <OwnerDecisionCards entries={digest.entries} /> : null}
     </section>
   );
 }

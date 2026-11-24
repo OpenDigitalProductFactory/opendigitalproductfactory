@@ -289,6 +289,7 @@ describe("backlog pack — handler behavior (delegation preserved)", () => {
   });
 
   it("update_backlog_item_status reviews an already-deferred item instead of returning a no-op", async () => {
+    const reviewAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
     db.principalFindFirst.mockResolvedValue({ id: "principal-1" });
     db.backlogItemFindUnique.mockResolvedValue({
       id: "row-1",
@@ -317,7 +318,7 @@ describe("backlog pack — handler behavior (delegation preserved)", () => {
         deferral: {
           reason: "Waiting for predecessor evidence.",
           trigger: "EP-1 reaches done.",
-          reviewAt: "2026-11-15T12:00:00.000Z",
+          reviewAt: reviewAt.toISOString(),
           ownerPrincipalId: "principal-1",
         },
       },
@@ -330,7 +331,7 @@ describe("backlog pack — handler behavior (delegation preserved)", () => {
       data: expect.objectContaining({
         deferReason: "Waiting for predecessor evidence.",
         deferTrigger: "EP-1 reaches done.",
-        deferReviewAt: new Date("2026-11-15T12:00:00.000Z"),
+        deferReviewAt: reviewAt,
         deferOwnerPrincipalId: "principal-1",
         deferredAt: expect.any(Date),
       }),

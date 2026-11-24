@@ -1,7 +1,13 @@
 {
   "schemaVersion": 1,
   "entry": "kernel/judgment/index.ts",
-  "runtimeDependencies": [],
+  "runtimeDependencies": [
+    {
+      "name": "@opendigitalproductfactory/dpf-scoped-judgment",
+      "version": "0.1.0-candidate.3",
+      "source": "exact local tarball"
+    }
+  ],
   "sources": [
     "packages/validators/src/decision-scopes.ts",
     "packages/validators/src/judgment/scopes.ts",
@@ -18,5 +24,13 @@
   },
   "license": "Apache-2.0",
   "sourceBaseline": "91550be3e97ad8d99af3d01992323c07d2f1d1c5",
-  "qualification": "Synthetic advisory contract fixture only; no authenticated ownership, corpus quality, human admission, enforcement or production qualification."
+  "qualification": "Synthetic advisory contract fixture only; no authenticated ownership, corpus quality, human admission, enforcement or production qualification.",
+  "judgmentArtifact": {
+    "name": "@opendigitalproductfactory/dpf-scoped-judgment",
+    "version": "0.1.0-candidate.3",
+    "path": "packages/validators/vendor/opendigitalproductfactory-dpf-scoped-judgment-0.1.0-candidate.3.tgz",
+    "sha256": "24fdf47bc9d43bc3a47b79843a1e35eb0e7e640b88d55f83443678267c241837",
+    "sourceRepository": "OpenDigitalProductFactory/dpf-scoped-judgment",
+    "sourceCommit": "27a4cd62865e80685f4f12e43f6eb6c1b4b3483e"
+  }
 }

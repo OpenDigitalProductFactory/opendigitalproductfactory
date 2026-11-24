@@ -19,10 +19,12 @@ import { newId } from "@/lib/shared/new-id";
 import {
   ratifyStatutoryRule,
   recordAndRatifyStatutoryRule,
+  recordAndRatifyWithholdingTable,
   rejectStatutoryRule,
   type StatutoryRatificationDb,
 } from "@/lib/finance/statutory-ratification";
 import type { StatutoryRuleKind } from "@/lib/finance/statutory-rules";
+import { parseWithholdingTableText } from "@/lib/finance/withholding-table-text";
 
 const STATUTORY_RATES_PATH = "/finance/settings/statutory-rates";
 
@@ -94,4 +96,51 @@ export async function recordStatutoryRuleAction(input: {
   if (!result.ok) return err(result.error);
   revalidatePath(STATUTORY_RATES_PATH);
   return ok({ payrollTaxRuleId: result.data.payrollTaxRuleId });
+}
+
+/**
+ * Enter and confirm a whole IRS withholding table read by a person
+ * (BI-099EAE30). All rows are confirmed together or none are.
+ */
+export async function recordWithholdingTableAction(input: {
+  jurisdictionRefId: string;
+  filingStatus: string;
+  schedule: string;
+  taxYear: number;
+  effectiveFrom: string;
+  retrievedAt: string;
+  sourceUrl: string;
+  sourceExcerpt: string;
+  rowsText: string;
+  line1g: string;
+}): Promise<ActionResult<{ created: number }>> {
+  const actor = await sessionActor();
+  const statuses = ["single", "married_jointly", "head_of_household"] as const;
+  const filingStatus = statuses.find((s) => s === input.filingStatus);
+  const schedule = input.schedule === "step2" ? "step2" : input.schedule === "standard" ? "standard" : null;
+  if (!filingStatus || !schedule) return err("Choose the filing status and which table this is.");
+  const parsed = parseWithholdingTableText(input.rowsText);
+  if (!parsed.readable) return err(`Line ${parsed.line} is not a wage amount followed by a rate.`);
+  const line1g = input.line1g.trim() === "" ? null : Number(input.line1g.replace(/[$,]/g, ""));
+  if (line1g !== null && (!Number.isFinite(line1g) || line1g < 0)) return err("Enter the line 1g amount as a dollar figure, or leave it blank.");
+
+  const result = await recordAndRatifyWithholdingTable(db, {
+    actor,
+    now: new Date(),
+    idSeed: newId().slice(0, 10).toUpperCase(),
+    entry: {
+      jurisdictionRefId: input.jurisdictionRefId,
+      filingStatus,
+      schedule,
+      taxYear: input.taxYear,
+      effectiveFrom: new Date(`${input.effectiveFrom}T00:00:00.000Z`),
+      retrievedAt: new Date(`${input.retrievedAt}T00:00:00.000Z`),
+      sourceUrl: input.sourceUrl.trim(),
+      sourceExcerpt: input.sourceExcerpt.trim(),
+      rows: parsed.rows,
+      line1g,
+    },
+  });
+  if (result.ok) revalidatePath(STATUTORY_RATES_PATH);
+  return result;
 }

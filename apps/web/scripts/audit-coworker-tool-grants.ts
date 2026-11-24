@@ -160,6 +160,11 @@ function loadToolToGrants(): Record<string, string[]> {
       pattern: /PROVIDER_MANAGEMENT_TOOL_GRANTS[^=]*= \{([\s\S]*?)\n\}/,
     },
     {
+      // Coworker capability & work-pattern experiment origination (BI-5A17505E).
+      path: "apps/web/lib/tak/coworker-capability-tool-grants.ts",
+      pattern: /COWORKER_CAPABILITY_TOOL_GRANTS[^=]*= \{([\s\S]*?)\n\}/,
+    },
+    {
       // Work-thread tools retain their existing grants after feedback extraction.
       path: "apps/web/lib/tak/thread-tool-grants.ts",
       pattern: /THREAD_TOOL_GRANTS[^=]*= \{([\s\S]*?)\n\}/,

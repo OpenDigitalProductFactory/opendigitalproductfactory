@@ -278,6 +278,51 @@ describe("dispatchDueDemand", () => {
     expect(workItemUpdate).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: "completed" }) }));
   });
 
+  it("routes an a2a-request row through the A2A sender, and its receipt is the acknowledgement (BI-B45BBD8A)", async () => {
+    const request = {
+      requestId: "a2r_0123456789abcdef", senderTaskId: null, notAfter: "2026-07-23T06:00:00.000Z",
+    };
+    const { db, update } = deliveryDb({
+      mirrorId: "fdmo_1", version: 1, deliveryAttempts: 0, recordType: "a2a-request",
+      payload: { request, activity: "dpf.a2a.task.submitted.v1", eventId: "link_1:a2r_0123456789abcdef" },
+    });
+    const send = vi.fn();
+    const sendA2a = vi.fn().mockResolvedValue({
+      ok: true, status: 202,
+      body: { specVersion: "dpf.a2a-receipt/1", requestId: "a2r_0123456789abcdef", outcome: "accepted", receiverTaskId: "CE-1", state: "submitted" },
+    });
+
+    const result = await dispatchDueDemand(db, {
+      now: new Date("2026-07-20T06:10:00.000Z"), send, sendA2a, decryptToken: () => "dpflink_token",
+    });
+
+    expect(send).not.toHaveBeenCalled();
+    expect(sendA2a).toHaveBeenCalledWith(
+      expect.objectContaining({ linkId: "link_1", linkToken: "dpflink_token" }),
+      "dpf.a2a.task.submitted.v1",
+      request,
+      expect.objectContaining({ eventId: "link_1:a2r_0123456789abcdef" }),
+    );
+    expect(result.delivered).toBe(1);
+    expect(update).toHaveBeenCalledWith({ where: { mirrorId: "fdmo_1" }, data: expect.objectContaining({ syncStatus: "synced" }) });
+  });
+
+  it("withdraws an a2a-request past notAfter without sending it (BI-B45BBD8A)", async () => {
+    const { db, update } = deliveryDb({
+      mirrorId: "fdmo_1", version: 1, deliveryAttempts: 0, recordType: "a2a-request",
+      payload: { request: { requestId: "a2r_0123456789abcdef", senderTaskId: null, notAfter: "2026-07-20T06:00:00.000Z" }, activity: "dpf.a2a.task.submitted.v1", eventId: "e" },
+    });
+    const sendA2a = vi.fn();
+
+    const result = await dispatchDueDemand(db, {
+      now: new Date("2026-07-20T06:10:00.000Z"), send: vi.fn(), sendA2a, decryptToken: () => "dpflink_token",
+    });
+
+    expect(sendA2a).not.toHaveBeenCalled();
+    expect(result.withdrawn).toBe(1);
+    expect(update).toHaveBeenCalledWith({ where: { mirrorId: "fdmo_1" }, data: expect.objectContaining({ syncStatus: "withdrawn" }) });
+  });
+
   it("retains a failed delivery and schedules bounded exponential retry with jitter", async () => {
     const { db, workItemUpdate } = deliveryDb(outbox);
     const send = vi.fn().mockResolvedValue({ ok: false, status: 500, error: "server error" });

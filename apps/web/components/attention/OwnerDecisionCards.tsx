@@ -14,6 +14,7 @@ import { CoworkerProposalActions } from "./CoworkerProposalActions";
 import { ProactivityProposalActions } from "./ProactivityProposalActions";
 import { ResearchProposalActions } from "./ResearchProposalActions";
 import { LEAVE_DECISION_ROUTE } from "@/lib/workforce/leave/leave-decision-proposal-contract";
+import { ComplianceEvidenceReviewActions } from "./ComplianceEvidenceReviewActions";
 
 export function OwnerDecisionCards({
   entries,
@@ -135,7 +136,7 @@ function DecisionSummary({ entry }: { entry: OwnerAttentionEntry }) {
             {stripConsequenceLead(card.ifYouDoNothing)}
           </span>
         </span>
-        <span className="block leading-snug">
+        {card.recommendation.visible ? <span className="block leading-snug">
           <span className="text-[10px] font-semibold uppercase tracking-wider text-[var(--dpf-accent)]">
             {card.recommendation.lead}
           </span>
@@ -145,7 +146,7 @@ function DecisionSummary({ entry }: { entry: OwnerAttentionEntry }) {
           <span className="ml-2 text-xs text-[var(--dpf-text)]">
             {capitalize(card.recommendation.text)}
           </span>
-        </span>
+        </span> : null}
         {card.byline ? (
           <span className="block text-[10px] text-[var(--dpf-muted)]" title="Who produced this — AI-labeled; a role is a presentation label, not an accountable person.">
             {card.byline}
@@ -174,6 +175,9 @@ function DecisionActions({ entry }: { entry: OwnerAttentionEntry }) {
         proposalId={entry.item.id.replace(/^research-proposal:/, "")}
       />
     );
+  }
+  if (entry.item.source === "compliance-source-freshness" && entry.item.complianceEvidence) {
+    return <ComplianceEvidenceReviewActions evidence={entry.item.complianceEvidence} />;
   }
   if (entry.item.source === "agent-proposal" && /proactiv/i.test(entry.item.title)) {
     return <ProactivityProposalActions proposalId={entry.item.id.replace(/^agent-proposal:/, "")} />;

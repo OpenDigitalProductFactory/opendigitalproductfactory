@@ -65,7 +65,7 @@ test("registry ids are unique", () => {
 test("canonical judgment source and compiler lock enroll the Node20 guard distribution", () => {
   const entry = DERIVED_ARTIFACTS.find((item) => item.id === "judgment-guard-runtime");
   assert.ok(entry);
-  for (const path of ["packages/validators/src/judgment/option-scoring.ts", "packages/validators/src/judgment/mcda-quality-gates.ts", "scripts/build-judgment-guard-runtime.mjs", "pnpm-lock.yaml"])
+  for (const path of ["packages/validators/src/judgment/option-scoring.ts", "packages/validators/src/judgment/mcda-quality-gates.ts", "scripts/build-judgment-guard-runtime.mjs", "packages/validators/vendor/JUDGMENT-ADOPTION.json", "packages/validators/vendor/opendigitalproductfactory-dpf-scoped-judgment-0.1.0-candidate.3.tgz", "pnpm-lock.yaml"])
     assert.ok(matchesAnyGlob(path, entry.sourceGlobs), path);
   assert.deepEqual(entry.check, ["node", "scripts/build-judgment-guard-runtime.mjs", "--check"]);
   assert.equal(entry.artifactPaths.length, 4);

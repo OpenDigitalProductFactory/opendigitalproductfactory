@@ -4,10 +4,12 @@ import type { InitiativeReadinessDecision, ReadinessRequirementResult } from "./
 
 export function owesPlanCoverage(decision: InitiativeReadinessDecision): boolean {
   return decision.verdict === "input-required" && decision.target === "implementation"
-    && [...decision.blockers, ...decision.unmet].some(entry => entry.code === "PLAN_REQUIRED" && entry.state === "missing");
+    && [...decision.blockers, ...decision.unmet].some(entry => entry.code === "PLAN_REQUIRED"
+      && (entry.state === "missing" || entry.state === "stale"));
 }
 
 /** Delivery closure does not supply the baseline needed by unfinished planning.
+ * Stale coverage still owes a current plan, which may need its first baseline.
  * Read complete own/inherited history: the item's recent activity page cannot
  * prove absence. Any retained rows, even malformed or cyclic, are not absence. */
 export async function loadPlanBaselinePrerequisite(args: {

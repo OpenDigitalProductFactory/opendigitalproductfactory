@@ -192,8 +192,9 @@ export type GovernedPayloadHint = {
  * carried as evidence; it governs reuse, not confidentiality, so a licence
  * never lowers a private repository and its absence never raises a public one.
  *
- * Provenance covers the CODE only. Secrets, customer records and every other
- * governed class found inside a public diff are classified exactly as before.
+ * Provenance alone covers the CODE only: secrets, customer records and every
+ * other governed class found in the payload are classified as before. The one
+ * exception is `publishedText` (BI-3D5AC133).
  */
 export type SourceCodeProvenance = {
   /** `owner/name` of the repository, from the caller's trusted record. */
@@ -201,6 +202,15 @@ export type SourceCodeProvenance = {
   visibility: RepositoryVisibility;
   /** SPDX licence id when known, for the record only. */
   licence?: string | null;
+  /**
+   * Exact spans the caller read from this repository at commits the public
+   * forge serves to anyone, for example a reviewed diff whose base and head an
+   * unauthenticated forge read returned. Such text is already published, so
+   * no class found inside it raises the payload; the text around it is still
+   * screened. Honoured only with proven-public visibility, and set only by a
+   * server caller that made that read, never from request input.
+   */
+  publishedText?: readonly string[];
 };
 
 export type InferencePayloadClassificationInput = {

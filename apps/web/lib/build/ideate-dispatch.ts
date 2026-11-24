@@ -11,7 +11,11 @@
 // 3. The CLI searches /workspace, reads files, outputs a design doc
 // 4. Portal parses the result and saves it via saveBuildEvidence
 
-import { getDecryptedCredential, getProviderBearerToken } from "@/lib/inference/ai-provider-internals";
+import { getDecryptedCredential } from "@/lib/inference/ai-provider-internals";
+import { claudeCredential as credentialForClaude, resolveClaudeAuth, type ClaudeAuth } from "@/lib/executor-drivers/claude/auth";
+import { claudeOneShotArgs, parseClaudeResult } from "@/lib/executor-drivers/claude/one-shot";
+import { codexExecArgs } from "@/lib/executor-drivers/codex/exec";
+import { writeCodexAuth } from "./codex-dispatch";
 import {
   SANDBOX_CONTAINER,
   credentialFileExports,
@@ -52,44 +56,6 @@ export type IdeateResult = {
 };
 
 /**
- * Inject Codex CLI auth into the sandbox container.
- * Reuses the same logic as codex-dispatch.ts.
- */
-async function ensureCodexAuth(providerId: string): Promise<void> {
-  const credential = await getDecryptedCredential(providerId);
-  if (!credential?.cachedToken) {
-    throw new Error(`No OAuth token for provider "${providerId}".`);
-  }
-
-  const accessToken = credential.cachedToken;
-  const isJwt = accessToken.split(".").length === 3;
-  const idToken = isJwt
-    ? accessToken
-    : Buffer.from('{"alg":"none","typ":"JWT"}').toString("base64url")
-      + "." + Buffer.from('{"sub":"dpf"}').toString("base64url")
-      + ".";
-
-  const authJson = JSON.stringify({
-    auth_mode: "chatgptAuthTokens",
-    tokens: {
-      access_token: accessToken,
-      refresh_token: credential.refreshToken ?? "",
-      id_token: idToken,
-      account_id: null,
-    },
-    last_refresh: new Date().toISOString(),
-  });
-
-  await writeSandboxFile({
-    containerId: SANDBOX_CONTAINER,
-    path: "/root/.codex/auth.json",
-    content: authJson,
-    ownerOnly: true,
-    mkdirParents: "/root/.codex",
-  });
-}
-
-/**
  * Grok (xAI) specific auth injection for the sandbox.
  *
  * Grok CLI typically authenticates via the XAI_API_KEY environment variable.
@@ -113,44 +79,11 @@ async function ensureGrokAuth(providerId: string): Promise<void> {
   });
 }
 
-type ClaudeAuth =
-  | { mode: "oauth"; token: string }
-  | { mode: "apikey"; apiKey: string };
-
-/**
- * Resolve Claude auth credentials from the DB.
- * For OAuth providers, uses getProviderBearerToken so expired tokens are
- * automatically refreshed (access tokens expire every few hours; refresh
- * tokens are valid for days). Falls back to getDecryptedCredential for
- * API key providers where no refresh is needed.
- */
-async function resolveClaudeAuth(providerId: string): Promise<ClaudeAuth> {
-  const isOAuth = providerId === "anthropic-sub";
-
-  if (!isOAuth) {
-    const credential = await getDecryptedCredential(providerId);
-    const apiKey = credential?.secretRef ?? credential?.cachedToken;
-    if (!apiKey) {
-      throw new Error(`No Anthropic API key for provider "${providerId}".`);
-    }
-    return { mode: "apikey", apiKey };
-  }
-
-  // OAuth: use getProviderBearerToken which checks expiry and refreshes automatically.
-  // Direct getDecryptedCredential would return an expired access token on the next
-  // request after tokenExpiresAt, causing a 401 from the CLI.
-  const result = await getProviderBearerToken(providerId);
-  if ("error" in result) {
-    throw new Error(`OAuth token refresh failed for "${providerId}": ${result.error}. Re-authenticate via ${providerSetupLocation(providerId)}.`);
-  }
-  return { mode: "oauth", token: result.token };
-}
-
 /**
  * Write Claude auth to a per-run credential file in the sandbox. Returns the
  * file and the env var the runner loads it into.
  */
-async function ensureClaudeAuth(providerId: string): Promise<{ envVar: string; credentialFile: string; bareFlag: string }> {
+async function ensureClaudeAuth(providerId: string): Promise<{ envVar: string; credentialFile: string; authMode: ClaudeAuth["mode"] }> {
   const auth = await resolveClaudeAuth(providerId);
 
   // Written 600 under umask 077 and owned by node (claude runs as node). The
@@ -158,11 +91,9 @@ async function ensureClaudeAuth(providerId: string): Promise<{ envVar: string; c
   // dispatchIdeateResearch removes it again if the runner never got that far.
   // One file per run, so one run's runner cannot delete another run's token.
   const credentialFile = ideateClaudeCredentialFile(crypto.randomUUID());
-  const credential = auth.mode === "oauth"
-    ? { envVar: "CLAUDE_CODE_OAUTH_TOKEN", value: auth.token, bareFlag: "" }  // --bare disables OAuth
-    : { envVar: "ANTHROPIC_API_KEY", value: auth.apiKey, bareFlag: "--bare " };
+  const credential = credentialForClaude(auth);
   await writeSandboxFile({ containerId: SANDBOX_CONTAINER, path: credentialFile, content: credential.value, ownerOnly: true, chownNodeUser: true });
-  return { envVar: credential.envVar, credentialFile, bareFlag: credential.bareFlag };
+  return { envVar: credential.envVar, credentialFile, authMode: auth.mode };
 }
 
 /**
@@ -477,19 +408,18 @@ export function buildIdeateRunnerScript(
     model?: string | null;
     /** Credential file from ensureClaudeAuth and the env var to load it into. */
     claudeCredential?: { envVar: string; file: string };
-    /** Auth-mode flag fragment from ensureClaudeAuth; empty for OAuth. */
-    claudeBareFlag?: string;
+    /** Auth mode from ensureClaudeAuth: an API key runs with --bare, OAuth without. */
+    claudeAuthMode?: ClaudeAuth["mode"];
     providerId?: string;
   },
 ): string {
   if (engine === "claude") {
-    const modelFlag = opts.model ? `--model ${opts.model}` : "";
     return [
       "#!/bin/sh",
       `mkdir -p ${IDEATE_WORKING_DIR}`,
       `cd ${IDEATE_WORKING_DIR}`,
       ...(opts.claudeCredential ? credentialFileExports(opts.claudeCredential.envVar, opts.claudeCredential.file) : []),
-      `claude ${opts.claudeBareFlag ?? ""}-p - --dangerously-skip-permissions --add-dir ${IDEATE_SOURCE_DIR} --output-format json ${modelFlag} < /tmp/ideate-prompt.txt | tee /tmp/ideate-output.json`,
+      `claude ${claudeOneShotArgs({ authMode: opts.claudeAuthMode ?? "oauth", addDirs: [IDEATE_SOURCE_DIR], model: opts.model }).join(" ")} < /tmp/ideate-prompt.txt | tee /tmp/ideate-output.json`,
     ].join("\n");
   }
   if (engine === "grok") {
@@ -501,11 +431,10 @@ export function buildIdeateRunnerScript(
       `grok ${modelFlag} --prompt-file /tmp/ideate-prompt.txt --always-approve`,
     ].join("\n");
   }
-  const modelFlag = opts.model ? `-m ${opts.model}` : "";
   return [
     "#!/bin/sh",
     `cd ${IDEATE_SOURCE_DIR}`,
-    `exec codex exec --dangerously-bypass-approvals-and-sandbox --skip-git-repo-check ${modelFlag} < /tmp/ideate-prompt.txt 2>/dev/null`,
+    `exec codex ${codexExecArgs({ sandbox: "bypass", model: opts.model }).join(" ")} < /tmp/ideate-prompt.txt 2>/dev/null`,
   ].join("\n");
 }
 
@@ -622,16 +551,16 @@ export async function dispatchIdeateResearch(params: {
 
   // Resolve auth — returns env var fragments for Claude, or injects auth file for Codex
   let claudeCredential: { envVar: string; file: string } | undefined;
-  let claudeBareFlag = "";
+  let claudeAuthMode: ClaudeAuth["mode"] = "oauth";
   try {
     if (dispatchEngine === "claude") {
       const authResult = await ensureClaudeAuth(providerId);
       claudeCredential = { envVar: authResult.envVar, file: authResult.credentialFile };
-      claudeBareFlag = authResult.bareFlag;
+      claudeAuthMode = authResult.authMode;
     } else if (dispatchEngine === "grok") {
       await ensureGrokAuth(providerId);
     } else {
-      await ensureCodexAuth(providerId);
+      await writeCodexAuth(providerId);
     }
   } catch (err) {
     return {
@@ -668,7 +597,7 @@ export async function dispatchIdeateResearch(params: {
     const script = buildIdeateRunnerScript(dispatchEngine, {
       model,
       claudeCredential,
-      claudeBareFlag,
+      claudeAuthMode,
       providerId,
     });
     await writeSandboxFile({ containerId: SANDBOX_CONTAINER, path: runnerScript, content: script, mode: "755" });
@@ -716,32 +645,28 @@ export async function dispatchIdeateResearch(params: {
     const durationMs = elapsed;
     let rawOutput = spawnStdout.trim();
 
-    // If using --output-format json, extract the result field (Claude-specific today)
+    // Claude answers with its json result: the driver reads it (Claude-specific today).
     if (dispatchEngine === "claude" && rawOutput.startsWith("{")) {
-      try {
-        const parsed = JSON.parse(rawOutput);
-        // Fail fast on CLI-level errors (auth failures, rate limits, etc.)
-        // before parseDesignDoc accidentally misidentifies the error JSON as a design doc.
-        if (parsed.is_error) {
-          const errText = typeof parsed.result === "string" ? parsed.result : "Claude CLI returned an error";
-          const isAuth = errText.includes("401") || errText.toLowerCase().includes("authentication") || errText.toLowerCase().includes("invalid.*credentials");
-          console.error(`[ideate-dispatch] Claude CLI error (is_error=true): ${errText.slice(0, 200)}`);
-          return {
-            designDoc: null,
-            rawOutput,
-            success: false,
-            durationMs,
-            error: isAuth
-              ? `Claude authentication failed (401). The Anthropic OAuth token has expired — go to ${providerSetupLocation(providerId)} and reconnect.`
-              : `Claude CLI error: ${errText.slice(0, 150)}`,
-          };
-        }
-        if (parsed.result) {
-          rawOutput = typeof parsed.result === "string" ? parsed.result : JSON.stringify(parsed.result);
-          console.log(`[ideate-dispatch] Extracted result from JSON output (${rawOutput.length} chars)`);
-        }
-      } catch {
-        // Not valid JSON — use raw output as-is
+      const result = parseClaudeResult(rawOutput);
+      // Fail fast on CLI-level errors (auth failures, rate limits, etc.)
+      // before parseDesignDoc accidentally misidentifies the error JSON as a design doc.
+      if (result.json && result.isError) {
+        const errText = result.hasResult ? result.text : "Claude CLI returned an error";
+        const isAuth = errText.includes("401") || errText.toLowerCase().includes("authentication") || errText.toLowerCase().includes("invalid.*credentials");
+        console.error(`[ideate-dispatch] Claude CLI error (is_error=true): ${errText.slice(0, 200)}`);
+        return {
+          designDoc: null,
+          rawOutput,
+          success: false,
+          durationMs,
+          error: isAuth
+            ? `Claude authentication failed (401). The Anthropic OAuth token has expired — go to ${providerSetupLocation(providerId)} and reconnect.`
+            : `Claude CLI error: ${errText.slice(0, 150)}`,
+        };
+      }
+      if (result.json && result.hasResult && result.text) {
+        rawOutput = result.text;
+        console.log(`[ideate-dispatch] Extracted result from JSON output (${rawOutput.length} chars)`);
       }
     }
 

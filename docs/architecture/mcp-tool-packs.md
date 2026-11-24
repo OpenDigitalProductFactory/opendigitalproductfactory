@@ -163,6 +163,13 @@ arities) and [`workbooks-pack`](../../apps/web/lib/mcp/packs/workbooks-pack.ts) 
 followed on the same lazy pattern as the third and fourth packs — **every sibling-module
 domain (static + lazy) is now extracted.**
 
+`drive_workroom_runtime` accepts a `connectionId` on start to select the
+provider account and driver. A provider-only start selects that client's
+default connection. The room stores the connection for reattach and addresses
+the session by its client GAID and thread ID. A steer request for a running turn
+on a driver without steering reports `capability-unavailable` and queues the
+input as the next turn.
+
 `claim_backlog_item_for_work` and `adopt_worktree` accept `baseSha`/`headSha` as a
 full SHA or a prefix of 7 or more hex characters (BI-DF34D948). The handlers expand a
 prefix through the repository provider, using `work-capsules/source-commit-resolution.ts`.

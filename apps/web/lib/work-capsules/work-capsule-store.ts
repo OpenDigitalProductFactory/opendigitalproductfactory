@@ -606,6 +606,8 @@ export async function updateWorkCapsuleStatus(args: {
   routing?: { disposition: string; decisionInteractionId: string | null };
   actor: WorkCapsuleActor;
   now?: Date;
+  /** Protect an idle sweep from a checkpoint or renewal written after its read. */
+  expectedUpdatedAt?: Date;
 }) {
   if (!isWorkCapsuleStatus(args.status)) throw new Error("Invalid capsule status");
 
@@ -646,7 +648,7 @@ export async function updateWorkCapsuleStatus(args: {
 
   const updated = await inTransaction(args.db, async (tx) => {
     const updated = await tx.workroom.update({
-      where: { capsuleId: args.capsuleId },
+      where: { capsuleId: args.capsuleId, ...(args.expectedUpdatedAt ? { updatedAt: args.expectedUpdatedAt } : {}) },
       data: {
         status: args.status,
         workspaceState: {

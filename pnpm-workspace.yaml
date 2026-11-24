@@ -21,17 +21,17 @@ catalog:
   "@axe-core/playwright": ^4.14.0
   "@types/node": ^26.6.6
   "@types/pg": ^8.23.1
-  "@vitest/coverage-v8": ^5.0.4
+  "@vitest/coverage-v8": ^5.1.1
   bcryptjs: ^3.0.3
-  dotenv: ^18.0.9
-  net-snmp: ^3.29.2
+  dotenv: ^18.0.10
+  net-snmp: ^3.29.3
   pg: ^8.23.1
   prom-client: ^15.1.3
   tsx: ^4.23.15
   typescript: ^6.0.3
-  undici: ^8.12.3
-  vite: ^8.3.5
-  vitest: ^5.0.4
+  undici: ^8.12.4
+  vite: ^8.3.8
+  vitest: ^5.1.1
   # yaml is the platform frontmatter parser (apps/web user guide and the
   # integration-test harness). One catalog range so the two declarations
   # cannot drift (plan 2026-09-08 S11).
@@ -88,6 +88,9 @@ overrides:
   # 8.0.0 is a clean upstream fix with zero runtime dependencies and the same
   # `node >=16` engine, so floor it instead of accepting the finding.
   deepmerge-ts: '^8.0.0'
+  # GHSA-7589-6fvf-x4pw (Dependabot #299): effect <=3.22.0 has a ReDoS in
+  # Schema.TemplateLiteral compiled regexes; floor the transitive Prisma chain at 3.22.1.
+  'effect@<3.22.1': '^3.22.1'
   # @types/node: first-party workspaces declare ^26, but @types/net-snmp (24)
   # pins an older major (docx (25) and @inngest/ai 0.1.7 (22) did too, until
   # docx retired and @inngest/ai 0.1.8 dropped its dependencies), so the tree

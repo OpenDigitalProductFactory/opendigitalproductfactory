@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import {
   ratifyStatutoryRule,
+  recordAndRatifyWithholdingTable,
   recordAndRatifyStatutoryRule,
   rejectStatutoryRule,
   statutoryActorKind,
@@ -68,6 +69,7 @@ function memoryDb(initial: StatutoryRuleRow[]) {
           && r.taxType === where.taxType
           && r.ruleKind === where.ruleKind
           && r.side === where.side
+          && (r.qualifierKey ?? "") === ((where as { qualifierKey?: string }).qualifierKey ?? "")
           && r.status === where.status)) as never,
       create: create as never,
       update: update as never,
@@ -161,6 +163,26 @@ describe("ratifyStatutoryRule", () => {
   });
 });
 
+describe("bracket tables (BI-2BC8D614)", () => {
+  it("confirming one bracket never closes another bracket of the same table", async () => {
+    const lowBand = row({
+      id: "r-low", payrollTaxRuleId: "PTR-LOW", status: "ratified", taxType: "federal_withholding",
+      value: 0.1, qualifierKey: "filingStatus=single;over=7500;schedule=standard",
+      effectiveFrom: new Date("2025-01-01T00:00:00.000Z"),
+    });
+    const highBand = row({
+      taxType: "federal_withholding", value: 0.12,
+      qualifierKey: "filingStatus=single;over=19900;schedule=standard",
+    });
+    const { db, rows } = memoryDb([lowBand, highBand]);
+
+    const result = await ratifyStatutoryRule(db, { payrollTaxRuleId: "PTR-1", actor: person, now });
+
+    expect(result).toMatchObject({ ok: true, data: { closedWindows: [] } });
+    expect(rows.find((r) => r.id === "r-low")!.effectiveTo).toBeNull();
+  });
+});
+
 describe("rejectStatutoryRule", () => {
   it("requires a reason", async () => {
     const { db, update } = memoryDb([row()]);
@@ -246,5 +268,70 @@ describe("recordAndRatifyStatutoryRule", () => {
 
     expect(result.ok).toBe(false);
     expect(create).not.toHaveBeenCalled();
+  });
+});
+
+describe("recordAndRatifyWithholdingTable (BI-099EAE30)", () => {
+  const entry = {
+    jurisdictionRefId: "TAX-JUR-US-FEDERAL",
+    filingStatus: "single" as const,
+    schedule: "standard" as const,
+    taxYear: 2026,
+    effectiveFrom: new Date("2026-01-01T00:00:00.000Z"),
+    sourceUrl: "https://www.irs.gov/publications/p15t",
+    sourceExcerpt: "Single or Married Filing Separately ... 0 7,500 ... 10% ...",
+    retrievedAt: now,
+    rows: [{ over: 0, rate: 0 }, { over: 7_500, rate: 0.1 }, { over: 19_900, rate: 0.12 }],
+    line1g: 8_600,
+  };
+
+  it("records and confirms every row and the line 1g amount, each a separate figure", async () => {
+    const { db, rows } = memoryDb([]);
+    const result = await recordAndRatifyWithholdingTable(db, { entry, actor: person, now, idSeed: "T1" });
+    expect(result).toEqual({ ok: true, data: { created: 4 } });
+    expect(rows.every((r) => r.status === "ratified")).toBe(true);
+    expect(rows.map((r) => r.qualifierKey)).toEqual([
+      "filingStatus=single;over=0;schedule=standard",
+      "filingStatus=single;over=7500;schedule=standard",
+      "filingStatus=single;over=19900;schedule=standard",
+      "filingStatus=other;line=1g",
+    ]);
+  });
+
+  it("rolls the whole table back when a row fails part-way through", async () => {
+    const { db, rows, create } = memoryDb([]);
+    // A transaction that really rolls back, and a write that fails on row 2.
+    db.$transaction = async (fn) => {
+      const snapshot = rows.map((r) => ({ ...r }));
+      try { return await fn(db); } catch (e) { rows.splice(0, rows.length, ...snapshot); throw e; }
+    };
+    let calls = 0;
+    const original = create.getMockImplementation()!;
+    create.mockImplementation(async (args: { data: StatutoryRuleRow }) => {
+      calls += 1;
+      if (calls === 2) throw new Error("database went away");
+      return original(args);
+    });
+
+    await expect(recordAndRatifyWithholdingTable(db, { entry, actor: person, now, idSeed: "T2" })).rejects.toThrow("database went away");
+    expect(rows).toHaveLength(0);
+  });
+
+  it.each([
+    ["a table not starting at 0", { rows: [{ over: 7_500, rate: 0.1 }] }],
+    ["rows out of order", { rows: [{ over: 0, rate: 0 }, { over: 19_900, rate: 0.12 }, { over: 7_500, rate: 0.1 }] }],
+    ["a rate typed as a percentage", { rows: [{ over: 0, rate: 0 }, { over: 7_500, rate: 10 }] }],
+    ["no quoted passage", { sourceExcerpt: " " }],
+  ])("refuses %s", async (_label, over) => {
+    const { db, rows } = memoryDb([]);
+    const result = await recordAndRatifyWithholdingTable(db, { entry: { ...entry, ...over }, actor: person, now, idSeed: "T3" });
+    expect(result.ok).toBe(false);
+    expect(rows).toHaveLength(0);
+  });
+
+  it("refuses the automation persona", async () => {
+    const { db, rows } = memoryDb([]);
+    expect((await recordAndRatifyWithholdingTable(db, { entry, actor: automation, now, idSeed: "T4" })).ok).toBe(false);
+    expect(rows).toHaveLength(0);
   });
 });

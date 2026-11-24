@@ -1,0 +1,72 @@
+{
+  "title": "Payroll",
+  "noPermission": "Running payroll needs finance management permission.",
+  "lead": {
+    "blocked": ".input {$count :number}\n.match $count\none {{One thing blocks payroll.}}\n* {{{$count} things block payroll.}}",
+    "ready": "Payroll is ready to run.",
+    "fixFirst": "See what to fix",
+    "runNow": "Run payroll"
+  },
+  "blockers": {
+    "heading": "Before payroll can run",
+    "figuresLink": "Confirm tax figures"
+  },
+  "staff": {
+    "heading": "Who is paid",
+    "w4OnFile": "W-4 on file, works in {$state}",
+    "noW4": "No W-4 on file",
+    "noPay": "Not on payroll: no pay rate"
+  },
+  "w4": {
+    "summary": "Record a W-4",
+    "employee": "Employee",
+    "effectiveFrom": "First pay date it applies to",
+    "filingStatus": "Filing status (Step 1c)",
+    "single": "Single or married filing separately",
+    "marriedJointly": "Married filing jointly",
+    "headOfHousehold": "Head of household",
+    "step2": "Step 2 box checked",
+    "step3": "Step 3 credits, per year",
+    "step4a": "Step 4(a) other income, per year",
+    "step4b": "Step 4(b) deductions, per year",
+    "step4c": "Step 4(c) extra withholding, per paycheck",
+    "exempt": "Exempt written below Step 4(c)",
+    "workState": "State where they work (two letters)",
+    "submit": "Save W-4",
+    "done": "W-4 saved."
+  },
+  "run": {
+    "summary": "Run payroll for a period",
+    "periodStart": "First day",
+    "periodEnd": "Last day",
+    "payDate": "Pay date",
+    "frequency": "How often you pay",
+    "weekly": "Weekly",
+    "biweekly": "Every two weeks",
+    "semimonthly": "Twice a month",
+    "monthly": "Monthly",
+    "submit": "Compute pay run",
+    "done": "Pay run computed. Review it below before anything is paid."
+  },
+  "runs": {
+    "heading": "Pay runs",
+    "none": "No pay run yet.",
+    "summary": "{$period} · paid {$payDate} · {$status}",
+    "gross": "Gross",
+    "net": "Net pay",
+    "employerCost": "Employer cost",
+    "deductions": "Taken from pay",
+    "employerTaxes": "Employer taxes"
+  },
+  "books": {
+    "netTotal": "Net pay to send",
+    "taxesToRemit": "Taxes to remit",
+    "approve": "Approve and post to the books",
+    "approved": "Pay run approved and posted to the books.",
+    "payHelp": "Send each person's net pay from your bank, then record it here with the bank's reference.",
+    "paidOn": "Date the payment left the bank",
+    "bankReference": "Bank reference",
+    "recordPaid": "Record as paid",
+    "paid": "Pay run recorded as paid."
+  }
+}

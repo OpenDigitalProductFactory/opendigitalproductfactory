@@ -1,18 +1,7 @@
+import type { WorkPatternExperimentCellRequest } from "@/lib/tak/work-pattern-experiment-candidate-schema";
 import type { WorkPatternExecutionProfile } from "@/lib/tak/work-pattern-experiment-types";
 
-export type WorkPatternExperimentCellRequest = {
-  experimentRunId: string;
-  childTaskRunId: string;
-  cellKey: string;
-  pairKey: string;
-  methodVariantKey: string;
-  modelVariantKey: string;
-  executionProfile: WorkPatternExecutionProfile;
-  fixtureKey: string;
-  oracleKey: string;
-  oracleVersion: string;
-  resourcePolicyKey: string;
-};
+export type { WorkPatternExperimentCellRequest };
 
 export type WorkPatternExperimentWorkspace = {
   workspaceId: string;

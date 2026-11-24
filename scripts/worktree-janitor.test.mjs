@@ -1,7 +1,18 @@
 import assert from "node:assert/strict";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { describe, it } from "node:test";
 
-import { backupUnpushedBranch, loadLeasePaths, pathHasLease } from "./worktree-janitor.mjs";
+import {
+  backupUnpushedBranch,
+  backupUnpushedDetachedHead,
+  isFreshCheckoutAtOriginMain,
+  loadLeasePaths,
+  pathHasActiveProcessCwd,
+  pathHasLease,
+  scanOrphanDirectories,
+} from "./worktree-janitor.mjs";
 
 // BI-E5C1ED0A — the janitor crashed on every UNATTENDED run.
 //
@@ -80,5 +91,96 @@ describe("worktree janitor unpushed-work backup", () => {
   it("refuses (keep the worktree) when the ref cannot be written or the count cannot be read", () => {
     assert.equal(backupUnpushedBranch("/root", "feat/x", "2026-10-27", fakeGit({ unpushed: 1, writeFails: true }).git).ok, false);
     assert.equal(backupUnpushedBranch("/root", "feat/x", "2026-10-27", fakeGit({ countFails: true }).git).ok, false);
+  });
+
+  it("pins unpushed detached HEAD commits under refs/janitor-backup/<date>/detached-<slug>", () => {
+    const { git, calls } = fakeGit({ unpushed: 2 });
+    const r = backupUnpushedDetachedHead("/root", "/worktrees/trailer-tmp", "2026-11-22", git);
+    assert.deepEqual(r, { ok: true, ref: "refs/janitor-backup/2026-11-22/detached-trailer-tmp", unpushed: 2 });
+    assert.ok(calls.includes(`update-ref refs/janitor-backup/2026-11-22/detached-trailer-tmp ${"a".repeat(40)}`));
+
+    assert.equal(
+      backupUnpushedDetachedHead("/root", "/worktrees/trailer-tmp", "2026-11-22", fakeGit({ unpushed: 0 }).git).ref,
+      null,
+    );
+    assert.equal(
+      backupUnpushedDetachedHead("/root", "/worktrees/trailer-tmp", "2026-11-22", fakeGit({ countFails: true }).git).ok,
+      false,
+    );
+  });
+});
+
+describe("worktree janitor orphan directory scanner", () => {
+  it("reports unregistered DPF orphan directories while skipping registered trees, files, and foreign repos", () => {
+    const tmp = mkdtempSync(path.join(os.tmpdir(), "dpf-janitor-orphans-"));
+    try {
+      const root = path.join(tmp, "dpf");
+      const base = path.join(tmp, "dpf-worktrees");
+      mkdirSync(root, { recursive: true });
+      mkdirSync(base, { recursive: true });
+
+      const registeredWt = path.join(base, "active-wt");
+      const brokenOrphan = path.join(base, "stale-orphan");
+      const emptyOrphan = path.join(base, "empty-orphan");
+      const foreignClone = path.join(base, "other-repo");
+      const foreignLinked = path.join(base, "other-linked");
+      mkdirSync(registeredWt);
+      mkdirSync(brokenOrphan);
+      mkdirSync(emptyOrphan);
+      mkdirSync(path.join(foreignClone, ".git"), { recursive: true });
+      mkdirSync(foreignLinked);
+
+      writeFileSync(path.join(brokenOrphan, ".git"), `gitdir: ${path.join(root, ".git", "worktrees", "stale-orphan")}\n`);
+      writeFileSync(path.join(foreignLinked, ".git"), "gitdir: /elsewhere/other-repo/.git/worktrees/other-linked\n");
+      writeFileSync(path.join(base, "stray.log"), "ignore non-dir files\n");
+
+      const scan = scanOrphanDirectories(
+        root,
+        [{ path: root }, { path: registeredWt }],
+        { available: true, activePaths: new Set() },
+        { worktreeBase: base, includeT3Base: false },
+      );
+
+      assert.equal(scan.baseDir, path.resolve(base));
+      assert.deepEqual(
+        scan.orphans.map((o) => ({ name: o.name, kind: o.kind, empty: o.empty })),
+        [
+          { name: "empty-orphan", kind: "empty-dir", empty: true },
+          { name: "stale-orphan", kind: "broken-worktree", empty: false },
+        ],
+      );
+
+      // Also scans ~/.t3/worktrees/<repo> when present.
+      const fakeHome = path.join(tmp, "home");
+      const t3Orphan = path.join(fakeHome, ".t3", "worktrees", "dpf", "old-t3-backups");
+      mkdirSync(t3Orphan, { recursive: true });
+      const withT3 = scanOrphanDirectories(
+        root,
+        [{ path: root }, { path: registeredWt }],
+        { available: true, activePaths: new Set() },
+        { worktreeBase: base, homeDir: fakeHome },
+      );
+      assert.ok(withT3.orphans.some((o) => o.name === "old-t3-backups"));
+    } finally {
+      rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+
+  it("matches active process CWDs at or below a worktree path and protects fresh checkouts at origin/main", () => {
+    const cwds = new Set(["/users/x/dpf-worktrees/active/apps/web"]);
+    assert.equal(pathHasActiveProcessCwd(cwds, "/Users/x/dpf-worktrees/active"), true);
+    assert.equal(pathHasActiveProcessCwd(cwds, "/Users/x/dpf-worktrees/active-other"), false);
+
+    const tmp = mkdtempSync(path.join(os.tmpdir(), "dpf-janitor-fresh-"));
+    try {
+      writeFileSync(path.join(tmp, ".git"), "gitdir: /root/.git/worktrees/fresh\n");
+      const sameShaGit = () => ({ ok: true, stdout: "a".repeat(40) });
+      const movedShaGit = (args) => ({ ok: true, stdout: args[1] === "HEAD" ? "b".repeat(40) : "a".repeat(40) });
+      assert.equal(isFreshCheckoutAtOriginMain("/root", tmp, { git: sameShaGit }), true);
+      assert.equal(isFreshCheckoutAtOriginMain("/root", tmp, { git: movedShaGit }), false);
+      assert.equal(isFreshCheckoutAtOriginMain("/root", tmp, { git: sameShaGit, freshGraceMs: 0 }), false);
+    } finally {
+      rmSync(tmp, { recursive: true, force: true });
+    }
   });
 });

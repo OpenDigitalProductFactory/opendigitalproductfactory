@@ -7,7 +7,7 @@
 // Safety:
 // - Only runs when DPF_ENVIRONMENT=dev.
 // - DATABASE_URL must match an explicit disposable-preview endpoint.
-// - Automatic repair is allowlisted to one migration with an exact schema contract.
+// - Automatic repair is restricted to individually verified migration contracts.
 // - Unrecoverable drift → exit 3 (blocked_sandbox_drift) with one next action.
 
 import { execFileSync } from "node:child_process";
@@ -27,6 +27,10 @@ import {
   probeHiveContributionsSchema,
   readMigrationSql,
 } from "../../../scripts/lib/dev-preview-migrate-converge.mjs";
+import {
+  RELATION_DRIFT_MIGRATION,
+  recoverGraphRegistry,
+} from "../../../scripts/lib/dev-preview-graph-registry-recovery.mjs";
 
 const { Client } = pg;
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -101,8 +105,8 @@ function assertDevPreviewContext() {
 async function loadFailedMigrationState(client) {
   const { rows } = await client.query(
     `SELECT migration_name, logs, finished_at, rolled_back_at
-       FROM _prisma_migrations
-      WHERE finished_at IS NULL
+       FROM public._prisma_migrations
+      WHERE finished_at IS NULL AND rolled_back_at IS NULL
       ORDER BY started_at DESC
       LIMIT 5`,
   );
@@ -115,18 +119,34 @@ async function main() {
 
   log("running prisma migrate deploy (contributor-preview)");
   let deploy = runPrisma(["migrate", "deploy"]);
-  if (deploy.ok) {
-    log("migrate deploy succeeded with no repair");
-    process.stdout.write(deploy.stdout);
-    return;
+  if (!deploy.ok) {
+    log("migrate deploy failed; evaluating disposable repair path");
+    process.stderr.write(deploy.combined.slice(0, 4000));
   }
-
-  log("migrate deploy failed; evaluating disposable repair path");
-  process.stderr.write(deploy.combined.slice(0, 4000));
 
   const client = new Client({ connectionString: databaseUrl });
   await client.connect();
+  const verifyCompletedRegistry = async () => {
+    const recovery = await recoverGraphRegistry({
+      query: async (sql, values) => (await client.query(sql, values)).rows,
+      readSql: readMigrationSql,
+      runPrisma,
+      context: { environment: process.env.DPF_ENVIRONMENT, databaseUrl },
+      recoveryMode: "completed",
+    });
+    if (["restored", "registry-current"].includes(recovery.action)) {
+      log(`migrate deploy succeeded; registry=${recovery.action}`);
+      process.stdout.write(deploy.stdout);
+    } else {
+      process.stderr.write(`${formatBlockedMessage(recovery)}\n`);
+      process.exitCode = BLOCKED_SANDBOX_DRIFT_EXIT;
+    }
+  };
   try {
+    if (deploy.ok) {
+      await verifyCompletedRegistry();
+      return;
+    }
     for (let round = 1; round <= MAX_REPAIR_ROUNDS; round += 1) {
       const failedRows = await loadFailedMigrationState(client);
       let migrationName =
@@ -153,6 +173,25 @@ async function main() {
 
       const failureLog = failedRows.find((r) => r.migration_name === migrationName)?.logs
         ?? deploy.combined;
+
+      if (migrationName === RELATION_DRIFT_MIGRATION) {
+        // A single source-bound restore/resolve/deploy sequence. The helper
+        // re-probes under locks and returns terminally even if deploy fails.
+        const recovery = await recoverGraphRegistry({
+          query: async (sql, values) => (await client.query(sql, values)).rows,
+          readSql: readMigrationSql,
+          runPrisma,
+          context: { environment: process.env.DPF_ENVIRONMENT, databaseUrl },
+        });
+        if (recovery.action === "recovered") {
+          log("migrate deploy succeeded after verified registry restoration");
+          process.stdout.write(recovery.output);
+          return;
+        }
+        process.stderr.write(`${formatBlockedMessage(recovery)}\n${recovery.output ?? ""}`);
+        process.exitCode = BLOCKED_SANDBOX_DRIFT_EXIT;
+        return;
+      }
 
       let effects;
       try {
@@ -204,8 +243,7 @@ async function main() {
         }
         deploy = runPrisma(["migrate", "deploy"]);
         if (deploy.ok) {
-          log("migrate deploy succeeded after repair");
-          process.stdout.write(deploy.stdout);
+          await verifyCompletedRegistry();
           return;
         }
         process.stderr.write(deploy.combined.slice(0, 4000));

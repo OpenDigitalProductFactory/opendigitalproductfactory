@@ -8,6 +8,16 @@
     "unavailable": "Approvals unavailable."
   },
   "result": "Approval result",
+  "complianceEvidence": {
+    "reviewClaims": "Review cited claims",
+    "openSource": "Open cited source →",
+    "confirm": "Confirm still valid",
+    "flagChanged": "Flag as changed"
+  },
+  "weeklyReview": {
+    "openDeferred": "Open deferred items",
+    "closeDeferred": "Close deferred items"
+  },
   "recent": "Recent approval results",
   "unavailable": "This request is not available in your Inbox.",
   "details": "Request details",
@@ -33,6 +43,41 @@
     "task-waiting-again": "The task continued and needs another decision. Review the next request in your Inbox.",
     "expired": "The approval window closed before execution. Your assistant must check the target before sending a fresh request."
   },
+  "serviceReport": {
+    "available": "Saved service check. This observation does not confirm current health or recovery.",
+    "unproven": "The original saved service check could not be verified.",
+    "inspect": "Your assistant can inspect the recorded details. This does not authorize another command.",
+    "evidence": "Original diagnostic execution",
+    "target": "Recorded version",
+    "observedAt": "Observed at",
+    "outcome": "Report outcome",
+    "none": "None",
+    "outcomes": { "current": "No configuration update reported", "degraded": "Check incomplete", "would-recreate": "Configuration updates reported" },
+    "groups": {
+      "wouldRecreate": "Services needing an update",
+      "unchanged": "Reported as unchanged",
+      "skippedStopped": "Stopped services skipped",
+      "dataOwnerChanged": "Data services needing review",
+      "unclassified": "Services not classified",
+      "failed": "Services not verified",
+      "bindDrift": "Services with different network settings"
+    }
+  },
+  "runtime": {
+    "unproven": "The original request did not complete. Its effect on services is not confirmed.",
+    "inspect": "Your assistant must reconcile the original result before another attempt.",
+    "recovery": "The platform recorded that this change still needs recovery. Restoration is not confirmed.",
+    "inspectRecovery": "Your assistant must reconcile the original recovery before any new change.",
+    "verified": "The original request completed and its saved host receipt was verified.",
+    "continue": "Your assistant can continue from this recorded result.",
+    "appliedPending": "The service change was recorded, but completion is still being reconciled.",
+    "settingsChanged": "The request could not verify that the saved settings still matched. Its effect on services is not confirmed.",
+    "incomplete": "The original change is not settled. Your assistant must check its recorded progress.",
+    "reportedCompletion": "The request reported completion, but its host result has not been verified.",
+    "evidence": "Original runtime execution",
+    "hostUnproven": "Host result not verified",
+    "hostVerified": "Historical host receipt verified"
+  },
   "failure": {
     "handoff-transaction-required": {
       "reason": "The handoff stopped before transfer. The platform's required transfer check did not pass.",
@@ -55,9 +100,10 @@
     "whyDisclosure": "Why am I being asked?",
     "technicalEvidence": "Technical evidence",
     "recommendationLabel": "AI recommendation",
-    "coworkerByline": "AI coworker · needs your approval",
+    "coworkerByline": "AI coworker",
     "whyPlain": "This request needs your permission before the coworker can make the change. It covers this exact request once.",
     "standingChoice": "Don't ask me again when this coworker does this",
+    "providerStandingHint": "Checking this also lets this coworker make future eligible provider-account changes on your behalf. That permission can cover other accounts and operations. Changes that require a separate approval will still come to you.",
     "standingHint": "Covers only this coworker doing this same kind of action on your behalf. Anything that reaches outside, cannot be undone, or changes someone's access will still come to you.",
     "standingRecorded": "Saved: you won't be asked again when this coworker does this.",
     "standingUndo": "Ask me again next time",
@@ -72,6 +118,12 @@
       "recordTitle": "Save this work result?",
       "reviewTitle": "Record the research review?",
       "unresolvedTitle": "Review this coworker request?",
+      "providerDisableTitle": "Turn off {$account} for model requests?",
+      "providerEnableTitle": "Enable {$account} for model requests?",
+      "providerDisableDescription": "If you authorize this, DPF will stop routing new model requests to {$account}.",
+      "providerEnableDescription": "If you authorize this, DPF can route new model requests to {$account} when it meets the routing requirements.",
+      "providerEnableAgain": "You can enable this account again in provider settings.",
+      "providerDisableAgain": "You can turn this account off again in provider settings.",
       "appUpdateTitle": "Request an update for this app?",
       "mergeWorkTitle": "Combine these duplicate work requests?",
       "releaseReservationTitle": "Release this shared test reservation?",
@@ -80,7 +132,7 @@
       "handoverDescription": "{$assistant} takes over this work under your account. It can read the work, record results and continue the existing changes.",
       "blockedDescription": "Records that your coworker could not complete this work.",
       "recordDescription": "Records your coworker's reported result.",
-      "unresolvedDescription": "The effect of this exact request is unresolved. Review the proposal before authorizing.",
+    "unresolvedDescription": "Unresolved; review before authorizing.",
       "handoverConsequence": "Access stays limited to this work; existing permissions still apply.",
       "stageConsequence": "This may advance the stage when its evidence meets the completion requirements.",
       "recordConsequence": "This records a report; it does not mark the work complete.",
@@ -134,7 +186,7 @@
   "expiredUnanswered": {
     "label": "Expired unanswered",
     "context": "Nobody answered this request before its window closed, so nothing was changed.",
-    "explanation": "Nobody answered this request in time, so nothing was changed. If it is still wanted, ask again and it comes back to you for a decision.",
+    "explanation": "No decision was made. Ask again if needed.",
     "askAgain": "Ask again",
     "asking": "Asking again…",
     "asked": "Asked again. The new request is waiting for your decision.",

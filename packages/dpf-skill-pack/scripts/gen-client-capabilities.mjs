@@ -38,7 +38,8 @@ export const MATRIX_BEGIN = "<!-- BEGIN GENERATED: client-capability-matrix (nod
 export const MATRIX_END = "<!-- END GENERATED: client-capability-matrix -->";
 
 export const STATUSES = Object.freeze(["verified", "encoded", "unproven"]);
-export const HOOK_HOSTS = Object.freeze(["cli", "desktop", "ide"]);
+// "harness" is a client started by an orchestrating harness such as T3 Code (BI-95665E9B).
+export const HOOK_HOSTS = Object.freeze(["cli", "desktop", "ide", "harness"]);
 export const HOOK_EVENTS = Object.freeze([
   "SessionStart",
   "PreToolUse:Bash",

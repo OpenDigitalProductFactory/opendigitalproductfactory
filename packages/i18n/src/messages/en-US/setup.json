@@ -115,7 +115,7 @@
     "hostReserved": "Local capacity is reserved for platform verification.",
     "hostUnavailable": "Local capacity ownership could not be checked.",
     "pauseEnds": "Pause ends",
-    "nextAttempt": "Next attempt after",
+    "nextAttempt": "Recorded reset forecast:",
     "indefinite": "Until you enable it.",
     "health": "Health",
     "pauseExplanation": "Pausing blocks new inference, including chat and embeddings. Running work may finish. Health checks continue.",
@@ -124,7 +124,8 @@
     "manageSignIn": "Manage shared sign-in",
     "manageChatGPT": "Manage ChatGPT",
     "details": "More routing details",
-    "workloadRules": "Workload rules apply per request."
+    "workloadRules": "Workload rules apply per request.",
+    "lastObserved": "Limit last reported:"
   },
   "offerPositioning": {
     "open": "+ Add what you offer and who it's for",

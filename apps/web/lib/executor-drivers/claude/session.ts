@@ -1,4 +1,6 @@
-// Claude Code as a Workroom's supervised runtime (BI-05715F4C, design §4.7).
+// Claude Code as a long-lived session: the Claude driver's session face, used by
+// the Workroom runtime (BI-05715F4C, design §4.7; moved into the driver by
+// BI-A01B06F6).
 //
 // One long-lived `claude -p` in stream-json mode: each turn is a user message
 // written to stdin, the session's events come back on stdout, and the process
@@ -11,12 +13,11 @@
 import { randomUUID } from "node:crypto";
 import { StringDecoder } from "node:string_decoder";
 
-import type { RuntimeLauncher } from "./sandbox-launcher";
-import type { ExecutorAdapter, RuntimeEventSink, RuntimeSession, RuntimeSessionConfig } from "./types";
+import type { RuntimeLauncher } from "@/lib/workroom-runtime/sandbox-launcher";
+import type { DriverCapabilities, ExecutorDriver, RuntimeEventSink, RuntimeSession, RuntimeSessionConfig, TurnUsage } from "../types";
+import { claudeCredential, type ClaudeAuth } from "./auth";
 
 export const RUNTIME_PERMISSION_TOOL = "approve_runtime_permission";
-
-export type ClaudeRuntimeAuth = { mode: "oauth"; token: string } | { mode: "apikey"; apiKey: string };
 
 /** Runs inside the sandbox. The MCP config (with the bearer) is written 0600 and never on argv. */
 export const CLAUDE_SESSION_SCRIPT = [
@@ -37,16 +38,44 @@ export function claudeSessionFlags(config: RuntimeSessionConfig, sessionId: stri
   return [resume ? `--resume ${resume}` : `--session-id ${sessionId}`, model ? `--model ${model}` : ""].filter(Boolean).join(" ");
 }
 
-export function createClaudeAdapter(deps: {
+export const CLAUDE_CAPABILITIES: DriverCapabilities = {
+  // A message sent mid-turn waits for the turn to end, so it is a new turn, not a steer.
+  steer: false,
+  interrupt: true,
+  // Claude asks before it acts through the room's approve_runtime_permission tool.
+  runtimeRequests: "permission-tool",
+  resumeThread: true,
+  usage: true,
+  oneShot: true,
+};
+
+/** The usage a stream-json result event reports; unknown when it reports none. */
+export function turnUsageFromResult(event: Record<string, unknown>): TurnUsage {
+  const usage = event["usage"];
+  if (!usage || typeof usage !== "object") return { reported: "unknown" };
+  const u = usage as Record<string, unknown>;
+  const count = (key: string) => (typeof u[key] === "number" ? (u[key] as number) : 0);
+  const created = count("cache_creation_input_tokens");
+  const read = count("cache_read_input_tokens");
+  return {
+    reported: "native",
+    inputTokens: count("input_tokens"),
+    outputTokens: count("output_tokens"),
+    ...(created > 0 ? { cacheCreationInputTokens: created } : {}),
+    ...(read > 0 ? { cacheReadInputTokens: read } : {}),
+    ...(typeof event["total_cost_usd"] === "number" ? { costUsd: event["total_cost_usd"] } : {}),
+  };
+}
+
+export function createClaudeSessionDriver(deps: {
   launch: RuntimeLauncher;
-  auth: () => Promise<ClaudeRuntimeAuth>;
-}): ExecutorAdapter {
+  auth: (account: RuntimeSessionConfig["account"]) => Promise<ClaudeAuth>;
+}): ExecutorDriver {
   return {
     provider: "claude",
-    // A message sent mid-turn waits for the turn to end, so it is a new turn, not a steer.
-    supportsSteer: false,
+    capabilities: CLAUDE_CAPABILITIES,
     async openSession(config: RuntimeSessionConfig, onEvent: RuntimeEventSink): Promise<RuntimeSession> {
-      const auth = await deps.auth();
+      const credential = claudeCredential(await deps.auth(config.account));
       const sessionId = config.resumeThreadId && SESSION_ID.test(config.resumeThreadId) ? config.resumeThreadId : randomUUID();
       const mcpConfig = { mcpServers: { dpf: { type: "http", url: config.mcp.url, headers: { Authorization: `Bearer ${config.mcp.bearerToken}` } } } };
       const proc = deps.launch({
@@ -56,7 +85,7 @@ export function createClaudeAdapter(deps: {
           DPF_RUNTIME_DIR: `${config.cwd}/.dpf-runtime/${config.capsuleId}`,
           DPF_MCP_CONFIG: JSON.stringify(mcpConfig),
           DPF_SESSION_FLAGS: claudeSessionFlags(config, sessionId),
-          ...(auth.mode === "oauth" ? { CLAUDE_CODE_OAUTH_TOKEN: auth.token } : { ANTHROPIC_API_KEY: auth.apiKey }),
+          [credential.envVar]: credential.value,
         },
       });
       proc.onStderr(() => {});
@@ -77,6 +106,7 @@ export function createClaudeAdapter(deps: {
         } else if (event["type"] === "result") {
           const turnId = activeTurnId ?? `turn-${turns}`;
           activeTurnId = null;
+          onEvent({ type: "usage", turnId, usage: turnUsageFromResult(event) });
           const failed = event["is_error"] === true || (typeof event["subtype"] === "string" && event["subtype"] !== "success");
           onEvent({ type: "turn-completed", turnId, status: failed ? "failed" : "completed",
             error: failed ? String(event["result"] ?? event["subtype"] ?? "the turn failed").slice(0, 500) : null });

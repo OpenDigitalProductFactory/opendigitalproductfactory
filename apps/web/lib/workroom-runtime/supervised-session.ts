@@ -8,7 +8,7 @@
 
 import { addressingNamesSession } from "@/lib/work-management/room-message-addressing";
 
-import type { RuntimeProvider } from "./types";
+import type { RuntimeProvider } from "@/lib/executor-drivers/types";
 
 export const DEFAULT_RUNTIME_CWD = "/workspace";
 /** Room-wide messages folded into one turn, newest kept. */
@@ -21,6 +21,7 @@ export type SupervisionStatus = "supervised" | "supervision-lost" | "closed";
 export type SupervisionActor = { userId: string; agentId: string | null; principalId: string | null };
 
 export type StoredRuntimeSession = {
+  connectionId?: string | null;
   provider: RuntimeProvider;
   threadId: string | null;
   tokenId: string;
@@ -95,6 +96,7 @@ export function readStoredRuntimeSession(workspaceState: unknown): StoredRuntime
   const actor = readActor(record["actor"]);
   return {
     provider: record["provider"],
+    ...(str("connectionId") ? { connectionId: str("connectionId") } : {}),
     threadId: str("threadId") ?? null,
     tokenId: record["tokenId"],
     status: readStatus(record["status"]),

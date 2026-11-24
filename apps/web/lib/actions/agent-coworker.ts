@@ -10,7 +10,8 @@ import { generateCannedResponse } from "@/lib/agent-routing";
 import { loadOpeningBriefingPayload } from "@/lib/agent/opening-briefing-loader";
 import type { OpeningBriefingPayload } from "@/lib/agent/opening-briefing";
 import { resolveAgentForRouteWithPrompts } from "@/lib/tak/agent-routing-server";
-import { serializeMessage, loadProviderInfo, loadInlineApprovalRequests } from "@/lib/agent-coworker-data";
+import { serializeMessage, loadInlineApprovalRequests, getRecentMessages } from "@/lib/agent-coworker-data";
+import { readSettledForegroundNotices } from "@/lib/agent/foreground-work-publication";
 import {
   NoAllowedProvidersForSensitivityError,
   NoProvidersAvailableError,
@@ -178,32 +179,11 @@ export async function getThreadSnapshotById(input: {
   });
   if (!thread) return null;
 
-  const messages = await prisma.agentMessage.findMany({
-    where: { threadId: thread.id },
-    orderBy: { createdAt: "desc" },
-    take: 50,
-    select: {
-      id: true,
-      role: true,
-      content: true,
-      agentId: true,
-      routeContext: true,
-      providerId: true,
-      modelId: true,
-      ...RESPONSE_FEEDBACK_BINDING_SELECT, createdAt: true,
-      attachments: {
-        select: { id: true, fileName: true, mimeType: true, sizeBytes: true, parsedContent: true },
-      },
-    },
-  });
+  const messages = await getRecentMessages(thread.id, 50, false);
 
-  // BI-1D0B5308: resolve per-turn provider/model so the attribution badge shows
-  // right after a turn completes (client refreshes via this snapshot), not only
-  // on a full page reload.
-  const providerInfo = await loadProviderInfo(messages);
   return {
     threadId: thread.id,
-    messages: messages.reverse().map((m) => serializeMessage(m, undefined, providerInfo.get(m.id))),
+    messages,
   };
 }
 
@@ -232,27 +212,7 @@ export async function getOrCreateThreadSnapshot(input: {
     select: { id: true },
   });
 
-  const messages = await prisma.agentMessage.findMany({
-    where: { threadId: thread.id },
-    orderBy: { createdAt: "desc" },
-    take: 50,
-    select: {
-      id: true,
-      role: true,
-      content: true,
-      agentId: true,
-      routeContext: true,
-      providerId: true,
-      modelId: true,
-      ...RESPONSE_FEEDBACK_BINDING_SELECT, createdAt: true,
-      attachments: {
-        select: { id: true, fileName: true, mimeType: true, sizeBytes: true, parsedContent: true },
-      },
-    },
-  });
-
-  // BI-1D0B5308: attach per-turn provider/model attribution on initial load.
-  const providerInfo = await loadProviderInfo(messages);
+  const messages = await getRecentMessages(thread.id, 50, false);
 
   // BI-DED493BA: proactive on-load briefing — the panel must not open silent.
   // Best-effort: a briefing failure never breaks thread load.
@@ -262,7 +222,7 @@ export async function getOrCreateThreadSnapshot(input: {
 
   return {
     threadId: thread.id,
-    messages: messages.reverse().map((m) => serializeMessage(m, undefined, providerInfo.get(m.id))),
+    messages,
     openingBriefing,
   };
 }
@@ -2427,6 +2387,7 @@ export async function loadEarlierMessages(input: {
     take: limit + 1, // fetch one extra to check hasMore
     select: {
       id: true,
+      taskRunId: true,
       role: true,
       content: true,
       agentId: true,
@@ -2437,9 +2398,10 @@ export async function loadEarlierMessages(input: {
 
   const hasMore = messages.length > limit;
   const slice = hasMore ? messages.slice(0, limit) : messages;
+  const settled = await readSettledForegroundNotices(input.threadId, slice);
 
   return {
-    messages: slice.reverse().map((m) => serializeMessage(m)),
+    messages: slice.reverse().map((m) => serializeMessage(m, undefined, undefined, undefined, settled.has(m.id))),
     hasMore,
   };
 }

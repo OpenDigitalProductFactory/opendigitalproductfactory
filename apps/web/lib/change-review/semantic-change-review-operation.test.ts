@@ -305,4 +305,18 @@ describe("semantic change-review operation", () => {
     expect(out.nextAction).toBe("retry-review");
     expect(out.repairLimitReached).toBe(false);
   });
+
+  // BI-3D5AC133: only a diff the server read itself is offered as published text.
+  it("passes a server-read diff to dispatch with its commits and trees, and nothing for a pasted one", async () => {
+    const pass = { decision: "pass", failureAnalysisReview: { adequate: true, rationale: "Challenged recovery against the executed final-change test." }, issues: [], summary: "Pass." };
+    const range = { baseSha: "1".repeat(40), headSha: "2".repeat(40) };
+    const read = vi.fn().mockResolvedValue(pass);
+    const sourced = input({ artifactSource: range });
+    await runSemanticChangeReview(sourced, { dispatch: read });
+    expect(read.mock.calls[0]![1]).toMatchObject({ serverRead: { artifact: sourced.artifact, ...range,
+      baseTreeHash: sourced.identity.baseTreeHash, headTreeHash: sourced.identity.headTreeHash } });
+    const pasted = vi.fn().mockResolvedValue(pass);
+    await runSemanticChangeReview(input(), { dispatch: pasted });
+    expect(pasted.mock.calls[0]![1]).not.toHaveProperty("serverRead");
+  });
 });

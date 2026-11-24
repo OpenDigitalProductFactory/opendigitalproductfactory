@@ -20,6 +20,18 @@ export class RetireEffectError extends Error {
   }
 }
 
+/**
+ * Thrown by an executor that decided not to act, for a stated reason a retry
+ * cannot change (authority, a missing subject). The effect is settled failed
+ * for good; it is not retried.
+ */
+export class RefuseEffectError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "RefuseEffectError";
+  }
+}
+
 export type EffectReport = {
   outcome: "succeeded" | "failed" | "retired";
   final: boolean;
@@ -80,6 +92,8 @@ export function createEffectWorker(deps: EffectWorkerDeps) {
       const message = error instanceof Error ? error.message : "unknown error";
       if (error instanceof RetireEffectError) {
         report = { outcome: "retired", final: true, error: message };
+      } else if (error instanceof RefuseEffectError) {
+        report = { outcome: "failed", final: true, error: message };
       } else {
         const final = effect.attemptCount >= effect.maxAttempts;
         report = { outcome: "failed", final, error: message, retryAfterMs: final ? undefined : effectBackoffMs(effect.attemptCount) };
