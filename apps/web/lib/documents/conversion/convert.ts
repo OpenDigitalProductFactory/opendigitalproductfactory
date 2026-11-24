@@ -33,6 +33,7 @@ import {
   type ConverterTarget,
 } from "./formats";
 import { resolveDoctoolsImage, type DoctoolsImageResolution } from "./image";
+import { runActuatorDoctools, usesPrivateActuator } from "../../../../../scripts/lib/scope-writer-observation.mjs";
 
 export const DEFAULT_MAX_INPUT_BYTES = 50 * 1024 * 1024;
 export const DEFAULT_CONVERSION_TIMEOUT_MS = 120_000;
@@ -126,7 +127,7 @@ export type ConvertDeps = {
  * The engine's own timeout, inside the portal's budget, so dpf-convert exits
  * 124 cleanly before the portal has to kill the container.
  */
-function engineTimeoutSeconds(timeoutMs: number): number {
+export function engineTimeoutSeconds(timeoutMs: number): number {
   return Math.max(1, Math.floor((timeoutMs * 0.85) / 1000));
 }
 
@@ -176,6 +177,16 @@ export async function convertDocument(request: ConvertRequest, deps: ConvertDeps
   const from = request.from === undefined ? undefined : normalizeSourceExtension(request.from);
   if (from !== undefined && !CONVERTER_SOURCE_EXTENSIONS.has(from)) {
     return fail("conversion-failed", `unsupported source format: ${request.from}`);
+  }
+
+  if (!deps.run && !deps.resolveImage && await usesPrivateActuator()) {
+    try {
+      return await (deps.limiter ?? sharedDoctoolsLimiter()).run(async () => {
+        const result = await runActuatorDoctools({ kind: "convert", from, to: request.to }, request.input,
+          { timeoutMs: timeoutMs + 15_000, maxOutputBytes }) as BudgetedProcessResult;
+        return interpret(result, request.to);
+      });
+    } catch { return fail("converter-unavailable", "could not reach the document conversion actuator"); }
   }
 
   const resolution = await (deps.resolveImage ?? resolveDoctoolsImage)();

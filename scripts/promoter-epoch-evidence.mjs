@@ -490,10 +490,10 @@ export async function readScopeWriterObserverBinding({ stateDir, secret, now = n
 /** Run only in the canonical actuator, with the installation's named owners.
  * @param {Record<string, string|undefined>} env
  * @param {{ fencePreviews: () => Promise<unknown>, observeCiCapacity: () => Promise<unknown>,
- *   reconcileSubstrate: () => Promise<unknown>, sweepPromoters: () => Promise<unknown> }} owners
+ *   reconcileSubstrate: () => Promise<unknown>, sweepPromoters: () => Promise<unknown>, doctools: object }} owners
  */
-export async function serveScopeWriterObserver(env, { fencePreviews, observeCiCapacity, reconcileSubstrate, sweepPromoters }) {
-  const { createScopeWriterObserver, observeActuatorProjectServices, observeActuatorProjectContainers, publishActuatorSocket } =
+export async function serveScopeWriterObserver(env, { fencePreviews, observeCiCapacity, reconcileSubstrate, sweepPromoters, doctools }) {
+  const { createScopeWriterObserver, observeActuatorProjectServices, observeActuatorProjectContainers, observeActuatorPortalImage, publishActuatorSocket } =
     await import('./lib/scope-writer-observation.mjs');
   const stateDir = '/dpf-state';
   const project = env.PROMOTE_COMPOSE_PROJECT;
@@ -517,6 +517,7 @@ export async function serveScopeWriterObserver(env, { fencePreviews, observeCiCa
     },
     observeServices: () => observeActuatorProjectServices(project),
     observeProjectContainers: () => observeActuatorProjectContainers(project),
+    observePortalImage: () => observeActuatorPortalImage(project),
     observeCiCapacity,
     readServiceLogs: async (service, lines, timestamps = false) => {
       const ids = (await runDocker(['ps', '--all', '--no-trunc', '--filter', `label=com.docker.compose.project=${project}`,
@@ -533,6 +534,7 @@ export async function serveScopeWriterObserver(env, { fencePreviews, observeCiCa
     fencePreviews,
     reconcileSubstrate,
     sweepPromoters,
+    doctools,
   });
   process.umask(0o117);
   await publishActuatorSocket(server);

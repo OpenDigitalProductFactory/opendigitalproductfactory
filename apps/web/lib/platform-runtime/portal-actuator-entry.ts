@@ -2,6 +2,7 @@ import { pathToFileURL } from "node:url";
 import { observeCiCapacityAtDaemon } from "../nonprod/local-ci-capacity-broker";
 import { fenceEndedPreviewRuntimesAtDaemon } from "../nonprod/preview-runtime-fence";
 import { sweepOrphanedPromoterContainersAtDaemon } from "../self-upgrade/promoter-sweep";
+import { createDoctoolsActuator } from "../documents/conversion/doctools-actuator";
 
 async function main() {
   // Use the same immutable promoter closure shipped for this image's
@@ -13,11 +14,13 @@ async function main() {
       observeCiCapacity: typeof observeCiCapacityAtDaemon;
       reconcileSubstrate: () => Promise<unknown>;
       sweepPromoters: () => Promise<unknown>;
+      doctools: ReturnType<typeof createDoctoolsActuator>;
     }): Promise<void>;
   };
   let previewPass: ReturnType<typeof fenceEndedPreviewRuntimesAtDaemon> | undefined;
   let promoterPass: ReturnType<typeof sweepOrphanedPromoterContainersAtDaemon> | undefined;
   const project = process.env.PROMOTE_COMPOSE_PROJECT;
+  if (!project) throw new Error("actuator_project_unavailable");
   await serveScopeWriterObserver(process.env, {
     fencePreviews: () => {
       previewPass ??= fenceEndedPreviewRuntimesAtDaemon().finally(() => { previewPass = undefined; });
@@ -32,6 +35,7 @@ async function main() {
       promoterPass ??= sweepOrphanedPromoterContainersAtDaemon({ project }).finally(() => { promoterPass = undefined; });
       return promoterPass;
     },
+    doctools: createDoctoolsActuator(project),
   });
 }
 

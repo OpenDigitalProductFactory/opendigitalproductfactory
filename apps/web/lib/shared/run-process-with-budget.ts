@@ -27,6 +27,10 @@ export type BudgetedProcessOptions = {
   timeoutLabel?: string;
   /** Stop the process once its stdout grows past this many bytes. */
   maxStdoutBytes?: number;
+  /** Keep only recent diagnostic characters from the child. */
+  maxStderrChars?: number;
+  /** Binary callers can avoid retaining a second UTF-8 representation. */
+  binaryStdout?: boolean;
   /** Removes a container by name. Defaults to `docker rm -f <name>`. */
   removeContainer?: (name: string) => Promise<void>;
 };
@@ -76,7 +80,7 @@ export async function runProcessWithBudget(
 
     const result = (exitCode: number): BudgetedProcessResult => {
       const stdoutBytes = Buffer.concat(chunks);
-      return { exitCode, stdout: stdoutBytes.toString("utf8"), stderr, stdoutBytes, outputLimitExceeded };
+      return { exitCode, stdout: opts.binaryStdout ? "" : stdoutBytes.toString("utf8"), stderr, stdoutBytes, outputLimitExceeded };
     };
 
     const stop = (exitCode: number) => {
@@ -111,7 +115,9 @@ export async function runProcessWithBudget(
       stdoutLength += chunk.length;
     });
     child.stderr.on("data", (chunk: Buffer) => {
+      if (settled) return;
       stderr += chunk;
+      if (opts.maxStderrChars !== undefined && stderr.length > opts.maxStderrChars) stderr = stderr.slice(-opts.maxStderrChars);
     });
 
     if (opts.stdin) {

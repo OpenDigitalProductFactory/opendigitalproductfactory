@@ -24,10 +24,10 @@ async function withServer(serve, observation, run) {
   }
 }
 
-const call = (socketPath, options) => new Promise((resolve, reject) => {
+const call = (socketPath, options, body) => new Promise((resolve, reject) => {
   const req = request({ socketPath, ...options }, res => { res.resume(); res.on('end', () => resolve(res.statusCode)); });
   req.on('error', reject);
-  req.end();
+  req.end(body);
 });
 
 it('serves a single bound read without accepting caller-supplied verbs, queries or targets', unixOnly, async () => {
@@ -184,4 +184,39 @@ it('omits peer containers and private Docker fields from project diagnostics', a
     { ...portal, Labels: { ...owner, 'com.docker.compose.oneoff': 'True' } },
   ]);
   assert.deepEqual(result, { containers: [{ ID: portal.Id, Name: 'owned-portal-1', Service: 'portal', State: 'running', Status: 'Up' }] });
+});
+
+it('transports bounded conversion bytes without taking an image, entrypoint or container name', unixOnly, async () => {
+  const { createScopeWriterObserver, runActuatorDoctools } = await load();
+  const bytes = Buffer.from([0xff, 0x00, 0x01]);
+  const received = [];
+  await withServer(observe => createScopeWriterObserver({ observe, doctools: {
+    limit: () => 4,
+    run: async (operation, input) => {
+      received.push({ operation, input });
+      return { exitCode: 0, stdoutBytes: bytes, stderr: 'test output', outputLimitExceeded: false };
+    },
+  } }), async () => ({}), async socketPath => {
+    const options = { socketPath, timeoutMs: 2_000, maxOutputBytes: 4 };
+    const result = await runActuatorDoctools({ kind: 'convert', from: 'docx', to: 'pdf' }, bytes, options);
+    assert.deepEqual(result, { exitCode: 0, stdoutBytes: bytes, stdout: '', stderr: 'test output', outputLimitExceeded: false });
+    for (const suffix of ['?image=peer', '/entrypoint', '?container=portal']) {
+      assert.equal(await call(socketPath, { method: 'POST', path: `/v1/runtime/doctools/convert/docx/pdf${suffix}`,
+        headers: { 'content-type': 'application/octet-stream', 'content-length': bytes.length } }, bytes), 404);
+    }
+    assert.equal(await call(socketPath, { method: 'POST', path: '/v1/runtime/doctools/render',
+      headers: { 'content-type': 'application/octet-stream', 'content-length': 5 } }, Buffer.alloc(5)), 413);
+    assert.deepEqual(received, [{ operation: { kind: 'convert', from: 'docx', to: 'pdf' }, input: bytes }]);
+  });
+});
+
+it('projects the running portal image from the bound project and refuses ambiguity', async () => {
+  const { observeActuatorPortalImage } = await load();
+  const image = `sha256:${'a'.repeat(64)}`;
+  const portal = { Id: 'b'.repeat(64), ImageID: image, State: 'running',
+    Labels: { 'com.docker.compose.project': 'owned', 'com.docker.compose.service': 'portal' } };
+  assert.deepEqual(await observeActuatorPortalImage('owned', async () => [portal]), { image, containerId: portal.Id });
+  for (const rows of [[portal, portal], [{ ...portal, ImageID: 'mutable:latest' }], [{ ...portal, State: 'exited' }]]) {
+    await assert.rejects(observeActuatorPortalImage('owned', async () => rows), { message: 'scope_writer_observation_unavailable' });
+  }
 });
