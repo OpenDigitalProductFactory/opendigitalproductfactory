@@ -9,8 +9,13 @@ export const SCOPE_WRITER_OBSERVER_SOCKET = '/run/dpf-actuator/scope-observer.so
 const cohortPath = '/v1/scope-writer/cohort';
 const retirementPath = '/v1/scope-writer/retirement';
 const projectServicesPath = '/v1/runtime/project-services';
+const ciCapacityPath = '/v1/runtime/ci-capacity';
+const serviceLogsPath = '/v1/runtime/service-logs';
 const fencePreviewsPath = '/v1/runtime/fence-ended-previews';
+const reconcileSubstratePath = '/v1/runtime/reconcile-substrate';
 const responseLimit = 8192;
+const serviceLogResponseLimit = 180 * 1024;
+export const ACTUATOR_SERVICE_LOG_NAMES = Object.freeze(['portal', 'sandbox', 'postgres', 'portal-init', 'browser-use']);
 const unavailable = () => new Error('scope_writer_observation_unavailable');
 
 export function hasPrivateActuatorMount(mountinfo) {
@@ -19,14 +24,21 @@ export function hasPrivateActuatorMount(mountinfo) {
 
 /** Serve one read operation. The Unix directory belongs to the actuator.
  * The observer derives scope from host-owned state, never from the request. */
-export function createScopeWriterObserver({ observe, observeServices, readRetirement, fencePreviews }) {
+export function createScopeWriterObserver({ observe, observeServices, observeCiCapacity, readRetirement, fencePreviews,
+  reconcileSubstrate, readServiceLogs }) {
   const operations = new Map([
     [`GET ${cohortPath}`, observe], [`GET ${projectServicesPath}`, observeServices],
+    [`GET ${ciCapacityPath}`, observeCiCapacity],
     [`GET ${retirementPath}`, readRetirement], [`POST ${fencePreviewsPath}`, fencePreviews],
+    [`POST ${reconcileSubstratePath}`, reconcileSubstrate],
   ]);
   const server = createServer({ headersTimeout: 2_000, requestTimeout: 2_000, maxHeaderSize: 1024 }, async (req, res) => {
     res.setHeader('Connection', 'close');
-    const call = operations.get(`${req.method} ${req.url}`);
+    const requestedLog = req.method === 'GET' && req.url?.startsWith(`${serviceLogsPath}?`)
+      ? /^service=([a-z-]+)&tail=([1-9][0-9]{0,2})$/.exec(req.url.slice(serviceLogsPath.length + 1)) : null;
+    const log = requestedLog && readServiceLogs && ACTUATOR_SERVICE_LOG_NAMES.includes(requestedLog[1]) && Number(requestedLog[2]) <= 500
+      ? () => readServiceLogs(requestedLog[1], Number(requestedLog[2])) : null;
+    const call = log ?? operations.get(`${req.method} ${req.url}`);
     if (!call || req.headers['transfer-encoding'] !== undefined
       || (req.headers['content-length'] !== undefined && req.headers['content-length'] !== '0')) {
       res.writeHead(404).end();
@@ -34,7 +46,7 @@ export function createScopeWriterObserver({ observe, observeServices, readRetire
     }
     try {
       const body = JSON.stringify(await call());
-      if (!body || Buffer.byteLength(body) > responseLimit) throw unavailable();
+      if (!body || Buffer.byteLength(body) > (log ? serviceLogResponseLimit : responseLimit)) throw unavailable();
       res.writeHead(200, { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) }).end(body);
     } catch { res.writeHead(503).end(); }
   });
@@ -61,7 +73,7 @@ export async function publishActuatorSocket(server, { socketPath = SCOPE_WRITER_
 }
 
 /** Close the connection on refused, stalled, oversized or malformed output. */
-async function requestActuator(path, socketPath, { method = 'GET', timeoutMs = 2_500 } = {}) {
+async function requestActuator(path, socketPath, { method = 'GET', timeoutMs = 2_500, maxBytes = responseLimit } = {}) {
   if (socketPath === SCOPE_WRITER_OBSERVER_SOCKET) {
     try {
       const [directory, socket] = await Promise.all([lstat(dirname(socketPath)), lstat(socketPath)]);
@@ -81,7 +93,7 @@ async function requestActuator(path, socketPath, { method = 'GET', timeoutMs = 2
       res.on('aborted', fail);
       res.on('data', chunk => {
         size += chunk.length;
-        if (size > responseLimit) return fail();
+        if (size > maxBytes) return fail();
         chunks.push(chunk);
       });
       res.on('end', () => {
@@ -109,8 +121,22 @@ export function readActuatorProjectServices({ socketPath = SCOPE_WRITER_OBSERVER
   return requestActuator(projectServicesPath, socketPath);
 }
 
+export function readActuatorCiCapacity({ socketPath = SCOPE_WRITER_OBSERVER_SOCKET } = {}) {
+  return requestActuator(ciCapacityPath, socketPath, { timeoutMs: 12_000 });
+}
+
+export async function readActuatorServiceLogs(service, lines, { socketPath = SCOPE_WRITER_OBSERVER_SOCKET } = {}) {
+  if (!ACTUATOR_SERVICE_LOG_NAMES.includes(service) || !Number.isInteger(lines) || lines < 1 || lines > 500) throw unavailable();
+  return requestActuator(`${serviceLogsPath}?service=${service}&tail=${lines}`, socketPath,
+    { timeoutMs: 15_000, maxBytes: serviceLogResponseLimit });
+}
+
 export function reconcileEndedPreviewRuntimes({ socketPath = SCOPE_WRITER_OBSERVER_SOCKET } = {}) {
   return requestActuator(fencePreviewsPath, socketPath, { method: 'POST', timeoutMs: 30_000 });
+}
+
+export function reconcileActuatorSubstrate({ socketPath = SCOPE_WRITER_OBSERVER_SOCKET } = {}) {
+  return requestActuator(reconcileSubstratePath, socketPath, { method: 'POST', timeoutMs: 60_000 });
 }
 
 /** Only the installation binding selects the project. Daemon metadata is

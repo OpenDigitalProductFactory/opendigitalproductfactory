@@ -115,6 +115,7 @@ export async function observeMaintenanceEnvironments({ project, runDocker }) {
   if (!inventory.length || inventory.length > 10_000 || inventory.some(id => !/^[a-f0-9]{64}$/.test(id))
     || new Set(inventory).size !== inventory.length) observationInvalid();
   const environments = {};
+  let activeProjectPromoter = false;
   // Inspect only this project's candidate services; inventory remains complete
   // for proving removal. Do not load Docker Config.Env or other secret fields.
   const projectIds = (await runDocker(['ps', '--all', '--no-trunc', '--filter', `label=com.docker.compose.project=${project}`,
@@ -132,6 +133,7 @@ export async function observeMaintenanceEnvironments({ project, runDocker }) {
     const id = projectIds[index], labels = inspected?.Config?.Labels;
     if (inspected?.Id !== id || labels?.['com.docker.compose.project'] !== project) observationInvalid();
     const service = labels['com.docker.compose.service'];
+    if (service === 'promoter' && inspected.State?.Running !== false) activeProjectPromoter = true;
     if (!SERVICES.includes(service)) continue;
     if (environments[service] || inspected.State?.Running !== true) observationInvalid();
     environments[service] = { id, startedAt: inspected.State.StartedAt };
@@ -139,7 +141,7 @@ export async function observeMaintenanceEnvironments({ project, runDocker }) {
   if (!SERVICES.every(service => environments[service])) observationInvalid();
   // A daemon switch during the multi-call observation invalidates the snapshot.
   if ((await runDocker(['info', '--format', '{{.ID}}'])).trim() !== daemonId) observationInvalid();
-  return { daemonId, environments, inventory: inventory.sort() };
+  return { daemonId, environments, inventory: inventory.sort(), activeProjectPromoter };
 }
 
 

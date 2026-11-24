@@ -17,6 +17,7 @@
 // mirror agent-grants.ts TOOL_TO_GRANTS, which stays the gating source.
 
 import { prisma } from "@dpf/db";
+import { ACTUATOR_SERVICE_LOG_NAMES, hasPrivateActuatorMount, readActuatorServiceLogs } from "../../../../../scripts/lib/scope-writer-observation.mjs";
 
 import { lazyFsPromises, lazyPath, lazyChildProcess, lazyUtil, getCwd } from "@/lib/shared/lazy-node";
 import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
@@ -145,19 +146,26 @@ function logAdminActivity(
 
 async function adminViewLogs(params: Record<string, unknown>, userId: string): Promise<ToolResult> {
   const service = String(params.service ?? "");
-  const lines = Math.min(Number(params.lines) || 100, 500);
-  const ALLOWED_SERVICES = ["portal", "sandbox", "postgres", "portal-init", "browser-use"];
-  if (!ALLOWED_SERVICES.includes(service)) {
-    return { success: false, error: `Invalid service. Allowed: ${ALLOWED_SERVICES.join(", ")}`, message: `Unknown service "${service}".` };
+  const lines = Math.max(1, Math.min(Math.trunc(Number(params.lines) || 100), 500));
+  if (!ACTUATOR_SERVICE_LOG_NAMES.includes(service)) {
+    return { success: false, error: `Invalid service. Allowed: ${ACTUATOR_SERVICE_LOG_NAMES.join(", ")}`, message: `Unknown service "${service}".` };
   }
   try {
-    const { exec: execCb } = lazyChildProcess();
-    const { promisify } = lazyUtil();
-    const execAsync = promisify(execCb);
-    const { stdout } = await execAsync(`docker compose logs ${service} --tail ${lines} --no-color 2>&1`, {
-      cwd: composeCwd(),
-      timeout: 15_000,
-    });
+    const { readFile } = lazyFsPromises();
+    const usesActuator = await readFile("/proc/self/mountinfo").then(hasPrivateActuatorMount, () => false);
+    let stdout: string;
+    if (usesActuator) {
+      const logs = await readActuatorServiceLogs(service, lines) as { output?: unknown };
+      if (typeof logs.output !== "string") throw new Error("actuator_log_service_unavailable");
+      stdout = logs.output;
+    } else {
+      const { exec: execCb } = lazyChildProcess();
+      const { promisify } = lazyUtil();
+      const result = await promisify(execCb)(`docker compose logs ${service} --tail ${lines} --no-color 2>&1`, {
+        cwd: composeCwd(), timeout: 15_000,
+      });
+      stdout = result.stdout;
+    }
     await logAdminActivity(userId, "admin_view_logs", { service, lines }, "success", 1, stdout.slice(0, 500));
     return { success: true, message: `Last ${lines} lines from ${service}:`, data: { service, output: stdout.slice(0, 30000) } };
   } catch (err) {

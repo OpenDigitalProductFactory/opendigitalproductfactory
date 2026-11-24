@@ -184,7 +184,7 @@ export async function assertScopeEpochEnrollmentReady(ports: ScopeEpochEnrollmen
     const { retired } = await authenticatedRetirement(ports, local.sourceSha);
     await assertNoCanonicalActuators({ runDocker: docker });
     const cohort = await observeMaintenanceEnvironments({ project: current.project, runDocker: docker });
-    if (retired.project !== current.project || retired.daemonId !== cohort.daemonId
+    if (retired.project !== current.project || retired.daemonId !== cohort.daemonId || cohort.activeProjectPromoter
       || retired.after.portal.id !== containerId || canonicalJson(retired.after) !== canonicalJson(cohort.environments)
       || retired.retiredContainerIds.some((id: string) => cohort.inventory.includes(id))
       || canonicalJson(await inspect()) !== canonicalJson(current)) refuse("current-cohort-unproven");

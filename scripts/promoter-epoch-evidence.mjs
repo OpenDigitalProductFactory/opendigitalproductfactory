@@ -52,11 +52,11 @@ export function resolveEpochDockerInvocation(args, env = process.env) {
   return { command, args: [...prefix, ...args] };
 }
 
-export async function runEpochDocker(args, { env = process.env, execute = exec, timeoutMs = 15_000 } = {}) {
+export async function runEpochDocker(args, { env = process.env, execute = exec, timeoutMs = 15_000, includeStderr = false } = {}) {
   const invocation = resolveEpochDockerInvocation(args, env);
-  const { stdout } = await execute(invocation.command, invocation.args,
-    { timeout: timeoutMs, maxBuffer: 2 * 1024 * 1024, encoding: 'utf8' });
-  return stdout;
+  const { stdout, stderr } = await execute(invocation.command, invocation.args,
+    { env, timeout: timeoutMs, maxBuffer: 2 * 1024 * 1024, encoding: 'utf8' });
+  return includeStderr ? stdout + stderr : stdout;
 }
 
 async function runScopeWriterImageProbe({ image, runDocker, served = false }) {
@@ -162,7 +162,8 @@ const actuatorSecretOptions = [
   'DATABASE_URL', 'DPF_SECRET_PROVIDER', 'DPF_ONEPASSWORD_CONNECT_HOST', 'DPF_ONEPASSWORD_CONNECT_TOKEN_FILE',
   'DPF_ONEPASSWORD_CONNECT_TOKEN', 'DPF_ONEPASSWORD_VAULT_ID', 'DPF_ONEPASSWORD_ITEM_ID', 'DPF_SECRET_PROVIDER_TIMEOUT_MS',
 ];
-const actuatorEnvKeys = new Set([...actuatorSecretOptions, 'PROMOTE_COMPOSE_PROJECT', 'TSX_TSCONFIG_PATH', 'DPF_RUNTIME_SECRET_NAMES']);
+const actuatorEnvKeys = new Set([...actuatorSecretOptions, 'PROMOTE_COMPOSE_PROJECT', 'TSX_TSCONFIG_PATH',
+  'TSX_DISABLE_CACHE', 'DPF_RUNTIME_SECRET_NAMES']);
 
 /** Check the fully interpolated, merged Compose service plans without exposing
  * environment values. An exact Docker inspection is still required at boot. */
@@ -193,11 +194,12 @@ export function verifyPortalWriterCompose(recipe, { project, image, actuatorImag
       || actuator.read_only !== true || actuator.user !== '0:0' || !exactArguments(actuator.cap_drop, ['ALL'])
       || !exactArguments(actuator.cap_add, ['CHOWN']) || !exactArguments(actuator.security_opt, ['no-new-privileges:true'])
       || !exactArguments(actuator.entrypoint, ['/usr/local/bin/node', '/usr/local/bin/runtime-secret-bootstrap.mjs', '--',
-        '/usr/local/bin/node', '--import', 'tsx'])
+        '/usr/local/bin/node', '--import', '/app/packages/db/node_modules/tsx/dist/loader.mjs'])
       || !exactArguments(actuator.command, ['/app/apps/web-src/lib/platform-runtime/portal-actuator-entry.ts'])
       || !safeEnvironment(actuator.environment)
       || actuator.environment?.PROMOTE_COMPOSE_PROJECT !== project
       || actuator.environment.TSX_TSCONFIG_PATH !== '/app/apps/web-src/tsconfig.json'
+      || actuator.environment.TSX_DISABLE_CACHE !== '1'
       || actuator.environment.DPF_RUNTIME_SECRET_NAMES !== 'DATABASE_URL'
       || Object.keys(actuator.environment).some(key => !actuatorEnvKeys.has(key))
       || actuatorSecretOptions.some(key => (actuator.environment[key] ?? '') !== (portal.environment?.[key] ?? ''))
@@ -284,7 +286,7 @@ export async function observeClosedScopeWriterCohort({ launch, retirement, runDo
     const currentLaunch = await observeScopeWriterLaunch({ id: launch.id, image: launch.image, project, runDocker: docker });
     await assertNoCanonicalActuators({ runDocker: docker });
     const observedAt = wallNow();
-    if (observed.daemonId !== daemonId || currentLaunch.recipeDigest !== launch.recipeDigest
+    if (observed.daemonId !== daemonId || observed.activeProjectPromoter || currentLaunch.recipeDigest !== launch.recipeDigest
       || currentLaunch.startedAt !== observed.environments.portal.startedAt
       || retirement.retiredContainerIds.some(id => observed.inventory.includes(id))
       || !hasContinuousMaintenanceStarts(retirement.after, observed.environments, observedAt)) refuse();
@@ -487,15 +489,21 @@ export async function readScopeWriterObserverBinding({ stateDir, secret, now = n
 
 /** Run only in the canonical actuator, with the installation's named owners.
  * @param {Record<string, string|undefined>} env
- * @param {() => Promise<unknown>} fencePreviews
+ * @param {{ fencePreviews: () => Promise<unknown>, observeCiCapacity: () => Promise<unknown>,
+ *   reconcileSubstrate: () => Promise<unknown> }} owners
  */
-export async function serveScopeWriterObserver(env, fencePreviews) {
+export async function serveScopeWriterObserver(env, { fencePreviews, observeCiCapacity, reconcileSubstrate }) {
   const { createScopeWriterObserver, observeActuatorProjectServices, publishActuatorSocket } = await import('./lib/scope-writer-observation.mjs');
-  const stateDir = env.DPF_PROMOTER_STATE_DIR ?? '/dpf-state';
+  const stateDir = '/dpf-state';
   const project = env.PROMOTE_COMPOSE_PROJECT;
   if (process.getuid() !== 0 || typeof project !== 'string' || !/^[a-z0-9][a-z0-9_-]{0,99}$/.test(project))
     throw new Error('scope_writer_observer_installation_invalid');
-  const secret = await readMigrationSecret({ env });
+  const secret = await readMigrationSecret({ env: {} });
+  const engineEnvironment = {
+    DPF_DOCKER_BIN: '/usr/bin/docker',
+    DPF_DOCKER_PREFIX_ARGS: JSON.stringify(['--host', 'unix:///var/run/docker.sock']),
+  };
+  const runDocker = (args, options) => runEpochDocker(args, { ...options, env: engineEnvironment });
   const readBinding = async () => {
     const binding = await readScopeWriterObserverBinding({ stateDir, secret });
     if (binding.retirement.project !== project) throw new Error('scope_writer_observer_installation_invalid');
@@ -504,14 +512,23 @@ export async function serveScopeWriterObserver(env, fencePreviews) {
   const server = createScopeWriterObserver({
     observe: async () => {
       const { launch, retirement, served, retirementDigest } = await readBinding();
-      return { ...await observeClosedScopeWriterCohort({ launch, retirement }), served, retirementDigest };
+      return { ...await observeClosedScopeWriterCohort({ launch, retirement, runDocker }), served, retirementDigest };
     },
     observeServices: () => observeActuatorProjectServices(project),
+    observeCiCapacity,
+    readServiceLogs: async (service, lines) => {
+      const ids = (await runDocker(['ps', '--all', '--no-trunc', '--filter', `label=com.docker.compose.project=${project}`,
+        '--filter', `label=com.docker.compose.service=${service}`, '--format', '{{.ID}}'], { timeoutMs: 3_000 })).trim();
+      if (!/^[a-f0-9]{64}$/.test(ids)) throw new Error('actuator_log_service_unproven');
+      const output = (await runDocker(['logs', '--tail', String(lines), ids], { timeoutMs: 10_000, includeStderr: true })).slice(0, 30_000);
+      return { output };
+    },
     readRetirement: async () => {
       const { envelope, retirementDigest } = await readBinding();
       return { envelope, retirementDigest };
     },
     fencePreviews,
+    reconcileSubstrate,
   });
   process.umask(0o117);
   await publishActuatorSocket(server);

@@ -1,7 +1,8 @@
 # ─── Stage 1: base ────────────────────────────────────────────────────────────
 # Cache bust: 2026-04-09-ideate-dispatch
 FROM node:24-alpine AS base
-RUN corepack enable && corepack prepare pnpm@10.33.2 --activate
+ENV COREPACK_HOME=/opt/dpf/corepack
+RUN corepack enable && corepack prepare pnpm@10.33.2 --activate && chmod -R a+rX /opt/dpf/corepack
 WORKDIR /app
 
 # ─── Dev stage (parallel branch — not part of production chain) ──────────────
@@ -83,6 +84,9 @@ COPY scripts/lib/capability-service-projection.mjs ./scripts/lib/
 COPY scripts/lib/capability-state-hash.mjs ./scripts/lib/
 COPY scripts/lib/transition-signing.mjs ./scripts/lib/
 COPY scripts/lib/maintenance-epoch-receipt.mjs ./scripts/lib/
+COPY scripts/lib/scope-writer-observation.mjs ./scripts/lib/
+COPY scripts/lib/docker-socket.mjs ./scripts/lib/
+COPY scripts/lib/entry-module.mjs ./scripts/lib/
 COPY scripts/lib/canonical-json.mjs ./scripts/lib/
 # The local-CI status set is shared by the gate scripts and the MCP evidence
 # handler, so the build stage needs it too (BI-C59AC8AF).
@@ -134,6 +138,8 @@ COPY scripts/lib/capability-state-hash.mjs ./scripts/lib/
 COPY scripts/lib/capability-service-projection.mjs ./scripts/lib/
 COPY scripts/lib/transition-signing.mjs ./scripts/lib/
 COPY scripts/lib/maintenance-epoch-receipt.mjs ./scripts/lib/
+COPY scripts/lib/scope-writer-observation.mjs ./scripts/lib/
+COPY scripts/lib/docker-socket.mjs ./scripts/lib/
 COPY scripts/installer/resolve-host-identity.mjs ./scripts/installer/
 COPY scripts/installer/local-model-policy.json ./scripts/installer/
 COPY scripts/capability-service-catalog.generated.json ./scripts/

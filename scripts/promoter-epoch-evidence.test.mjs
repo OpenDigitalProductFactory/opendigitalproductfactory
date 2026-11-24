@@ -83,7 +83,8 @@ function harness() {
     if (fault === 'transport') throw new Error('daemon unavailable PRIVATE_SECRET');
     if (args[0] === 'info') return fault === 'daemon-changed' ? 'different-daemon' : 'daemon-example';
     if (args[0] === 'ps') {
-      const ids = phase === 'before' ? before : fault === 'old-present' ? [...before, ...after] : after;
+    const ids = phase === 'before' ? before : fault === 'old-present' ? [...before, ...after]
+      : fault === 'compose-promoter' ? [...after, '5'.repeat(64)] : after;
       return ids.join('\n');
     }
     assert.equal(args[0], 'inspect');
@@ -91,7 +92,7 @@ function harness() {
     return ids.map(id => JSON.stringify({ Id: id, State: { Running: fault !== 'stopped', StartedAt: phase === 'before'
       ? '2026-10-15T00:00:00.000Z' : '2026-10-16T01:01:00.000Z' }, Config: { Labels: {
       'com.docker.compose.project': fault === 'wrong-project' ? 'other' : 'dpf',
-      'com.docker.compose.service': (id[0] === '1' || id[0] === '3') ? 'portal' : 'sandbox',
+      'com.docker.compose.service': id[0] === '5' ? 'promoter' : (id[0] === '1' || id[0] === '3') ? 'portal' : 'sandbox',
     } } })).join('\n');
   };
   return { runDocker, commands, advance: () => { phase = 'after'; }, fail: f => { fault = f; } };
@@ -202,10 +203,10 @@ describe('scope writer actuator observations', () => {
         'portal-actuator': { image: actuatorImage, pull_policy: 'never', user: '0:0', read_only: true,
           networks: { default: null }, cap_drop: ['ALL'], cap_add: ['CHOWN'], security_opt: ['no-new-privileges:true'],
           entrypoint: ['/usr/local/bin/node', '/usr/local/bin/runtime-secret-bootstrap.mjs', '--',
-            '/usr/local/bin/node', '--import', 'tsx'],
+            '/usr/local/bin/node', '--import', '/app/packages/db/node_modules/tsx/dist/loader.mjs'],
           command: ['/app/apps/web-src/lib/platform-runtime/portal-actuator-entry.ts'],
           environment: { PROMOTE_COMPOSE_PROJECT: 'fixture', TSX_TSCONFIG_PATH: '/app/apps/web-src/tsconfig.json',
-            DPF_RUNTIME_SECRET_NAMES: 'DATABASE_URL' }, volumes: [
+            DPF_RUNTIME_SECRET_NAMES: 'DATABASE_URL', TSX_DISABLE_CACHE: '1' }, volumes: [
             { type: 'volume', source: 'portal_actuator', target: '/run/dpf-actuator' },
             { type: 'bind', source: '/install/state', target: '/dpf-state', read_only: true },
             { type: 'bind', source: '/var/run/docker.sock', target: '/var/run/docker.sock' },
@@ -309,6 +310,8 @@ describe('scope writer actuator observations', () => {
     await assert.rejects(imageEvidence.observeClosedScopeWriterCohort({ ...binding, runDocker: async (args, options) =>
       args.includes('name=dpf-promoter') ? 'an-active-actuator' : runDocker(args, options),
     }), /scope_writer_cohort_unproven/);
+    h.fail('compose-promoter');
+    await assert.rejects(imageEvidence.observeClosedScopeWriterCohort(binding), /scope_writer_cohort_unproven/);
   });
 
   it('binds launch evidence to the authenticated retirement bytes and refuses substituted evidence', async () => {

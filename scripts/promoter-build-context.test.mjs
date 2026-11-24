@@ -142,6 +142,21 @@ test("portal-baked JIT context includes every staged promoter closure source", a
   );
 });
 
+test("portal compiler, source services and private actuator carry their exact shared closure", async () => {
+  const dockerfile = await readFile(join(root, "Dockerfile"), "utf8");
+  const build = dockerfile.split("FROM deps AS build")[1].split("FROM deps AS init")[0];
+  const init = dockerfile.split("FROM deps AS init")[1].split("FROM base AS runner")[0];
+  for (const stage of [build, init]) {
+    assert.match(stage, /^COPY scripts\/lib\/scope-writer-observation\.mjs .*\.\/scripts\/lib\/$/m);
+    assert.match(stage, /^COPY scripts\/lib\/docker-socket\.mjs .*\.\/scripts\/lib\/$/m);
+    assert.match(stage, /^COPY scripts\/lib\/entry-module\.mjs .*\.\/scripts\/lib\/$/m);
+  }
+  assert.match(dockerfile, /^COPY scripts\/promoter-epoch-evidence\.mjs \/promoter\/scripts\/promoter-epoch-evidence\.mjs$/m);
+  const actuator = await readFile(join(root, "apps/web/lib/platform-runtime/portal-actuator-entry.ts"), "utf8");
+  assert.match(actuator, /"\/promoter\/scripts\/promoter-epoch-evidence\.mjs"/);
+  assert.match(dockerfile, /^ENV COREPACK_HOME=\/opt\/dpf\/corepack$/m);
+});
+
 test("Dockerfile.promoter.dockerignore allowlist matches the staged promoter closure exactly", async () => {
   const dockerignore = await readFile(join(root, "Dockerfile.promoter.dockerignore"), "utf8");
   const copySources = new Set(await readPromoterBuildContextSources(root));

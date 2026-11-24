@@ -122,3 +122,40 @@ it('accepts a preview reconciliation trigger without accepting any target, comma
       assert.equal(calls, 1);
     });
 });
+
+it('returns only the fixed CI capacity projection through its read operation', unixOnly, async () => {
+  const { createScopeWriterObserver, readActuatorCiCapacity } = await load();
+  await withServer(observe => createScopeWriterObserver({ observe, observeCiCapacity: async () =>
+    ({ dockerHealthy: true, builderMemoryUsageBytes: [1_000, 0] }) }), async () => ({}), async socketPath => {
+    assert.deepEqual(await readActuatorCiCapacity({ socketPath }), { dockerHealthy: true, builderMemoryUsageBytes: [1_000, 0] });
+    assert.equal(await call(socketPath, { method: 'GET', path: '/v1/runtime/ci-capacity?container=peer' }), 404);
+  });
+});
+
+it('lets the native substrate owner select and reconcile its own targets', unixOnly, async () => {
+  const { createScopeWriterObserver, reconcileActuatorSubstrate } = await load();
+  let triggers = 0;
+  await withServer(observe => createScopeWriterObserver({ observe, reconcileSubstrate: async () => {
+    triggers++;
+    return { restarted: 0 };
+  } }), async () => ({}), async socketPath => {
+    assert.equal(await call(socketPath, { method: 'POST', path: '/v1/runtime/reconcile-substrate?container=peer' }), 404);
+    assert.deepEqual(await reconcileActuatorSubstrate({ socketPath }), { restarted: 0 });
+    assert.equal(triggers, 1);
+  });
+});
+
+it('dispatches only bounded logs for a named canonical service', unixOnly, async () => {
+  const { createScopeWriterObserver, readActuatorServiceLogs } = await load();
+  const calls = [];
+  await withServer(observe => createScopeWriterObserver({ observe, readServiceLogs: async (...input) => {
+    calls.push(input);
+    return { output: 'log fixture' };
+  } }), async () => ({}), async socketPath => {
+    assert.deepEqual(await readActuatorServiceLogs('sandbox', 50, { socketPath }), { output: 'log fixture' });
+    for (const query of ['service=peer&tail=50', 'service=sandbox&tail=501', 'service=sandbox&tail=50&container=peer']) {
+      assert.equal(await call(socketPath, { method: 'GET', path: `/v1/runtime/service-logs?${query}` }), 404);
+    }
+    assert.deepEqual(calls, [['sandbox', 50]]);
+  });
+});
