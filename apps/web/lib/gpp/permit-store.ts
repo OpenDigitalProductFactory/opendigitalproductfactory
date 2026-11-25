@@ -131,6 +131,12 @@ function toPermitRow(row: PermitDbRow): PermitRow {
   };
 }
 
+/** Observe current permit facts inside the caller's read-only owner snapshot. */
+export async function readGppPermitForEvidence(tx: Prisma.TransactionClient, permitId: string): Promise<PermitRow | null> {
+  const row = await tx.gppPermit.findUnique({ where: { gppPermitId: permitId }, select: PERMIT_SELECT });
+  return row ? toPermitRow(row) : null;
+}
+
 const prismaStore: GppPermitStore = {
   async createPermit(claims, signature) {
     const created = await prisma.gppPermit.create({

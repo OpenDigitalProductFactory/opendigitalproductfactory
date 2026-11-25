@@ -11,7 +11,7 @@
 // Definitions moved verbatim out of the inline PLATFORM_TOOLS array; grants
 // mirror agent-grants.ts TOOL_TO_GRANTS, which stays the gating source.
 
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
+import type { RegisteredToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { RepositorySourceAdmission } from "@/lib/backlog/initiative-readiness/repository-artifact";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
 import { pageSource, boundedInteger } from "@/lib/source-page";
@@ -38,7 +38,7 @@ const DEFAULT_SEARCH_RESULTS = 20;
 const MAX_SEARCH_RESULTS = 50;
 const MAX_SEARCH_OFFSET = 2_000;
 
-const definitions: ToolDefinition[] = [
+const definitions: RegisteredToolDefinition[] = [
   {
     name: "query_version_history",
     description: "List product versions with their git tags, ship dates, change counts, and promotion status. Optionally filter by digital product ID.",
@@ -49,6 +49,7 @@ const definitions: ToolDefinition[] = [
         limit: { type: "number", description: "Max results (default 20)" },
       },
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: false,
@@ -71,6 +72,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["path"],
     },
+    workroomAccess: "source-read",
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: false,
@@ -97,6 +99,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["path", "version", "expectedBlobId"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: false,
@@ -119,6 +122,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["query"],
     },
+    workroomAccess: "source-read",
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: false,
@@ -133,6 +137,7 @@ const definitions: ToolDefinition[] = [
         version: { type: "string", description: "Git tag or ref (default: deployed version)" },
       },
     },
+    workroomAccess: "source-read",
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: false,
@@ -148,6 +153,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["from"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: false,

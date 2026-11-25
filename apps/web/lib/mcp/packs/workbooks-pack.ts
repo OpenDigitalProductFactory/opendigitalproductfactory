@@ -11,12 +11,12 @@
 // one-for-one over the same service, so a coworker builds a tracker the way a
 // person does. `grants` IS the TOOL_TO_GRANTS source (workbook-tool-grants.ts).
 
-import type { ToolDefinition } from "@/lib/mcp-tool-types";
+import type { RegisteredToolDefinition } from "@/lib/mcp-tool-types";
 import { WORKBOOK_TOOL_GRANTS } from "@/lib/tak/workbook-tool-grants";
 import { FIELD_TYPES } from "@/lib/workbooks/types";
 import type { ToolPack } from "../tool-pack";
 
-const definitions: ToolDefinition[] = [
+const definitions: RegisteredToolDefinition[] = [
   {
     name: "workbook_list_tables",
     description: "List the Workbook tables the agent can access (grid/spreadsheet data). Read-only. Pass workbookId to scope to one workbook.",
@@ -27,6 +27,7 @@ const definitions: ToolDefinition[] = [
       },
       required: [],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_workbooks",
     executionMode: "immediate",
     sideEffect: false,
@@ -41,6 +42,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["tableId"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_workbooks",
     executionMode: "immediate",
     sideEffect: false,
@@ -68,6 +70,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["tableId"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_workbooks",
     executionMode: "immediate",
     sideEffect: false,
@@ -83,6 +86,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["tableId"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_workbooks",
     executionMode: "immediate",
     sideEffect: true,
@@ -99,6 +103,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["tableId", "rowId"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_workbooks",
     executionMode: "immediate",
     sideEffect: true,
@@ -114,6 +119,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["name"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_workbooks",
     executionMode: "immediate",
     sideEffect: true,
@@ -129,6 +135,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["workbookId", "name"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_workbooks",
     executionMode: "immediate",
     sideEffect: true,
@@ -148,6 +155,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["tableId", "name", "fieldType"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_workbooks",
     executionMode: "immediate",
     sideEffect: true,
@@ -168,6 +176,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["tableId", "name", "viewType"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_workbooks",
     executionMode: "immediate",
     sideEffect: true,

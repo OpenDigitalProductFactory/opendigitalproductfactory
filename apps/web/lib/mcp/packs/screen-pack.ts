@@ -19,15 +19,16 @@
 
 import { prisma } from "@dpf/db";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
-import type { ToolDefinition, ToolExecutionContext, ToolResult } from "@/lib/mcp-tool-types";
+import type { RegisteredToolDefinition, ToolExecutionContext, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
 
-const definitions: ToolDefinition[] = [
+const definitions: RegisteredToolDefinition[] = [
   {
     name: "screen_describe",
     description:
       "Pseudo-User Contract. Return the active ScreenManifest summary for the chat's current routeContext — the list of selections, navigations, panels, forms, and domain actions the coworker may invoke on this page. Read-only. Call once at the start of a turn to discover what's available before dispatching screen_* actions. Returns the manifest's serialisable metadata; live handlers stay on the client.",
     inputSchema: { type: "object", properties: {}, required: [] },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: false,
@@ -38,6 +39,7 @@ const definitions: ToolDefinition[] = [
     description:
       "Pseudo-User Contract. Return the current observable state of the active screen — selected entities (by selectionId), focused field id, open panel ids, current scroll anchor, current form values. Read-only. Source of truth is the page; this tool returns the snapshot the chat session plumbed in via screenState. Call screen_describe first for the manifest shape, then screen_get_state for the live values.",
     inputSchema: { type: "object", properties: {}, required: [] },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: false,
@@ -55,6 +57,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["selectionId", "entityId"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: true,
@@ -73,6 +76,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["route"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: true,
@@ -90,6 +94,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["panelId"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: true,
@@ -107,6 +112,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["panelId"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: true,
@@ -125,6 +131,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["formId", "fieldId"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: true,
@@ -144,6 +151,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["formId", "fieldId", "value"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: true,
@@ -161,6 +169,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["anchor"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: false,
@@ -180,6 +189,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["manifestActionId", "rationale"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: true,
@@ -197,6 +207,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["envelopeId"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: true,

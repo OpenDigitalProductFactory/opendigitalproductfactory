@@ -8,7 +8,7 @@
 // Spec: docs/superpowers/specs/2026-09-24-portfolio-budget-and-investment-wip-design.md
 
 import { prisma } from "@dpf/db";
-import type { ToolDefinition, ToolExecutionContext, ToolResult } from "@/lib/mcp-tool-types";
+import type { RegisteredToolDefinition, ToolExecutionContext, ToolResult } from "@/lib/mcp-tool-types";
 import {
   confirmEpicPortfolios,
   loadEpicPortfolioProposals,
@@ -47,11 +47,12 @@ const balancePolicySchema = {
   required: ["refactorPercent", "windowDays", "tolerancePercent", "steeringEnabled", "minimumAttempts", "minimumTokens", "minimumClassificationPercent", "freshnessDays"],
 };
 
-const definitions: ToolDefinition[] = [
+const definitions: RegisteredToolDefinition[] = [
   {
     name: "read_platform_funding_setup",
     description: "Read explicit initial platform ownership setup for the authenticated person. Lists only that person's accountable organizations, the exact current-state confirmation digest and prospective allocation. No owner or allocation is inferred or changed.",
     inputSchema: { type: "object", additionalProperties: false, properties: { afterOrganizationId: { type: ["string", "null"] } }, required: [] },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_platform", executionMode: "immediate", sideEffect: false,
   },
   {
@@ -62,18 +63,21 @@ const definitions: ToolDefinition[] = [
       properties: { organizationId: { type: "string", minLength: 1 }, expectedDigest: { type: "string", minLength: 1 }, attestation: { type: "boolean", const: true }, reason: { type: "string", minLength: 1 } },
       required: ["organizationId", "expectedDigest", "attestation", "reason"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_platform", sideEffect: true, consequence: "authority",
   },
   {
     name: "get_investment_balance",
     description: "Read your funding scope's cumulative refactor/new target, revision and measured token coverage. Founder shared platform defaults to 80% refactor; organization/archetype work defaults to 20%. Unobserved external spending is not estimated. Requires the recorded funding owner; an admin role does not substitute.",
     inputSchema: { type: "object", properties: { scope: fundingScopeSchema }, required: ["scope"] },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_operations", executionMode: "immediate", sideEffect: false,
   },
   {
     name: "set_investment_balance",
     description: "Set your scope's approximate cumulative refactor/new target and optional dynamic steering. Read the current revision first, then provide expectedRevision (null for first setup) and a reason. Canonical funding authority is checked in the transaction. Revisions preserve history; hard spend, readiness and WIP limits remain in force.",
     inputSchema: { type: "object", properties: { scope: fundingScopeSchema, policy: balancePolicySchema, expectedRevision: { type: ["string", "null"] }, reason: { type: "string" }, expiresAt: { type: ["string", "null"] } }, required: ["scope", "policy", "expectedRevision", "reason"] },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_backlog", sideEffect: true, consequence: "authority",
   },
   {
@@ -83,6 +87,7 @@ const definitions: ToolDefinition[] = [
       scope: fundingScopeSchema, expectedBoundAt: { type: ["string", "null"] }, reason: { type: "string" }, classification: { type: ["string", "null"], enum: ["refactor", "new", null], description: "Optional evidenced classification for one specific Workroom item. Explain in reason. Null clears the override; omit to preserve it." },
       target: { type: "object", properties: { kind: { type: "string", enum: ["installation", "portfolio", "workroom"] }, id: { type: "string" }, purpose: { type: "string", enum: ["shared-platform", "archetype"] }, itemId: { type: "string" } }, required: ["kind"] },
     }, required: ["scope", "target", "expectedBoundAt", "reason"] },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_backlog", sideEffect: true, consequence: "authority",
   },
   {
@@ -98,6 +103,7 @@ const definitions: ToolDefinition[] = [
       },
       required: [],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_operations",
     executionMode: "immediate",
     sideEffect: false,
@@ -126,6 +132,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["confirmations", "reason"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_backlog",
     sideEffect: true,
   },
@@ -141,6 +148,7 @@ const definitions: ToolDefinition[] = [
       },
       required: [],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_operations",
     executionMode: "immediate",
     sideEffect: false,
@@ -161,6 +169,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["portfolioId", "allocatedPoints", "reason"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_backlog",
     sideEffect: true,
   },
@@ -178,6 +187,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["portfolioId", "principalRef", "reason"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_platform",
     sideEffect: true,
     // Changes who decides the approvals this portfolio's work raises.

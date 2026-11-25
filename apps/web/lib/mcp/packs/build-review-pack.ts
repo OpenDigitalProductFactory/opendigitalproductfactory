@@ -13,12 +13,12 @@
 // implementations live in sibling modules (build-review-handlers.ts and
 // build-design-review-handler.ts) so no file exceeds the module-size ceiling.
 
-import type { ToolDefinition } from "@/lib/mcp-tool-types";
+import type { RegisteredToolDefinition } from "@/lib/mcp-tool-types";
 import type { ToolPack } from "../tool-pack";
 import { saveBuildEvidence, reviewBuildPlan } from "@/lib/mcp/build-review-handlers";
 import { reviewDesignDoc } from "@/lib/mcp/build-design-review-handler";
 
-const definitions: ToolDefinition[] = [
+const definitions: RegisteredToolDefinition[] = [
   {
     name: "saveBuildEvidence",
     description: "Save evidence to a FeatureBuild record. ALWAYS pass both `field` and `value` — calls with empty `{}` are rejected. Example: `{field: \"designDoc\", value: {problemStatement: \"...\", existingFunctionalityAudit: \"...\", reusePlan: \"...\", proposedApproach: \"...\", acceptanceCriteria: [\"...\"]}}`. Valid fields: designDoc, designReview, buildPlan, planReview, taskResults, verificationOut, acceptanceMet.",
@@ -31,6 +31,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["field", "value"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: false, // Internal build workflow — available in advise mode
@@ -45,6 +46,7 @@ const definitions: ToolDefinition[] = [
         buildId: { type: "string", description: "Optional FB-* build ID. Omit to target the current active build." },
       },
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: false, // Internal build workflow — available in advise mode
@@ -59,6 +61,7 @@ const definitions: ToolDefinition[] = [
         buildId: { type: "string", description: "Optional FB-* build ID. Omit to target the current active build." },
       },
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: false, // Internal build workflow — available in advise mode

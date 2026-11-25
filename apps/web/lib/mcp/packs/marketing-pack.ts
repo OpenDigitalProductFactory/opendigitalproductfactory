@@ -7,10 +7,10 @@
 // should land here rather than as inline cases. Grants mirror agent-grants.ts
 // TOOL_TO_GRANTS (the gating source); tool-registry.test asserts no drift.
 
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
+import type { RegisteredToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack } from "../tool-pack";
 
-const definitions: ToolDefinition[] = [
+const definitions: RegisteredToolDefinition[] = [
   {
     name: "build_tracked_links",
     description:
@@ -39,6 +39,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["source", "medium", "campaign"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_marketing",
     sideEffect: false,
   },
@@ -63,6 +64,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["name", "objective"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "operate_marketing",
     sideEffect: true,
     coworkerArtifact: true,
@@ -83,6 +85,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["campaignId"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "operate_marketing",
     sideEffect: true,
     coworkerArtifact: true,
@@ -100,6 +103,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["campaignId"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "operate_marketing",
     sideEffect: true,
     coworkerArtifact: true,
@@ -115,6 +119,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["campaignId"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_marketing",
     sideEffect: false,
   },
@@ -129,6 +134,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["campaignId"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_marketing",
     sideEffect: false,
   },
@@ -146,6 +152,7 @@ const definitions: ToolDefinition[] = [
       },
       required: [],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_marketing",
     sideEffect: false,
   },
@@ -164,6 +171,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["taskId", "label", "body"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "operate_marketing",
     sideEffect: true,
     coworkerArtifact: true,
@@ -183,6 +191,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["variantId"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "operate_marketing",
     sideEffect: true,
     coworkerArtifact: true,
@@ -198,6 +207,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["taskId"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_marketing",
     sideEffect: false,
   },
@@ -234,6 +244,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["topic", "query"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "operate_marketing",
     sideEffect: true,
     coworkerArtifact: true,
@@ -282,6 +293,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["competitorName"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "operate_marketing",
     sideEffect: true,
     coworkerArtifact: true,
@@ -311,6 +323,7 @@ const definitions: ToolDefinition[] = [
       },
       required: [],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_marketing",
     sideEffect: false,
   },

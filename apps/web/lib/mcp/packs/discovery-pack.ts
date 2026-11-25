@@ -23,11 +23,11 @@ import {
   type IntegrationTreatment,
 } from "@/lib/build/integration-benchmarking";
 import { getToolMarketplaceReadiness } from "@/lib/actions/tool-marketplace-readiness";
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
+import type { RegisteredToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
 import { resolveActiveBuildId, extractBuildIdHint } from "@/lib/mcp/build-tool-helpers";
 
-const definitions: ToolDefinition[] = [
+const definitions: RegisteredToolDefinition[] = [
   {
     name: "search_portfolio_context",
     description: "Search taxonomy, products, builds, and backlog for items related to a feature description.",
@@ -36,6 +36,7 @@ const definitions: ToolDefinition[] = [
       properties: { query: { type: "string", description: "Plain-language feature description" } },
       required: ["query"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: false,
@@ -86,6 +87,7 @@ const definitions: ToolDefinition[] = [
         },
         required: ["query"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: null,
   },
   {
@@ -112,6 +114,7 @@ const definitions: ToolDefinition[] = [
         limit: { type: "number", description: "Max readiness entries to return. Default 12." },
       },
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: false,
@@ -134,6 +137,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["toolName", "toolType"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_tool_evaluations",
     sideEffect: true,
   },

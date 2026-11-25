@@ -855,6 +855,10 @@ model McpApiToken {
   // erase the audit trail. The token is refused for any other room.
   workroomRef   String?
   runRef        String?
+  // S5 workroom_session_scoped only: versioned, non-expanding attempt and
+  // operation ceiling for the independently authenticated Control receiver.
+  // Legacy, PAT and OAuth rows remain null. Never store bearer plaintext here.
+  workroomAuthorization Json?
   name          String
   tokenHash     String    @unique
   prefix        String

@@ -8,17 +8,18 @@
 // shared platform-dev-config server action that also backs the in-portal Apply
 // Update button, so both surfaces produce identical merge behavior.
 
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
+import type { RegisteredToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack } from "../tool-pack";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 import type { RuntimeReconciliationIntent } from "@/lib/platform-runtime/transition-protocol";
 import { PLATFORM_UPDATE_TOOL_GRANTS } from "@/lib/tak/platform-update-tool-grants";
 
-const definitions: ToolDefinition[] = [
+const definitions: RegisteredToolDefinition[] = [
   {
     name: "preview_runtime_capability_reconciliation",
     description: "Read this install's validated host capability snapshot and complete saved capability settings. Reports disagreement without selecting desired settings, reserving authority or changing services. Use the returned baseline to prepare an explicit reconciliation request.",
     inputSchema: { type: "object", properties: {}, additionalProperties: false },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_platform", executionMode: "immediate", sideEffect: false,
   },
   {
@@ -36,6 +37,7 @@ const definitions: ToolDefinition[] = [
       } },
     } },
     // Changing executable host capabilities changes the install's authority.
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_platform", executionMode: "immediate", sideEffect: true,
     consequence: "authority", consequenceScope: "platform",
   },
@@ -43,6 +45,7 @@ const definitions: ToolDefinition[] = [
     name: "apply_platform_update",
     description: "Merge the new platform version into your customised source. Returns a clean merge or a list of conflicts for the AI coworker to resolve with you.",
     inputSchema: { type: "object", properties: {} },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_platform",
     executionMode: "immediate",
     sideEffect: true,
@@ -70,6 +73,7 @@ const definitions: ToolDefinition[] = [
       },
       required: [],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_operations",
     executionMode: "immediate",
     sideEffect: false,

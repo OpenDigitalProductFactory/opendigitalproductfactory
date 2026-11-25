@@ -7,10 +7,10 @@
 // layout, type, colour and overrun the way a person would. No password is
 // typed and no credential passes through the agent.
 
-import type { ToolDefinition, ToolResult, ToolExecutionContext } from "@/lib/mcp-tool-types";
+import type { RegisteredToolDefinition, ToolResult, ToolExecutionContext } from "@/lib/mcp-tool-types";
 import type { ToolPack } from "../tool-pack";
 
-const definitions: ToolDefinition[] = [
+const definitions: RegisteredToolDefinition[] = [
   {
     name: "issue_ux_verification_sign_in",
     description:
@@ -41,6 +41,7 @@ const definitions: ToolDefinition[] = [
       },
       required: [],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_platform",
     executionMode: "immediate",
     sideEffect: true,

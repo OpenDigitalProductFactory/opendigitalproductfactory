@@ -20,6 +20,7 @@ import { TERMINAL_WORKROOM_STATUSES } from "@/lib/work-management/standing-room-
 import type { ResolvedMcpToken } from "./mcp-api-token";
 
 export const WORKROOM_SESSION_TOKEN_KIND = "workroom_session";
+export const S5_WORKROOM_TOKEN_KIND = "workroom_session_scoped";
 const TOKEN_PREFIX = "dpfroom_";
 const IDLE_EXPIRY_MS = 24 * 60 * 60 * 1000;
 
@@ -44,7 +45,11 @@ export type ResolvedWorkroomSessionToken = ResolvedMcpToken & {
   runRef: string | null;
 };
 
-const sha256 = (value: string) => createHash("sha256").update(value).digest("hex");
+export const hashWorkroomSessionBearer = (value: string) => createHash("sha256").update(value).digest("hex");
+export const createWorkroomSessionBearer = () => `${TOKEN_PREFIX}${randomBytes(24).toString("base64url")}`;
+export function isGeneratedWorkroomSessionBearer(value: string): boolean {
+  return typeof value === "string" && value.startsWith(TOKEN_PREFIX) && /^[A-Za-z0-9_-]{32}$/u.test(value.slice(TOKEN_PREFIX.length));
+}
 
 export async function issueWorkroomSessionToken(input: {
   userId: string;
@@ -53,7 +58,7 @@ export async function issueWorkroomSessionToken(input: {
   runRef: string | null;
   now?: Date;
 }): Promise<{ tokenId: string; plaintext: string }> {
-  const plaintext = `${TOKEN_PREFIX}${randomBytes(24).toString("base64url")}`;
+  const plaintext = createWorkroomSessionBearer();
   const now = input.now ?? new Date();
   const row = await prisma.mcpApiToken.create({
     data: {
@@ -63,7 +68,7 @@ export async function issueWorkroomSessionToken(input: {
       workroomRef: input.capsuleId,
       runRef: input.runRef,
       name: `room:${input.capsuleId}${input.runRef ? ` run:${input.runRef}` : ""}`,
-      tokenHash: sha256(plaintext),
+      tokenHash: hashWorkroomSessionBearer(plaintext),
       prefix: plaintext.slice(0, 12),
       tokenSuffix: plaintext.slice(-4),
       scopes: [...WORKROOM_SESSION_SCOPES],
@@ -82,7 +87,7 @@ export async function resolveWorkroomSessionToken(
   now: Date = new Date(),
 ): Promise<ResolvedWorkroomSessionToken | null> {
   if (typeof plaintext !== "string" || !plaintext.startsWith(TOKEN_PREFIX)) return null;
-  const row = await prisma.mcpApiToken.findUnique({ where: { tokenHash: sha256(plaintext) } });
+  const row = await prisma.mcpApiToken.findUnique({ where: { tokenHash: hashWorkroomSessionBearer(plaintext) } });
   if (!row || row.kind !== WORKROOM_SESSION_TOKEN_KIND || !row.workroomRef) return null;
   if (row.revokedAt != null) return null;
   if (row.expiresAt != null && row.expiresAt.getTime() < now.getTime()) return null;

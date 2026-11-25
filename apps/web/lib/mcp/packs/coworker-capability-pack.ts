@@ -19,7 +19,7 @@ import { loadAuthenticatedAccount } from "@/lib/identity/authenticated-account";
 import { coworkerAuthorityWhere } from "@/lib/coworker-identity";
 import { loadAgentHostContext } from "@/lib/mcp/agent-host-context";
 
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
+import type { RegisteredToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { CapabilityKey } from "@/lib/permissions";
 import { ROUTE_AGENT_MAP_ENTRIES } from "@/lib/tak/agent-routing";
 import { getToolMarketplaceReadiness } from "@/lib/actions/tool-marketplace-readiness";
@@ -205,7 +205,7 @@ function parseCapabilityNeeds(rawNeeds: unknown): CoworkerCapabilityNeedInput[] 
 
 // ─── Definitions (moved verbatim out of PLATFORM_TOOLS) ─────────────────────
 
-const definitions: ToolDefinition[] = [
+const definitions: RegisteredToolDefinition[] = [
   {
     name: "get_my_coworker_profile",
     description: "Identify the authenticated account and connection separately from the acting AI coworker. Read the coworker's identity, skills, effective grants and installation operating context. Use first when connection instructions are missing or before treating an install as production: installationContext states its declared environment, host, credential/teardown/peer limits and granted-work guidance. Coworker lifecycleStage is not the installation environment. Context never widens grants.",
@@ -213,6 +213,7 @@ const definitions: ToolDefinition[] = [
       type: "object",
       properties: {},
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: false,
@@ -234,6 +235,7 @@ const definitions: ToolDefinition[] = [
         },
       },
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: false,
@@ -273,6 +275,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["verdict", "confidence", "needs"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: true,
@@ -293,6 +296,7 @@ const definitions: ToolDefinition[] = [
         severity: { type: "string", enum: [...COWORKER_CAPABILITY_NEED_SEVERITIES] },
       },
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: false,
@@ -315,6 +319,7 @@ const definitions: ToolDefinition[] = [
         severity: { type: "string", enum: [...COWORKER_CAPABILITY_NEED_SEVERITIES] },
       },
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: false,

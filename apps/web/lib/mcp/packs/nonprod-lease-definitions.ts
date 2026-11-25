@@ -1,5 +1,5 @@
 import { NONPROD_ENVIRONMENT_KEYS } from "@/lib/nonprod/environment-lease-lock";
-import type { ToolDefinition } from "@/lib/mcp-tool-types";
+import type { RegisteredToolDefinition } from "@/lib/mcp-tool-types";
 import { HEAVY_RESOURCE_CLASSES } from "@/lib/nonprod/host-resource-policy";
 
 const hostPressureSchema = {
@@ -29,7 +29,7 @@ const hostPressureSchema = {
   ],
 } as const;
 
-export const nonprodLeaseDefinitions: ToolDefinition[] = [
+export const nonprodLeaseDefinitions: RegisteredToolDefinition[] = [
   {
     name: "list_nonprod_environment_leases",
     description:
@@ -41,6 +41,7 @@ export const nonprodLeaseDefinitions: ToolDefinition[] = [
       properties: { leaseId: { type: "string", description: "Optional exact lease ID for persisted reservation readback, including terminal rows." } },
       required: [],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: false,
@@ -67,6 +68,7 @@ export const nonprodLeaseDefinitions: ToolDefinition[] = [
       },
       required: [],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: false,
@@ -164,6 +166,7 @@ export const nonprodLeaseDefinitions: ToolDefinition[] = [
       },
       required: ["environmentKey", "ownerProvider", "ownerSessionId", "purpose", "expiresAt"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: true,
@@ -190,6 +193,7 @@ export const nonprodLeaseDefinitions: ToolDefinition[] = [
       },
       required: ["leaseId"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: true,
@@ -231,6 +235,7 @@ export const nonprodLeaseDefinitions: ToolDefinition[] = [
       },
       required: ["leaseId", "ownerSessionId"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: true,

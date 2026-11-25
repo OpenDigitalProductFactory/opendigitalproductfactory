@@ -17,7 +17,7 @@
 // `registry_read` (a coworker-read baseline), so every coworker inherits it — the
 // pack mirrors agent-grants.ts TOOL_TO_GRANTS, which stays the gating source.
 
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
+import type { RegisteredToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack } from "../tool-pack";
 
 const DISCIPLINES = ["all", "wwmd", "wwwd", "wsid"] as const;
@@ -30,7 +30,7 @@ function truncate(value: string | null, max = 400): string | null {
   return value.length > max ? `${value.slice(0, max)}…` : value;
 }
 
-const definitions: ToolDefinition[] = [
+const definitions: RegisteredToolDefinition[] = [
   {
     name: "list_open_decision_reviews",
     description:
@@ -51,6 +51,7 @@ const definitions: ToolDefinition[] = [
       },
       required: [],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_operations",
     executionMode: "immediate",
     sideEffect: false,

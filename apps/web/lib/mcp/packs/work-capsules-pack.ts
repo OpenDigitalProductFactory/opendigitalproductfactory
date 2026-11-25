@@ -9,7 +9,7 @@
 // array; grants mirror agent-grants.ts TOOL_TO_GRANTS.
 
 import { workroomRuntimeConsequence } from "@/lib/workroom-runtime/runtime-consequence";
-import type { ToolDefinition, ToolExecutionContext, ToolResult } from "@/lib/mcp-tool-types";
+import type { RegisteredToolDefinition, ToolExecutionContext, ToolResult } from "@/lib/mcp-tool-types";
 import { workCapsuleToolEnums } from "@/lib/work-capsules/mcp-handlers";
 import { DELIVERY_SHAPE_REFS } from "@/lib/work-management/delivery-shapes";
 import { ATLAS_HEALTH_STATES } from "@/lib/work-management/atlas-health";
@@ -66,11 +66,12 @@ const scopeProperties = {
   },
 } as const;
 
-const definitions: ToolDefinition[] = [
+const definitions: RegisteredToolDefinition[] = [
   {
     name: "review_workroom_sensitivity",
     description: "Read exact-room administrative classification state and a revision digest. Returns no room content or historical prose. Use before an administrator verifies an invalid declaration.",
     inputSchema: { type: "object", properties: { capsuleId: { type: "string" } }, required: ["capsuleId"] },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_platform", sideEffect: false,
   },
   {
@@ -81,6 +82,7 @@ const definitions: ToolDefinition[] = [
       sensitivity: { type: "string", enum: [...PRINCIPAL_SENSITIVITIES] },
       classificationReviewed: { type: "boolean", const: true }, rationale: { type: "string", minLength: 20, maxLength: 2000 },
     }, required: ["capsuleId", "expectedDigest", "sensitivity", "classificationReviewed", "rationale"] },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_platform", executionMode: "proposal", sideEffect: true, consequence: "authority",
   },
   {
@@ -104,6 +106,7 @@ const definitions: ToolDefinition[] = [
       },
       required: [],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: false,
@@ -130,6 +133,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["capsuleId"],
     },
+    workroomAccess: "room-operation",
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: false,
@@ -150,6 +154,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["title", "objective", "source", "idempotencyKey"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_backlog",
     sideEffect: true,
   },
@@ -164,6 +169,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["capsuleId", "taxonomy"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_backlog",
     executionMode: "immediate",
     sideEffect: true,
@@ -189,6 +195,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["title", "objective", "repositoryFullName", "headBranch", "worktreePath"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_backlog",
     sideEffect: true,
   },
@@ -229,6 +236,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["itemId", "worktreePath", "branchName", "provider", "sessionRef"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_backlog",
     sideEffect: true,
   },
@@ -244,6 +252,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["itemId", "reason"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_backlog",
     sideEffect: true,
     consequence: "authority",
@@ -274,6 +283,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["capsuleId", "claims"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_backlog",
     sideEffect: true,
     // changes identity or authority → consult-gated (TAK §8.4.1). A plain
@@ -316,6 +326,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["capsuleId"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_backlog",
     sideEffect: true,
   },
@@ -333,6 +344,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["capsuleId"],
     },
+    workroomAccess: "publication",
     requiredCapability: "manage_backlog",
     sideEffect: true,
     consequence: "irreversible",
@@ -360,6 +372,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["capsuleId", "status", "reason"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_backlog",
     sideEffect: true,
   },
@@ -378,6 +391,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["capsuleId", "reason"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_backlog",
     sideEffect: true,
     // Restores the room's ability to dispatch agent work, and to spend on providers.
@@ -408,6 +422,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["capsuleId", "action"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_backlog",
     sideEffect: true,
     // Issues a room-scoped credential to a CLI and lets it act in the sandbox.
@@ -428,6 +443,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["tool_name", "input"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_backlog",
     // Answers a question and records it on the room; it changes no state the room acts on.
     sideEffect: false,
@@ -451,6 +467,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["capsuleId", "toVersion"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_backlog",
     sideEffect: true,
   },
@@ -485,6 +502,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["capsuleId", "expectedRoomId", "claims"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_backlog",
     sideEffect: true,
     // changes identity or authority → consult-gated (TAK §8.4.1).
@@ -531,6 +549,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["capsuleId", "summary"],
     },
+    workroomAccess: "evidence",
     requiredCapability: "manage_backlog",
     sideEffect: true,
   },
@@ -559,6 +578,7 @@ const definitions: ToolDefinition[] = [
       },
       // The handler requires capsuleId, or capsuleIds for a batched handover.
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_backlog",
     sideEffect: true,
     // changes identity or authority → consult-gated (TAK §8.4.1).
@@ -585,6 +605,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["provider", "externalSessionId"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_backlog",
     sideEffect: true,
   },
@@ -603,6 +624,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["capsuleId", "type", "body"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_backlog",
     sideEffect: true,
   },

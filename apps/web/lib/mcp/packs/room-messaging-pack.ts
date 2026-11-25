@@ -15,7 +15,7 @@
 import { prisma } from "@dpf/db";
 
 import type { ToolPack } from "@/lib/mcp/tool-pack";
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
+import type { RegisteredToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import { ensureAgentPrincipalIdentity, getAgentGaidMap, syncUserPrincipal } from "@/lib/identity/principal-linking";
 import { getCoworkerRoomEngagement } from "@/lib/work-management/coworker-room-engagement.server";
 import { loadWorkspaceMentionRoster } from "@/lib/work-management/mention-roster.server";
@@ -38,6 +38,7 @@ import { inviteRoomParticipantConsequence } from "@/lib/work-management/room-cha
 import { decodeRoomMessageCursor, encodeRoomMessageCursor } from "@/lib/work-management/room-message-cursor";
 import { roomMessageAddressingView } from "@/lib/work-management/room-message-addressing";
 import { prepareRoomAddressing, publishRoomMessagePosted } from "@/lib/work-management/room-message-wake.server";
+import { applyAccountHandoverHandler, planAccountHandoverHandler } from "../room-account-handover-handlers";
 import { readUnreadForMe } from "@/lib/mcp/room-unread-handler";
 
 type PackContext = { agentId?: string; apiTokenId?: string };
@@ -393,52 +394,6 @@ async function inviteRoomParticipantHandler(
   };
 }
 
-/** The person behind the call must be able to manage the platform; the assistant borrows nothing. */
-async function requirePlatformManager(userId: string): Promise<ToolResult | null> {
-  const { currentUserContext } = await import("@/lib/govern/current-user-context");
-  const { can } = await import("@/lib/govern/permissions");
-  const human = userId ? await currentUserContext(userId) : null;
-  if (!human || !can(human, "manage_platform")) {
-    return { success: false, error: "forbidden", message: "Handing over an account's work needs a person with platform-management permission." };
-  }
-  return null;
-}
-
-async function planAccountHandoverHandler(params: Record<string, unknown>, userId: string): Promise<ToolResult> {
-  const refusal = await requirePlatformManager(userId);
-  if (refusal) return refusal;
-  const { liveAgentAccessNote, planAccountHandover } = await import("@/lib/work-management/account-handover");
-  const plan = await planAccountHandover(prisma as never, { sourceAccount: str(params, "sourceAccount") ?? "" });
-  if (!plan.ok) return { success: false, error: "handover_refused", message: plan.error };
-  const count = (kind: string) => plan.data.items.filter((i) => i.kind === kind).length;
-  // The handover moves work, not access (BI-9D2199D4): say what stays live and where to end it.
-  const access = liveAgentAccessNote(plan.data.sourceEmail, plan.data.liveAgentCredentials);
-  return {
-    success: true,
-    message: `${plan.data.items.length} item(s) would move from ${plan.data.sourceEmail}: ${count("room")} room(s), ${count("build")} build(s), ${count("scheduled-task")} scheduled task(s). ${plan.data.refused.length} refused.${access}`,
-    data: plan.data,
-  };
-}
-
-async function applyAccountHandoverHandler(params: Record<string, unknown>, userId: string): Promise<ToolResult> {
-  const refusal = await requirePlatformManager(userId);
-  if (refusal) return refusal;
-  const { applyAccountHandover } = await import("@/lib/work-management/account-handover");
-  const result = await applyAccountHandover(prisma as never, {
-    sourceAccount: str(params, "sourceAccount") ?? "",
-    digest: str(params, "digest") ?? "",
-    reason: str(params, "reason") ?? "",
-    actor: { userId },
-  });
-  if (!result.ok) return { success: false, error: "handover_refused", message: result.error };
-  const { rooms, builds, scheduledTasks, failed } = result.data;
-  return {
-    success: failed.length === 0,
-    message: `Handed over ${rooms} room(s), ${builds} build(s) and ${scheduledTasks} scheduled task(s).${failed.length ? ` ${failed.length} item(s) could not move; run the dry run again for the rest.` : ""}`,
-    data: result.data,
-  };
-}
-
 async function appointRoomCoordinatorHandler(
   params: Record<string, unknown>,
   userId: string,
@@ -606,7 +561,7 @@ async function acknowledgeWorkroomBroadcastHandler(
   });
 }
 
-const definitions: ToolDefinition[] = [
+const definitions: RegisteredToolDefinition[] = [
   {
     name: "post_room_message",
     description:
@@ -624,6 +579,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["caseKey", "body"],
     },
+    workroomAccess: "room-operation",
     requiredCapability: "view_operations",
     sideEffect: true,
   },
@@ -642,6 +598,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["caseKey"],
     },
+    workroomAccess: "room-operation",
     requiredCapability: "view_operations",
     sideEffect: false,
   },
@@ -658,6 +615,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["capsuleId", "body"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_operations",
     sideEffect: true,
   },
@@ -673,6 +631,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["capsuleId", "commandKey"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_operations",
     sideEffect: true,
   },
@@ -690,6 +649,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["capsuleId", "principalRef"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_backlog",
     sideEffect: true,
     // changes who answers for a room → consult-gated (TAK §8.4.1).
@@ -714,6 +674,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["caseKey"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_operations",
     sideEffect: true,
     // changes identity or authority → consult-gated (TAK §8.4.1), except an
@@ -732,6 +693,7 @@ const definitions: ToolDefinition[] = [
       },
       required: [],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_operations",
     sideEffect: false,
   },
@@ -747,6 +709,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["sourceAccount"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_platform",
     sideEffect: false,
   },
@@ -763,6 +726,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["sourceAccount", "digest", "reason"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_platform",
     sideEffect: true,
     // Changes who owns rooms, builds and scheduled work, and so who decides their approvals.
@@ -778,8 +742,12 @@ export const roomMessagingPack: ToolPack = {
     read_room_messages: (params, userId, context) => readRoomMessagesHandler(params, userId, context),
     invite_room_participant: (params, userId, context) => inviteRoomParticipantHandler(params, userId, context),
     appoint_room_coordinator: (params, userId, context) => appointRoomCoordinatorHandler(params, userId, context),
-    plan_account_handover: (params, userId) => planAccountHandoverHandler(params, userId),
-    apply_account_handover: (params, userId) => applyAccountHandoverHandler(params, userId),
+    plan_account_handover: (params, userId) => planAccountHandoverHandler(str(params, "sourceAccount") ?? "", userId),
+    apply_account_handover: (params, userId) => applyAccountHandoverHandler({
+      sourceAccount: str(params, "sourceAccount") ?? "",
+      digest: str(params, "digest") ?? "",
+      reason: str(params, "reason") ?? "",
+    }, userId),
     get_coworker_room_engagement: (params, userId, context) => getCoworkerRoomEngagementHandler(params, userId, context),
     broadcast_workroom_ask: (params, userId, context) => broadcastWorkroomAskHandler(params, userId, context),
     acknowledge_workroom_broadcast: (params, userId, context) => acknowledgeWorkroomBroadcastHandler(params, userId, context),

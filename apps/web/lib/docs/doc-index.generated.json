@@ -2457,6 +2457,17 @@
         "public-development-routing"
       ]
     },
+    "docs/architecture/s5-rehearsal-admission-read.md": {
+      "publicHref": "/architecture/s5-rehearsal-admission-read/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "s5-synthetic-rehearsal-admission-read",
+        "target",
+        "read-interface"
+      ]
+    },
     "docs/architecture/scoped-judgment-adoption.md": {
       "publicHref": "/architecture/scoped-judgment-adoption/",
       "portalHref": null,

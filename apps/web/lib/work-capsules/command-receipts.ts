@@ -57,6 +57,7 @@ type ReceiptPayload = {
   commandType: string;
   target: CommandTarget;
   payloadBinding?: CommandPayloadBinding;
+  observationBinding?: CommandPayloadBinding;
   result?: unknown;
   rejection?: CommandRejection;
 };
@@ -121,10 +122,14 @@ type CommandReceiptIdentity = {
   authorityScopeKey: string; commandId: string; commandType: string; target: CommandTarget;
   payloadBinding?: CommandPayloadBinding; expectedRoomRowId?: string;
   beforeRoomLock?: (tx: ReceiptDb) => Promise<void>;
+  beforeReceiptRead?: (tx: ReceiptDb, lockedRoomRowId: string) => Promise<boolean>;
 };
 
 /** Shared serialization for lookup, effect and rejected-outcome publication. */
 async function lockCommandPrefix(tx: ReceiptDb, args: CommandReceiptIdentity, bound: boolean): Promise<string | null> {
+    if (args.beforeReceiptRead && (!bound || !args.expectedRoomRowId)) {
+      throw new CommandReceiptUnavailableError("Current result access requires a bound command and its original Workroom row.");
+    }
     if (bound && (!tx.$queryRaw || !tx.$executeRaw || !tx.workroomActivity.findFirst)) {
       throw new CommandReceiptUnavailableError("Bound commands require command and room locks and receipt reads.");
     }
@@ -139,6 +144,9 @@ async function lockCommandPrefix(tx: ReceiptDb, args: CommandReceiptIdentity, bo
     if (bound && !rowId) throw new CommandReceiptUnavailableError("The bound command's Workroom could not be locked.");
     if (args.expectedRoomRowId !== undefined && rowId !== args.expectedRoomRowId) {
       throw new CommandReceiptUnavailableError("The original persistent Workroom no longer matches this command.");
+    }
+    if (args.beforeReceiptRead && (!rowId || await args.beforeReceiptRead(tx, rowId) !== true)) {
+      throw new CommandReceiptUnavailableError("Current result access could not be verified.");
     }
     return rowId;
 }
@@ -163,10 +171,15 @@ export async function runReceiptedCommand<T>(args: {
   target: CommandTarget;
   actor?: { userId: string | null; agentId: string | null };
   payloadBinding?: CommandPayloadBinding;
+  /** Server-owned binding for read-only recovery without the original request. */
+  observationBinding?: CommandPayloadBinding;
   /** Supplied by an exact original-target command, never inferred from current state. */
   expectedRoomRowId?: string;
   /** Server-owned DB-only dependency locks, before the Workroom row. */
   beforeRoomLock?: (tx: ReceiptDb) => Promise<void>;
+  /** Current result access, after locking the exact room and before any replay.
+   * Bound commands only. DB reads here do not authorize an effect in `run`. */
+  beforeReceiptRead?: CommandReceiptIdentity["beforeReceiptRead"];
   run: (tx: ReceiptDb) => Promise<T>;
   rejectionOf?: (error: unknown) => CommandRejection | null;
 }): Promise<T> {
@@ -176,8 +189,13 @@ export async function runReceiptedCommand<T>(args: {
   if (binding && (binding.version !== 1 || !/^[a-f0-9]{64}$/.test(binding.digest))) {
     throw new CommandReceiptUnavailableError("Invalid versioned command payload binding.");
   }
+  const observation = args.observationBinding;
+  if (observation && (!bound || !args.expectedRoomRowId || !args.beforeReceiptRead || !validBinding(observation))) {
+    throw new CommandReceiptUnavailableError("Observation requires an exact bound command and current result access.");
+  }
   const payload = (fields: Pick<ReceiptPayload, "result" | "rejection">): ReceiptPayload => ({
-    commandType: args.commandType, target: args.target, ...(binding ? { payloadBinding: binding } : {}), ...fields,
+    commandType: args.commandType, target: args.target, ...(binding ? { payloadBinding: binding } : {}),
+    ...(observation ? { observationBinding: observation } : {}), ...fields,
   });
   const lockPrefix = (tx: ReceiptDb) => lockCommandPrefix(tx, args, bound);
   const write = (tx: ReceiptDb, workCapsuleId: string, accepted: boolean, payload: ReceiptPayload) =>
@@ -243,7 +261,7 @@ export async function runReceiptedCommand<T>(args: {
   }
 }
 
-type BoundCommandLookupArgs = Omit<CommandReceiptIdentity, "beforeRoomLock" | "expectedRoomRowId"> & {
+type BoundCommandLookupArgs = Omit<CommandReceiptIdentity, "expectedRoomRowId"> & {
   db: ReceiptDb; payloadBinding: CommandPayloadBinding; expectedRoomRowId: string;
 };
 
@@ -253,7 +271,7 @@ function boundLookupIdentity(args: BoundCommandLookupArgs): CommandReceiptIdenti
   }
   return { authorityScopeKey: args.authorityScopeKey, commandId: args.commandId,
     commandType: args.commandType, target: args.target, payloadBinding: args.payloadBinding,
-    expectedRoomRowId: args.expectedRoomRowId };
+    expectedRoomRowId: args.expectedRoomRowId, beforeRoomLock: args.beforeRoomLock, beforeReceiptRead: args.beforeReceiptRead };
 }
 
 /** Lookup-only recovery. Call only after current result-access authority passed.
@@ -272,11 +290,39 @@ export async function lookupReceiptedCommand<T>(args: BoundCommandLookupArgs): P
   }, true);
 }
 
+function validBinding(binding: CommandPayloadBinding | undefined): binding is CommandPayloadBinding {
+  return binding?.version === 1 && /^[a-f0-9]{64}$/.test(binding.digest);
+}
+
+/** Body-free observation of an accepted outcome. The caller must derive the
+ * second binding from independently authenticated scope and the exact original
+ * target. The read never returns a refusal, absence proof or effect grant. */
+export async function observeAcceptedCommand(args: Omit<CommandReceiptIdentity, "payloadBinding" | "expectedRoomRowId" | "beforeReceiptRead"> & {
+  db: ReceiptDb;
+  expectedRoomRowId: string;
+  beforeReceiptRead: NonNullable<CommandReceiptIdentity["beforeReceiptRead"]>;
+  observationBinding: CommandPayloadBinding;
+}): Promise<unknown> {
+  if (!args.expectedRoomRowId || !args.beforeReceiptRead || !validBinding(args.observationBinding)) {
+    throw new CommandReceiptUnavailableError("Observation requires the original Workroom, exact binding and current result access.");
+  }
+  return inTransaction(args.db, async tx => {
+    await lockCommandPrefix(tx, args, true);
+    const existing = await readReceipt(tx, args.authorityScopeKey, args.commandId);
+    if (existing?.kind !== COMMAND_ACCEPTED) return null;
+    const recorded = existing.payload as ReceiptPayload | null;
+    if (recorded?.commandType !== args.commandType || recorded.target?.kind !== args.target.kind || recorded.target.id !== args.target.id
+      || !validBinding(recorded.payloadBinding) || !validBinding(recorded.observationBinding)
+      || recorded.observationBinding.digest !== args.observationBinding.digest) return null;
+    return recorded.result;
+  }, true);
+}
+
 /** Lifecycle-only absence proof under the SAME real command→room transaction.
  * Any record blocks maintenance, including conflicting, legacy or unknown ones.
  * Read metadata only: this is never authority to load a private original outcome.
  * No command handler or receipt publication is accepted. */
-export async function withLockedCommandAbsence<R>(args: BoundCommandLookupArgs,
+export async function withLockedCommandAbsence<R>(args: Omit<BoundCommandLookupArgs, "beforeReceiptRead" | "beforeRoomLock">,
   inspect: (tx: ReceiptDb) => Promise<R>): Promise<{ kind: "recorded" } | { kind: "absent"; result: R }> {
   const identity = boundLookupIdentity(args);
   return inTransaction(args.db, async tx => {

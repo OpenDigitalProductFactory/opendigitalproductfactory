@@ -1,11 +1,12 @@
-import type { ToolDefinition } from "@/lib/mcp-tool-types";
+import type { RegisteredToolDefinition } from "@/lib/mcp-tool-types";
 import { providerAccountConsequence } from "@/lib/mcp/provider-account-consequence";
 
-export const providerAccountDefinitions: ToolDefinition[] = [
+export const providerAccountDefinitions: RegisteredToolDefinition[] = [
   {
     name: "get_provider_accounts",
     description: "Read configured provider accounts, authentication state and account-specific trust posture. Credentials are masked; unconfigured and disabled accounts remain visible.",
     inputSchema: { type: "object", properties: { providerId: { type: "string", description: "Optionally restrict to one provider" }, limit: { type: "integer", minimum: 1, maximum: 100, description: "Accounts per page, default 25" }, cursor: { type: "string", description: "nextCursor from the previous page" } } },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_provider_connections", sideEffect: false,
     annotations: { readOnlyHint: true, idempotentHint: true },
   },
@@ -28,6 +29,7 @@ export const providerAccountDefinitions: ToolDefinition[] = [
       scope: { type: "string" },
       providerWorkspaceId: { type: "string", description: "Anthropic API-key workspace ID (wrkspc_...). Required for organization-scoped keys; empty clears it." },
     }, required: ["operation"] },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_provider_connections", sideEffect: true, consequence: "authority",
     consequenceForCall: providerAccountConsequence,
   },

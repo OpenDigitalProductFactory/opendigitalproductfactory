@@ -1,7 +1,7 @@
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
+import type { RegisteredToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack } from "../tool-pack";
 
-const definitions: ToolDefinition[] = [
+const definitions: RegisteredToolDefinition[] = [
   {
     name: "request_self_upgrade",
     description:
@@ -16,6 +16,7 @@ const definitions: ToolDefinition[] = [
       },
       required: [],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_provider_connections",
     executionMode: "immediate",
     sideEffect: true,
@@ -45,6 +46,7 @@ const definitions: ToolDefinition[] = [
       properties: {},
       required: [],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_provider_connections",
     executionMode: "immediate",
     sideEffect: true,
@@ -60,6 +62,7 @@ const definitions: ToolDefinition[] = [
       properties: {},
       required: [],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_operations",
     executionMode: "immediate",
     sideEffect: false,
@@ -75,6 +78,7 @@ const definitions: ToolDefinition[] = [
       properties: {},
       required: [],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_operations",
     executionMode: "immediate",
     sideEffect: false,

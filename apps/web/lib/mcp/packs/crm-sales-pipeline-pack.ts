@@ -7,7 +7,7 @@
 // which owns duplicate detection and quote math. Contact-level tools live in
 // the separate crm-contacts pack.
 
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
+import type { RegisteredToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack } from "../tool-pack";
 import { prisma } from "@dpf/db";
 import {
@@ -25,7 +25,7 @@ const SETTABLE_ACCOUNT_STATUSES: string[] = CUSTOMER_ACCOUNT_STATUSES.filter(
   (status) => !(CUSTOMER_TOMBSTONE_STATUSES as readonly string[]).includes(status),
 );
 
-const definitions: ToolDefinition[] = [
+const definitions: RegisteredToolDefinition[] = [
   {
     name: "list_customer_accounts",
     description: "List customer accounts in the CRM (name, status, industry, and open-opportunity count). Use this on the Customer workspace to see who the accounts/prospects are before qualifying opportunities or drafting a quote.",
@@ -37,6 +37,7 @@ const definitions: ToolDefinition[] = [
       },
       required: [],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_customer",
     sideEffect: false,
   },
@@ -53,6 +54,7 @@ const definitions: ToolDefinition[] = [
       },
       required: [],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_customer",
     sideEffect: false,
   },
@@ -66,6 +68,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["opportunityId"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_customer",
     sideEffect: false,
   },
@@ -81,6 +84,7 @@ const definitions: ToolDefinition[] = [
       },
       required: [],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_customer",
     sideEffect: false,
   },
@@ -100,6 +104,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["name"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "operate_customer",
     sideEffect: true,
     coworkerArtifact: true,
@@ -120,6 +125,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["title", "accountId"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "operate_customer",
     sideEffect: true,
     coworkerArtifact: true,
@@ -172,6 +178,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["opportunityId", "validUntil", "lineItems"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "operate_customer",
     sideEffect: true,
     coworkerArtifact: true,

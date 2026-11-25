@@ -11,10 +11,10 @@
 // permanently empty on installs that never had them derived. draft-builder.ts
 // reads all three.
 
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
+import type { RegisteredToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import { MARKETING_ROUTE_TO_MARKET } from "@/lib/marketing/vocabulary";
 
-export const recordMarketingGroundingDefinition: ToolDefinition = {
+export const recordMarketingGroundingDefinition: RegisteredToolDefinition = {
   name: "record_marketing_grounding",
   description:
     "Record the durable business facts a marketing plan stands on: who this organization serves (target segments and ideal customer profiles), what proof it can point to, what makes it different, and what constrains it. Use this after the operator answers questions about their audience — NOT for a recommendation, which is save_marketing_review. Only supplied fields are written, so an interview can be captured across several turns without a later round blanking an earlier one.",
@@ -84,6 +84,7 @@ export const recordMarketingGroundingDefinition: ToolDefinition = {
     },
     required: [],
   },
+  workroomAccess: "outside-workroom",
   requiredCapability: "operate_marketing",
   sideEffect: true,
   coworkerArtifact: true,

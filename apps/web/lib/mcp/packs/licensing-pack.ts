@@ -11,10 +11,10 @@
 // Definitions moved verbatim out of the inline PLATFORM_TOOLS array; grants
 // mirror agent-grants.ts TOOL_TO_GRANTS, which stays the gating source.
 
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
+import type { RegisteredToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
 
-const definitions: ToolDefinition[] = [
+const definitions: RegisteredToolDefinition[] = [
   {
     name: "save_licensing_investigation",
     description: "Persist the current licensing investigation posture for the business without requiring every field to be re-entered. Use this to save whether the business is existing, new, or expanding, plus jurisdiction and research-confidence updates discovered during the coworker conversation.",
@@ -33,6 +33,7 @@ const definitions: ToolDefinition[] = [
       },
       required: [],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_compliance",
     executionMode: "immediate",
     sideEffect: true,
@@ -52,6 +53,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["issueType", "title"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_compliance",
     executionMode: "immediate",
     sideEffect: true,

@@ -6,7 +6,7 @@ import { humanApprovalForConsumption, humanApprovalForExecution } from "@/lib/co
 import { fingerprintCoworkerInput } from "@/lib/govern/authority/coworker-authority-decision";
 import { loadEnvironmentClassResolution } from "@/lib/install/environment-class";
 import { loadInstallationOperatingIntent } from "@/lib/installation-journey/operating-intent";
-import type { ToolDefinition, ToolExecutionContext, ToolResult } from "@/lib/mcp-tool-types";
+import type { RegisteredToolDefinition, ToolExecutionContext, ToolResult } from "@/lib/mcp-tool-types";
 import { can } from "@/lib/permissions";
 import { isRecord } from "@/lib/shared/coerce";
 import { resolveAgentWorkroomAccess } from "@/lib/work-management/workroom-agent-access.server";
@@ -16,7 +16,7 @@ import { blockingSemanticFailure, isFailureAnalysisOnlyFail } from "./semantic-r
 
 const operationType = "semantic-change-review.exemption";
 const inputKeys = ["capsuleId", "sourceHeadSha", "baseTreeHash", "headTreeHash", "diffDigest", "reason", "expiresAt", "verificationEvidenceId", "clientAssessmentActivityId", "reviewBasis"];
-export const semanticReviewExemptionDefinition: ToolDefinition = {
+export const semanticReviewExemptionDefinition: RegisteredToolDefinition = {
   name: "record_semantic_review_exemption",
   description: "Record one operator-authorized DEV publication exception with current verification and a cited client assessment. Native review remains UNRUN and assessment independence UNVERIFIED. The operator explicitly accepts that assurance limit. No model executes and a failed review requires repair.",
   inputSchema: { type: "object", additionalProperties: false, properties: {
@@ -25,6 +25,7 @@ export const semanticReviewExemptionDefinition: ToolDefinition = {
     expiresAt: { type: "string" }, verificationEvidenceId: { type: "string" }, clientAssessmentActivityId: { type: "string" },
     reviewBasis: { type: "string", enum: ["operator-accepted-client-assessment"], description: "Explicit acceptance of client assessment whose independent execution is not certified. Part of the operator's exact approval." },
   }, required: ["capsuleId", "sourceHeadSha", "baseTreeHash", "headTreeHash", "diffDigest", "reason", "expiresAt", "verificationEvidenceId", "clientAssessmentActivityId", "reviewBasis"] },
+  workroomAccess: "outside-workroom",
   requiredCapability: "manage_platform", executionMode: "immediate", sideEffect: true,
   consequence: "authority", consequenceScope: "platform", buildPhases: ["review", "ship"],
 };

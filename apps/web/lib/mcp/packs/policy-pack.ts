@@ -2,7 +2,7 @@
 // Coworker-facing create/update of governed Policy rows as DRAFT for human review.
 // Publish remains a human lifecycle action on /compliance/policies.
 
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
+import type { RegisteredToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
 import {
   generatePolicyId,
@@ -11,7 +11,7 @@ import {
   validatePolicyInput,
 } from "@/lib/govern/policy-types";
 
-const definitions: ToolDefinition[] = [
+const definitions: RegisteredToolDefinition[] = [
   {
     name: "list_policies",
     description:
@@ -31,6 +31,7 @@ const definitions: ToolDefinition[] = [
       },
       required: [],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: false,
@@ -50,6 +51,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["policyId"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: false,
@@ -83,6 +85,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["title", "category"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_compliance",
     executionMode: "immediate",
     sideEffect: true,
@@ -107,6 +110,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["policyId"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_compliance",
     executionMode: "immediate",
     sideEffect: true,
@@ -125,6 +129,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["policyId"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_compliance",
     executionMode: "immediate",
     sideEffect: true,

@@ -11,10 +11,10 @@
 // (including the read-only vs proposal execution modes and the MCP annotations).
 // Grants mirror agent-grants.ts TOOL_TO_GRANTS, which stays the gating source.
 
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
+import type { RegisteredToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
 
-const definitions: ToolDefinition[] = [
+const definitions: RegisteredToolDefinition[] = [
   {
     name: "list_wiki_overlay_drafts",
     description:
@@ -23,6 +23,7 @@ const definitions: ToolDefinition[] = [
       type: "object",
       properties: {},
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: null,
     executionMode: "immediate",
     sideEffect: false,
@@ -56,6 +57,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["pageIds"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: null,
     executionMode: "proposal",
     sideEffect: true,
