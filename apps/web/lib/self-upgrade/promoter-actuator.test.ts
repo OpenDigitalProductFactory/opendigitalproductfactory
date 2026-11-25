@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  admitRuntimeTransitionLaunch,
   admitSelfUpgradeLaunch,
   launchPromoterAtActuator,
   readPromoterInstallBinding,
   requestPromoterLaunchThroughActuator,
   type PromoterInstallBinding,
+  type RuntimeHostContext,
 } from "./promoter-actuator";
 import type { PromoterParams } from "./promoter";
 import type { SelfUpgradeConfig } from "./config";
@@ -110,10 +112,10 @@ describe("admitSelfUpgradeLaunch", () => {
 
 describe("launchPromoterAtActuator", () => {
   it("launches the admitted owner and returns bounded streams", async () => {
-    const launches: Array<{ params: PromoterParams; owner: unknown }> = [];
+    const launches: Array<{ params: PromoterParams }> = [];
     const result = await launchPromoterAtActuator(request(), {
-      binding, readConfig: async () => config,
-      launch: async (launched, owner) => { launches.push({ params: launched, owner }); return { exitCode: 0, stdout: "x".repeat(300 * 1024), stderr: "" }; },
+      binding, readConfig: async () => config, hostContexts: async () => [], activeTransitionIds: async () => [],
+      run: async (launched) => { launches.push({ params: launched }); return { exitCode: 0, stdout: "x".repeat(300 * 1024), stderr: "" }; },
     });
     expect(result.exitCode).toBe(0);
     expect(Buffer.byteLength(result.stdout)).toBeLessThan(260 * 1024);
@@ -124,7 +126,8 @@ describe("launchPromoterAtActuator", () => {
   it("never launches a refused request", async () => {
     let launched = 0;
     await expect(launchPromoterAtActuator(request({ composeProject: "peer" }), {
-      binding, readConfig: async () => config, launch: async () => { launched++; return { exitCode: 0, stdout: "", stderr: "" }; },
+      binding, readConfig: async () => config, hostContexts: async () => [], activeTransitionIds: async () => [],
+      run: async () => { launched++; return { exitCode: 0, stdout: "", stderr: "" }; },
     })).rejects.toThrow();
     expect(launched).toBe(0);
   });
@@ -150,11 +153,89 @@ describe("requestPromoterLaunchThroughActuator", () => {
     expect(malformed.exitCode).toBe(PROMOTER_ALREADY_RUNNING_EXIT_CODE);
   });
 
-  it("does not send runtime-capability launches yet", async () => {
-    let sent = 0;
+  it("keeps a runtime-capability owner pending with EX_TEMPFAIL on a lost reply", async () => {
     const result = await requestPromoterLaunchThroughActuator(launchParams, { kind: "runtime-capability", transitionId: "RCT-1" },
-      async () => { sent++; return {}; });
+      async () => { throw new Error("lost"); });
     expect(result.exitCode).toBe(75);
-    expect(sent).toBe(0);
+  });
+});
+
+describe("admitRuntimeTransitionLaunch", () => {
+  const contexts: RuntimeHostContext[] = [
+    { hostInstallPath: "/Users/op/dpf", stateDirHostPath: "/Users/op/.dpf", composeFiles: ["docker-compose.yml"], composeProject: "dpf" },
+    { hostInstallPath: "/Users/op/dpf", stateDirHostPath: "/Users/op/.dpf", composeFiles: ["docker-compose.yml", "docker-compose.macos.yml"],
+      composeProject: "dpf", composeEnvFileHostPath: "/Users/op/dpf/.env", hostIdentity: { platform: "darwin", arch: "arm64", provenance: "install-state" } },
+  ];
+  const runtime = { ...binding, transitionSecretFileHostPath: "/Users/op/.dpf/runtime-transition.secret", appUrl: undefined };
+  const base = (overrides: Record<string, unknown> = {}) => ({
+    ...contexts[1], targetSha: "a".repeat(40), promoterImage: `sha256:${"b".repeat(64)}`,
+    backupPath: "/backups/runtime-capability-transition", healthUrl: "http://localhost:3000/api/health", ...overrides,
+  });
+  const apply = (overrides: Record<string, unknown> = {}) => ({
+    owner: { kind: "runtime-capability", transitionId: "RCT-1" },
+    params: base({ runtimeCapabilityTransitionId: "RCT-1", containerName: "dpf-promoter-RCT-1", timeoutMs: 600_000,
+      runtimeCapabilityEnvelope: "e".repeat(64), runtimeCapabilitySignature: "c".repeat(64),
+      runtimeCapabilitySecretFileHostPath: "/Users/op/.dpf/runtime-transition.secret", ...overrides }),
+  });
+  const authority = (operation: string, overrides: Record<string, unknown> = {}) => ({
+    owner: { kind: "runtime-authority", operation },
+    params: base({ runtimeTransitionAuthorityOperation: operation, timeoutMs: 60_000, ...overrides }),
+  });
+  const active = async () => ["RCT-9"];
+
+  it("admits an apply whose host context matches an install-derived context", async () => {
+    const admitted = await admitRuntimeTransitionLaunch(apply(), runtime, contexts, active);
+    expect(admitted.launchOwner).toEqual({ kind: "runtime-capability", transitionId: "RCT-1" });
+  });
+
+  it("admits a rollback action owned by its transition", async () => {
+    await expect(admitRuntimeTransitionLaunch(apply({ runtimeCapabilityTransitionId: "RCT-1-rollback", containerName: "dpf-promoter-RCT-1-rollback" }),
+      runtime, contexts, active)).resolves.toBeTruthy();
+  });
+
+  it.each([
+    ["hostInstallPath", "/Users/other/dpf"],
+    ["stateDirHostPath", "/tmp/state"],
+    ["composeProject", "peer"],
+    ["composeFiles", ["docker-compose.yml", "docker-compose.linux.yml"]],
+    ["runtimeCapabilitySecretFileHostPath", "/tmp/secret"],
+    ["backupPath", "/backups/other"],
+    ["healthUrl", "http://attacker/api/health"],
+    ["containerName", "dpf-promoter-RCT-2"],
+    ["promoterImage", "evil:latest"],
+    ["targetSha", "main"],
+    ["installStateMigrationEnvelope", "e".repeat(64)],
+  ])("refuses an apply with a mismatched %s", async (key, value) => {
+    await expect(admitRuntimeTransitionLaunch(apply({ [key]: value }), runtime, contexts, active)).rejects.toThrow("promoter_actuator_admission_refused");
+  });
+
+  it("binds each authority operation to its fixed container and inputs", async () => {
+    await expect(admitRuntimeTransitionLaunch(authority("reserve", { runtimeCapabilityTransitionId: "RCT-1",
+      containerName: "dpf-promoter-authority-RCT-1" }), runtime, contexts, active)).resolves.toBeTruthy();
+    await expect(admitRuntimeTransitionLaunch(authority("release", { runtimeCapabilityTransitionId: "RCT-1",
+      runtimeTransitionAuthorityToken: "f".repeat(64), containerName: "dpf-promoter-authority-release-RCT-1" }), runtime, contexts, active)).resolves.toBeTruthy();
+    await expect(admitRuntimeTransitionLaunch(authority("reserve", { runtimeCapabilityTransitionId: "RCT-1",
+      containerName: "dpf-promoter-authority-release-RCT-1" }), runtime, contexts, active)).rejects.toThrow();
+    await expect(admitRuntimeTransitionLaunch(authority("release", { runtimeCapabilityTransitionId: "RCT-1",
+      containerName: "dpf-promoter-authority-release-RCT-1" }), runtime, contexts, active)).rejects.toThrow();
+    await expect(admitRuntimeTransitionLaunch(authority("delete-everything", { containerName: "dpf-promoter-x" }), runtime, contexts, active)).rejects.toThrow();
+  });
+
+  it("derives the active transition set for reconciliation instead of trusting the caller", async () => {
+    const minimal = { hostInstallPath: "/Users/op/dpf", stateDirHostPath: "/Users/op/.dpf", targetSha: "runtime-capability-transition",
+      backupPath: "/backups/runtime-capability-transition", healthUrl: "http://localhost:3000/api/health",
+      runtimeTransitionAuthorityOperation: "reconcile", runtimeTransitionActiveIds: [], containerName: "dpf-promoter-authority-reconcile", timeoutMs: 60_000 };
+    const admitted = await admitRuntimeTransitionLaunch({ owner: { kind: "runtime-authority", operation: "reconcile" }, params: minimal },
+      runtime, contexts, active);
+    expect(admitted.runtimeTransitionActiveIds).toEqual(["RCT-9"]);
+  });
+});
+
+describe("launchThroughPrivateActuator routing", () => {
+  it("leaves build, readiness and dry-run promoter work on the existing path", async () => {
+    const { launchThroughPrivateActuator } = await import("./promoter-actuator");
+    for (const params of [{ phase: "build" }, { dryRun: true }, {}]) {
+      expect(await launchThroughPrivateActuator({ ...params, launchOwner: undefined } as unknown as PromoterParams, async () => true)).toBeNull();
+    }
   });
 });

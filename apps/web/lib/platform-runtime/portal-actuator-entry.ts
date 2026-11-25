@@ -51,16 +51,33 @@ async function main() {
       return prunePass;
     },
     launchPromoter: async body => {
-      // Call the admitted launch directly: inside the actuator the private
-      // socket is mounted too, so runPromoter would route back to itself.
-      const [{ launchPromoterAtActuator, readPromoterInstallBinding }, { getSelfUpgradeConfig }, { runAdmittedPromoter }, promoter] = await Promise.all([
-        import("../self-upgrade/promoter-actuator"), import("../self-upgrade/config"),
-        import("../self-upgrade/promoter-launch"), import("../self-upgrade/promoter"),
+      // Call runPromoterAtDaemon: inside the actuator the private socket is
+      // mounted too, so runPromoter would route back to itself.
+      const [{ launchPromoterAtActuator, readPromoterInstallBinding }, { getSelfUpgradeConfig }, promoter,
+        { runtimeTransitionHostContext }, { activeRuntimeTransitionIds }, { readFile }] = await Promise.all([
+        import("../self-upgrade/promoter-actuator"), import("../self-upgrade/config"), import("../self-upgrade/promoter"),
+        import("./runtime-transition-host-context"), import("./runtime-capability-executor"), import("node:fs/promises"),
       ]);
+      const context = (host?: Record<string, unknown>) => { try { return [runtimeTransitionHostContext(host, process.env)]; } catch { return []; } };
       return launchPromoterAtActuator(body, {
         binding: readPromoterInstallBinding(process.env),
         readConfig: getSelfUpgradeConfig,
-        launch: (params, owner) => runAdmittedPromoter(params, owner, params.promoterImage ?? "", promoter.buildAdmittedPromoterCommand),
+        // Install-derived candidates only: no snapshot, the current install
+        // state, and the snapshot inside the signed envelope (which the
+        // admitted launch then matches to its row under the admission lock).
+        hostContexts: async params => {
+          const installState = await readFile("/dpf-state/install-state.json", "utf8").then(text => JSON.parse(text) as Record<string, unknown>, () => undefined);
+          let signed: Record<string, unknown> | undefined;
+          try {
+            const envelope = typeof params.runtimeCapabilityEnvelope === "string"
+              ? JSON.parse(Buffer.from(params.runtimeCapabilityEnvelope, "base64url").toString("utf8")) as Record<string, unknown> : null;
+            const reconciliation = envelope?.version !== 1 && envelope?.mode === "reconciliation" ? envelope.reconciliation as Record<string, unknown> | undefined : undefined;
+            signed = reconciliation?.observedHost as Record<string, unknown> | undefined;
+          } catch { signed = undefined; }
+          return [...context(undefined), ...(installState ? context(installState) : []), ...(signed ? context(signed) : [])];
+        },
+        activeTransitionIds: activeRuntimeTransitionIds,
+        run: promoter.runPromoterAtDaemon,
       });
     },
     doctools: createDoctoolsActuator(project),

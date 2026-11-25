@@ -168,7 +168,8 @@ const actuatorSecretOptions = [
 // Compose inputs copied from the portal's resolved interpolation at render time,
 // so the actuator derives launch targets from the install, never the caller.
 const actuatorBindingKeys = ['DPF_HOST_INSTALL_PATH', 'PROMOTE_SOURCE', 'DPF_STATE_DIR_HOST', 'DPF_BACKUPS_HOST_PATH',
-  'PROMOTE_BACKUP_PATH', 'PROMOTE_HEALTH_URL', 'DPF_SELF_UPGRADE_COMPOSE_FILES'];
+  'PROMOTE_BACKUP_PATH', 'PROMOTE_HEALTH_URL', 'DPF_SELF_UPGRADE_COMPOSE_FILES', 'DPF_RUNTIME_TRANSITION_SECRET_FILE_HOST',
+  'APP_URL', 'COMPOSE_PROJECT_NAME', 'DPF_HOST_PLATFORM', 'DPF_HOST_ARCH', 'DPF_IMAGE_TAG', 'DPF_IMAGE_CHANNEL_TAG', 'GHCR_OWNER'];
 const bindingValue = /^[A-Za-z0-9 _./:@$+-]{1,1024}$/;
 const actuatorEnvKeys = new Set([...actuatorSecretOptions, ...actuatorBindingKeys, 'PROMOTE_COMPOSE_PROJECT', 'TSX_TSCONFIG_PATH',
   'TSX_DISABLE_CACHE', 'DPF_RUNTIME_SECRET_NAMES']);

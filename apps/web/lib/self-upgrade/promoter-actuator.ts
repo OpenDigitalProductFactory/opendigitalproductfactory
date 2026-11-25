@@ -9,8 +9,10 @@
 // existing admitted launch, which re-reads the owner row under the canonical
 // admission lock before the exact-ID start.
 //
-// Only the self-upgrade owner is accepted here so far; runtime-capability
-// launches still run on the legacy recipe until their host context is bound.
+// Runtime-capability actions (apply, rollback and the host authority
+// reserve/release/reconcile/rotate operations) are bound the same way: their
+// host context must equal one the actuator derives from the install, and
+// reconciliation uses the actuator's own view of active transitions.
 
 import type { SelfUpgradeConfig } from "./config";
 import type { PromoterLaunchOwner } from "./promoter-launch";
@@ -27,7 +29,12 @@ export type PromoterInstallBinding = {
   backupPathOverride?: string;
   composeFiles?: string[];
   healthUrl?: string;
+  transitionSecretFileHostPath?: string;
+  appUrl?: string;
 };
+
+/** Host context fields a runtime-transition promoter receives. */
+export type RuntimeHostContext = Pick<PromoterParams, "hostInstallPath" | "composeFiles" | "composeProject" | "composeEnvFileHostPath" | "hostIdentity"> & { stateDirHostPath: string };
 
 const refuse = (): never => { throw new Error("promoter_actuator_admission_refused"); };
 const PROJECT = /^[a-z0-9][a-z0-9_-]{0,99}$/;
@@ -80,6 +87,8 @@ export function readPromoterInstallBinding(env: Record<string, string | undefine
     backupPathOverride,
     composeFiles: composeFiles?.length ? composeFiles : undefined,
     healthUrl: env.PROMOTE_HEALTH_URL || undefined,
+    transitionSecretFileHostPath: optionalPath(env.DPF_RUNTIME_TRANSITION_SECRET_FILE_HOST),
+    appUrl: env.APP_URL || undefined,
   };
 }
 
@@ -131,6 +140,66 @@ export function admitSelfUpgradeLaunch(value: unknown, binding: PromoterInstallB
   return { owner: { kind: "self-upgrade", runId }, params: params as unknown as PromoterParams };
 }
 
+const RUNTIME_ID = /^RCT-[A-Za-z0-9-]{1,48}$/;
+const RUNTIME_KEYS = new Set([
+  "hostInstallPath", "stateDirHostPath", "composeFiles", "composeProject", "composeEnvFileHostPath", "hostIdentity",
+  "runtimeCapabilitySecretFileHostPath", "targetSha", "promoterImage", "backupPath", "healthUrl", "timeoutMs",
+  "runtimeCapabilityTransitionId", "runtimeTransitionAuthorityOperation", "runtimeTransitionAuthorityToken",
+  "runtimeTransitionActiveIds", "runtimeCapabilityEnvelope", "runtimeCapabilitySignature", "runtimeCapabilityProfiles", "containerName",
+]);
+const CONTEXT_KEYS = ["hostInstallPath", "stateDirHostPath", "composeFiles", "composeProject", "composeEnvFileHostPath", "hostIdentity"] as const;
+const AUTHORITY_CONTAINER: Record<string, (id: string) => string> = {
+  reserve: (id) => `dpf-promoter-authority-${id}`,
+  release: (id) => `dpf-promoter-authority-release-${id}`,
+  reconcile: () => "dpf-promoter-authority-reconcile",
+  "rotate-secret": () => "dpf-promoter-runtime-secret-rotation",
+};
+
+/** Strictly bind a runtime-capability action or host authority operation. */
+export async function admitRuntimeTransitionLaunch(value: unknown, binding: PromoterInstallBinding,
+  contexts: RuntimeHostContext[], activeTransitionIds: () => Promise<string[]>): Promise<PromoterParams> {
+  if (!isRecord(value) || Object.keys(value).length !== 2 || !isRecord(value.owner) || !isRecord(value.params)) return refuse();
+  const owner = value.owner, params = value.params;
+  if (Object.keys(params).some((key) => !RUNTIME_KEYS.has(key))) refuse();
+  // The host context must equal one the actuator derived from the install;
+  // only the fields the caller sent are compared, as a group.
+  const sent = CONTEXT_KEYS.filter((key) => params[key] !== undefined);
+  if (params.hostInstallPath !== binding.installPath || params.stateDirHostPath !== binding.stateDirHostPath
+    || !contexts.some((context) => sent.every((key) => JSON.stringify(context[key]) === JSON.stringify(params[key])))) refuse();
+  if (params.composeProject !== undefined && params.composeProject !== binding.project) refuse();
+  if (params.runtimeCapabilitySecretFileHostPath !== undefined
+    && params.runtimeCapabilitySecretFileHostPath !== binding.transitionSecretFileHostPath) refuse();
+  if (params.backupPath !== "/backups/runtime-capability-transition"
+    || params.healthUrl !== `${binding.appUrl ?? "http://localhost:3000"}/api/health`
+    || typeof params.targetSha !== "string" || !(SHA.test(params.targetSha) || params.targetSha === "runtime-capability-transition")
+    || (params.promoterImage !== undefined && (typeof params.promoterImage !== "string" || !IMAGE_ID.test(params.promoterImage)))
+    || (params.timeoutMs !== undefined && (typeof params.timeoutMs !== "number" || params.timeoutMs <= 0 || params.timeoutMs > 60 * 60_000))) refuse();
+  const action = params.runtimeCapabilityTransitionId;
+  if (action !== undefined && (typeof action !== "string" || !RUNTIME_ID.test(action))) refuse();
+
+  if (owner.kind === "runtime-capability" && Object.keys(owner).length === 2
+    && typeof owner.transitionId === "string" && RUNTIME_ID.test(owner.transitionId)) {
+    // launchDurablePromoter re-reads the row (or its compensation) and the
+    // exact envelope and signature under the admission lock.
+    if (!action || params.runtimeTransitionAuthorityOperation !== undefined || params.containerName !== `dpf-promoter-${action}`
+      || typeof params.runtimeCapabilityEnvelope !== "string" || !ENVELOPE.test(params.runtimeCapabilityEnvelope)
+      || typeof params.runtimeCapabilitySignature !== "string" || !HEX64.test(params.runtimeCapabilitySignature)) refuse();
+    return { ...(params as unknown as PromoterParams), launchOwner: { kind: "runtime-capability", transitionId: owner.transitionId } };
+  }
+  const operation = owner.operation;
+  if (owner.kind !== "runtime-authority" || Object.keys(owner).length !== 2 || typeof operation !== "string"
+    || !Object.hasOwn(AUTHORITY_CONTAINER, operation) || params.runtimeTransitionAuthorityOperation !== operation
+    || params.runtimeCapabilityEnvelope !== undefined || params.runtimeCapabilitySignature !== undefined) return refuse();
+  const scoped = operation === "reserve" || operation === "release";
+  if ((scoped ? !action : action !== undefined) || params.containerName !== AUTHORITY_CONTAINER[operation]!(String(action ?? ""))
+    || (operation === "release") !== (typeof params.runtimeTransitionAuthorityToken === "string" && HEX64.test(params.runtimeTransitionAuthorityToken))
+    || (operation !== "release" && params.runtimeTransitionAuthorityToken !== undefined)) refuse();
+  const admitted = { ...(params as unknown as PromoterParams) };
+  if (operation === "reconcile") admitted.runtimeTransitionActiveIds = await activeTransitionIds();
+  else if (params.runtimeTransitionActiveIds !== undefined) refuse();
+  return admitted;
+}
+
 const tail = (value: string) => {
   const bytes = Buffer.from(value);
   return bytes.length > RESULT_STREAM_BYTES ? `…${bytes.subarray(-RESULT_STREAM_BYTES).toString("utf8")}` : value;
@@ -140,24 +209,35 @@ const tail = (value: string) => {
 export async function launchPromoterAtActuator(value: unknown, deps: {
   binding: PromoterInstallBinding;
   readConfig: () => Promise<SelfUpgradeConfig>;
-  launch: (params: PromoterParams, owner: PromoterLaunchOwner) => Promise<PromoterResult>;
+  hostContexts: (params: Record<string, unknown>) => Promise<RuntimeHostContext[]>;
+  activeTransitionIds: () => Promise<string[]>;
+  run: (params: PromoterParams) => Promise<PromoterResult>;
 }): Promise<PromoterResult> {
-  if (Buffer.byteLength(JSON.stringify(value ?? null)) > MAX_REQUEST_BYTES) refuse();
-  const { owner, params } = admitSelfUpgradeLaunch(value, deps.binding, await deps.readConfig());
-  const result = await deps.launch({ ...params, launchOwner: owner }, owner);
+  if (Buffer.byteLength(JSON.stringify(value ?? null)) > MAX_REQUEST_BYTES || !isRecord(value) || !isRecord(value.owner)
+    || !isRecord(value.params)) refuse();
+  const request = value as { owner: Record<string, unknown>; params: Record<string, unknown> };
+  let params: PromoterParams;
+  if (request.owner.kind === "self-upgrade") {
+    const admitted = admitSelfUpgradeLaunch(request, deps.binding, await deps.readConfig());
+    params = { ...admitted.params, launchOwner: admitted.owner };
+  } else {
+    params = await admitRuntimeTransitionLaunch(request, deps.binding, await deps.hostContexts(request.params), deps.activeTransitionIds);
+  }
+  const result = await deps.run(params);
   return { exitCode: result.exitCode, stdout: tail(result.stdout), stderr: tail(result.stderr) };
 }
 
 /** Portal side. A lost or refused reply keeps the owner pending: the launch is
  * idempotent by name and binding, and the run watchdog settles a stuck run. */
-export async function requestPromoterLaunchThroughActuator(params: PromoterParams, owner: PromoterLaunchOwner,
+type ActuatorPromoterOwner = PromoterLaunchOwner | { kind: "runtime-authority"; operation: string };
+
+export async function requestPromoterLaunchThroughActuator(params: PromoterParams, owner: ActuatorPromoterOwner,
   request: (body: unknown, timeoutMs: number) => Promise<unknown>): Promise<PromoterResult> {
   const pending: PromoterResult = {
-    exitCode: owner.kind === "runtime-capability" ? 75 : PROMOTER_ALREADY_RUNNING_EXIT_CODE,
+    exitCode: owner.kind === "self-upgrade" ? PROMOTER_ALREADY_RUNNING_EXIT_CODE : 75,
     stdout: "",
     stderr: "The private actuator did not confirm the promoter launch; the run stays pending until its owner settles it.",
   };
-  if (owner.kind !== "self-upgrade") return pending;
   const { launchOwner: _owner, ...rest } = params;
   void _owner;
   try {
@@ -170,12 +250,18 @@ export async function requestPromoterLaunchThroughActuator(params: PromoterParam
 }
 
 /** BI-224F56F1: the immutable portal has no Docker socket. With the actuator
- * mounted, an admitted self-upgrade launch goes to it; null keeps the legacy
- * path. The actuator itself calls runAdmittedPromoter directly, never this. */
-export async function launchThroughPrivateActuator(params: PromoterParams): Promise<PromoterResult | null> {
-  if (params.launchOwner?.kind !== "self-upgrade") return null;
+ * mounted, admitted launches and host authority operations go to it; null
+ * keeps the existing path (build, readiness and dry runs are migrated
+ * separately). The actuator itself calls runPromoterAtDaemon, never this. */
+export async function launchThroughPrivateActuator(params: PromoterParams,
+  available?: () => Promise<boolean>): Promise<PromoterResult | null> {
+  const admitted = params.launchOwner && !params.runtimeTransitionAuthorityOperation && !params.dryRun && params.phase !== "build";
+  const owner: ActuatorPromoterOwner | null = admitted ? params.launchOwner!
+    : params.runtimeTransitionAuthorityOperation && !params.dryRun && params.phase !== "build"
+      ? { kind: "runtime-authority", operation: params.runtimeTransitionAuthorityOperation } : null;
+  if (!owner) return null;
   const observation = await import("../../../../scripts/lib/scope-writer-observation.mjs");
-  if (!await observation.usesPrivateActuator()) return null;
-  return requestPromoterLaunchThroughActuator(params, params.launchOwner,
+  if (!await (available ?? observation.usesPrivateActuator)()) return null;
+  return requestPromoterLaunchThroughActuator(params, owner,
     (body, timeoutMs) => observation.launchActuatorPromoter(body, { timeoutMs }));
 }

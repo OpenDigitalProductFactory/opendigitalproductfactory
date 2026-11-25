@@ -766,10 +766,10 @@ import {
 
 /** The one fixed serializer for a promoter launch; shared with the actuator. */
 export const buildAdmittedPromoterCommand = (input: PromoterParams) => buildCompatiblePromoterCommand(input, buildPromoterCommand, createPromoterDockerRunner(input));
-export async function runPromoter(params: PromoterParams): Promise<PromoterResult> {
+export const runPromoter = async (params: PromoterParams): Promise<PromoterResult> => (await (await import("./promoter-actuator")).launchThroughPrivateActuator(params)) ?? runPromoterAtDaemon(params); // BI-224F56F1: no socket in the immutable portal; the actuator runs runPromoterAtDaemon after admission
+export async function runPromoterAtDaemon(params: PromoterParams): Promise<PromoterResult> {
   if (params.launchOwner && !params.runtimeTransitionAuthorityOperation && !params.dryRun && params.phase !== "build") {
-    return await (await import("./promoter-actuator")).launchThroughPrivateActuator(params) // BI-224F56F1: no socket in the immutable portal
-      ?? (await import("./promoter-launch")).runAdmittedPromoter(params, params.launchOwner, params.promoterImage || DEFAULT_PROMOTER_IMAGE, buildAdmittedPromoterCommand);
+    return (await import("./promoter-launch")).runAdmittedPromoter(params, params.launchOwner, params.promoterImage || DEFAULT_PROMOTER_IMAGE, buildAdmittedPromoterCommand);
   }
   const { command, args } = await buildAdmittedPromoterCommand(params);
   // Idempotency guard (SUR-E2BF265E). The container name is deterministic

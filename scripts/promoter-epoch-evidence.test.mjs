@@ -207,12 +207,16 @@ describe('scope writer actuator observations', () => {
     assert.doesNotMatch(overlay, /private-test-value/);
     const bound = structuredClone(base);
     Object.assign(bound.services.portal.environment, { DPF_HOST_INSTALL_PATH: '/install/source',
-      DPF_STATE_DIR_HOST: '/install/$state', DPF_SELF_UPGRADE_COMPOSE_FILES: 'docker-compose.yml' });
+      DPF_STATE_DIR_HOST: '/install/$state', DPF_SELF_UPGRADE_COMPOSE_FILES: 'docker-compose.yml',
+      DPF_RUNTIME_TRANSITION_SECRET_FILE_HOST: '/install/state/runtime-transition.secret', DPF_HOST_PLATFORM: 'darwin', GHCR_OWNER: 'owner' });
     const boundOverlay = imageEvidence.renderScopeWriterComposeOverride(bound, { project: 'fixture', image: launchImage });
     const actuatorSection = boundOverlay.slice(boundOverlay.indexOf('  portal-actuator:'));
     assert.match(actuatorSection, /DPF_HOST_INSTALL_PATH: "\/install\/source"/);
     assert.match(actuatorSection, /DPF_STATE_DIR_HOST: "\/install\/\$\$state"/);
     assert.match(actuatorSection, /DPF_SELF_UPGRADE_COMPOSE_FILES: "docker-compose.yml"/);
+    assert.match(actuatorSection, /DPF_RUNTIME_TRANSITION_SECRET_FILE_HOST: "\/install\/state\/runtime-transition.secret"/);
+    assert.match(actuatorSection, /DPF_HOST_PLATFORM: "darwin"/);
+    assert.match(actuatorSection, /GHCR_OWNER: "owner"/);
     assert.doesNotMatch(actuatorSection, /PROMOTE_SOURCE/);
     const injected = structuredClone(bound);
     injected.services.portal.environment.DPF_HOST_INSTALL_PATH = '/install/source"\n    privileged: true';

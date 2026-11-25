@@ -45,7 +45,7 @@ async function readReceipt(id: string): Promise<RuntimeTransitionReceipt> {
   return JSON.parse(await readFile(receiptPath(id), "utf8")) as RuntimeTransitionReceipt;
 }
 
-async function activeRuntimeTransitionIds(): Promise<string[]> {
+export async function activeRuntimeTransitionIds(): Promise<string[]> {
   const active = await prisma.runtimeCapabilityTransition.findMany({ where: { status: { in: ["pending", "applying", "host_applied", "compensating"] } }, select: { transitionId: true } });
   return active.map((row) => row.transitionId).sort();
 }
