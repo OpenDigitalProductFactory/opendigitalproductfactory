@@ -71,4 +71,15 @@ describe("server-only maintenance epoch import", () => {
     }
     expect(updateMany).not.toHaveBeenCalled();
   });
+
+  it.each([
+    ["parse-retirement-receipt", { readEnvelope: async () => "not JSON" }],
+    ["read-transition-secret", { readSecret: async (): Promise<string> => { throw new Error("read error"); } }],
+    ["verify-maintenance-retirement", { readSecret: async (): Promise<string> => "too short" }],
+  ] as const)("reports %s to its internal diagnostic caller without writing", async (step, fault) => {
+    const onProbeFailure = vi.fn();
+    expect(await attachMaintenanceEpochEvidence({ ...options(), ...fault, onProbeFailure })).toEqual({ status: "unavailable" });
+    expect(onProbeFailure).toHaveBeenCalledExactlyOnceWith(step, expect.any(Error));
+    expect(updateMany).not.toHaveBeenCalled();
+  });
 });

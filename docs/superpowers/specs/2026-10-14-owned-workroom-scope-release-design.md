@@ -406,6 +406,14 @@ compose and sandbox-isolation contract; its production MCP calls re-enter the
 portal's current authorization/target checks. Do not treat its version as a grant
 to write the production database.
 
+When enrollment is held, the scope claim reports its reason and next action
+(BI-F50A3855). Missing or stale canonical evidence calls for an owner-authorized
+governed self-upgrade (`request_self_upgrade`) that records maintenance-epoch
+retirement for the running source. If a governed transition is in progress,
+wait for it to finish before retrying. Unexpected probe failures report only
+the step and an allowlisted error code or class. Report that reason to the
+installation operator without collecting raw paths, error text, or secrets.
+
 Inside the acquisition transaction, before the room lock, take the existing
 runtime-capability-transition and self-upgrade-admission advisory locks in that
 order and refuse enrollment while either has active work. These existing durable

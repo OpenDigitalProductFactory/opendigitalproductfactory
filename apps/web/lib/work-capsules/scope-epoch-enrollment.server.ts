@@ -8,6 +8,7 @@ import { isRecord } from "@/lib/shared/coerce";
 import { runProcessWithBudget } from "@/lib/shared/run-process-with-budget";
 import { attachMaintenanceEpochEvidence } from "@/lib/self-upgrade/maintenance-epoch-evidence";
 import { verifyMaintenanceEpoch, observeMaintenanceEnvironments, assertNoCanonicalActuators } from "../../../../scripts/lib/maintenance-epoch-receipt.mjs";
+import type { ToolResult } from "@/lib/mcp-tool-types";
 import { SCOPE_EPOCH_WRITER_PATHS, validateScopeEpochWriterContract, type ScopeEpochWriterContract } from "./scope-epoch-contract";
 import type { CapsuleDb } from "./work-capsule-store-types";
 
@@ -26,7 +27,73 @@ const prepared = new WeakMap<object, ScopeEpochEnrollmentProof>();
 export function retainPreparedScopeEpochEnrollment(tx: object, proof: ScopeEpochEnrollmentProof): void { prepared.set(tx, proof); }
 export function preparedScopeEpochEnrollment(tx: object): ScopeEpochEnrollmentProof | undefined { return prepared.get(tx); }
 const hash = (value: Buffer | string) => createHash("sha256").update(value).digest("hex");
-function refuse(detail: string): never { throw new Error(`scope-epoch-enrollment-held:${detail}`); }
+const governedUpgrade = "The live install needs an owner-authorized governed self-upgrade (request_self_upgrade) whose completion evidence carries maintenance-epoch retirement for the running source.";
+const reportProbe = "Probe error: report this reason to the installation operator.";
+const recovery = {
+  "current-container-identity-unproven": "Report the container identity probe failure to the installation operator.",
+  "current-portal-unproven": "Report that the probe could not bind the executing process to the running portal.",
+  "packaged-writer-mismatch": "Report the packaged writer mismatch to the installation operator before retrying.",
+  "final-retirement-unavailable": governedUpgrade,
+  "retirement-attachment-raced": "Retry the claim to read the retirement evidence after the concurrent update.",
+  "matching-canonical-run-unproven": governedUpgrade,
+  "retirement-order-unproven": governedUpgrade,
+  "current-cohort-unproven": governedUpgrade,
+  "docker-observation-unavailable": "Report the Docker observation failure to the installation operator.",
+  "canonical-actuator-present": "If a governed self-upgrade is active, wait for it to finish and retry. Otherwise report the remaining actuator to the installation operator.",
+  "observation-budget-expired": "Retry the claim once, then report the Docker observation timeout if it persists.",
+  "observation-oversized": "Report the Docker observation output limit to the installation operator.",
+  "packaged-proof-oversized": "Report the packaged writer proof output limit to the installation operator.",
+  "canonical-transition-active": "Wait for the governed transition to finish, then retry the claim.",
+  "process-proof-unproven": "Retry the claim to prepare a fresh process-bound proof.",
+  "transaction-admission-unavailable": "Report the unavailable transaction admission to the installation operator.",
+} as const;
+type ProbeStep = "read-process-cgroup" | "read-process-mounts" | "identify-container" | "inspect-portal" | "parse-portal-inspect"
+  | "read-image-version" | "read-source-content-hash" | "read-writer-contract" | "read-writer-source"
+  | "validate-local-writer-contract" | "run-packaged-writer" | "parse-packaged-writer" | "validate-packaged-writer-contract"
+  | "attach-retirement" | "read-retirement-receipt" | "parse-retirement-receipt" | "read-upgrade-run"
+  | "read-transition-secret" | "verify-maintenance-retirement" | "observe-canonical-actuators" | "observe-current-cohort"
+  | "assemble-enrollment-proof";
+const safeProbeCodes = ["ENOENT", "EACCES", "EPERM", "EIO", "ENOTDIR", "EISDIR", "ETIMEDOUT", "ECONNREFUSED"] as const;
+const safeProbeMarkers = ["scope-writer-compatibility-unproven", "maintenance_epoch_evidence_invalid",
+  "runtime_transition_secret_too_short", "runtime_transition_payload_tampered", "maintenance_epoch_observation_unavailable"] as const;
+type ProbeCode = (typeof safeProbeCodes)[number] | (typeof safeProbeMarkers)[number] | "SyntaxError" | "TypeError" | "Error" | "unknown";
+type EnrollmentReason = { kind: keyof typeof recovery } | { kind: "canonical-writer-evidence-unavailable"; step: ProbeStep; code: ProbeCode };
+
+class ScopeEpochEnrollmentError extends Error {
+  constructor(readonly reason: EnrollmentReason, next: string) {
+    const detail = "step" in reason ? `${reason.kind}:${reason.step}:${reason.code}` : reason.kind;
+    super(`scope-epoch-enrollment-held:${detail}. ${next}`);
+  }
+}
+export function scopeEpochEnrollmentRefusal(error: unknown): ToolResult | null {
+  return error instanceof ScopeEpochEnrollmentError ? {
+    success: false, error: "scope_claim_precondition_failed", message: error.message, data: { reason: error.reason },
+  } : null;
+}
+function refuse(kind: keyof typeof recovery): never {
+  throw new ScopeEpochEnrollmentError({ kind }, recovery[kind]);
+}
+function probeCode(error: unknown): ProbeCode {
+  // Never copy unknown error names, codes, messages, paths, stacks or causes.
+  try {
+    if (error instanceof Error) {
+      const code = Object.getOwnPropertyDescriptor(error, "code")?.value;
+      const message = Object.getOwnPropertyDescriptor(error, "message")?.value;
+      return safeProbeCodes.find(known => known === code) ?? safeProbeMarkers.find(known => known === message)
+        ?? (error instanceof SyntaxError ? "SyntaxError" : error instanceof TypeError ? "TypeError" : "Error");
+    }
+  } catch { /* Error-like inputs can themselves throw on introspection. */ }
+  return "unknown";
+}
+function refuseProbe(step: ProbeStep, error: unknown): never {
+  if (error instanceof ScopeEpochEnrollmentError) throw error;
+  const code = probeCode(error);
+  if (step === "observe-canonical-actuators" && code === "maintenance_epoch_observation_unavailable") refuse("canonical-actuator-present");
+  throw new ScopeEpochEnrollmentError({ kind: "canonical-writer-evidence-unavailable", step, code }, reportProbe);
+}
+async function probe<T>(step: ProbeStep, run: () => T | Promise<T>): Promise<T> {
+  try { return await run(); } catch (error) { return refuseProbe(step, error); }
+}
 const record = (value: unknown) => isRecord(value) ? value : null;
 const brands = new WeakSet<object>();
 const currentInspect = '{"id":{{json .Id}},"image":{{json .Image}},"running":{{json .State.Running}},"hostname":{{json .Config.Hostname}},"labels":{{json .Config.Labels}}}';
@@ -65,10 +132,14 @@ export async function assertScopeEpochEnrollmentReady(ports: ScopeEpochEnrollmen
     return result.stdout;
   };
   try {
-    const [cgroup, mounts] = await Promise.all([ports.readFile("/proc/self/cgroup"), ports.readFile("/proc/self/mountinfo")]);
-    const containerId = currentScopeWriterContainerId(cgroup.toString(), mounts.toString());
+    const read = (step: ProbeStep, file: string) => probe(step, () => ports.readFile(file));
+    const [cgroup, mounts] = await Promise.all([
+      read("read-process-cgroup", "/proc/self/cgroup"), read("read-process-mounts", "/proc/self/mountinfo"),
+    ]);
+    const containerId = await probe("identify-container", () => currentScopeWriterContainerId(cgroup.toString(), mounts.toString()));
     const inspect = async () => {
-      const value = record(JSON.parse(await docker(["inspect", "--type", "container", "--format", currentInspect, containerId])));
+      const output = await probe("inspect-portal", () => docker(["inspect", "--type", "container", "--format", currentInspect, containerId]));
+      const value = record(await probe("parse-portal-inspect", () => JSON.parse(output)));
       const labels = record(value?.labels);
       if (!value || value.id !== containerId || value.running !== true || value.hostname !== hostname()
         || typeof value.image !== "string" || !/^sha256:[a-f0-9]{64}$/.test(value.image)
@@ -78,36 +149,38 @@ export async function assertScopeEpochEnrollmentReady(ports: ScopeEpochEnrollmen
     const current = await inspect();
     const path = (name: string) => `/app/${name.replace(/^apps\/web\//, "apps/web-src/")}`;
     const [version, content, contract, ...writers] = await Promise.all([
-      ports.readFile("/app/.dpf-image-version"), ports.readFile("/app/.dpf-source-content-hash"),
-      ports.readFile(path("apps/web/lib/work-capsules/scope-epoch-contract.ts")),
-      ...SCOPE_EPOCH_WRITER_PATHS.map(name => ports.readFile(path(name))),
+      read("read-image-version", "/app/.dpf-image-version"), read("read-source-content-hash", "/app/.dpf-source-content-hash"),
+      read("read-writer-contract", path("apps/web/lib/work-capsules/scope-epoch-contract.ts")),
+      ...SCOPE_EPOCH_WRITER_PATHS.map(name => read("read-writer-source", path(name))),
     ]);
-    const local = validateScopeEpochWriterContract({ schemaVersion: 1, version: 1,
+    const local = await probe("validate-local-writer-contract", () => validateScopeEpochWriterContract({ schemaVersion: 1, version: 1,
       sourceSha: version.toString().trim(), sourceContentHash: content.toString().trim(), contractSha256: hash(contract),
-      writers: Object.fromEntries(SCOPE_EPOCH_WRITER_PATHS.map((name, index) => [name, hash(writers[index]!)])) });
-    const output = await docker(["run", "--rm", "--read-only", "--name", `dpf-scope-writer-probe-${randomUUID()}`,
+      writers: Object.fromEntries(SCOPE_EPOCH_WRITER_PATHS.map((name, index) => [name, hash(writers[index]!)])) }));
+    const output = await probe("run-packaged-writer", () => docker(["run", "--rm", "--read-only", "--name", `dpf-scope-writer-probe-${randomUUID()}`,
       "--network", "none", "--cap-drop", "ALL", "--security-opt", "no-new-privileges", "--memory", "128m", "--cpus", "1",
-      "--pids-limit", "64", "--pull", "never", "--entrypoint", "node", current.image, "/app/apps/web-src/lib/work-capsules/scope-epoch-writer-probe.mjs"]);
+      "--pids-limit", "64", "--pull", "never", "--entrypoint", "node", current.image, "/app/apps/web-src/lib/work-capsules/scope-epoch-writer-probe.mjs"]));
     if (Buffer.byteLength(output) > 8192) refuse("packaged-proof-oversized");
-    const observed: ScopeEpochWriterContract = validateScopeEpochWriterContract(JSON.parse(output));
+    const packaged = await probe("parse-packaged-writer", () => JSON.parse(output));
+    const observed: ScopeEpochWriterContract = await probe("validate-packaged-writer-contract", () => validateScopeEpochWriterContract(packaged));
     if (canonicalJson(local) !== canonicalJson(observed)) refuse("packaged-writer-mismatch");
 
-    const imported = await ports.attachRetirement();
+    const imported = await probe("attach-retirement", () => ports.attachRetirement({ onProbeFailure: refuseProbe }));
+    if (imported.status === "raced") refuse("retirement-attachment-raced");
     if (imported.status !== "attached" && imported.status !== "replayed") refuse("final-retirement-unavailable");
-    const run = await ports.readRun(imported.runId);
+    const run = await probe("read-upgrade-run", () => ports.readRun(imported.runId));
     const evidence = record(run?.completionEvidence), recovery = record(evidence?.recoveryPoint), readiness = record(evidence?.readiness);
     if (!run || run.status !== "succeeded" || run.targetSha !== local.sourceSha || run.deployedSha !== local.sourceSha || !run.startedAt
       || recovery?.schemaVersion !== 1 || recovery.status !== "ok" || recovery.trigger !== "pre-upgrade-recovery"
       || recovery.selfUpgradeRunId !== run.runId || typeof recovery.createdAt !== "string" || !Array.isArray(recovery.members)
       || !recovery.members.length || recovery.members.some(member => !isRecord(member) || member.target !== "postgres" || member.status !== "ok" || typeof member.runId !== "string" || !member.runId.trim())
       || readiness?.result !== "ready" || readiness.mode !== "enforced" || readiness.targetSha !== local.sourceSha || typeof readiness.imageDigest !== "string") refuse("matching-canonical-run-unproven");
-    const secret = (await ports.readFile("/dpf-state/runtime-transition.secret")).toString().trim();
-    const retired = verifyMaintenanceEpoch(evidence!.maintenanceEpochRetirement, secret, { runId: run.runId,
+    const secret = (await read("read-transition-secret", "/dpf-state/runtime-transition.secret")).toString().trim();
+    const retired = await probe("verify-maintenance-retirement", () => verifyMaintenanceEpoch(evidence!.maintenanceEpochRetirement, secret, { runId: run.runId,
       targetSha: local.sourceSha, promoterDigest: readiness.imageDigest,
-      recoveryPointDigest: hash(canonicalJson(recovery)), now: ports.now().getTime() });
+      recoveryPointDigest: hash(canonicalJson(recovery)), now: ports.now().getTime() }));
     if (Date.parse(recovery.createdAt) > Date.parse(retired.capturedAt) || run.startedAt.getTime() > Date.parse(retired.capturedAt)) refuse("retirement-order-unproven");
-    await assertNoCanonicalActuators({ runDocker: docker });
-    const cohort = await observeMaintenanceEnvironments({ project: current.project, runDocker: docker });
+    await probe("observe-canonical-actuators", () => assertNoCanonicalActuators({ runDocker: docker }));
+    const cohort = await probe("observe-current-cohort", () => observeMaintenanceEnvironments({ project: current.project, runDocker: docker }));
     if (retired.project !== current.project || retired.daemonId !== cohort.daemonId
       || retired.after.portal.id !== containerId || canonicalJson(retired.after) !== canonicalJson(cohort.environments)
       || retired.retiredContainerIds.some((id: string) => cohort.inventory.includes(id))
@@ -120,8 +193,7 @@ export async function assertScopeEpochEnrollmentReady(ports: ScopeEpochEnrollmen
     Object.freeze(proof); brands.add(proof);
     return proof;
   } catch (error) {
-    if (error instanceof Error && error.message.startsWith("scope-epoch-enrollment-held:")) throw error;
-    return refuse("canonical-writer-evidence-unavailable");
+    return refuseProbe("assemble-enrollment-proof", error);
   }
 }
 
