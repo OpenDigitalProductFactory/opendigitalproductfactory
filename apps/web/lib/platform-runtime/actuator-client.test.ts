@@ -8,11 +8,10 @@ const web = join(__dirname, "..", "..");
 // A static import, dynamic import() or require() of the module, by any
 // relative path or extension form; a file list naming it is not one.
 const DIRECT = /(?:\bfrom|\bimport\s*\(|\brequire\s*\()\s*["'`](?:\.{1,2}\/)+(?:[\w.-]+\/)*scripts\/lib\/scope-writer-observation(?:\.mjs|\.d\.mts)?["'`]/;
-// Held by the S5 writer (BI-687E7D81) while this repair lands; they move to the
-// client in that branch. A new entry here needs the same kind of owner reason.
+// Held by the S5 writer (BI-687E7D81) while this repair lands; it moves to the
+// client under BI-42438509. A new entry here needs the same kind of owner reason.
 const PENDING_OWNER: Record<string, string> = {
-  "lib/mcp/packs/admin-pack.ts": "BI-687E7D81 holds the edit scope",
-  "lib/mcp/packs/sandbox-pack.ts": "BI-687E7D81 holds the edit scope",
+  "lib/mcp/packs/admin-pack.ts": "BI-687E7D81 holds the edit scope (BI-42438509)",
 };
 
 async function sources(dir: string): Promise<string[]> {

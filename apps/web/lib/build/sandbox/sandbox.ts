@@ -380,6 +380,25 @@ export async function createSandbox(
   return stdout.trim();
 }
 
+/**
+ * The canonical sandbox's container state ("running", "exited", ...), or null
+ * when it does not exist. With the private actuator the sandbox it observed
+ * decides; without it, the original local `docker inspect` (BI-224F56F1).
+ */
+export async function readSandboxStatus(sandboxId: string, timeout: number): Promise<string | null> {
+  if (await usesPrivateActuator()) {
+    const selected = await readActuatorSandbox().catch(() => null);
+    if (!selected?.containerId || (sandboxId !== selected.containerId && sandboxId !== selected.name)) return null;
+    return selected.running ? "running" : "exited";
+  }
+  try {
+    const { stdout } = await exec(`docker inspect -f "{{.State.Status}}" ${sandboxId}`, { timeout });
+    return String(stdout).trim();
+  } catch {
+    return null;
+  }
+}
+
 export async function startSandbox(containerId: string): Promise<void> {
   if (await usesPrivateActuator()) {
     // The canonical sandbox runs under Compose; a stopped one is restarted by

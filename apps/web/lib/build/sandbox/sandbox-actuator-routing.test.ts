@@ -13,6 +13,7 @@ vi.mock("@/lib/workroom-runtime/sandbox-exec", async (load) => ({ ...await load<
 
 import { inspectDockerContainer } from "./sandbox-admin";
 import { runSandboxRecoveryCommand } from "./sandbox-recovery";
+import { readSandboxStatus } from "./sandbox";
 
 beforeEach(() => { actuator.restart.mockClear(); actuator.exec.mockClear(); });
 
@@ -33,6 +34,32 @@ describe("sandbox admin and recovery in the qualified portal (BI-224F56F1)", () 
       await expect(runSandboxRecoveryCommand("docker", args)).rejects.toThrow("sandbox_recovery_target_unproven");
     }
     expect(actuator.restart).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("readSandboxStatus", () => {
+  it("reads the actuator's observed sandbox, by ID or name, and nothing else", async () => {
+    actuator.mounted.mockResolvedValue(true);
+    await expect(readSandboxStatus("dpf-sandbox-1", 5_000)).resolves.toBe("running");
+    await expect(readSandboxStatus("c".repeat(64), 5_000)).resolves.toBe("running");
+    await expect(readSandboxStatus("dpf-portal-1", 5_000)).resolves.toBeNull();
+    actuator.sandbox.mockResolvedValueOnce({ containerId: "c".repeat(64), name: "dpf-sandbox-1", running: false });
+    await expect(readSandboxStatus("dpf-sandbox-1", 5_000)).resolves.toBe("exited");
+    actuator.sandbox.mockRejectedValueOnce(new Error("scope_writer_observation_unavailable"));
+    await expect(readSandboxStatus("dpf-sandbox-1", 5_000)).resolves.toBeNull();
+    expect(actuator.exec).not.toHaveBeenCalled();
+  });
+
+  it("keeps the local docker inspect without the actuator", async () => {
+    actuator.mounted.mockResolvedValue(false);
+    const lines: string[] = [];
+    vi.spyOn(await import("@/lib/workroom-runtime/sandbox-exec"), "execSandboxCommandLine").mockImplementation(async line => {
+      lines.push(line);
+      return { stdout: "paused\n", stderr: "" };
+    });
+    await expect(readSandboxStatus("dpf-sandbox-1", 5_000)).resolves.toBe("paused");
+    expect(lines).toEqual(['docker inspect -f "{{.State.Status}}" dpf-sandbox-1']);
+    actuator.mounted.mockResolvedValue(true);
   });
 });
 

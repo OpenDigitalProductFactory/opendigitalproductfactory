@@ -317,24 +317,9 @@ async function recoverSandboxTool(params: Record<string, unknown>, userId: strin
   };
 }
 
-/** The canonical sandbox's container state, or null when it does not exist.
- * BI-224F56F1: the qualified portal reads the actuator's observed sandbox. */
-async function readSandboxStatus(sandboxId: string, timeout: number): Promise<string | null> {
-  const observation = await import("../../../../../scripts/lib/scope-writer-observation.mjs");
-  if (await observation.usesPrivateActuator()) {
-    const selected = await observation.readActuatorSandbox().catch(() => null) as { containerId?: string; name?: string; running?: boolean } | null;
-    if (!selected?.containerId || (sandboxId !== selected.containerId && sandboxId !== selected.name)) return null;
-    return selected.running ? "running" : "exited";
-  }
-  const { exec: execCb } = lazyChildProcess();
-  const { promisify } = lazyUtil();
-  try {
-    const { stdout } = await promisify(execCb)(`docker inspect -f "{{.State.Status}}" ${sandboxId}`, { timeout });
-    return String(stdout).trim();
-  } catch {
-    return null;
-  }
-}
+/** The canonical sandbox's container state, or null when it does not exist (lib/build/sandbox). */
+const readSandboxStatus = async (sandboxId: string, timeout: number) =>
+  (await import("@/lib/build/sandbox/sandbox")).readSandboxStatus(sandboxId, timeout);
 
 async function checkSandbox(): Promise<ToolResult> {
   const sandboxId = process.env.SANDBOX_CONTAINER_ID ?? "dpf-sandbox-1";
