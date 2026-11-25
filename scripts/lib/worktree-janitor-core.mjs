@@ -11,13 +11,13 @@
 //   present) but no live session heartbeat — the merge was abandoned mid-flight.
 //   Surfaced, never auto-deleted (an interrupted merge can hide un-reconciled work).
 // Tier A (safe auto-reap when DPF_WORKTREE_JANITOR_AUTO_REAP=1):
-//   merged (ancestry OR squash-merged PR) + clean + no open PR + no lease + not
+//   branch has work beyond its base + merged + clean + no open PR + no lease + not
 //   pinned + no live session + not mid-merge
 // Tier B (observe / propose only — never auto-delete):
 //   unmerged + clean + age > graceDays
 //
 // Side-effecting removal stays in scripts/worktree-janitor.mjs via
-// junction-safe-worktree-remove.mjs.
+// the governed checkout retirement sequence.
 
 /** @typedef {"PRUNE_TIER_A" | "PRUNE_TIER_B" | "KEEP" | "SKIP" | "PINNED" | "FLAG_ABANDONED_MERGE"} WorktreeVerdict */
 
@@ -29,6 +29,7 @@
  * @property {boolean} pinned        .worktree-pinned present
  * @property {boolean} hasActiveLease
  * @property {boolean} hasOpenPr
+ * @property {"no-commits" | "has-commits" | "unknown"} [branchWork]  named branch proof; required to reap
  * @property {boolean} merged        ancestor of origin/main OR has merged PR
  * @property {boolean} dirty         porcelain non-empty
  * @property {number} ageDays        days since last commit (0 if unknown)
@@ -233,6 +234,16 @@ export function classifyWorktree(facts, opts = {}) {
     return {
       verdict: "FLAG_ABANDONED_MERGE",
       reason: `branch=${facts.branch} MERGE_HEAD present with no live session — abandoned mid-merge; quarantined for review, never auto-reaped`,
+      tier: null,
+    };
+  }
+
+  if (facts.branchWork !== "has-commits") {
+    return {
+      verdict: "KEEP",
+      reason: facts.branchWork === "no-commits"
+        ? `branch=${facts.branch} no commits beyond its base`
+        : `branch=${facts.branch} base could not be verified`,
       tier: null,
     };
   }

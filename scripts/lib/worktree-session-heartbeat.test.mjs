@@ -101,6 +101,16 @@ describe("write / read / remove / isWorktreeSessionLive", () => {
     assert.equal(isWorktreeSessionLive("/wt", { now: 0, fs }), false);
   });
 
+  it("keeps a T3 checkout past the heartbeat TTL until the bridge settles it", () => {
+    const fs = memFs();
+    const bridgeId = "t3-worktree-bridge";
+    const later = DEFAULT_TTL_MS * 2;
+    writeHeartbeat("/wt", { now: 1000, sessionId: bridgeId, fs });
+    assert.equal(isWorktreeSessionLive("/wt", { now: later, fs }), true);
+    removeHeartbeat("/wt", { sessionId: bridgeId, fs });
+    assert.equal(isWorktreeSessionLive("/wt", { now: later, fs }), false);
+  });
+
   it("missing marker is not live and read returns null", () => {
     const fs = memFs();
     assert.equal(readHeartbeat("/none", { fs }), null);

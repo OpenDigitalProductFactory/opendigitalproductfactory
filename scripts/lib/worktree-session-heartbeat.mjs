@@ -3,7 +3,8 @@
 // Worktree session heartbeat (EP-PROCESS-SPINE, plan 2026-08-11-worktree-lifecycle-hygiene).
 //
 // A live session writes a small, GITIGNORED marker into its worktree and refreshes
-// it every turn (SessionStart + Stop) and removes it on SessionEnd. The fleet
+// it every turn (SessionStart + Stop). Standalone sessions clear their own entry
+// on SessionEnd; the T3 bridge keeps its entry until host settlement. The fleet
 // worktree janitor reads it as a liveness signal so it never reaps a worktree out
 // from under a session that is still working in it — the "janitor reaped an active
 // session's worktree mid-session" near-miss.
@@ -11,8 +12,7 @@
 // It is deliberately a FILE, not a DB/MCP record: the janitor is a host Node script
 // that may have no portal/DB view, and every CLI surface (Claude/Codex/Grok) shares
 // the same host filesystem. The marker is gitignored so it never dirties the tree —
-// which would otherwise both muddy the janitor's `dirty` signal and block a
-// worktree's own Tier-A SessionEnd reap.
+// which would otherwise muddy the janitor's `dirty` signal.
 //
 // Pure helpers + injectable fs so the janitor and the session hook share one
 // contract and it stays exhaustively unit-testable.
@@ -22,6 +22,7 @@ import { join } from "node:path";
 
 /** Gitignored marker filename written into each live worktree. */
 export const HEARTBEAT_FILENAME = ".dpf-session-heartbeat.json";
+export const T3_BRIDGE_SESSION_ID = "t3-worktree-bridge";
 
 /** Default liveness window. A session that has not had a turn (Stop) in this long
  *  is treated as idle and its worktree becomes reap-eligible again. Generous on
@@ -102,7 +103,11 @@ export function readHeartbeat(worktreePath, deps = {}) {
 export function isWorktreeSessionLive(worktreePath, deps = {}) {
   const now = deps.now ?? Date.now();
   const ttlMs = deps.ttlMs ?? DEFAULT_TTL_MS;
-  return isHeartbeatLive(readHeartbeat(worktreePath, deps), now, ttlMs);
+  const heartbeat = readHeartbeat(worktreePath, deps);
+  // The bridge runs independently of the provider. Long gaps between turns
+  // aren't proof that T3 settled. Only the host settle callback clears this slot.
+  return Object.hasOwn(sessionEntries(heartbeat), T3_BRIDGE_SESSION_ID) ||
+    isHeartbeatLive(heartbeat, now, ttlMs);
 }
 
 // ── several sessions in one worktree (BI-296C9E24) ──────────────────────────

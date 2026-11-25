@@ -437,7 +437,7 @@ class HookRosterTest(unittest.TestCase):
         root = Path(__file__).resolve().parents[1]
         payload = updater.build_grok_hooks_payload(root)
         for event, expected in [("SessionStart", "Check worktree location"),
-                                ("SessionEnd", "Reap this checkout")]:
+                                ("SessionEnd", "Log why provider exit")]:
             hooks = [h for group in payload["hooks"][event] for h in group["hooks"]]
             hook = next(h for h in hooks if "worktree-session-hygiene.mjs" in h["command"])
             self.assertTrue(hook["statusMessage"].startswith(expected))
