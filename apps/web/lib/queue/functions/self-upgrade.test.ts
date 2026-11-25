@@ -58,8 +58,7 @@ const mocks = vi.hoisted(() => ({
   resolveSelfUpgradeHostIdentity: vi.fn(() => ({ platform: "linux", arch: "amd64", provenance: "explicit" })),
   readRegistryReleaseCandidate: vi.fn(),
   loadVerifiedReleaseTargetEvidence: vi.fn(),
-  recordVerifiedReleaseTargetEvidence: vi.fn().mockResolvedValue(true),
-  sourceWriterThroughPrivateActuator: vi.fn(async (..._a: unknown[]): Promise<unknown> => null), usesPrivateActuator: vi.fn(async () => false),
+  recordVerifiedReleaseTargetEvidence: vi.fn().mockResolvedValue(true), sourceWriterThroughPrivateActuator: vi.fn(async (..._a: unknown[]): Promise<unknown> => null), usesPrivateActuator: vi.fn(async () => false),
 }));
 vi.mock("@/lib/self-upgrade/config", () => ({
   getSelfUpgradeConfig: mocks.getSelfUpgradeConfig,

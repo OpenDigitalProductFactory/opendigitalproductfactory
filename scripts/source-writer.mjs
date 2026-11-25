@@ -15,6 +15,7 @@
 // including prep refusals such as merge conflicts. Exit 2 is an invalid request.
 
 import { pathToFileURL } from "node:url";
+import { scriptArgv } from "./lib/script-argv.mjs";
 import { defaultGitRunner, prepareUpgradeSource } from "./lib/upgrade-source/prepare-source.mjs";
 
 export const SOURCE_WRITER_ROOT = "/host-dpf";
@@ -71,7 +72,7 @@ export async function runSourceWriter(request, run = defaultGitRunner) {
 if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
   let request;
   try {
-    request = parseSourceWriterRequest(process.argv[2], process.env.DPF_SOURCE_WRITER_INPUT ?? "");
+    request = parseSourceWriterRequest(scriptArgv()[0], process.env.DPF_SOURCE_WRITER_INPUT ?? "");
   } catch {
     process.stdout.write(`${JSON.stringify({ ok: false, reason: "invalid-request" })}\n`);
     process.exit(2);

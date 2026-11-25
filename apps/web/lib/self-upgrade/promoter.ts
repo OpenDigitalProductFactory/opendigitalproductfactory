@@ -529,13 +529,10 @@ export const PROMOTER_JIT_BUILD_SCRIPT =
   "cp /promoter/scripts/installer/install-release-assets.mjs \"$BDIR/scripts/installer/install-release-assets.mjs\" && " +
   "cp /promoter/scripts/installer/install-state-lock-contract.json \"$BDIR/scripts/installer/install-state-lock-contract.json\" && " +
   "cp /promoter/scripts/installer/install-state-schema-registry.mjs \"$BDIR/scripts/installer/install-state-schema-registry.mjs\" && " +
-  "cp /promoter/scripts/installer/install-state.schema.json \"$BDIR/scripts/installer/install-state.schema.json\" && " +
-  "cp /promoter/scripts/installer/install-state.v1.schema.json \"$BDIR/scripts/installer/install-state.v1.schema.json\" && " +
+  "cp /promoter/scripts/installer/install-state.schema.json \"$BDIR/scripts/installer/install-state.schema.json\" && cp /promoter/scripts/installer/install-state.v1.schema.json \"$BDIR/scripts/installer/install-state.v1.schema.json\" && " +
   "cp /promoter/scripts/installer/install-state.v2.schema.json \"$BDIR/scripts/installer/install-state.v2.schema.json\" && " +
-  "cp /promoter/scripts/lib/resolve-capability-compose-profiles.mjs \"$BDIR/scripts/lib/resolve-capability-compose-profiles.mjs\" && " +
-  "cp /promoter/scripts/lib/govern-capability-compose-args.mjs \"$BDIR/scripts/lib/govern-capability-compose-args.mjs\" && " +
-  "cp /promoter/scripts/lib/script-argv.mjs \"$BDIR/scripts/lib/script-argv.mjs\" && " +
-  "cp /promoter/scripts/lib/git.mjs \"$BDIR/scripts/lib/git.mjs\" && " +
+  "cp /promoter/scripts/lib/resolve-capability-compose-profiles.mjs \"$BDIR/scripts/lib/resolve-capability-compose-profiles.mjs\" && cp /promoter/scripts/lib/govern-capability-compose-args.mjs \"$BDIR/scripts/lib/govern-capability-compose-args.mjs\" && " +
+  "cp /promoter/scripts/lib/script-argv.mjs \"$BDIR/scripts/lib/script-argv.mjs\" && cp /promoter/scripts/lib/git.mjs \"$BDIR/scripts/lib/git.mjs\" && " +
   "cp /promoter/scripts/lib/capability-state-hash.mjs \"$BDIR/scripts/lib/capability-state-hash.mjs\" && " +
   "cp /promoter/scripts/capability-service-catalog.generated.json \"$BDIR/scripts/capability-service-catalog.generated.json\" && " +
   "mkdir -p \"$BDIR/scripts/lib/upgrade-source\" && cp /promoter/scripts/source-writer.mjs \"$BDIR/scripts/source-writer.mjs\" && cp /promoter/scripts/lib/upgrade-source/prepare-source.mjs \"$BDIR/scripts/lib/upgrade-source/prepare-source.mjs\" && cp /promoter/scripts/lib/upgrade-source/transient-network.mjs \"$BDIR/scripts/lib/upgrade-source/transient-network.mjs\" && cp /promoter/scripts/lib/upgrade-source/lfs-materialization.mjs \"$BDIR/scripts/lib/upgrade-source/lfs-materialization.mjs\" && cp /promoter/scripts/lib/upgrade-source/version-stamp.mjs \"$BDIR/scripts/lib/upgrade-source/version-stamp.mjs\" && cp /promoter/scripts/lib/error-message.mjs \"$BDIR/scripts/lib/error-message.mjs\" && " +
