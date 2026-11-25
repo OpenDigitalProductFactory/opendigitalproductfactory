@@ -2,13 +2,19 @@ import { prisma } from "@dpf/db";
 import { isLandedSwapFalseFailureReason } from "./landed-swap-identity";
 import { transitionState, setQuiescenceLevel, broadcastQuiescenceCleared } from "./quiescence";
 
-/** A failed caller cannot finish the swap handshake. Do not infer failure from
- * heartbeat silence: healthy promoters deliberately wait without heartbeats. */
+/** Backstop the absolute cutoff even if both the caller and its waiting
+ * coordinator disappear. Historical rows retain their failed-parent grace. */
 export async function recoverOrphanedUpgradeDrains(now = new Date()): Promise<number> {
-  const cutoff = new Date(now.getTime() - 60 * 60 * 1000);
+  const legacyCutoff = new Date(now.getTime() - 60 * 60 * 1000);
   const candidates = await prisma.quiescenceRun.findMany({
-    where: { trigger: "self-upgrade", status: { in: ["ready-to-swap", "swapping"] }, startedAt: { lt: cutoff } },
-    select: { runId: true, status: true, triggerRefId: true, lastHeartbeatAt: true }, take: 10,
+    where: {
+      trigger: "self-upgrade", status: { in: ["ready-to-swap", "swapping"] },
+      OR: [
+        { readyToSwapDeadlineAt: { lte: now } },
+        { readyToSwapDeadlineAt: null, startedAt: { lt: legacyCutoff } },
+      ],
+    },
+    select: { runId: true, status: true, triggerRefId: true, lastHeartbeatAt: true, readyToSwapDeadlineAt: true }, take: 10,
   });
   let recovered = 0;
   for (const row of candidates) {
@@ -16,17 +22,24 @@ export async function recoverOrphanedUpgradeDrains(now = new Date()): Promise<nu
     const parent = await prisma.selfUpgradeRun.findUnique({
       where: { runId: row.triggerRefId }, select: { status: true, completedAt: true, reason: true },
     });
-    if (parent?.status !== "failed" || !parent.completedAt || parent.completedAt >= cutoff) continue;
-    // A known replay failure may be corrected from independent deployment proof.
-    // It is not authoritative failure, even before its parent has been healed.
-    if (isLandedSwapFalseFailureReason(parent.reason)) continue;
+    const deadline = row.readyToSwapDeadlineAt;
+    if (deadline ? deadline > now : parent?.status !== "failed" || !parent.completedAt || parent.completedAt >= legacyCutoff) continue;
+    const succeeded = parent?.status === "succeeded";
+    const reason = deadline ? "maintenance-deadline-elapsed" : "failed-upgrade-parent";
     try {
-      await transitionState(row.runId, "failed", {
-        outcome: "failed", completionSource: "watchdog", completedAt: now,
-        outcomeNotes: `Orphaned swap: parent ${row.triggerRefId} has been failed for over one hour`,
+      // The running target, not a known replay failure, decides the historical outcome.
+      if (parent?.status === "failed" && isLandedSwapFalseFailureReason(parent.reason)) {
+        if (deadline) await setQuiescenceLevel("normal", null, now, row.runId);
+        continue;
+      }
+      await transitionState(row.runId, succeeded ? "completed" : "failed", {
+        outcome: succeeded ? "succeeded" : "failed", completionSource: "watchdog", completedAt: now,
+        ...(succeeded && parent.completedAt ? { swapCompletedAt: parent.completedAt } : {}),
+        outcomeNotes: deadline ? `Swap handshake was not settled by ${deadline.toISOString()}`
+          : `Orphaned swap: parent ${row.triggerRefId} has been failed for over one hour`,
       }, now, { status: row.status, lastHeartbeatAt: row.lastHeartbeatAt });
       await setQuiescenceLevel("normal", null, now, row.runId);
-      await broadcastQuiescenceCleared({ runId: row.runId, outcome: "failed", triggerRefId: row.triggerRefId, reason: "failed-upgrade-parent" });
+      await broadcastQuiescenceCleared({ runId: row.runId, outcome: succeeded ? "succeeded" : "failed", triggerRefId: row.triggerRefId, ...(!succeeded ? { reason } : {}) });
       recovered++;
     } catch (error) {
       console.warn("[quiescence] orphan recovery did not complete", row.runId, error);

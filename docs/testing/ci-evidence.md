@@ -316,6 +316,13 @@ The CI and UX job summaries report payload bytes and packaging or
 download/validation/extraction duration. Compare those transfer measurements
 with the avoided UX build duration before retaining or tuning the artifact.
 
+The route sweep excludes `/ops/self-upgrade` from its general budget sample.
+The **Verify self-upgrade maintenance deadline without dispatching an upgrade**
+step uses the isolated authenticated UX seed. It opens the real confirmation,
+submits only a stale maximum, checks that no run was admitted, and renders the
+stored recovery and installing deadline against a synthetic quiescence row.
+This is served-route evidence. It is not a live upgrade or a recovery execution.
+
 ## Exact-tree cross-lifecycle receipt reuse
 
 `BI-9585E580` adds the GitHub-native evidence contract needed to avoid a second

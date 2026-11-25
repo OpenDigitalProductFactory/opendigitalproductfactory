@@ -18,6 +18,16 @@ it("preserves a recently failed caller during its recovery grace", async () => {
   mocks.parent.mockResolvedValue({ status: "failed", completedAt: now });
   expect(await recoverOrphanedUpgradeDrains(now)).toBe(0);
 });
+it("uses the committed deadline even if the caller and coordinator both disappeared", async () => {
+  const row = { runId: "QR-own", status: "ready-to-swap", triggerRefId: "SUR-own", lastHeartbeatAt: null };
+  mocks.candidates.mockResolvedValue([{ ...row, readyToSwapDeadlineAt: new Date(+now + 1) }]);
+  mocks.parent.mockResolvedValue({ status: "running" });
+  expect(await recoverOrphanedUpgradeDrains(now)).toBe(0);
+  mocks.candidates.mockResolvedValue([{ ...row, readyToSwapDeadlineAt: now }]);
+  expect(await recoverOrphanedUpgradeDrains(now)).toBe(1);
+  expect(mocks.level).toHaveBeenCalledExactlyOnceWith("normal", null, now, row.runId);
+  expect(mocks.send).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ reason: "maintenance-deadline-elapsed" }));
+});
 it("recovers an old ready-to-swap row whose parent definitively failed", async () => {
   mocks.parent.mockResolvedValue({ status: "failed", completedAt: new Date("2026-09-06T19:05:50Z") });
   expect(await recoverOrphanedUpgradeDrains(now)).toBe(1);

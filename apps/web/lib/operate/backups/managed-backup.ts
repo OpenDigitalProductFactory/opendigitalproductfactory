@@ -73,6 +73,8 @@ export interface ManagedBackupArgs {
   prismaClient?: PrismaLike;
   /** Inject a clock for deterministic testing. */
   now?: () => Date;
+  /** Fenced capture checks again immediately before each new host effect. */
+  checkAdmission?: () => Promise<Date>;
   /**
    * Extra script environment for this run, merged over the spec's env. The
    * uploads engine uses it to pass the resolved roots and the paired Postgres
@@ -345,6 +347,7 @@ export async function runManagedBackup(
 
   // Use the in-process Prisma client unless the caller injected a stub.
   const prisma = args.prismaClient ?? (await import("@dpf/db")).prisma;
+  await args.checkAdmission?.();
 
   const tsKey = isoTsForDirectory(startedAt);
   const relativePath = `${spec.subdir}/${tsKey}`;
@@ -416,21 +419,33 @@ export async function runManagedBackup(
 
   // Ensure the parent /backups/<subdir> directory exists. The target itself
   // is created by the shell script.
+  if (args.checkAdmission) {
+    try { await args.checkAdmission(); } catch { return recordFailure("The recovery capture lost its maintenance window."); }
+  }
   await fs.mkdir(path.posix.join(backupsRoot, spec.subdir), { recursive: true });
 
   const env = { ...spec.buildEnv({ targetDir: absoluteTargetDir, composeProject }), ...(args.extraEnv ?? {}) };
 
   // Routes through the shared /bin/sh chokepoint so the script need not carry
   // the executable bit (which git-on-Windows + the Docker COPY both strip).
+  let timeoutMs = spec.timeoutMs;
+  if (args.checkAdmission) {
+    try { timeoutMs = Math.min(timeoutMs, +(await args.checkAdmission()) - +now()); }
+    catch { return recordFailure("The recovery capture lost its maintenance window."); }
+    if (timeoutMs <= 0) return recordFailure("The recovery capture reached its confirmed deadline.");
+  }
   const outcome = await runManagedScript(scriptPath, {
     env,
-    timeoutMs: spec.timeoutMs,
+    timeoutMs,
   });
   const manifest = outcome.ok ? await readManifest(absoluteTargetDir) : null;
   const finishedAt = now();
   const durationMs = finishedAt.getTime() - startedAt.getTime();
 
   if (outcome.ok && manifest) {
+    if (args.checkAdmission) {
+      try { await args.checkAdmission(); } catch { return recordFailure("The recovery capture lost its maintenance window."); }
+    }
     if (spec.recordCaptureEvidence) {
       try {
         await spec.recordCaptureEvidence({
@@ -463,7 +478,9 @@ export async function runManagedBackup(
     spec.metrics.durationSeconds.observe({ trigger }, durationMs / 1000);
     spec.metrics.lastSuccessSeconds.set(Math.floor(finishedAt.getTime() / 1000));
 
-    await applyRetention(prisma, spec.target, retention, backupsRoot, trace);
+    // Scheduled/ordinary backup runs own retention. An upgrade's bounded
+    // capture must not start an extra host deletion after its fence closes.
+    if (!args.checkAdmission) await applyRetention(prisma, spec.target, retention, backupsRoot, trace);
 
     const retainedBytes = await computeRetainedStorageBytes(prisma, spec.target);
     spec.metrics.storageBytes.set(retainedBytes);

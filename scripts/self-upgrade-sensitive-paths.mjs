@@ -8,6 +8,7 @@ export const SELF_UPGRADE_SENSITIVE_PATH_RULES = Object.freeze([
   rule("promoter-artifacts", "promoter", /^(?:Dockerfile\.promoter|scripts\/(?:promote\.|build-promoter|repair-promoter).*)/),
   rule("self-upgrade-runtime", "selfUpgrade", /^apps\/web\/(?:lib|app\/api\/ops)\/self-upgrade(?:\/|\.|$)/),
   rule("self-upgrade-queue-actions", "selfUpgrade", /^apps\/web\/(?:lib\/queue\/functions\/self-upgrade|lib\/actions\/(?:self-upgrade|promotions))/),
+  rule("self-upgrade-drain-coordinator", "selfUpgrade", /^apps\/web\/(?:lib\/queue\/functions\/quiescence-run(?:\.test)?\.ts|instrumentation(?:\.drain-wait\.test)?\.ts|lib\/operate\/backups\/runner-budgets\.ts)$/),
   rule("compose-and-state", "composeState", /^(?:docker-compose(?:\.[^/]+)?\.ya?ml|scripts\/installer\/lib\/state\.(?:ps1|sh)|scripts\/compile-capability-service-catalog\.mjs)/),
   rule("installer-entrypoints", "installer", /^(?:(?:install|uninstall|dpf-reinstall)-dpf\.(?:ps1|sh)|dpf-reinstall\.(?:ps1|sh)|scripts\/(?:fresh-install\.ps1|setup\.sh|verify-install-|installer\/))/),
   rule("capability-catalog", "capabilities", /^(?:packages\/db\/data\/capability-service-catalog\.json|scripts\/(?:resolve|apply|compile)-.*capabilit)/),

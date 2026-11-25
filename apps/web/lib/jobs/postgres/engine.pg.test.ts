@@ -139,6 +139,23 @@ describe.skipIf(!DATABASE_URL)("Postgres durable-job engine (real database)", ()
     expect((await runRow("waiter")).find((r) => r.eventId === "w2")).toMatchObject({ status: "completed", output: "timed-out" });
   });
 
+  it("stores an absolute wait instant unchanged and rejects a signal after that instant", async () => {
+    const deadline = new Date(Date.now() - 1_000);
+    const fn = define({ id: "absolute-waiter", triggers: [{ event: "t/absolute-wait" }] }, async ({ step }: never) => {
+      const s = step as never as import("../types").JobStepTools;
+      return (await s.waitForEvent("x", { event: "t/late-signal", timeout: deadline })) ? "matched" : "timed-out";
+    });
+    const w = worker([fn]);
+    await send({ name: "t/absolute-wait" });
+    await w.drain();
+    const result = await pool.query(`SELECT to_char("expiresAt", 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS cutoff FROM "JobWait"`);
+    expect(result.rows).toEqual([{ cutoff: deadline.toISOString() }]);
+    await send({ name: "t/late-signal" });
+    await w.maintain();
+    await w.drain();
+    expect((await runRow("absolute-waiter"))[0]).toMatchObject({ status: "completed", output: "timed-out" });
+  });
+
   it("only matches events received after the wait began", async () => {
     const fn = define({ id: "late-waiter", triggers: [{ event: "t/lw" }] }, async ({ step }: never) => {
       const s = step as never as import("../types").JobStepTools;

@@ -33,8 +33,11 @@ import { failQuiescenceSwap, signalSwapComplete, signalSwapStarting } from "@/li
 import { readDrainControl } from "@/lib/self-upgrade/drain-wait";
 import { isTerminalQuiescenceStatus } from "@/lib/self-upgrade/quiescence-contract";
 import { guardAdmissionClosedForSwap } from "@/lib/self-upgrade/drain-admission";
+import { resolvePromoterTimeoutMs } from "@/lib/self-upgrade/promoter-timeout";
+import { agentEventBus } from "@/lib/tak/agent-event-bus";
 
 type PreflightParams = Parameters<typeof runCandidatePreflight>[0];
+class SwapAdmissionLostError extends Error {}
 
 /** The plain-data part of the candidate preflight, so it can be re-run after
  *  the drain if the install-state moved (the injected functions and the signing
@@ -48,7 +51,7 @@ export type SelfUpgradeSwapContext = {
   runId: string;
   quiescenceRunId: string | null;
   dryRun?: boolean;
-  /** Operator emergency override (shipForce) — the swap guard honours it. */
+  /** Operator override belongs to the pre-ready blocker check, not the swap fence. */
   force?: boolean;
   buildId?: string;
   cooldownMinutes: number;
@@ -129,11 +132,16 @@ export async function finishSelfUpgrade(ctx: SelfUpgradeSwapContext): Promise<Re
     "admission-reopened-before-swap: " + reason,
     { reason: "admission-reopened-before-swap", excerpt: reason },
   );
+  const checkAdmission = quiescenceRunId ? async () => {
+    const guard = await guardAdmissionClosedForSwap(quiescenceRunId, { selfUpgradeRunId: runId });
+    if (!guard.ok) throw new Error(guard.error);
+    return guard.data.deadline;
+  } : undefined;
   if (quiescenceRunId) {
-    const guard = await guardAdmissionClosedForSwap(quiescenceRunId, { forced: ctx.force });
+    const guard = await guardAdmissionClosedForSwap(quiescenceRunId, { selfUpgradeRunId: runId });
     if (!guard.ok) return admissionFailure(guard.error);
   }
-  const recoveryPoint = await createSelfUpgradeRecoveryPoint({ runId, dryRun });
+  const recoveryPoint = await createSelfUpgradeRecoveryPoint({ runId, dryRun, ...(checkAdmission ? { checkAdmission } : {}) });
   if (recoveryPoint.status === "failed") {
     await recordRunRecoveryPoint(runId, recoveryPoint);
     const reason = summarizeRecoveryPointFailure(recoveryPoint);
@@ -143,19 +151,13 @@ export async function finishSelfUpgrade(ctx: SelfUpgradeSwapContext): Promise<Re
   // If admission was reopened, keep the host artifacts for inspection but
   // don't publish a usable recovery point or proceed with the swap.
   if (quiescenceRunId) {
-    const guard = await guardAdmissionClosedForSwap(quiescenceRunId, { forced: ctx.force });
-    const reason = !guard.ok ? guard.error : guard.data.reasserted
-      ? "Admission was reopened during recovery capture. Start a fresh upgrade."
-      : null;
-    if (reason) {
-      await recordRunRecoveryPoint(runId, { ...recoveryPoint, status: "failed", pairedReceipt: null, reason });
-      return admissionFailure(reason);
+    const guard = await guardAdmissionClosedForSwap(quiescenceRunId, { selfUpgradeRunId: runId });
+    if (!guard.ok) {
+      await recordRunRecoveryPoint(runId, { ...recoveryPoint, status: "failed", pairedReceipt: null, reason: guard.error });
+      return admissionFailure(guard.error);
     }
   }
   await recordRunRecoveryPoint(runId, recoveryPoint);
-
-  // Mark the ready-to-swap to swapping boundary for the drain audit.
-  if (quiescenceRunId) await signalSwapStarting(quiescenceRunId);
 
   if (!dryRun) {
     const compatibility = await runReassessmentCandidatePreflight({ runId, targetSha: ctx.builtStamp,
@@ -219,8 +221,27 @@ export async function finishSelfUpgrade(ctx: SelfUpgradeSwapContext): Promise<Re
       // timeout (runPromoter) or by the watchdog backstop.
       containerName: `dpf-promoter-${runId}`,
     };
-    result = await runPromoter(promoterParams);
+    let assertDispatchAdmission: (() => Promise<void>) | undefined;
+    if (quiescenceRunId) {
+      const fence = { selfUpgradeRunId: runId, minimumRemainingMs: resolvePromoterTimeoutMs(promoterParams) };
+      const start = await guardAdmissionClosedForSwap(quiescenceRunId, fence);
+      if (!start.ok) return admissionFailure(start.error);
+      await signalSwapStarting(quiescenceRunId);
+      const dispatch = await guardAdmissionClosedForSwap(quiescenceRunId, fence);
+      if (!dispatch.ok) return admissionFailure(dispatch.error);
+      agentEventBus.broadcastSystem({
+        type: "system:quiescence", level: "swapping", runId: quiescenceRunId, outcome: "swapping",
+        swapEtaSeconds: null, deferReason: null, deferSurface: null,
+        readyToSwapDeadlineAt: dispatch.data.deadline.toISOString(),
+      });
+      assertDispatchAdmission = async () => {
+        const guard = await guardAdmissionClosedForSwap(quiescenceRunId, fence);
+        if (!guard.ok) throw new SwapAdmissionLostError(guard.error);
+      };
+    }
+    result = await runPromoter(promoterParams, assertDispatchAdmission);
   } catch (err) {
+    if (err instanceof SwapAdmissionLostError) return admissionFailure(err.message);
     // The promoter failed to even spawn (e.g. docker missing). Without this
     // catch the rejection would leave the run stuck "running" — blocking every
     // future trigger.

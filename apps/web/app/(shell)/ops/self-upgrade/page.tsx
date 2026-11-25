@@ -21,6 +21,7 @@ import { getLocaleContext } from "@/lib/i18n/locale-context.server";
 import type { SelfUpgradeStatusSnapshot } from "@/lib/self-upgrade/status-snapshot";
 import { UNKNOWN_SELF_UPGRADE_SUPPORT } from "@/lib/self-upgrade/support";
 import { createSelfUpgradeTargetBinding } from "@/lib/self-upgrade/target-binding";
+import { readyToSwapBudgetMs } from "@/lib/self-upgrade/ready-to-swap-window";
 
 export default async function SelfUpgradePage() {
   // BI-D43EB266: Self-Upgrade is the single operator entry point for "update
@@ -252,6 +253,7 @@ export default async function SelfUpgradePage() {
               quiescence={clientProps.quiescence}
               jobEngine={clientProps.jobEngine}
               targetBinding={targetBinding}
+              confirmedReadyToSwapMaxMs={readyToSwapBudgetMs("paired-upgrade")}
               confirmation={ownerSummary.riskNotice}
             />
           }

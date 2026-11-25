@@ -60,11 +60,7 @@ export function isDrainWaitingStatus(status: string): boolean {
   return (DRAIN_WAIT_STATUSES as readonly string[]).includes(status);
 }
 
-/** How long after entering ready-to-swap a run still counts as live for the
- *  self-upgrade reconciler without a heartbeat: the coordinator stops beating
- *  there while the promoter builds (25-min budget) and the 10-min swap-complete
- *  handshake runs; an hour leaves margin and still reconciles a dead one. */
-const SWAP_WINDOW_MS = 60 * 60 * 1000;
+import { isReadyToSwapWindowLive, readyToSwapDeadline } from "./ready-to-swap-window";
 
 /** A waiting drain whose coordinator has not heartbeated for this long is dead.
  *  The 2-minute stuck-coordinator reaper (taskrun-watchdog.ts) normally fails it
@@ -101,13 +97,12 @@ export async function isLiveSelfUpgradeDrain(runId: string | null, now: Date = n
   if (!runId) return false;
   const row = await prisma.quiescenceRun.findUnique({
     where: { runId },
-    select: { status: true, trigger: true, lastHeartbeatAt: true },
+    select: { status: true, trigger: true, lastHeartbeatAt: true, readyToSwapDeadlineAt: true, enteredStateAt: true, abortRequestedAt: true },
   });
   return (
     !!row &&
     row.trigger === "self-upgrade" &&
-    isDrainWaitingStatus(row.status) &&
-    isDrainHeartbeatLive({ lastHeartbeatAt: row.lastHeartbeatAt, now, thresholdMs: DRAIN_HEARTBEAT_LIVENESS_MS })
+    isSelfUpgradeDrainLive(row, now, DRAIN_HEARTBEAT_LIVENESS_MS)
   );
 }
 
@@ -120,6 +115,9 @@ export type DrainControl = {
   forced: boolean;
   /** Set once an operator pressed Abort (abortRequestedBy, see recordDrainAbort). */
   abortRequestedBy: string | null;
+  trigger: string;
+  triggerRefId: string | null;
+  readyToSwapDeadlineAt: Date | null;
 };
 
 /**
@@ -131,7 +129,7 @@ export async function readDrainControl(runId: string): Promise<DrainControl | nu
     where: { runId },
     select: {
       status: true, budgetMs: true, startedAt: true, enteredStateAt: true, shipForceEscalatedAt: true,
-      abortRequestedAt: true, abortRequestedBy: true,
+      abortRequestedAt: true, abortRequestedBy: true, trigger: true, triggerRefId: true, readyToSwapDeadlineAt: true,
     },
   });
   if (!row) return null;
@@ -142,6 +140,9 @@ export async function readDrainControl(runId: string): Promise<DrainControl | nu
     drainStartedAt: entered.draining ?? row.startedAt.toISOString(),
     forced: !!row.shipForceEscalatedAt,
     abortRequestedBy: row.abortRequestedAt ? (row.abortRequestedBy ?? "unknown") : null,
+    trigger: row.trigger,
+    triggerRefId: row.triggerRefId,
+    readyToSwapDeadlineAt: readyToSwapDeadline(row),
   };
 }
 
@@ -304,7 +305,7 @@ export async function awaitQuiescenceReady(
  * whose drain is still live. The periodic self-upgrade reconciler
  * (instrumentation.ts) skips these: a run that has waited 30+ minutes for work
  * is waiting, not stuck. Live means non-terminal and either heartbeating, or in
- * the swap window (ready-to-swap / swapping, entered within SWAP_WINDOW_MS):
+ * the stored swap window (ready-to-swap / swapping):
  * the coordinator stops heartbeating there by design, so that phase is keyed
  * on status, as the stuck-coordinator reaper already does. Fails open to an
  * empty set (the reconciler's prior behaviour) on a read error.
@@ -317,19 +318,25 @@ export async function selfUpgradeRunsWithLiveDrain(
   if (runIds.length === 0) return new Set();
   try {
     const rows = await prisma.quiescenceRun.findMany({
-      where: { triggerRefId: { in: runIds }, status: { notIn: [...TERMINAL_QUIESCENCE_STATUSES] } },
-      select: { triggerRefId: true, status: true, lastHeartbeatAt: true, enteredStateAt: true },
+      where: { trigger: "self-upgrade", triggerRefId: { in: runIds }, status: { notIn: [...TERMINAL_QUIESCENCE_STATUSES] } },
+      select: { triggerRefId: true, status: true, lastHeartbeatAt: true, enteredStateAt: true, readyToSwapDeadlineAt: true, abortRequestedAt: true },
     });
-    const inSwapWindow = (r: (typeof rows)[number]) => {
-      const readyAt = ((r.enteredStateAt as unknown as EnteredStateAt | null) ?? {})["ready-to-swap"];
-      return (r.status === "ready-to-swap" || r.status === "swapping") && !!readyAt && !isStale(now, new Date(readyAt), SWAP_WINDOW_MS);
-    };
-    const live = rows.filter(
-      (r) => isDrainHeartbeatLive({ lastHeartbeatAt: r.lastHeartbeatAt, now, thresholdMs: staleAfterMs }) || inSwapWindow(r),
-    );
+    const live = rows.filter((r) => isSelfUpgradeDrainLive(r, now, staleAfterMs));
     return new Set(live.map((r) => r.triggerRefId).filter((id): id is string => !!id));
   } catch (err) {
     console.warn(sanitizeForLog(`[self-upgrade-reconcile] live-drain check failed (non-fatal): ${getErrorMessage(err)}`));
     return new Set();
   }
+}
+
+/** Heartbeats only govern the pre-ready phase. They cannot renew the hold. */
+export function isSelfUpgradeDrainLive(
+  row: Parameters<typeof isReadyToSwapWindowLive>[0] & { lastHeartbeatAt: Date | null },
+  now: Date,
+  thresholdMs: number,
+): boolean {
+  if (row.abortRequestedAt) return false;
+  return isDrainWaitingStatus(row.status)
+    ? isDrainHeartbeatLive({ lastHeartbeatAt: row.lastHeartbeatAt, now, thresholdMs })
+    : isReadyToSwapWindowLive(row, now);
 }

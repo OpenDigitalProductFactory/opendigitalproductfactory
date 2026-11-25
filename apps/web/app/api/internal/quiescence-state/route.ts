@@ -5,11 +5,9 @@
  * request. The Proxy runs at Next.js Edge runtime and cannot import Prisma
  * directly; this route is the bridge.
  *
- * Auth: this endpoint is *internal*. It's called by the Proxy via internal
- * fetch and by no one else. Public exposure leaks no sensitive data — just
- * "is the portal currently draining?" — but the operator UI surfaces the
- * same information via /ops/quiescence (BI-QUIESCE-006) so there's no need
- * to expose a separate public API.
+ * The base shape is sessionless because the Proxy reads it over loopback.
+ * Its quiescence allowlist is not an authorization check. The banner's
+ * opt-in deadline display requires a signed-in session at this handler.
  *
  * Note: this route is intentionally excluded from the Proxy's quiescence
  * gate (the gate would recursively try to fetch state about itself).
@@ -22,21 +20,37 @@ import { NextResponse } from "next/server";
 import { getQuiescenceConfig } from "@/lib/self-upgrade/quiescence";
 import { getDeployedSha } from "@/lib/self-upgrade/completion";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
+import { prisma } from "@dpf/db";
+import { auth } from "@/lib/auth";
+import { apiErrorResponse } from "@/lib/api/error";
 
 export const runtime = "nodejs";
 // Always evaluate at request time — quiescence state changes during the
 // runtime and stale caching here would invalidate the entire protocol.
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(request?: Request) {
   try {
+    const displayRequested = request && new URL(request.url).searchParams.get("display") === "1";
+    if (displayRequested && !(await auth())?.user) return apiErrorResponse("UNAUTHORIZED", "Sign in to read the maintenance deadline.", 401);
     const config = await getQuiescenceConfig();
     const sha = await getDeployedSha();
+    // Ordinary edge admission lookups keep their existing single cached read.
+    const display = displayRequested && config.runId && config.level !== "normal"
+      ? await prisma.quiescenceRun.findUnique({
+        where: { runId: config.runId, trigger: "self-upgrade", status: { in: ["ready-to-swap", "swapping"] }, abortRequestedAt: null },
+        select: { readyToSwapDeadlineAt: true, swapStartedAt: true },
+      })
+      : null;
     return NextResponse.json(
       {
         level: config.level,
         runId: config.runId,
         enteredAt: config.enteredAt,
+        ...(display?.readyToSwapDeadlineAt ? {
+          readyToSwapDeadlineAt: display.readyToSwapDeadlineAt.toISOString(),
+          swapStarted: !!display.swapStartedAt,
+        } : {}),
         version: process.env.PORTAL_VERSION ?? "unknown",
         bundleHash: sha ?? "unknown",
       },
