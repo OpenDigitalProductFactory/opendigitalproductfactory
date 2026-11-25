@@ -2,25 +2,25 @@
 status: draft
 ---
 
-# DPF -> DPF2 Convergence: Production Tenant Record Export Contract & Cutover Readiness
+# DPF Convergence with the DPF2 OS Layer: Record Custody & Cutover Readiness
 
 **Date:** 2026-11-22  
-**Scope:** Sister DPF repository readiness for converging live production-tenant operations and platform execution workloads onto DPF2 with zero data loss and zero unverified cutovers.
+**Scope:** DPF absorbs the qualified DPF2 OS layer and remains the public product. This spec governs business-record custody and one-writer-at-a-time workload transfers with no data loss or unverified cutover.
 
 ---
 
 ## 1. Operating Guardrails
 
-1. **The live production tenant stays on DPF** as the production test bed until DPF2 proves every cutover gate (record-migration parity, verified restore rehearsal, workload equivalence, and rollback readiness).
+1. **DPF remains the public product and the live install remains the tenant.** Business records stay in DPF's relational plane. The qualified OS layer supervises that storage capability without taking custody of its records. Each workload keeps its incumbent DPF writer until the successor proves equivalence, effect custody and rollback readiness. See WWMD `DI-520267766767` and the ratified [Install Is the Tenant](../../founder-kernel/wiki/principles/install-is-the-tenant.md) rule (`DI-2DEB0D9B417F`).
 2. **Read-only export posture:** Rehearsal exports MUST execute inside a PostgreSQL `REPEATABLE READ READ ONLY` transaction and read content-addressed blobs via read-only copies. No live production row, sequence, schedule, or blob is mutated.
 3. **Zero committed tenant data or secrets:** No live DB dumps, private tenant customer records, credentials, password hashes, payment tokens, or API tokens may ever be committed to git. Export artifacts live strictly outside version control (e.g. `$DPF_BACKUP_ROOT/dpf2-rehearsal-<YYYY-MM-DD>/`) with owner-only filesystem permissions (`chmod 700`).
-4. **Regenerable projections stay out of the authoritative export:** Postgres rows and content-addressed `DocumentBlob` files are the system of record. Derived `DocumentRendition` projections, Qdrant embeddings, and Neo4j graph projections are regenerated in DPF2 and validated during rehearsal.
+4. **Regenerable projections stay out of the authoritative export:** Postgres rows and content-addressed `DocumentBlob` files are the system of record. Derived document renditions, pgvector embeddings and PostgreSQL graph projections are rebuildable from authoritative records and are validated during rehearsal. BET-5 (BI-A1E864A5) moved both projections onto PostgreSQL. A same-schema whole-database restore may carry derived rows physically without granting them record-of-truth status.
 
 ---
 
 ## 2. Minimal Production-Tenant Record Export Contract (Rehearsal Scope)
 
-The rehearsal bundle exports three bounded, FK-ordered slices from the DPF Postgres database (`packages/db/prisma/schema/`) plus paired content-addressed files from the document blob store (`apps/web/lib/documents/blob-storage.ts`).
+This optional logical parity probe is not the Gate 3 restore input. Its bundle exports three bounded, FK-ordered slices from the DPF Postgres database (`packages/db/prisma/schema/`) plus paired content-addressed files from the document blob store (`apps/web/lib/documents/blob-storage.ts`).
 
 ### 2.1 Slice 1 — Organization & Principal Identity
 
@@ -37,7 +37,7 @@ Source schema: `packages/db/prisma/schema/core-identity.prisma`.
 | 7 | `PrincipalAlias` (`"PrincipalAlias"`) | `principalId IN (:exported_principals)` | `(aliasType, aliasValue, issuer)` | None |
 | 8 | `AuthorityBinding` + `AuthorityBindingSubject` + `AuthorityBindingGrant` | Active non-revoked bindings for `:exported_principals` | `id` | Never export raw tokens (`McpApiToken`, `ApiToken`, `OAuthClient`, `OAuthAuthorizationCode`, `OAuthRefreshToken`, `PasswordResetToken`) or `User.passwordHash` |
 
-> **Credential hygiene rule:** Authentication secrets and OAuth/MCP bearer tokens are **never** migrated across platforms. DPF2 mints fresh credentials bound to imported `Principal` identities after identity parity is confirmed.
+> **Credential hygiene rule:** Authentication secrets and OAuth/MCP bearer tokens are **never** migrated across platforms. The qualified authority owner mints fresh credentials bound to verified `Principal` identities. This rule governs the logical slice and cross-plane credentials, not the physical contents of the sealed same-schema dump.
 
 ### 2.2 Slice 2 — Active WWWD & WSID Policies
 
@@ -48,7 +48,7 @@ Source schemas: `packages/db/prisma/schema/decision-governance.prisma`, `package
 | 9 | `DecisionPerspectiveProfile` (`"DecisionPerspectiveProfile"`) | `status = 'active'` AND (`(kind = 'organization' AND "ownerOrganizationId" = :org_id)` [WWWD] OR `(kind = 'profession' AND ("ownerOrganizationId" IS NULL OR "ownerOrganizationId" = :org_id))` [WSID: shared or owned by the selected organization, never another tenant's]) | `profileId` | Preserves `scope`, `fallbackProfileId`, `defaultResolver`, `autonomyPolicy`, `currentVersionId` |
 | 10 | `DecisionPerspectiveProfileVersion` (`"DecisionPerspectiveProfileVersion"`) | `profileId IN (:exported_profiles)` (full lineage or at minimum `currentVersionId`) | `versionId`, `(profileId, versionNumber)` | Preserves `materialFingerprint`, `changeSummary`, `promotedByPrincipalId` |
 | 11 | `PerspectiveMaterial` (`"PerspectiveMaterial"`) | `profileId IN (:exported_profiles)` AND `freshness = 'current'` AND `reviewStatus <> 'rejected'` AND `promotionState IN ('promoted', 'candidate')` | `materialId` | Preserves `sourceType`, `sourceRef`, `domainClass`, `direction`, `domains`, `evidenceGrade`, `stalenessPolicy`, `confidenceWeight`, `summary` |
-| 12 | `WikiPage` (`"WikiPage"`) | (`organizationId = :org_id` AND `status = 'published'` [WWWD overlays]) OR (`id IN (:material_referenced_page_ids)` [WSID profession pages carrying `metadata.professionJurisdiction` / `professionCompetencyLevel`]) | `(organizationId, slug)` / `id` | Base `isKernel = true` pages come from DPF2's kernel seed; org overrides retain `kernelPageId` + `derivedFromKernelVersion` |
+| 12 | `WikiPage` (`"WikiPage"`) | (`organizationId = :org_id` AND `status = 'published'` [WWWD overlays]) OR (`id IN (:material_referenced_page_ids)` [WSID profession pages carrying `metadata.professionJurisdiction` / `professionCompetencyLevel`]) | `(organizationId, slug)` / `id` | Base `isKernel = true` pages are outside this logical overlay slice; Gate 3 restores the original database rows. Org overrides retain `kernelPageId` + `derivedFromKernelVersion` |
 | 13 | `WikiPageRevision` + `WikiPageLink` | Latest revision per exported `WikiPage`; links where both endpoints are in exported `WikiPage` set | `pageId` | Maintains citation graph for PPR / wiki backlinks |
 | 14 | `RegulatoryAutonomyPolicy` + `JurisdictionCriteriaProfile` | Active policies matching `BusinessContext.operatesIn` / `sellsTo` / `employsIn` | `id` | Preserves org regulatory autonomy boundaries |
 
@@ -281,21 +281,23 @@ The output folder holds `backup/` (exactly `manifest.json`, `dpf.dump`, `dpf.dum
 
 ### 2.5 Rehearsal Restore & Parity Verification Gates
 
-Before ANY live tenant cutover is considered, DPF2 must pass all five rehearsal gates against an ephemeral staging database (`dpf2_rehearsal_<ts>`):
+Before any live workload transfer, run the relevant parity checks on an ephemeral DPF database supervised by the qualified OS layer. Gate 3 restores the same schema whole (§2.4.2). Slice manifests are independent parity probes, not the restore input.
 
-1. **FK & Schema Integrity Gate:** Every table in Slices 1–3 imports cleanly in topological order with zero dangling FKs, zero constraint violations, and exact row-count parity against `manifest.json`.
-2. **Blob Custody Gate:** Every `DocumentBlob` file restores to DPF2's content-addressed store and passes SHA-256 verification against `DocumentVersion.contentSha256` and `DocumentBlob.sha256`.
+1. **FK & Schema Integrity Gate:** The whole restore preserves the applied migration head, schema, row counts and constraints. Independently compare Slices 1–3 with their source snapshot for row counts, references and parity.
+2. **Blob Custody Gate:** Every `DocumentBlob` file restores to DPF's content-addressed store and passes SHA-256 verification against `DocumentVersion.contentSha256` and `DocumentBlob.sha256`.
 3. **Policy Evaluation Parity Gate:** Active WWWD (`kind = 'organization'`) and WSID (`kind = 'profession'`) profiles resolve identical `currentVersion.materialFingerprint`, `autonomyPolicy`, and `PerspectiveMaterial` sets, and sample `evaluate_org_business_decision` / `principle_decide` decisions produce equivalent outcomes against DPF.
-4. **Recurring Workflow Dry-Run Parity Gate:** Running DPF2's equivalent of `generateDueInvoices()` (`apps/web/lib/actions/recurring.ts`) in dry-run / outbound-disabled mode on the restored `RecurringSchedule` computes the exact next invoice date, line-item totals, tax calculation, and immutable `InvoiceDocument` linkage without sending any external email or payment notice.
+4. **Recurring Workflow Dry-Run Parity Gate:** Running the candidate workload's equivalent of `generateDueInvoices()` (`apps/web/lib/actions/recurring.ts`) in dry-run / outbound-disabled mode on the restored `RecurringSchedule` computes the exact next invoice date, line-item totals, tax calculation, and immutable `InvoiceDocument` linkage without sending any external email or payment notice.
 5. **Rollback Proof Gate:** DPF's own `scripts/backup-postgres.sh` + `scripts/postgres-trial-restore.sh` pass with exit code `0` within 24h prior to any stage transition.
 
 ---
 
 ## 3. Live DPF Execution Seams & Concrete Cutover Preconditions
 
-DPF executes autonomous and background work across four primary runtime seams. Each seam MUST retire independently in reverse-risk order and ONLY after its explicit preconditions are verified.
+DPF executes autonomous and background work across four primary runtime seams. Retire the displaced writer for each workload independently and only after the seam's preconditions are verified. This follows the owner's November 24 convergence direction as recorded in DPF2's convergence tracker at `3b49f0c1` (Gates 3–4 and T7).
 
 ### 3.1 `runBuildOrchestrator` (Build Specialist Dispatch)
+
+The originating DPF Workroom and Build Studio retain admission, workflow state and outcome acceptance. Only the coding execution seam is in scope for protected-executor transfer.
 
 - **Code seam:** `apps/web/lib/build/build-orchestrator.ts` (`runBuildOrchestrator` at line 1156, `runGauntletRepairTask` at line 1166, wrapped in `withOrchestrationRunning` from `build-liveness.ts`).
 - **Call sites:** `apps/web/lib/build/build-on-plan-approval.ts:136`, `apps/web/lib/actions/agent-coworker.ts:1729`.
@@ -303,7 +305,7 @@ DPF executes autonomous and background work across four primary runtime seams. E
 - **Cutover preconditions:**
   1. Zero in-flight orchestrations (`TaskRun` where `source = 'build'` and `status NOT IN ('completed','failed','canceled','rejected','archived')` = `0`).
   2. All open `FeatureBuild` records in `building` / `implementing` phase either completed, promoted, or explicitly parked with recorded handoff notes.
-  3. DPF2 proves end-to-end plan -> specialist dispatch -> verification -> PR delivery parity on a non-production repo/branch.
+  3. DPF proves end-to-end plan → protected specialist dispatch → verification → PR delivery parity on a non-production repo and branch, without moving Build Studio.
   4. Build admission disabled on DPF before disabling the seam so no new plan approval triggers `runBuildOrchestrator` during cutover.
 
 ### 3.2 `drive_workroom_runtime` (Supervised Workroom Runtime & Standing Drive)
@@ -316,7 +318,7 @@ DPF executes autonomous and background work across four primary runtime seams. E
   1. Zero active supervised sessions (`drive_workroom_runtime action=status` reports no live sessions across all non-terminal `Workroom` rows).
   2. Zero unsettled `WorkroomEffect` rows (`status IN ('pending', 'running')` = `0`).
   3. Zero non-revoked `McpApiToken` rows with `kind = 'workroom_session'`.
-  4. All active `Workroom` claims reconciled (either terminalized or migrated to DPF2) AND DPF2 proves fail-closed worktree liveness parity (worktree janitor never reaps claimed worktrees when liveness is unreadable).
+  4. All active `Workroom` claims reconciled (either terminalized or handed to the protected executor with explicit custody) AND DPF2 proves fail-closed worktree liveness parity (worktree janitor never reaps claimed worktrees when liveness is unreadable).
   5. Standing drive cron (`workroomDriveScheduled`) disabled via per-job kill switch before shutting down the DPF supervisor.
 
 ### 3.3 `autoExecuteBuild` (Checkpoint Build Pipeline & Boot Reconciler)
@@ -346,15 +348,17 @@ DPF executes autonomous and background work across four primary runtime seams. E
      - Active/running `function_runs` in `db=inngest` = `0` and Postgres `JobRun` with `status IN ('pending','running')` = `0`.
      - Redis `{queue}:queue:sorted:*` pending partitions drained to `0` (verified via retention/poison-queue check).
      - `inngest-retention-sweep` confirms zero stuck Redis-TTL orphans.
-  4. **Final Backup & Cold-Standby Rollback Window:** Execute a final verified `scripts/backup-postgres.sh` + `scripts/postgres-trial-restore.sh` immediately after quiescence and before promoting DPF2 to primary. Retain DPF Postgres + backup archive in cold read-only standby until DPF2 completes **two** clean recurring business cycles with zero incidents.
+  4. **Final Backup & Cold-Standby Rollback Window:** Execute a final verified `scripts/backup-postgres.sh` + `scripts/postgres-trial-restore.sh` at the workload's quiescence boundary and before moving its write authority. Keep the verified rollback point and displaced writer offline or fenced until the successor completes **two** clean recurring cycles where applicable. Rollback fences the successor before re-enabling the incumbent and reconciles effects already committed.
 
 ---
 
 ## 4. Phased Cutover Sequence (Go / No-Go Summary)
 
-| Phase | Target | DPF Posture | DPF2 Gate Required to Advance |
+The earlier Phase 3 global promotion (one DPF2 primary taking over the install, followed by DPF teardown) is **superseded**. It treated the OS layer as a product replacement and made unrelated workloads share one handoff. DPF remains the product, and each workload has one authoritative writer before, during and after its own transfer.
+
+| Phase | Target | DPF Posture | Evidence required to advance |
 | --- | --- | --- | --- |
-| **Phase 0 (Now)** | Record Export & Restore Rehearsal | 100% live primary for production tenant | Slices 1–3 exported read-only; restored to ephemeral DPF2 DB; all 5 rehearsal gates (§2.5) pass |
-| **Phase 1** | Shadow Policy & Dry-Run Workflow Parity | 100% live primary (outbound active) | WWWD/WSID decisions + dry-run recurring invoice/document generation match DPF on restored snapshot; zero external side effects from DPF2 |
-| **Phase 2** | Dev / Build / Workroom Seams (`runBuildOrchestrator`, `autoExecuteBuild`, `drive_workroom_runtime`) | Live for business ops; dev seams drained | DPF2 proves build checkpoint recovery, supervised workroom runtime, and fail-closed worktree liveness; DPF dev seams drained to zero in-flight runs |
-| **Phase 3** | Business Queues & Production Primary Promotion | Quiesced -> cold read-only standby | Final verified DPF backup + trial restore; `DPF_SCHEDULED_INNGEST_FUNCTIONS_ENABLED=0`; Inngest + Redis queues drained to 0; DPF2 assumes primary and passes 2 consecutive recurring cycles before DPF teardown |
+| **Phase 0 (Now)** | Same-schema restore rehearsal | Incumbent writes production | Restore DPF's database and verify storage custody in isolation. Use Slices 1–3 as parity probes (§2.5). |
+| **Phase 1** | Shadow policy and dry-run workflow parity | Incumbent writes and sends | Compare policy decisions and recurring invoice/document output on restored data. Candidate has no outbound effects. |
+| **Phase 2** | Dev, build and Workroom seams | DPF continues business operations | For each selected seam, prove recovery and liveness parity, stop incumbent admission, drain or account for in-flight effects and move that writer alone. |
+| **Phase 3** | Business workloads and queue custody | DPF remains live on its relational plane | For one workload at a time, fence the incumbent, drain or explicitly hand off queued work, prove a verified backup/restore point and dedupe state, then grant the successor write authority. Retire the old trigger before starting the next transfer. Keep the rollback point through two clean recurring cycles where applicable. |

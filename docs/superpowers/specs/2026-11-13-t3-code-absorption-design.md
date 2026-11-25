@@ -11,14 +11,24 @@ status: draft
 - [T3 source delta review](2026-09-04-t3-code-source-delta-review.md) (DI-580C8D86B161);
 - the 2026-11-13 inventory of T3 0.1.9 as installed on the owner's Mac. Read-only; source pinned to `pingdotgg/t3code@24e77473ecf4`, the exact build installed.
 
-**Decisions** (WWMD, all high confidence, no commandment conflict):
+**Original decisions** (WWMD, all high confidence at the time). See the current placement ruling below.
 
 | Decision | Choice | Composite | Alternatives |
 |---|---|---|---|
-| DI-C2095F79DA5B | Refactor DPF toward T3's patterns | 12.58 | 4.99 keep T3 as an external harness; 3.57 vendor T3's code |
-| DI-B806C8D27736 | Devices are execution hosts under one Workroom authority | 10.99 | 9.57 portal-only execution; 3.98 per-device ledgers |
+| DI-C2095F79DA5B | Refactor DPF toward T3's patterns (**superseded** by the owner override recorded on DI-2F02C8D698CC) | 12.58 | 4.99 keep T3 as an external harness; 3.57 vendor T3's code |
+| DI-B806C8D27736 | Devices are execution hosts under one Workroom authority (**narrowed**, see S6 below) | 10.99 | 9.57 portal-only execution; 3.98 per-device ledgers |
 | DI-BEAADBEEB92C | Adopt T3's decide/commit/outbox core on the Workroom log | 10.80 | 4.69 keep the runtime as is |
 | DI-1BB965D732C9 | Adopt T3's plan windows and per-turn usage, keep DPF's economics | 12.06 | 8.09 extend DPF's stores only |
+
+## Current convergence ruling
+
+The owner's November 13 decisions in the DPF2 plan, “T3 absorbed as DPF2's working core” and “what belongs in the OS layer, and where data lives,” govern placement. The November 24 convergence direction (DPF2 convergence tracker at `3b49f0c1`, T7, routed to BI-F484A2B9) applies that placement to DPF. DPF remains the public product and absorbs the qualified OS layer. The absorbed T3 runtime runs behind that layer's protected executor, which launches with the subject identity, permit and corpus. DPF retains GAID identity, JSI job qualification, Workroom steering and acceptance. The absorbed core does not own a second version of them.
+
+**DI-C2095F79DA5B is superseded by the owner override recorded on DI-2F02C8D698CC.** On November 24 (thread `2135e0ee`) the owner clarified: “The fact that T3 is far superior in many aspects than what we had is why absorbing it made sense. Especially as we shift to putting CLI and the OS level security and identity for GAID.” That reaffirms the November 13 decision to absorb T3 as the working core behind the protected launcher. Owning T3's launch code lets DPF's GAID identity reach that launcher on every start, redirect and resume. The original patterns-only decision, its comparison and the licence and provenance obligations remain on record.
+
+The first DPF Workroom receiver (convergence plan step 3, BI-687E7D81 AC-5) is the first test of the authority boundary. On one protected launch path, two coworkers in one Workroom receive different toolsets composed from GAID, JSI, the current authority binding and Workroom stage. With client hooks disabled, the server must still refuse out-of-job tools, stale stages, revoked members and cross-room invocations.
+
+**S6 is narrowed.** The original DPF host agent was to run the absorbed runtime on each device. That launch authority is superseded because process containment and start/stop evidence must remain with the protected executor. A device host may offer routing, liveness and reattachment through the qualified executor contract. It may not run a parallel executor, widen a permit or become a second Workroom authority. A paired install remains a federated peer.
 
 ## Purpose
 
@@ -38,7 +48,7 @@ This follows the commandment [Absorb, Don't Adopt](../../founder-kernel/wiki/pri
 DI-580C8D86B161 rejected "a global T3-style thread/session ledger across installations" as violating one Workroom authority. This design keeps that rejection: there is still one backlog and one Workroom authority, and no second ledger.
 
 What the owner's direction supersedes is the narrower conclusion that T3's patterns needed no new substrate. Two exceptions now apply:
-- **The owner's devices become execution hosts of their installation.** This adds a registry, not a ledger (decision DI-B806C8D27736).
+- **The original plan made the owner's devices execution hosts of their installation.** DI-B806C8D27736 retains the registry and single Workroom authority. The current ruling narrows S6's launch authority.
 - **The workroom runtime adopts an effect outbox** (DI-BEAADBEEB92C).
 
 ## Licence and provenance
@@ -49,11 +59,11 @@ What the owner's direction supersedes is the narrower conclusion that T3's patte
   - `@cursor/sdk` (proprietary);
   - `heic-to` (LGPL-3.0);
   - the hosted services: T3 Connect relay, Clerk, T3 Chat linking, PostHog/Axiom/Statsig telemetry.
-- **Patterns, not vendored code.** T3's `main` moved 985 commits in two days after the installed build. Vendoring would import that churn. DI-C2095F79DA5B scored vendoring lowest.
+- **Historical rationale for patterns, not vendored code (DI-C2095F79DA5B).** T3's `main` moved 985 commits in two days after the installed build. Vendoring would import that churn. DI-C2095F79DA5B scored vendoring lowest.
 
 ## What T3 does, and how DPF compares
 
-Each row compares T3's design with DPF's current one and gives the verdict:
+This is the original comparison. Its verdicts record the November 13 DPF assessment. For current runtime placement, follow the [convergence ruling](#current-convergence-ruling). The verdict vocabulary here is:
 - **Adopt:** DPF refactors toward T3's pattern.
 - **Keep:** DPF's design holds.
 - **Layer:** T3's mechanism carries DPF's governance on top.
@@ -65,7 +75,7 @@ Each row compares T3's design with DPF's current one and gives the verdict:
 | **Executor identity** | App ids are primary; provider ids are references. A *driver* is an integration; an *instance* is an account and configuration. Routing is by instance. A missing capability is explicit. | `executorKind` names a client surface. Codex and Claude each run through three separate paths: workroom runtime, Build Studio dispatch and inference routing. Each keeps its own session handling, and the tool-trace parser is duplicated. | **Adopt.** One driver per client and one instance per account. The three paths collapse onto one adapter per client. This is the largest refactor and the most debt removed. |
 | **Plan and capacity accounting** | Live windows (`usedPercent`, `resetsAt`, window length) pushed by Codex `account/rateLimits/updated`, plus Claude readers. Windows are pooled per account across environments. Usage is recorded per turn by token class. A `usage_limit` error class triggers a guarded auto-resume at reset. | Subscription estimator (cost per unit, PR #7019). Two capacity stores, `CliPoolStatus` and `ProviderCapacityStatus`. The Codex adapters report zero usage, and the runtime drops usage events. Slice 1 adds visible capacity waits. | **Adopt** windows, per-turn usage and guarded resume. One per-account window store replaces both stores. **Keep** the estimator, portfolio-level budgets (owner ruling) and routing to another executor (slice 1). Together these are DI-1BB965D732C9. |
 | **Usage outside the harness** | Scans native Claude, Codex, Grok and Pi histories, so usage outside T3 counts against the plan. | Only in-platform calls are recorded. | **Adopt,** read-only. A plan window is shared with the owner's own direct use, so the estimate is wrong without it. |
-| **Multi-device** | Each machine owns its environment, with no sync. Clients hold ordered route lists (LAN, tailnet, HTTPS, relay). Peer links run over MCP OAuth and can only narrow access. Linked work carries an immutable origin fence. | Installation-level federation and work sync between portals. No registry of which device runs a session. | **Adopt** environment-owned execution, route lists and narrowing links. **Keep** one backlog and one Workroom authority on the portal (DI-B806C8D27736). Devices register as execution hosts; they keep no ledger. |
+| **Multi-device** | Each machine owns its environment, with no sync. Clients hold ordered route lists (LAN, tailnet, HTTPS, relay). Peer links run over MCP OAuth and can only narrow access. Linked work carries an immutable origin fence. | Installation-level federation and work sync between portals. No registry of which device runs a session. | **Adopt** environment-owned execution, route lists and narrowing links. **Keep** one backlog and one Workroom authority on the portal (DI-B806C8D27736). Device routing and liveness stay subordinate to the protected executor (S6); devices keep no independent Workroom ledger. |
 | **Handover** | Switching provider is an explicit context-handoff record: a budgeted set of real messages, not a summary. | Two-step, owner-scoped handover with digests, lock-time snapshots and executor checkpoints (slice 1 removes the routine approvals). | **Layer.** **Keep** DPF's authority (propose then acknowledge, owner scope). **Adopt** T3's context-handoff record as what the receiver gets. |
 | **Recovery** | No provider process survives a restart. Effects tied to a lost process are retired, not replayed. Questions become answerable by a new message. Unsent input stays queued. | Reattach within a 24 h horizon, otherwise mark the session lost. Held questions are envelopes. | **Adopt** retire-not-replay and held input. **Keep** held questions as GPP envelopes. |
 | **Tool authority for agents** | A capability ceiling (runtime mode), not a scope list. Every MCP tool must declare its access or it does not compile. Forwarded calls only narrow. Each provider session gets its own token, revoked on release. | The room session token (`dpfroom_`) is bound to one room but not to a tool set. GPP gates consequence. | **Adopt** per-tool declared access and a per-session ceiling. This is the M2 workroom-bound toolset, the first slice of BI-3E2B7A96. **Keep** GPP consequence gates and owner approval for out-of-scope acts. |
@@ -89,6 +99,8 @@ Each row compares T3's design with DPF's current one and gives the verdict:
 
 Owner direction (2026-11-13, verbatim): "we need to take as much as makes sense", and "this is still [the owner's organization], and still Open Digital Product Factory at the end of the day. We need to take what makes sense and merge it in tightly, no seams, no extra UX where not needed."
 
+The table below preserves the original capability-by-capability assessment. Its reproduce-the-core recommendation is superseded by the [convergence ruling](#current-convergence-ruling). DPF retains its product surfaces and the licence and provenance constraints still apply.
+
 Each capability below was weighed on the same four questions:
 - **Licence and provenance.**
 - **Upstream velocity.** Copied code must be tracked or forked.
@@ -97,7 +109,7 @@ Each capability below was weighed on the same four questions:
 
 Each row also carries the seams check: where the user meets the capability, and which existing DPF surface carries it.
 
-Code-level detail, read at the pinned build, is in the 2026-11-13 capability notes. Almost everything in T3 is built on Effect (effect-ts) and its own SQLite orchestrator. Even its most separable parts, the protocol clients, are mostly generated code bound to Effect. So the general answer is to reproduce T3's design, which its own docs describe precisely. The exceptions are small permissively licensed tools taken as pinned internal dependencies.
+Code-level detail, read at the pinned build, is in the 2026-11-13 capability notes. Almost everything in T3 is built on Effect (effect-ts) and its own SQLite orchestrator. Even its most separable parts, the protocol clients, are mostly generated code bound to Effect. The original assessment therefore answered: reproduce T3's design, which its own docs describe precisely. It made an exception for small permissively licensed tools taken as pinned internal dependencies.
 
 Items are in rung-0 order: what most helps the platform improve itself comes first.
 
@@ -133,7 +145,7 @@ Several slices rebuild the paths these run on, so each carries these requirement
 | S3 one driver per client | The supervised-session port (`SupervisedSessionPort`: `isLive`, `deliver`, in `supervised-turn-delivery.ts`), the `addressedAs` qualifier, `deliveredCursor`, and the turn prompt (addressed message, sender GAID, case key, up to 20 room-wide messages since the cursor) | Each driver implements the port. Room delivery calls the driver; it does not know which client sits behind it. |
 | Executor instances (S3, C3) | One identity per subject (GAID §6.9) | An instance is operating state of its client's GAID, never an identity: `gaid:…:agt-ext-codex#instance=<id>`, with `#session=<thread>` as today. Routing, delegation to a specific executor (C3) and room addressing all use that form. Instance ids appear on no message as a sender identity. |
 | S5 workroom-bound toolset | A session in a room can read and post there, and subscribe to its messages | The room ceiling always includes `read_room_messages`, `post_room_message` and the room's message resource. The per-session token also identifies the session, so a session's posts carry `senderSession` from the token rather than from the starter's room token. This simplifies BI-FDE1B10C's matching. |
-| S6 execution hosts | An addressed message reaches the session wherever it runs | A supervised session on a device host is reached through that host's route. The host reports liveness and re-attaches after its own restart. Broker §7.2 states the delivery rules. A desktop session that a host now supervises becomes deliverable instead of `held-for-executor`. |
+| S6 execution hosts | An addressed message reaches the session wherever it runs | Reach a supervised session through a qualified protected-executor route. Read liveness and reattachment through that contract. Broker §7.2 states the delivery rules. A desktop session that a host now supervises becomes deliverable instead of `held-for-executor`. |
 | S7 context handoff | Nothing a room participant said is lost at handover | The handoff record's budgeted messages are drawn from the room's messages since the receiver's cursor, plus the outgoing session's own turns. |
 | C2 thread detail | One message stream per room | Turn items project onto the Workroom log. Room messages stay `WorkItemMessage` rows, and the feed shows both without copying either into the other. |
 | C3 delegation (A2A) | One binding for agent-to-agent work across installations | Delegation to a specific executor goes through the A2A dialog binding (BI-ADB5CC1C) and `TaskRun`, not a second channel. |
@@ -141,7 +153,7 @@ Several slices rebuild the paths these run on, so each carries these requirement
 
 **Convergence with DPF2's OS layer.** DPF2 records the same direction in its own plan (owner decisions of 2026-11-13: T3 absorbed as DPF2's working core; OS-layer placement). There, the protected launcher starts each agent process with its identity (GAID and principal), its access (the permit, enforced as containment) and its corpus. Two slices here land on that model:
 - S5's per-session ceiling and token are the DPF form of that launcher property;
-- S6's execution hosts are where such a launcher runs.
+- S6 routes to the protected executor. Its original per-device DPF host-agent launcher is superseded, as recorded above.
 
 The `#instance=` and `#session=` qualifiers above match it: a process carries its subject's GAID, and the qualifier names its operating state. DPF2's open questions (where WWMD and WWWD sit relative to the OS-layer corpus; one transport for peer links and linked environments) belong to DPF2's plan and are not answered here.
 
@@ -165,8 +177,8 @@ The `#instance=` and `#session=` qualifiers above match it: a process carries it
      - a guarded resume is armed for the reset (an early reset clears it);
      - the room is offered to an unblocked instance through the slice-1 handover.
 4. **Execution hosts (devices).**
-   - Each of the owner's devices runs a DPF host agent and registers with its installation as an execution host. This extends the agent toolchain's host agent, not a new daemon beside it.
-   - A workroom's session runs on the host that owns its worktree.
+   - The original plan extended the agent toolchain with a per-device DPF host agent to run the absorbed runtime. That launch role is superseded. Device routes can register only under the qualified protected-executor contract.
+   - The protected executor must bind the session to a route that can access the authorized worktree without widening its authority.
    - Clients reach hosts by ordered routes: loopback, tailnet, authenticated HTTPS.
    - Host links only narrow authority.
    - The paired Dev install stays a federated peer with work sync. It never becomes an execution host of production.
@@ -180,10 +192,10 @@ The `#instance=` and `#session=` qualifiers above match it: a process carries it
 T3 runs on the owner's Mac, a Windows desktop and an iPhone client. The Mac and the Windows machine are linked with full access until 7 December. Nothing in this plan stops T3 before its device's replacement is proven, and the owner keeps using T3 meanwhile.
 
 1. **Mirror (now).**
-   - DPF reads each device's T3 plan windows and usage read-only, through the host agent, into the per-instance window store.
+   - The plan-window mirror reads each device's T3 usage into the per-instance store without granting execution authority.
    - T3 threads that work DPF items run under slice 1's executor binding.
 2. **Run alongside.**
-   - The DPF host agent on each device runs the absorbed runtime for new workrooms.
+   - New Workrooms use the absorbed runtime only through a qualified protected-executor route.
    - T3 keeps its existing threads.
    - Parity is measured on: items merged, lead time, cost per item, approvals reaching the owner, and plan-limit handling.
 3. **Cut over per device** after two weeks at parity.
@@ -213,7 +225,7 @@ Safety rails that make recursion safe:
 
 ## Moving DPF's other dispatchers onto the core (owner direction 2026-11-20)
 
-Owner direction (Mark, 2026-11-20): "we want to migrate all other mechanisms into T3 … We need to close these gaps." On the DPF side, WWMD DI-1F6CA0FA20D8 reads "T3" as this document's absorbed core: the Workroom outbox and effect worker (S2) and the drivers (S3). It does not mean a call from production to the T3 Code desktop app, which has no route before S6 and would break "platform function never depends on a client".
+Owner direction (Mark, 2026-11-20): "we want to migrate all other mechanisms into T3 … We need to close these gaps." On the DPF side, WWMD DI-1F6CA0FA20D8 reads "T3" as this document's absorbed core: the Workroom outbox and effect worker (S2) and the drivers (S3). It does not mean a call from production to the T3 Code desktop app, which is not a protected-executor route and would break "platform function never depends on a client".
 
 **Slice 1, built (BI-EB4BB4A0): Build Studio's approved-plan dispatch.**
 - `performPlanToBuildTransition` commits the plan→build write and one `dispatch-build` WorkroomEffect for the build's own Build Studio Workroom in one transaction, keyed `build-dispatch:<buildId>`.
@@ -242,7 +254,7 @@ The owner's integrator clarified that "T3" means T3 Code's coding orchestration,
 - Failures are typed: `t3-unavailable`, `t3-timeout`, `t3-provider-mismatch`, `t3-run-failed`.
 - The runner keeps the model client's id, since the harness is not the client (BI-53BED66C D5).
 
-**It is not registered in production.** No route or credential to a T3 Code server exists. The live adapter depends on S6 execution hosts (BI-5A866218) or an owner-granted route. Its thread binding belongs on the build's Workroom log.
+**It is not registered in production.** No route or credential to a T3 Code server exists. A live adapter requires protected-executor qualification and S6 route binding (BI-5A866218). An owner-granted route does not substitute for that boundary. Its thread binding belongs on the build's Workroom log.
 
 **Still outside the core.** Traced on origin/main `35b96c4d`; each moves in its own slice.
 - The second build engine, `autoExecuteBuild` → `runBuildPipeline`, or the `build/execute.run` job when `DPF_BUILD_DURABLE_EXECUTION_ENABLED` is on. Its callers are:
@@ -269,7 +281,7 @@ Each slice is its own backlog item, sized delivery-medium or smaller, in this or
 | S3 | BI-A01B06F6 | One driver per client, instance routing; collapse the three client paths | S2 |
 | S4 | BI-1E498941 | First PR records the same-owner handoff offer at a plan limit, with guarded wait clearing and receiver acknowledgement still required. Per-instance plan windows, per-turn usage, history importer and replacement of both capacity stores remain. Absorbs open BI-02A513D1 | S3 |
 | S5 | BI-687E7D81 | Workroom-bound toolset and per-session ceiling (first slice of BI-3E2B7A96) | S3 |
-| S6 | BI-5A866218 | Execution hosts: registry, host runtime, route lists, narrowing links. Extends the per-user host service from BI-65C17737 | S3, S4 |
+| S6 | BI-5A866218 | Qualified execution routes, liveness and reattachment. Supersedes the original BI-65C17737 extension as the runtime launcher | S3, S4 |
 | S7 | BI-2C132569 | Context-handoff record; checkpoints and safe revert | S2, S3 |
 | S8 | BI-8B3DBAD8 | Device mirror, parity measures, per-device cutover; T3 retired | S4, S6 |
 | S9 | BI-204C9EE6 | Rung-0 loop: gap detectors to backlog, autonomous dispatch with rails and kill switch, outcome learning | S5, S8 |
