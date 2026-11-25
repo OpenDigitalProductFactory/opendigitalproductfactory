@@ -19,7 +19,7 @@ import { randomUUID } from "node:crypto";
 
 import { prisma } from "@dpf/db";
 
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
+import type { RegisteredToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import {
   decideSecurityResponse,
   type SecurityBlastRadius,
@@ -48,7 +48,7 @@ const clampLimit = (v: unknown, fallback: number, cap: number): number => {
 
 // ── Tool definitions ────────────────────────────────────────────────────────
 
-export const SIEM_TOOLS: ToolDefinition[] = [
+export const SIEM_TOOLS: RegisteredToolDefinition[] = [
   {
     name: "query_security_events",
     description:
@@ -64,6 +64,7 @@ export const SIEM_TOOLS: ToolDefinition[] = [
         limit: { type: "number", description: "max rows (default 50, max 200)" },
       },
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: null,
     sideEffect: false,
   },
@@ -81,6 +82,7 @@ export const SIEM_TOOLS: ToolDefinition[] = [
         limit: { type: "number", description: "max rows (default 50, max 200)" },
       },
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: null,
     sideEffect: false,
   },
@@ -93,6 +95,7 @@ export const SIEM_TOOLS: ToolDefinition[] = [
       properties: { caseKey: { type: "string" } },
       required: ["caseKey"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: null,
     sideEffect: false,
   },
@@ -112,6 +115,7 @@ export const SIEM_TOOLS: ToolDefinition[] = [
       },
       required: ["title", "scopeKey", "severity"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: null,
     sideEffect: true,
     coworkerArtifact: true,
@@ -133,6 +137,7 @@ export const SIEM_TOOLS: ToolDefinition[] = [
       },
       required: ["caseKey"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: null,
     sideEffect: true,
     coworkerArtifact: true,
@@ -152,6 +157,7 @@ export const SIEM_TOOLS: ToolDefinition[] = [
       },
       required: ["ruleKey", "kind", "rationale"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: null,
     sideEffect: true,
     coworkerArtifact: true,
@@ -174,6 +180,7 @@ export const SIEM_TOOLS: ToolDefinition[] = [
       },
       required: ["caseKey", "actionType", "target", "rationale"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: null,
     sideEffect: true,
     coworkerArtifact: true,

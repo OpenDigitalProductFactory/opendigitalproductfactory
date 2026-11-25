@@ -13,12 +13,12 @@
 
 import { randomUUID } from "node:crypto";
 
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
+import type { RegisteredToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import { employeeScopeVisibleIds, type EmployeeVisibilityScope } from "@/lib/govern/manager-scope";
 import { resolveManagerScope } from "@/lib/identity/load-effective-auth-context";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
 
-const definitions: ToolDefinition[] = [
+const definitions: RegisteredToolDefinition[] = [
   {
     name: "query_employees",
     description: "Search and list employee profiles. Use this to find employees by name, email, department, or status. Returns a summary list with employee IDs, names, and departments. Use before create_employee to check if someone already exists.",
@@ -31,6 +31,7 @@ const definitions: ToolDefinition[] = [
         limit: { type: "number", description: "Max results to return (default 20)" },
       },
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_employee",
     executionMode: "immediate",
     sideEffect: false,
@@ -39,6 +40,7 @@ const definitions: ToolDefinition[] = [
     name: "list_departments",
     description: "List all active departments with their IDs and names. Call this before create_employee to find valid department IDs or to present the user with choices.",
     inputSchema: { type: "object", properties: {} },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_employee",
     executionMode: "immediate",
     sideEffect: false,
@@ -47,6 +49,7 @@ const definitions: ToolDefinition[] = [
     name: "list_positions",
     description: "List all active positions with their IDs and titles. Call this before create_employee to find valid position IDs or to present the user with choices.",
     inputSchema: { type: "object", properties: {} },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_employee",
     executionMode: "immediate",
     sideEffect: false,
@@ -68,6 +71,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["firstName", "lastName"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_user_lifecycle",
     executionMode: "immediate",
     sideEffect: true,
@@ -86,6 +90,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["employeeId", "newStatus"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_user_lifecycle",
     executionMode: "immediate",
     sideEffect: true,
@@ -115,6 +120,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["locationContext", "policies"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_user_lifecycle",
     executionMode: "immediate",
     sideEffect: true,

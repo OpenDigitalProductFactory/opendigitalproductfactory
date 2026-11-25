@@ -15,7 +15,7 @@
 import { prisma } from "@dpf/db";
 
 import type { ToolPack } from "@/lib/mcp/tool-pack";
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
+import type { RegisteredToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import { ensureAgentPrincipalIdentity, getAgentGaidMap, syncUserPrincipal } from "@/lib/identity/principal-linking";
 import { getCoworkerRoomEngagement } from "@/lib/work-management/coworker-room-engagement.server";
 import { loadWorkspaceMentionRoster } from "@/lib/work-management/mention-roster.server";
@@ -606,7 +606,7 @@ async function acknowledgeWorkroomBroadcastHandler(
   });
 }
 
-const definitions: ToolDefinition[] = [
+const definitions: RegisteredToolDefinition[] = [
   {
     name: "post_room_message",
     description:
@@ -624,6 +624,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["caseKey", "body"],
     },
+    workroomAccess: "room-operation",
     requiredCapability: "view_operations",
     sideEffect: true,
   },
@@ -642,6 +643,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["caseKey"],
     },
+    workroomAccess: "room-operation",
     requiredCapability: "view_operations",
     sideEffect: false,
   },
@@ -658,6 +660,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["capsuleId", "body"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_operations",
     sideEffect: true,
   },
@@ -673,6 +676,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["capsuleId", "commandKey"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_operations",
     sideEffect: true,
   },
@@ -690,6 +694,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["capsuleId", "principalRef"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_backlog",
     sideEffect: true,
     // changes who answers for a room → consult-gated (TAK §8.4.1).
@@ -714,6 +719,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["caseKey"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_operations",
     sideEffect: true,
     // changes identity or authority → consult-gated (TAK §8.4.1), except an
@@ -732,6 +738,7 @@ const definitions: ToolDefinition[] = [
       },
       required: [],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_operations",
     sideEffect: false,
   },
@@ -747,6 +754,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["sourceAccount"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_platform",
     sideEffect: false,
   },
@@ -763,6 +771,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["sourceAccount", "digest", "reason"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_platform",
     sideEffect: true,
     // Changes who owns rooms, builds and scheduled work, and so who decides their approvals.

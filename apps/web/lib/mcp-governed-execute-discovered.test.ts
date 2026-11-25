@@ -65,6 +65,7 @@ function resolvedOk() {
     definition: {
       name: "acme__search", description: "Search Acme", inputSchema: { type: "object" },
       requiredCapability: null, requiresExternalAccess: true, sideEffect: false, discoveredPolicyGrants: ["registry_read"],
+      workroomAccess: "outside-workroom",
     },
   });
 }

@@ -9,7 +9,7 @@
 // recommendation; the human still validates the final action. The grant mirrors
 // agent-grants.ts TOOL_TO_GRANTS, which stays the gating source.
 
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
+import type { RegisteredToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack } from "../tool-pack";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 // Static: the module is pure and dependency-free, so a lazy import buys nothing
@@ -17,7 +17,7 @@ import { getErrorMessage } from "@/lib/shared/get-error-message";
 import { admitToOrgBusinessGate } from "@/lib/decision-perspective/decision-scope-admission";
 import { TOOL_CONSEQUENCES, type ToolConsequence } from "@/lib/tool-consequence";
 
-const definitions: ToolDefinition[] = [
+const definitions: RegisteredToolDefinition[] = [
   {
     name: "record_org_business_answer",
     description:
@@ -40,6 +40,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["question", "answer"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_operations",
     executionMode: "immediate",
     sideEffect: true,
@@ -82,6 +83,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["question", "options", "domainClass", "riskTier"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_operations",
     executionMode: "immediate",
     sideEffect: false,

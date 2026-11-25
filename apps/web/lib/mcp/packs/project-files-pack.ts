@@ -11,10 +11,10 @@
 // mirror agent-grants.ts TOOL_TO_GRANTS, which stays the gating source.
 
 import { prisma } from "@dpf/db";
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
+import type { RegisteredToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
 
-const definitions: ToolDefinition[] = [
+const definitions: RegisteredToolDefinition[] = [
   {
     name: "list_project_directory",
     description: "List files and directories in a project directory. Use '.' or empty string for project root. Helps discover the project structure.",
@@ -25,6 +25,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["path"],
     },
+    workroomAccess: "source-read",
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: false,
@@ -42,6 +43,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["path"],
     },
+    workroomAccess: "source-read",
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: false,
@@ -59,6 +61,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["query"],
     },
+    workroomAccess: "source-read",
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: false,
@@ -73,6 +76,7 @@ const definitions: ToolDefinition[] = [
         version: { type: "string", description: "Version label (default: 'dev')" },
       },
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: true,
@@ -86,6 +90,7 @@ const definitions: ToolDefinition[] = [
         version: { type: "string", description: "Version to read (default: latest or deployed)" },
       },
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: false,

@@ -29,10 +29,10 @@ import { inferProviderIdFromRouteContext } from "@/lib/ai-provider-route-context
 import { promoteBacklogItemToBuildDraft } from "@/lib/governed-backlog-tee-up";
 import { assertEndpointConcurrencySelection } from "@/lib/operate/endpoint-concurrency-diagnostic";
 
-import type { EndpointTestRunRequest, ToolDefinition, ToolResult, ToolExecutionContext } from "@/lib/mcp-tool-types";
+import type { EndpointTestRunRequest, RegisteredToolDefinition, ToolResult, ToolExecutionContext } from "@/lib/mcp-tool-types";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
 
-const definitions: ToolDefinition[] = [
+const definitions: RegisteredToolDefinition[] = [
   {
     name: "promote_to_build_studio",
     description:
@@ -49,6 +49,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["itemId"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_backlog",
     sideEffect: true,
   },
@@ -68,6 +69,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["buildId", "reason"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_capabilities",
     sideEffect: true,
     // destroys state → consult-gated (TAK §8.4.1).
@@ -85,6 +87,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["productId"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_backlog",
     sideEffect: true,
   },
@@ -103,6 +106,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["featureSha"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_operations",
     executionMode: "immediate",
     sideEffect: false,
@@ -123,6 +127,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["code"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: false, // sandbox-isolated; inner calls are read-only + governed per call
@@ -139,6 +144,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["path", "description", "newContent"],
     },
+    workroomAccess: "source-edit",
     requiredCapability: "manage_capabilities",
     sideEffect: true,
     buildPhases: ["build"],
@@ -162,6 +168,7 @@ const definitions: ToolDefinition[] = [
         allModels: { type: "boolean", description: "Test every active model profile for the endpoint. Use only for exhaustive diagnostics." },
       },
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_capabilities",
     executionMode: "immediate",
     sideEffect: true,

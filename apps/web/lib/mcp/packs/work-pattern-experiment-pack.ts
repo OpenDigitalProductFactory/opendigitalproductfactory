@@ -4,7 +4,7 @@
 // candidate as a CoworkerCapabilityNeed for operator review in the existing
 // coworker detail panel. Never activates a binding or starts an experiment.
 
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
+import type { RegisteredToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import {
   COWORKER_CAPABILITY_NEED_KINDS,
   COWORKER_CAPABILITY_NEED_SEVERITIES,
@@ -21,7 +21,7 @@ import {
 
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
 
-const definitions: ToolDefinition[] = [
+const definitions: RegisteredToolDefinition[] = [
   {
     name: "propose_work_pattern_experiment_candidate",
     description:
@@ -68,6 +68,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["agentId", "need", "blocks", "candidate"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_platform",
     executionMode: "immediate",
     sideEffect: true,

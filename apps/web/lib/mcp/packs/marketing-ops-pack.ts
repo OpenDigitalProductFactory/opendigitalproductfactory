@@ -24,13 +24,13 @@ import {
   recordMarketingKpiCheckpoint,
   recordMarketingStrategistReview,
 } from "@/lib/marketing";
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
+import type { RegisteredToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import { planUpcomingMarketingDraftsHandler } from "../marketing-cadence-handler";
 import { recordMarketingGroundingDefinition, recordMarketingGroundingHandler } from "../marketing-grounding-tool";
 import { retireMarketingWorkDefinition, retireMarketingWorkHandler } from "../marketing-retire-tool";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
 
-const definitions: ToolDefinition[] = [
+const definitions: RegisteredToolDefinition[] = [
   {
     name: "get_marketing_summary",
     description:
@@ -42,6 +42,7 @@ const definitions: ToolDefinition[] = [
       },
       required: [],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_marketing",
     sideEffect: false,
   },
@@ -53,6 +54,7 @@ const definitions: ToolDefinition[] = [
       properties: {},
       required: [],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_marketing",
     sideEffect: false,
   },
@@ -72,6 +74,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["summary"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "operate_marketing",
     sideEffect: true,
     coworkerArtifact: true,
@@ -93,6 +96,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["title", "objective"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "operate_marketing",
     sideEffect: true,
     coworkerArtifact: true,
@@ -111,6 +115,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["title", "assetType"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "operate_marketing",
     sideEffect: true,
     coworkerArtifact: true,
@@ -125,6 +130,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["draftId"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "operate_marketing",
     sideEffect: true,
     consequence: "outward",
@@ -139,6 +145,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["draftId"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "operate_marketing",
     sideEffect: true,
     consequence: "outward",
@@ -153,6 +160,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["draftId"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "operate_marketing",
     sideEffect: true,
     consequence: "outward",
@@ -168,6 +176,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["channelId"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "operate_marketing",
     sideEffect: true,
   },
@@ -179,6 +188,7 @@ const definitions: ToolDefinition[] = [
       properties: {},
       required: [],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "operate_marketing",
     sideEffect: true,
     consequence: "outward",
@@ -191,6 +201,7 @@ const definitions: ToolDefinition[] = [
       properties: {},
       required: [],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "operate_marketing",
     sideEffect: true,
   },
@@ -208,6 +219,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["channelId", "enabled", "weeklyCeiling"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_provider_connections",
     sideEffect: true,
     // changes identity or authority → consult-gated (TAK §8.4.1).
@@ -225,6 +237,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["assetTaskId"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "operate_marketing",
     sideEffect: true,
     coworkerArtifact: true,
@@ -242,6 +255,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["metric"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "operate_marketing",
     sideEffect: true,
     coworkerArtifact: true,
@@ -260,6 +274,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["title", "trigger", "action"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "operate_marketing",
     sideEffect: true,
     coworkerArtifact: true,
@@ -272,6 +287,7 @@ const definitions: ToolDefinition[] = [
       properties: {},
       required: [],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_marketing",
     sideEffect: false,
   },

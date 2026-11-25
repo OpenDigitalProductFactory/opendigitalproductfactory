@@ -13,6 +13,7 @@ import type { CapabilityKey } from "@/lib/permissions";
 import type { AuthorizedSurfaceToolExecutionContext } from "@/lib/coworker/authorized-surface-execution-types";
 import type { OutcomeDisposition } from "@/lib/shared/outcome-disposition";
 import type { RoomAuthorityContext } from "@/lib/work-management/room-turn-authority";
+import type { McpToolAccess } from "@/lib/mcp/workroom-tool-access";
 import type { ToolCallConsequenceRefiner, ToolConsequence, ToolConsequenceScope } from "@/lib/tool-consequence";
 
 export type BuildPhaseTag = "ideate" | "plan" | "build" | "review" | "ship";
@@ -226,6 +227,9 @@ export type ToolDefinition = {
     params?: Record<string, unknown>;
   }) => Promise<boolean>;
 };
+
+/** Checked-in DPF registry metadata. Wire tool descriptions are not declarations. */
+export type RegisteredToolDefinition = ToolDefinition & Readonly<{ workroomAccess: McpToolAccess }>;
 
 export type EndpointTestRunRequest = {
   concurrencyOnly?: boolean;

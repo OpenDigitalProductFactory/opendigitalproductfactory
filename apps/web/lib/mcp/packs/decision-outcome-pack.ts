@@ -16,10 +16,10 @@
 // appends a record, it never changes what the kernel decided. The two columns
 // it writes are the only decision columns absent from SEALED_IMMUTABLE_FIELDS.
 
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
+import type { RegisteredToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack } from "../tool-pack";
 
-const definitions: ToolDefinition[] = [
+const definitions: RegisteredToolDefinition[] = [
   {
     name: "record_decision_outcome",
     description:
@@ -57,6 +57,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["interactionId", "chosenOptionId"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_operations",
     executionMode: "immediate",
     sideEffect: true,
@@ -78,6 +79,7 @@ const definitions: ToolDefinition[] = [
         },
       },
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_operations",
     executionMode: "immediate",
     sideEffect: false,

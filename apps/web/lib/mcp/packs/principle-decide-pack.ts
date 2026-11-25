@@ -13,7 +13,7 @@
 
 import { wikiEmbeddingDigest } from "@dpf/db/wiki-embedding-digest";
 import { parseDecisionStakes } from "@dpf/validators/judgment/option-scoring";
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
+import type { RegisteredToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
 import {
   createRetrievalBudget,
@@ -33,7 +33,7 @@ import {
   PRINCIPLE_DECIDE_EVIDENCE_SCHEMA,
 } from "@/lib/decision/evidence-grounding";
 
-const definitions: ToolDefinition[] = [
+const definitions: RegisteredToolDefinition[] = [
   {
     name: "principle_decide",
     description:
@@ -137,6 +137,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["context", "options", "callingPopulation"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: null,
     executionMode: "immediate",
     sideEffect: false,

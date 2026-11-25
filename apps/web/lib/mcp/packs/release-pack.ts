@@ -15,11 +15,11 @@
 
 import { prisma } from "@dpf/db";
 
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
+import type { RegisteredToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
 import { logBuildActivity } from "@/lib/mcp/build-tool-helpers";
 
-const definitions: ToolDefinition[] = [
+const definitions: RegisteredToolDefinition[] = [
   {
     name: "check_deployment_windows",
     description: "Check available deployment windows for promoting changes to production. Returns current window status, blackout periods, and next available window time.",
@@ -30,6 +30,7 @@ const definitions: ToolDefinition[] = [
         risk_level: { type: "string", description: "Risk level: low, medium, high, or critical. Default: low." },
       },
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_operations",
     executionMode: "immediate",
     sideEffect: false,
@@ -45,6 +46,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["promotion_id"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_operations",
     executionMode: "immediate",
     sideEffect: true,
@@ -63,6 +65,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["promotion_id"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_operations" as const,
     executionMode: "immediate" as const,
     sideEffect: true,
@@ -80,6 +83,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["title", "build_ids"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: true,
@@ -95,6 +99,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["bundle_id"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: true,
@@ -109,6 +114,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["bundle_id"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_operations",
     executionMode: "immediate",
     sideEffect: true,
@@ -125,6 +131,7 @@ const definitions: ToolDefinition[] = [
         promotion_id: { type: "string", description: "Promotion ID (CP-xxx) — optional if bundle_id is provided." },
       },
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_operations",
     executionMode: "immediate",
     sideEffect: false,
