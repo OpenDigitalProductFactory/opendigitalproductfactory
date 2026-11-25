@@ -42,6 +42,11 @@ describe("decideBuildPrDeliveryAction", () => {
       state,
       readiness: { kind: "closed", headSha: "abc" },
     })).toEqual({ kind: "escalate", status: "closed", headSha: "abc", reason: "pull-request-closed-unmerged" });
+    expect(decideBuildPrDeliveryAction({
+      state,
+      readiness: { kind: "closed", headSha: "abc" },
+      prOnlyCustody: true,
+    })).toEqual({ kind: "wait", status: "closed", headSha: "abc", reason: "pull-request-closed-unmerged-closeout" });
   });
 
   it("keeps merge distinct from governed deployment", () => {
@@ -137,6 +142,7 @@ describe("executeBuildPrDeliveryAction — PR follow-through (BI-88341B5D)", () 
     expect(outcome.state.status).toBe("queued");
     expect(outcome.calls).toHaveLength(1);
     expect(outcome.calls[0]?.body).toContain("enablePullRequestAutoMerge");
+    expect(outcome.calls[0]?.body).toContain('"expectedHeadOid":"sha1"');
     expect(
       outcome.calls.some((call) => {
         const text = `${call.url} ${call.body ?? ""}`;
