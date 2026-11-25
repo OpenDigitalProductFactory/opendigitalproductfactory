@@ -170,13 +170,18 @@ export function parsePendingLog(stdout: string): ReleaseBatchTally {
 export async function countPendingUpstreamCommits(
   input: { hostSourcePath: string; remote: string; branch: string; sinceSha: string },
   gitRun: GitRunner,
+  checkoutWritable: () => Promise<boolean> = async () =>
+    !(await (await import("../../../../scripts/lib/scope-writer-observation.mjs")).usesPrivateActuator()),
 ): Promise<ReleaseBatchTally> {
   const logArgs = buildPendingLogCommand(input).slice(1);
   try {
     let result = await gitRun(logArgs);
     if (result.code !== 0) {
       // Most common cause: the lineage commit is behind a shallow boundary.
-      // One bounded deepen, then retry once.
+      // One bounded deepen, then retry once. The qualified portal reads a
+      // read-only checkout (BI-224F56F1): the deepen would only fail there, so
+      // the tally stays uncomputable, which the evaluator treats as fail-open.
+      if (!(await checkoutWritable())) return { pendingCount: null, oldestPendingAt: null };
       const deepen = await gitRun(buildDeepenCommand(input).slice(1));
       if (deepen.code !== 0) return { pendingCount: null, oldestPendingAt: null };
       result = await gitRun(logArgs);

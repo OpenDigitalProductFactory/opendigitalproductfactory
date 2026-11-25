@@ -11,6 +11,8 @@ import { test } from "node:test";
 import {
   DOCKER_AUTHORITY_REGISTRY,
   checkDockerAuthority,
+  checkSourceWriteAuthority,
+  findSourceWriteLines,
   findRawDockerLines,
   recipeEnabled,
 } from "./check-docker-authority-cutover.mjs";
@@ -53,11 +55,11 @@ test("refuses an unregistered raw Docker caller", () => {
 test("refuses growth in a registered file and requires shrink to be recorded", () => {
   const registry = { "a.ts": { class: "pending", count: 2, reason: "r" }, "b.ts": { class: "pending", count: 3, reason: "r" } };
   const grown = checkDockerAuthority({ observed: { "a.ts": [1, 2, 3], "b.ts": [1, 2, 3] }, registry, recipeOn: false });
-  assert.match(grown.join("\n"), /a\.ts.*3 raw Docker lines.*registered 2/);
+  assert.match(grown.join("\n"), /a\.ts.*3 raw Docker call lines.*registered 2/);
   const shrunk = checkDockerAuthority({ observed: { "a.ts": [1, 2], "b.ts": [1] }, registry, recipeOn: false });
-  assert.match(shrunk.join("\n"), /b\.ts.*1 raw Docker line.*lower the registered count/);
+  assert.match(shrunk.join("\n"), /b\.ts.*1 raw Docker call line.*lower the registered count/);
   const removed = checkDockerAuthority({ observed: { "a.ts": [1, 2] }, registry, recipeOn: false });
-  assert.match(removed.join("\n"), /b\.ts.*no longer calls Docker.*remove it/);
+  assert.match(removed.join("\n"), /b\.ts.*no raw Docker call remains.*remove it/);
 });
 
 test("holds the immutable portal recipe while any caller is pending", () => {
@@ -85,4 +87,26 @@ test("every registry entry names a known class and a reason", () => {
 test("the checked-in tree satisfies the registry", async () => {
   const { runInRepo } = await import("./check-docker-authority-cutover.mjs");
   assert.deepEqual(runInRepo(), []);
+});
+
+test("finds install checkout writes only in files that name a host source root", () => {
+  const writer = [
+    'const root = process.env.DPF_REPO_ROOT;',
+    'await gitRun(["-C", root, "fetch", remote]);',
+    '// writeFileSync(target, body) in a comment is ignored',
+    'writeFileSync(target, body);',
+    'await prepareUpgradeSource(input, gitRun);',
+    'await gitRun(["-C", root, "log", "--oneline"]);',
+  ].join("\n");
+  assert.deepEqual(findSourceWriteLines(writer), [2, 4, 5]);
+  assert.deepEqual(findSourceWriteLines('writeFileSync("/tmp/x", body);\nawait git(["fetch", r]);'), []);
+});
+
+test("holds the immutable portal recipe while any install checkout writer is pending", () => {
+  const registry = { "a.ts": { class: "pending", count: 1, reason: "r" }, "b.ts": { class: "routed", count: 1, reason: "r" } };
+  const observed = { "a.ts": [1], "b.ts": [1] };
+  assert.deepEqual(checkSourceWriteAuthority({ observed, registry, recipeOn: false }), []);
+  assert.match(checkSourceWriteAuthority({ observed, registry, recipeOn: true }).join("\n"), /portal-immutable-v1.*1 pending install checkout write/);
+  assert.match(checkSourceWriteAuthority({ observed: { "c.ts": [3] }, registry: {}, recipeOn: false }).join("\n"),
+    /c\.ts: install checkout write at line\(s\) 3 is not registered\. Route it through the authorized source writer/);
 });

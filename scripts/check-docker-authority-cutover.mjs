@@ -19,6 +19,13 @@
 // legacy recipe; "message" is operator or remote-host text, not a portal call;
 // "pending" is a writer-reachable call still to migrate.
 //
+// The same ratchet covers portal writes to the install checkout, which the
+// recipe mounts read-only (owner decision DI-250233FBDD9B): in any file that
+// names a host source root, every literal git write, upgrade-source call or
+// file write is registered in SOURCE_WRITE_REGISTRY. "routed" uses the
+// authorized source writer, or skips, when the actuator is mounted; "pending"
+// still writes from the portal and holds the recipe label.
+//
 // This is a literal-shape ratchet, not proof of absence: calls built through
 // variables escape it. The qualified runtime's proof is the served writer
 // probe, which refuses any portal mount outside the fixed profile.
@@ -84,6 +91,23 @@ export const DOCKER_AUTHORITY_REGISTRY = Object.freeze({
   "packages/db/src/discovery-collectors/docker.ts": { class: "pending", count: 4, reason: "Writer-reachable raw Docker call; migrate to a typed actuator operation before the immutable recipe." },
 });
 
+export const SOURCE_WRITE_REGISTRY = {
+  "apps/web/lib/auth/mcp-host-writer.ts": { class: "routed", count: 2, reason: "Returns before writing when the private actuator is mounted; the installer owns host client configuration." },
+  "apps/web/lib/queue/functions/self-upgrade.ts": { class: "routed", count: 2, reason: "Upstream refresh and source preparation go through the authorized source writer when the actuator is mounted." },
+  "apps/web/lib/self-upgrade/release-batch-status.ts": { class: "routed", count: 1, reason: "The fresh tally refreshes upstream through the authorized source writer when the actuator is mounted." },
+  "apps/web/lib/self-upgrade/release-batch.ts": { class: "routed", count: 3, reason: "Argv builders, and the shallow deepen is skipped when the actuator is mounted (the tally fails open)." },
+  "apps/web/lib/self-upgrade/version.ts": { class: "routed", count: 4, reason: "Argv builders, and the target freshen goes through the authorized source writer when the actuator is mounted." },
+  "apps/web/lib/skills/seed-writeback.ts": { class: "pending", count: 1, reason: "Writes an approved skill body into the install checkout; needs an owner-keyed source-writer operation." },
+  "apps/web/lib/work-capsules/git-scanner.ts": { class: "routed", count: 1, reason: "The /host-dpf trunk refresh goes through the authorized source writer; other clones are writable volumes." },
+};
+
+const HOST_SOURCE = /DPF_REPO_ROOT|DPF_HOST_SOURCE_ROOT|["'`]\/host-(?:dpf|worktrees)\b|hostSourcePath|hostSourceMountPath/;
+const SOURCE_WRITE_PATTERNS = [
+  /["'](?:fetch|checkout|merge|reset|commit|clean|stash|am|apply|cherry-pick|rebase|update-ref|switch|restore|gc|prune)["']\s*,/,
+  /\b(?:prepareUpgradeSource|build(?:Fetch|Deepen)Command)\s*\(/,
+  /\b(?:writeFileSync|writeFile|appendFileSync|appendFile|renameSync|rename|copyFileSync|copyFile|cpSync|symlinkSync)\s*\(/,
+];
+
 const PATTERNS = [
   /\bsocketPath\s*:/,
   /\b(?:bounded)?[dD]ockerSocket(?:Get|Stop)\s*\(/,
@@ -105,31 +129,49 @@ export function findRawDockerLines(source) {
     .flatMap((line, index) => (PATTERNS.some((pattern) => pattern.test(line)) ? [index + 1] : []));
 }
 
+/** 1-based lines writing to a host source checkout, in files that name one. */
+export function findSourceWriteLines(source) {
+  const code = stripComments(source);
+  if (!HOST_SOURCE.test(code)) return [];
+  return code.split("\n")
+    .flatMap((line, index) => (SOURCE_WRITE_PATTERNS.some((pattern) => pattern.test(line)) ? [index + 1] : []));
+}
+
 export function recipeEnabled(dockerfile) {
   return RECIPE_LABEL.test(dockerfile);
 }
 
-export function checkDockerAuthority({ observed, registry, recipeOn }) {
+function checkRegistry({ observed, registry, recipeOn, kind, refuse }) {
   const failures = [];
   for (const [path, lines] of Object.entries(observed)) {
     const entry = registry[path];
     const noun = lines.length === 1 ? "line" : "lines";
     if (!entry) {
-      failures.push(`${path}: raw Docker call at line(s) ${lines.join(", ")} is not registered. Route it through a typed actuator operation, or register it with a class and reason.`);
+      failures.push(`${path}: ${kind} at line(s) ${lines.join(", ")} is not registered. ${refuse}, or register it with a class and reason.`);
     } else if (lines.length > entry.count) {
-      failures.push(`${path}: ${lines.length} raw Docker ${noun} (${lines.join(", ")}), registered ${entry.count}. New raw calls are refused; use the private actuator.`);
+      failures.push(`${path}: ${lines.length} ${kind} ${noun} (${lines.join(", ")}), registered ${entry.count}. New ones are refused; ${refuse.toLowerCase()}.`);
     } else if (lines.length < entry.count) {
-      failures.push(`${path}: ${lines.length} raw Docker ${noun}, registered ${entry.count}; lower the registered count to lock in the migration.`);
+      failures.push(`${path}: ${lines.length} ${kind} ${noun}, registered ${entry.count}; lower the registered count to lock in the migration.`);
     }
   }
   for (const path of Object.keys(registry)) {
-    if (!observed[path]) failures.push(`${path}: no longer calls Docker; remove it from the registry.`);
+    if (!observed[path]) failures.push(`${path}: no ${kind} remains; remove it from the registry.`);
   }
   const pending = Object.entries(registry).filter(([path, entry]) => entry.class === "pending" && observed[path]);
   if (recipeOn && pending.length > 0) {
-    failures.push(`Dockerfile enables portal-immutable-v1 with ${pending.length} pending raw Docker caller(s): ${pending.map(([path]) => path).join(", ")}.`);
+    failures.push(`Dockerfile enables portal-immutable-v1 with ${pending.length} pending ${kind} file(s): ${pending.map(([path]) => path).join(", ")}.`);
   }
   return failures;
+}
+
+export function checkDockerAuthority({ observed, registry, recipeOn }) {
+  return checkRegistry({ observed, registry, recipeOn, kind: "raw Docker call",
+    refuse: "Route it through a typed actuator operation" });
+}
+
+export function checkSourceWriteAuthority({ observed, registry, recipeOn }) {
+  return checkRegistry({ observed, registry, recipeOn, kind: "install checkout write",
+    refuse: "Route it through the authorized source writer" });
 }
 
 export function runInRepo(root = REPO_ROOT) {
@@ -137,14 +179,20 @@ export function runInRepo(root = REPO_ROOT) {
     .split("\n")
     .filter((file) => /\.(?:ts|tsx|mjs|js)$/.test(file) && !/\.d\.ts$|\.test\.|test-support|__tests__/.test(file));
   const observed = {};
+  const writes = {};
   for (const file of files) {
     let source;
     try { source = readFileSync(join(root, file), "utf8"); } catch { continue; }
     const lines = findRawDockerLines(source);
     if (lines.length > 0) observed[file] = lines;
+    const writeLines = findSourceWriteLines(source);
+    if (writeLines.length > 0) writes[file] = writeLines;
   }
   const recipeOn = recipeEnabled(readFileSync(join(root, "Dockerfile"), "utf8"));
-  return checkDockerAuthority({ observed, registry: DOCKER_AUTHORITY_REGISTRY, recipeOn });
+  return [
+    ...checkDockerAuthority({ observed, registry: DOCKER_AUTHORITY_REGISTRY, recipeOn }),
+    ...checkSourceWriteAuthority({ observed: writes, registry: SOURCE_WRITE_REGISTRY, recipeOn }),
+  ];
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
@@ -154,5 +202,6 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
     for (const failure of failures) console.error(`docker-authority: ${failure}`);
     process.exit(1);
   }
-  console.log(`Docker authority OK — ${pending} pending writer-reachable caller file(s) before portal-immutable-v1.`);
+  const pendingWrites = Object.values(SOURCE_WRITE_REGISTRY).filter((entry) => entry.class === "pending").length;
+  console.log(`Docker authority OK — ${pending} pending writer-reachable caller file(s) and ${pendingWrites} pending install checkout writer(s) before portal-immutable-v1.`);
 }

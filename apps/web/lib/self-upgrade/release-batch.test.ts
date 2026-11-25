@@ -197,6 +197,15 @@ describe("countPendingUpstreamCommits", () => {
     expect(t.pendingCount).toBeNull();
   });
 
+  it("does not deepen a read-only checkout; the tally fails open instead (BI-224F56F1)", async () => {
+    const gitRun = vi
+      .fn<(args: string[]) => Promise<GitResult>>()
+      .mockResolvedValueOnce({ stdout: "", stderr: "bad revision", code: 128 });
+    const t = await countPendingUpstreamCommits(input, gitRun, async () => false);
+    expect(t.pendingCount).toBeNull();
+    expect(gitRun).toHaveBeenCalledTimes(1);
+  });
+
   it("fails open (null) when the git runner throws", async () => {
     const gitRun = vi.fn(async (): Promise<GitResult> => {
       throw new Error("git missing");
