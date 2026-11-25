@@ -47,7 +47,11 @@ The DPF2 intake at commit `3ed6fb23b8811f21bbf15123a727b94f56e9922c`
 reads and verifies each listed member in order, exactly two zero end blocks,
 the released manifest and archive digests, and the paired dump digest.
 The writer contract in BI-B7F4D608 already enforces the reader's size bounds.
-No layout or header change is part of this delivery.
+The writer change and its synthetic reader verification are in
+[DPF PR #7195](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/7195).
+Before implementation, compare the actual reader and writer source for
+the framing and bound assertions. No layout or header change is part of
+this delivery.
 
 ## Design
 
@@ -71,41 +75,85 @@ UTF-8, links, unknown or overlapping roots and unsafe paths.
 
 Snapshot the receiver's upload-root configuration before replacing its
 database. Resolve member names under those roots, never under an absolute
-path supplied by the backup. Detect destination aliases and verify existing
-parent directories and target paths without following links. Stage on the
-receiver's filesystem and publish only checked complete files. Do not erase
-unrelated files as an incidental effect of archive restore.
+path supplied by the backup. Confirm refuses an identity change since preview,
+an unknown root, a destination alias, and a link or non-regular target.
+An existing file with the expected digest is a no-op. An existing ordinary file
+with a different digest can be replaced only if it is in the exact collision
+set the operator reviewed and the verified safety pair contains its original
+bytes. Confirmation rechecks the collision-set digest. Otherwise refuse before
+replacing Postgres. Unlisted files are untouched.
+Stage verified complete files on each destination filesystem and publish with
+per-file rename while upload writers are drained.
 
 Under the existing restore lock, take both safety members from the current
-install before database replacement. Keep the selected and safety run
-identity in memory across Postgres replacement, then restore uploads after
-Postgres succeeds. If file publication fails, the combined result is failed
-and retains completed-step and safety evidence. It does not advertise a
-successful or atomic rollback across two storage types.
+install before database replacement. Write an atomic, fsynced recovery journal
+at `<backupsRoot>/restore/<operationId>/recovery.json`, on the host backup
+storage alongside the run directories. The journal records operation and
+install identity, the selected and safety pair locators and digests, resolved
+receiver root identities, overwrite scope and completed steps. Write and
+read back that journal before Postgres replacement. Both the journal and its
+artifacts stay readable after a crash or a partially replaced database. Audit
+rows in the restored database are a projection, not the recovery authority.
+
+The journal records stage entry before each effect and completion after
+verification. Persist file publication intents before rename, and pin the
+referenced runs against retention until recovery is complete. If Postgres
+completes but uploads are incomplete, the receiver stays closed to writers.
+The runtime checks unfinished journals before reopening writers after a restart.
+An unfinished operation cannot report success. The operator can resume
+the exact selected pair after revalidation, or choose the journal's safety
+pair through the existing restore confirmation to return to the prior state.
+Replaying a file already at the verified digest is a no-op. When undoing partial
+publication, remove only files the journal identifies as newly created by
+this operation and whose bytes still match the published digest. A differing
+or unknown file needs explicit resolution before reopening writers. There is
+no automatic safety restore or cross-store atomicity.
 
 ### Trial
 
 Use the same verifier without writing uploads. After the exact Postgres dump
 is restored into the temporary database, compare its DocumentBlob and
 MediaAsset references and expected hashes with the verified upload members.
-Any deletion exception must match a row's table, ID and storage key in that
-dump. Qualify manifest evidence for these exceptions; retain its digest in new
-recovery receipts. Report unreferenced entries in the SQL-backed document and
+The existing backup writer alone records `deletedAfterSnapshot` after
+the paired dump refers to a file that is absent and the exact live row no
+longer exists. These records remain in the unchanged manifest. The governed
+backup engine anchors the emitted manifest digest in an atomic, host-side
+custody record under `<backupsRoot>/uploads-custody/<runId>.json` before
+marking capture successful. This record is outside the DPF2 run directories.
+Pair receipts bind that digest alongside the
+archive and Postgres dump digests. A deletion exception is accepted only with
+that custody proof and an exact table, ID and storage-key match in the trial
+database. Missing proof or a conflicting, duplicate, or unmatched exception
+fails the upload trial. Report unreferenced entries in the SQL-backed document and
 media namespaces without misclassifying unrelated attachment or voice files.
 Use the current trial audit and failure surface. A failed Postgres trial
 cannot be represented as a passing pair.
 
 ### Recovery and readiness
 
-Add a versioned, explicit uploads member to new self-upgrade recovery points
-and pre-teardown receipts. New receipts are incomplete unless they carry both
-successful member identities and digests. Read historical Postgres-only
-receipts as legacy rather than treating a missing uploads member in a new
-receipt as acceptable. Rollback and successor recovery share the order
+Extend the existing recovery point and teardown receipt with one shared
+versioned paired-recovery contract. Put member identity and state validation
+in `packages/integration-shared`, following its shared script-and-TypeScript
+contract pattern. Consumers distinguish `legacy-postgres`, `paired`, and
+`incomplete`. A point written before uploads membership is recoverable as
+Postgres-only, with that limitation shown in the preview and result. A new
+paired-format point is incomplete, not legacy, if either member or digest
+is missing. Rollback and successor recovery share the order
 Postgres, then uploads. Retain teardown member locators and custody evidence
 with the existing external journal so a succeeding installation can validate
 and locate them without the former database. Do not weaken the signed plan,
 current destructive confirmation or host project restrictions.
+
+Ship additive readers before emitting the new version of a paired receipt.
+Keep the existing DPF host enforcement point, `scripts/governed-teardown.mjs`,
+owned by the DPF install-lifecycle lane. Its paired plan validation must be
+present in the exact pinned host runner and confirmed by a non-mutating
+capability check before the portal enables a new volume-deleting teardown.
+The host validates both exact member receipts and the paired trial result
+before any Compose or filesystem change. Old runners fail closed on the
+unknown envelope version, never reinterpret it as Postgres-only. New readers
+keep historical Postgres-only recovery support independently of new teardown
+execution admission. This updates DPF's existing guard, not the DPF2 launcher.
 
 Extend existing readiness summaries and /admin/backups to show uploads and
 their last run. Create or update the already-defined daily heartbeat row in
@@ -114,7 +162,7 @@ upload scripts with the portal's existing explicit source list.
 
 ## Scope boundaries
 
-No new archive format, second backup repository, host/launcher adoption,
+No new archive format, second backup repository, DPF2 host or launcher change,
 PostgreSQL major upgrade, Inngest member, or WAL retention policy. Those
 database-lifecycle duties follow under BI-921B2D17. No live destructive or
 restore test. Fixtures use generated data, disposable pgvector/pgvector:pg16
