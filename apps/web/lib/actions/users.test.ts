@@ -1,5 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+vi.mock("@/lib/i18n/locale-context.server", () => ({
+  getLocaleContext: async () => ({ language: "en-US", formatLocale: "en-US" }),
+}));
+
 vi.mock("@/lib/auth", () => ({
   auth: vi.fn(),
 }));
@@ -35,7 +39,9 @@ vi.mock("@dpf/db", () => ({
     userGroup: {
       deleteMany: vi.fn(),
       create: vi.fn(),
+      createMany: vi.fn(),
     },
+    principalAlias: { findUnique: vi.fn() },
     passwordResetToken: {
       create: vi.fn(),
       findUnique: vi.fn(),
@@ -61,6 +67,7 @@ import { resolveGovernedAction } from "@/lib/governance-resolver";
 import { syncUserPrincipal } from "@/lib/identity/principal-linking";
 import { prisma } from "@dpf/db";
 import {
+  addUserPlatformRole,
   adminIssuePasswordReset,
   completePasswordReset,
   createUserAccount,
@@ -264,5 +271,81 @@ describe("user actions", () => {
 
     expect(result.ok).toBe(true);
     expect(mockPrisma.$transaction).toHaveBeenCalledOnce();
+  });
+
+  describe("addUserPlatformRole", () => {
+    beforeEach(() => {
+      mockPrisma.user.findUnique.mockResolvedValue({
+        id: "user-1",
+        isActive: true,
+        isSuperuser: true,
+        automationVerificationId: null,
+        workHandedOverAt: null,
+        groups: [{ platformRole: { roleId: "HR-000" } }],
+      });
+      mockPrisma.principalAlias.findUnique.mockResolvedValue({ principal: { kind: "human", status: "active" } });
+      mockPrisma.platformRole.findUnique.mockResolvedValue({ id: "role-hr-200", name: "Digital Product Manager" });
+      mockPrisma.userGroup.createMany.mockResolvedValue({ count: 1 });
+    });
+
+    it("adds HR-200 to the authorized human's own account and writes an audit in the transaction", async () => {
+      const result = await addUserPlatformRole({ userId: "user-1", roleId: "HR-200" });
+      expect(result).toMatchObject({ ok: true, data: { change: "added" } });
+      expect(mockCan).toHaveBeenCalledWith(expect.objectContaining({ platformRoles: ["HR-000"] }), "manage_users");
+      expect(mockPrisma.userGroup.createMany).toHaveBeenCalledExactlyOnceWith({
+        data: { userId: "user-1", platformRoleId: "role-hr-200" }, skipDuplicates: true,
+      });
+      expect(mockPrisma.userGroup.deleteMany).not.toHaveBeenCalled();
+      expect(mockPrisma.user.update).not.toHaveBeenCalled();
+      expect(mockCreateAuthorizationDecisionLog).toHaveBeenCalledExactlyOnceWith(
+        expect.objectContaining({
+          actorType: "user", actorRef: "user-1", actionKey: "user.platform_role_add",
+          objectRef: "user-1", decision: "allow", rationale: { roleId: "HR-200", effect: "added" },
+        }),
+        prisma,
+      );
+    });
+
+    it("treats a duplicate as unchanged without a second grant receipt", async () => {
+      mockPrisma.userGroup.createMany.mockResolvedValue({ count: 0 });
+      expect(await addUserPlatformRole({ userId: "user-1", roleId: "HR-200" })).toMatchObject({ ok: true, data: { change: "unchanged" } });
+      expect(mockCreateAuthorizationDecisionLog).not.toHaveBeenCalled();
+    });
+
+    it("does not trust a stale privileged session after live authority was removed", async () => {
+      mockAuth.mockResolvedValue({ user: { ...authorizedSession.user, isSuperuser: true } });
+      mockPrisma.user.findUnique.mockResolvedValue({
+        id: "user-1", isActive: true, isSuperuser: false, automationVerificationId: null,
+        workHandedOverAt: null, groups: [],
+      });
+      mockCan.mockReturnValue(false);
+      expect(await addUserPlatformRole({ userId: "user-1", roleId: "HR-200" })).toMatchObject({ ok: false });
+      expect(mockPrisma.userGroup.createMany).not.toHaveBeenCalled();
+    });
+
+    it("rejects automation identities even if the account has administrative role metadata", async () => {
+      mockPrisma.user.findUnique.mockResolvedValue({
+        id: "user-1", isActive: true, isSuperuser: true, automationVerificationId: "fixture",
+        workHandedOverAt: null, groups: [{ platformRole: { roleId: "HR-000" } }],
+      });
+      expect(await addUserPlatformRole({ userId: "user-1", roleId: "HR-200" })).toMatchObject({ ok: false });
+      expect(mockPrisma.userGroup.createMany).not.toHaveBeenCalled();
+    });
+
+    it("does not allow a non-superuser to change a superuser target", async () => {
+      mockPrisma.user.findUnique.mockResolvedValueOnce({
+        id: "user-1", isActive: true, isSuperuser: false, automationVerificationId: null,
+        workHandedOverAt: null, groups: [{ platformRole: { roleId: "HR-000" } }],
+      }).mockResolvedValueOnce({ id: "target", isActive: true, isSuperuser: true });
+      expect(await addUserPlatformRole({ userId: "target", roleId: "HR-200" })).toMatchObject({ ok: false });
+      expect(mockPrisma.userGroup.createMany).not.toHaveBeenCalled();
+    });
+
+    it("does not report success or refresh on an audit error", async () => {
+      mockCreateAuthorizationDecisionLog.mockRejectedValueOnce(new Error("audit unavailable"));
+      expect(await addUserPlatformRole({ userId: "user-1", roleId: "HR-200" })).toMatchObject({ ok: false, error: expect.stringContaining("audit record") });
+      const { revalidatePath } = await import("next/cache");
+      expect(revalidatePath).not.toHaveBeenCalled();
+    });
   });
 });

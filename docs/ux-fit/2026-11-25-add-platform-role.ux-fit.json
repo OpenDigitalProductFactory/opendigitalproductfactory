@@ -1,0 +1,20 @@
+{
+  "version": "1",
+  "decidedOption": "add-action-in-existing-panel",
+  "decisionInteractionId": "DI-4BC0576A8920",
+  "scope": {
+    "files": [
+      "apps/web/components/employee/HrUserLifecyclePanel.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "add-action-in-existing-panel",
+      "separate-role-form",
+      "new-admin-role-route"
+    ]
+  },
+  "rationale": "Use the existing People role panel and repeat no form fields. Add role has a direct effect and preserves other roles and account status. The separate submit control names its replacement effect. Unauthorized humans have no Add role control. No agent action or new route.",
+  "verification": "The role panel test exercises selection, preservation of the lifecycle form, held-role disabling and visibility, while server tests exercise current human authority, additive write, retry and audit failure. Served portal verification is separate from these tests."
+}
