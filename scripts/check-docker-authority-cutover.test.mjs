@@ -66,6 +66,20 @@ test("detects a launcher called with the literal executable whatever follows it"
   assert.deepEqual(findRawDockerLines(source), [1, 2, 3, 4, 5, 6, 8, 12]);
 });
 
+test("a // inside a string, template or regex never hides the call after it", () => {
+  const source = [
+    'const url = "https://example.test/a//b"; execFile("docker");',
+    "const t = `//${x}`; spawn('docker', args);",
+    'const re = /\\/\\//g; spawnSync("docker", ["ps"]);',
+    "const half = total / 2; run('docker', args); // spawn('docker') here is a comment",
+    "/* spawn('docker', a) */ const ok = 1;",
+    "const glob = `ls /tmp/archive/*.txt`;",
+    'execFile("docker", args);',
+    'const close = "*/";',
+  ].join("\n");
+  assert.deepEqual(findRawDockerLines(source), [1, 2, 3, 4, 7]);
+});
+
 test("ignores comments, substring checks and non-call literals", () => {
   const source = [
     "// spawn(\"docker\", [\"ps\"]) is what we used to do",

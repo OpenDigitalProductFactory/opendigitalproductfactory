@@ -51,7 +51,7 @@ export const DOCKER_AUTHORITY_REGISTRY = Object.freeze({
   "apps/web/lib/build/sandbox/sandbox-db.ts": { class: "routed", count: 6, reason: "Readiness and seed go to the actuator's sandbox-db operation for the build's in-use slot; every other Docker line is refused by execSandboxCommandLine when the mount is present." },
   "apps/web/lib/build/sandbox/sandbox-promotion.ts": { class: "routed", count: 4, reason: "executePromotion refuses before any effect when the actuator is mounted (DI-062828328841: deliver through the protected PR and canonical self-upgrade), and every Docker line is refused by execSandboxCommandLine there." },
   "apps/web/lib/build/sandbox/sandbox-recovery.ts": { class: "routed", count: 2, reason: "runSandboxRecoveryCommand: exec through the actuator, start and restart through its catalog sandbox restart, anything else refused when the mount is present." },
-  "apps/web/lib/build/sandbox/sandbox.ts": { class: "routed", count: 18, reason: "Every Docker line goes through execSandboxCommandLine (exec into the observed sandbox, anything else refused when the actuator is mounted); portal copies stream a local tar into the sandbox; start uses the catalog sandbox restart." },
+  "apps/web/lib/build/sandbox/sandbox.ts": { class: "routed", count: 19, reason: "Every Docker line goes through execSandboxCommandLine (exec into the observed sandbox, anything else refused when the actuator is mounted); portal copies stream a local tar into the sandbox; start uses the catalog sandbox restart." },
   "apps/web/lib/coworker/service-converge-report.ts": { class: "message", count: 1, reason: "A literal matched against recorded admin_run_command parameters; it runs nothing (the executing tool is admin-pack)." },
   "apps/web/lib/documents/conversion/availability.ts": { class: "routed", count: 1, reason: "readActuatorDoctoolsHealth when the actuator mount is present." },
   "apps/web/lib/documents/conversion/command.ts": { class: "routed", count: 1, reason: "Builds converter argv shared by the actuator and the mount-absent fallback; spawns nothing itself." },
@@ -73,7 +73,7 @@ export const DOCKER_AUTHORITY_REGISTRY = Object.freeze({
   "apps/web/lib/queue/functions/substrate-reconciler.ts": { class: "routed", count: 4, reason: "reconcileActuatorSubstrate when the actuator mount is present; the daemon path is the actuator's own owner." },
   "apps/web/lib/routing/capability-probes/probe-engine-readiness.ts": { class: "routed", count: 1, reason: "spawnSandboxExec/execSandboxCommandLine: the private actuator execs into its observed canonical sandbox when mounted; any other Docker call is refused." },
   "apps/web/lib/routing/cli-adapter.ts": { class: "routed", count: 2, reason: "spawnSandboxExec/execSandboxCommandLine: the private actuator execs into its observed canonical sandbox when mounted; any other Docker call is refused." },
-  "apps/web/lib/routing/codex-cli-adapter.ts": { class: "routed", count: 2, reason: "spawnSandboxExec/execSandboxCommandLine: the private actuator execs into its observed canonical sandbox when mounted; any other Docker call is refused." },
+  "apps/web/lib/routing/codex-cli-adapter.ts": { class: "routed", count: 3, reason: "spawnSandboxExec/execSandboxCommandLine: the private actuator execs into its observed canonical sandbox when mounted; any other Docker call is refused." },
   "apps/web/lib/self-upgrade/build-failure-classifier.ts": { class: "message", count: 1, reason: "Operator remediation text only." },
   "apps/web/lib/self-upgrade/doctools-release-image.ts": { class: "routed", count: 2, reason: "Converter image resolve, presence and pull go to the actuator's fixed operations for the install's own dpf-doctools repository when it is mounted; local builds are refused there." },
   "apps/web/lib/self-upgrade/doctools-source-lineage.ts": { class: "message", count: 1, reason: "Error text only; the build runs through the promoter." },
@@ -129,10 +129,71 @@ const LAUNCHERS = ["spawn", "spawnSync", "execFile", "execFileSync", "execFileAs
 // A parenthesised callee, `(deps.spawn ?? spawn)("docker", …)`, is a launch too.
 const DOCKER_CALL = new RegExp(String.raw`(?:(?<![\w$])(?:[\w$]+\.)*(?:${LAUNCHERS.join("|")})|\))\s*\(\s*["'\`]${DOCKER_EXE}["'\`]`, "gs");
 
+const REGEX_AFTER_WORD = new Set(["return", "typeof", "case", "do", "else", "in", "of", "new", "delete", "void", "throw", "yield", "await"]);
+
+/** True when a `/` after this code token starts a regular expression literal. */
+function regexAllowed(lastChar, lastWord) {
+  if (lastChar === "") return true;
+  if (/[\w$]/.test(lastChar)) return REGEX_AFTER_WORD.has(lastWord);
+  return !/[)\]}"'`]/.test(lastChar);
+}
+
+/** Blanks comments (keeping line breaks) while leaving strings, template
+ * literals and regular expression literals intact, so a `//` inside
+ * "https://…" or a `/*` inside a shell glob never erases the code after it. */
 function stripComments(source) {
-  return source
-    .replace(/\/\*[\s\S]*?\*\//g, (block) => block.replace(/[^\n]/g, " "))
-    .replace(/(^|[^:"'`\\])\/\/.*$/gm, "$1");
+  const blank = (text) => text.replace(/[^\n]/g, " ");
+  const out = [];
+  let lastChar = "";
+  let lastWord = "";
+  let i = 0;
+  while (i < source.length) {
+    const c = source[i];
+    const next = source[i + 1];
+    let end = -1;
+    if (c === "/" && (next === "/" || next === "*")) {
+      end = next === "/" ? source.indexOf("\n", i) : source.indexOf("*/", i + 2);
+      end = end < 0 ? source.length : next === "/" ? end : end + 2;
+      out.push(blank(source.slice(i, end)));
+      i = end;
+      continue;
+    }
+    if (c === '"' || c === "'" || c === "`") {
+      end = i + 1;
+      while (end < source.length && source[end] !== c && (c === "`" || source[end] !== "\n")) end += source[end] === "\\" ? 2 : 1;
+      end = Math.min(end + 1, source.length);
+    } else if (c === "/" && regexAllowed(lastChar, lastWord)) {
+      let j = i + 1;
+      let inClass = false;
+      while (j < source.length && source[j] !== "\n" && (inClass || source[j] !== "/")) {
+        if (source[j] === "\\") j += 1;
+        else if (source[j] === "[") inClass = true;
+        else if (source[j] === "]") inClass = false;
+        j += 1;
+      }
+      if (source[j] === "/") {
+        end = j + 1;
+        while (end < source.length && /[a-z]/i.test(source[end])) end += 1;
+      }
+    }
+    if (end > i) {
+      out.push(source.slice(i, end));
+      lastChar = source[end - 1];
+      lastWord = "";
+      i = end;
+      continue;
+    }
+    out.push(c);
+    if (/[\w$]/.test(c)) {
+      lastWord = /[\w$]/.test(lastChar) ? lastWord + c : c;
+      lastChar = c;
+    } else if (!/\s/.test(c)) {
+      lastChar = c;
+      lastWord = "";
+    }
+    i += 1;
+  }
+  return out.join("");
 }
 
 /** 1-based line numbers holding a literal raw Docker call shape. */
