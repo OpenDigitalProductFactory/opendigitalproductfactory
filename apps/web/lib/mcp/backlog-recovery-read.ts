@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { canonicalJson } from "@dpf/integration-shared/canonical-json";
 import { INITIATIVE_GATE_KEYS } from "@/lib/backlog/initiative-readiness/receipt-schema";
-import type { InitiativeReadinessDecision, ReadinessRequirementResult } from "@/lib/backlog/initiative-readiness/types";
+import type { InitiativeReadinessDecision, ReadinessProfile, ReadinessRequirementResult } from "@/lib/backlog/initiative-readiness/types";
 import type { ToolResult } from "@/lib/mcp-tool-types";
 
 export const RECOVERY_READ_GATES = [...INITIATIVE_GATE_KEYS, "objective-mapping"] as const;
@@ -57,13 +57,26 @@ type Recovery = {
 
 /** One exact request or a finite refusal, shared by MCP callers without registering a tool pack. */
 export function boundedBacklogRecoveryRead(args: {
-  itemId: string; status: string; workShape: string | null; gate: string; recovery?: Recovery;
+  itemId: string; status: string; workShape: string | null; gate: string;
+  profile?: ReadinessProfile; recovery?: Recovery;
 }): ToolResult {
   const recovery = args.recovery ?? { reviewerRoutes: [], escalations: [], unroutable: [] };
   const availableGates = [...new Set(recovery.reviewerRoutes.map(route => route.gate).filter(isRecoveryReadGate))].sort();
   const routes = recovery.reviewerRoutes.filter(route => route.gate === args.gate);
   const identity = { itemId: args.itemId, status: args.status, workShape: args.workShape,
     recoveryGate: args.gate, availableGates };
+  // A doc-only decision does not owe the specialist design gate. Do not
+  // substitute an unrelated acceptance escalation for a data-review packet.
+  if (args.gate === "data-review" && args.profile === "doc-only" && routes.length === 0) {
+    const recordVerdict = "Ask the accountable data owner to review the exact deliverable and record their verdict. Link that attributable verdict on the item with record_execution_evidence (manual_check for agreement, manual_fail for a refusal).";
+    return {
+      success: false, error: "recovery_gate_not_applicable",
+      message: "The data-review specialist design gate is not offered for the doc-only profile. A data-owner sign-off in the acceptance criteria belongs to acceptance evidence.",
+      data: { ...identity, nextAction: args.status === "done"
+        ? `${recordVerdict} This item is already done. The link is supplemental evidence, not a new gate receipt or a reason to reopen the item.`
+        : `${recordVerdict} Cite the evidence in the normal completion flow, and use objective-mapping if independent acceptance is owed. An acceptance review does not substitute for the data owner's decision.` },
+    };
+  }
   if (routes.length > 1 || (!routes.length && !recovery.escalations.length && !recovery.unroutable.length)) {
     return { success: false, error: routes.length > 1 ? "recovery_gate_ambiguous" : "recovery_gate_unavailable",
       message: "No unique current request was delivered for this gate. Do not reconstruct or dispatch a different request.",
