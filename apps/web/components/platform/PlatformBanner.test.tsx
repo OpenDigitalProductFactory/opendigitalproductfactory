@@ -20,6 +20,9 @@ it("recovers the exact deadline on a fresh tab, keeps it at dispatch, and ignore
   await waitFor(() => expect(screen.getByRole("status").textContent).toContain("Preparing recovery backups"));
   const instant = () => container.querySelector("time")?.getAttribute("datetime");
   expect(instant()).toBe(deadline);
+  expect(container.querySelector("time")?.textContent).toBe(new Intl.DateTimeFormat("en-US", {
+    month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZoneName: "short",
+  }).format(new Date(deadline)));
   act(() => stream.receive?.({ level: "cleared", runId: "QR-other", outcome: "failed" }));
   expect(instant()).toBe(deadline);
   act(() => stream.receive?.({ level: "swapping", runId: "QR-fixture", readyToSwapDeadlineAt: deadline }));

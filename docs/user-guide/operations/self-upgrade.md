@@ -155,7 +155,8 @@ pauses as **awaiting operator**: new work stays paused and nothing is
 interrupted. The upgrade page then offers three choices:
 
 - **Keep waiting** gives the running work another 60 minutes.
-- **Force now** installs immediately, interrupting whatever is still running.
+- **Force now** skips the check that waits for active work, which may interrupt
+  it. If admission to new work reopens, the upgrade still fails without swapping.
 - **Abort** cancels this upgrade and reopens the portal to new work.
 
 While it waits, the page shows how long it has waited and the limit. Force

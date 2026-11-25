@@ -27,6 +27,7 @@ const world = vi.hoisted(() => ({
   swapEvent: { name: "ops/quiescence.swap-complete", data: { runId: "QR-1", outcome: "succeeded" } } as ControlEvent,
   confirmedWindowMs: null as number | null,
   readyDeadline: null as string | null,
+  legacyReadyCheckpoint: null as { status: string; enteredStateAt?: object } | null,
   onSwapWait: null as null | (() => ControlEvent),
 }));
 
@@ -129,6 +130,10 @@ let controlWaits = 0;
 const step = {
   run: async (id: string, fn: () => unknown) => {
     world.stepIds.push(id);
+    if (id === "enter-ready-to-swap" && world.legacyReadyCheckpoint) {
+      world.status = world.legacyReadyCheckpoint.status;
+      return world.legacyReadyCheckpoint;
+    }
     return await fn();
   },
   sleep: async (_id: string, d: unknown) => {
@@ -172,6 +177,7 @@ beforeEach(async () => {
     onSwapWait: null,
     confirmedWindowMs: null,
     readyDeadline: null,
+    legacyReadyCheckpoint: null,
     swapEvent: { name: "ops/quiescence.swap-complete", data: { runId: "QR-1", outcome: "succeeded" } },
   });
   controlWaits = 0;
@@ -433,6 +439,29 @@ describe("quiescence coordinator — an upgrade waits for work (BI-F9EE05E5)", (
     expect(await runCoordinator(UPGRADE)).toMatchObject({ ok: false, reason: "no-signal" });
     expect(world.waits.find((w) => w.event === "ops/quiescence.swap-complete")?.timeout).toEqual(new Date(+T0 - 15 * MIN));
     expect(world.levels.at(-1)).toBe("normal");
+  });
+
+  it("resumes an older ready step with its original ready timestamp plus the legacy 35 minutes", async () => {
+    const enteredAt = new Date(+T0 - 20 * MIN);
+    world.surfaces = [];
+    world.legacyReadyCheckpoint = { status: "ready-to-swap", enteredStateAt: { "ready-to-swap": enteredAt.toISOString() } };
+
+    expect(await runCoordinator(UPGRADE)).toMatchObject({ ok: true, outcome: "succeeded" });
+    expect(world.waits.find((w) => w.event === "ops/quiescence.swap-complete")?.timeout).toEqual(new Date(+enteredAt + 35 * MIN));
+  });
+
+  it.each([undefined, {}, { "ready-to-swap": "not-a-date" }])("fails closed on an older ready checkpoint with unusable timestamps: %j", async (enteredStateAt) => {
+    world.surfaces = [];
+    world.legacyReadyCheckpoint = { status: "ready-to-swap", enteredStateAt };
+
+    await expect(runCoordinator(UPGRADE)).resolves.toMatchObject({ ok: false, outcome: "failed", reason: "invalid-ready-deadline", runId: "QR-1" });
+    expect(world.transitions.at(-1)).toBe("failed");
+    expect(world.levels.at(-1)).toBe("normal");
+    expect(world.waits).toEqual([]);
+    expect(sendMock).toHaveBeenCalledExactlyOnceWith({
+      name: "platform.quiescence-cleared",
+      data: expect.objectContaining({ runId: "QR-1", outcome: "failed", reason: "invalid-ready-deadline" }),
+    });
   });
 
   it("other triggers keep the bounded drain: flip at start, defer at the budget", async () => {

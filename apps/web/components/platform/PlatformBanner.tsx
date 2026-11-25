@@ -242,7 +242,7 @@ function getPlatformBannerView(state: Exclude<BannerState, { kind: "hidden" }>, 
 
 function formatDeadline(value: string, locale: string): string {
   return new Date(value).toLocaleString(locale, {
-    month: "short", day: "numeric", hour: "numeric", minute: "2-digit", second: "2-digit", timeZoneName: "short",
+    month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZoneName: "short",
   });
 }
 

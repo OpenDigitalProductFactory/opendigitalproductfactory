@@ -29,6 +29,9 @@ export function readyToSwapBudgetMs(
   }
 }
 
+/** Revalidate at run start. Admission uses currentUpgradeConfirmationMatches for
+ * the exact match. If requirements decreased since admission, return the
+ * current requirement rather than holding the larger confirmed allowance. */
 export function resolveConfirmedUpgradeWindow(
   confirmedMaxMs?: number | null,
   promoterTimeoutMs = resolvePromoterTimeoutMs({}),
@@ -59,11 +62,13 @@ type WindowRow = {
   enteredStateAt: unknown;
 };
 
-export function readyToSwapDeadline(row: WindowRow): Date | null {
-  if (row.readyToSwapDeadlineAt) return row.readyToSwapDeadlineAt;
+export function readyToSwapDeadline(
+  row: Pick<WindowRow, "readyToSwapDeadlineAt" | "enteredStateAt">,
+  legacyBudgetMs = LEGACY_UNCONFIRMED_MAX_MS,
+): Date | null {
   const start = (row.enteredStateAt as EnteredStateAt | null)?.["ready-to-swap"];
-  const startMs = start ? Date.parse(start) : NaN;
-  return Number.isFinite(startMs) ? new Date(startMs + LEGACY_UNCONFIRMED_MAX_MS) : null;
+  const deadline = row.readyToSwapDeadlineAt ?? new Date((typeof start === "string" ? Date.parse(start) : NaN) + legacyBudgetMs);
+  return Number.isFinite(+deadline) ? deadline : null;
 }
 
 export function isReadyToSwapWindowLive(row: WindowRow, now: Date): boolean {

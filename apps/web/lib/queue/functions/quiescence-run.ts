@@ -50,8 +50,9 @@ import {
   recordDrainProgress,
 } from "@/lib/self-upgrade/drain-wait";
 import { reassertDrainingLevel } from "@/lib/self-upgrade/drain-admission";
-import { enterReadyToSwap, type ReadyTransition } from "@/lib/self-upgrade/ready-to-swap-state";
-import { LEGACY_UNCONFIRMED_MAX_MS, readyToSwapBudgetMs } from "@/lib/self-upgrade/ready-to-swap-window";
+import { enterReadyToSwap } from "@/lib/self-upgrade/ready-to-swap-state";
+import { readyToSwapBudgetMs, readyToSwapDeadline } from "@/lib/self-upgrade/ready-to-swap-window";
+import { isRecord } from "@/lib/shared/coerce";
 
 export const QUIESCENCE_RUN_FUNCTION_ID = "ops/quiescence-run";
 export const QUIESCENCE_START_EVENT = "ops/quiescence.start";
@@ -298,22 +299,35 @@ export const quiescenceRun = jobs.createFunction(
     // ─── Step 4d: ready-to-swap — await caller signal ────────────────────
 
     // The latest snapshot is already on finalSnapshot (persisted each check).
-    const ready = await step.run("enter-ready-to-swap", () => enterReadyToSwap(runId, triggerRefId, actualWaitMs)) as
-      ReadyTransition | { status: string; enteredStateAt: { "ready-to-swap"?: string } };
-    if ("kind" in ready && ready.kind === "aborted") {
+    const checkpoint: unknown = await step.run("enter-ready-to-swap", () => enterReadyToSwap(runId, triggerRefId, actualWaitMs));
+    const ready = isRecord(checkpoint) ? checkpoint : {};
+    if (ready.kind === "aborted") {
+      const operator = typeof ready.operator === "string" ? ready.operator : "unknown";
       await step.run("enter-aborted-before-ready", () => transitionState(runId, "aborted", {
         outcome: "aborted-by-operator", completionSource: "caller", completedAt: new Date(),
       }));
       await step.run("clear-aborted-before-ready", () => setQuiescenceLevel("normal", null, new Date(), runId));
-      await step.run("emit-aborted-before-ready", () => emitCleared({ runId, outcome: "aborted", triggerRefId, reason: ready.operator }));
+      await step.run("emit-aborted-before-ready", () => emitCleared({ runId, outcome: "aborted", triggerRefId, reason: operator }));
       return { ok: false, outcome: "aborted", runId };
     }
     // An older deployment may already have checkpointed this step. Anchor
     // legacy time to its original transition, never to a replay's wall clock.
-    const deadline = "kind" in ready ? ready.deadline : new Date(
-      Date.parse(ready.enteredStateAt["ready-to-swap"] ?? "") + (awaitOperator ? LEGACY_UNCONFIRMED_MAX_MS : readyToSwapBudgetMs("unrelated")),
-    ).toISOString();
-    if ("kind" in ready && ready.trigger === "self-upgrade") {
+    const legacy = ready.kind === undefined && ready.status === "ready-to-swap";
+    const expiresAt = readyToSwapDeadline({
+      readyToSwapDeadlineAt: ready.kind === "ready" && typeof ready.deadline === "string" ? new Date(ready.deadline) : null,
+      enteredStateAt: legacy ? ready.enteredStateAt : null,
+    }, legacy && !awaitOperator ? readyToSwapBudgetMs("unrelated") : undefined);
+    const failAndClear = async (reason: "no-signal" | "invalid-ready-deadline", notes: string) => {
+      await step.run(`enter-failed-${reason}`, () => transitionState(runId, "failed", {
+        outcome: "failed", completionSource: "caller", outcomeNotes: notes, completedAt: new Date(),
+      }));
+      await step.run(`flip-level-normal-${reason}`, () => setQuiescenceLevel("normal", null, new Date(), runId));
+      await step.run(`emit-cleared-failed-${reason}`, () => emitCleared({ runId, outcome: "failed", triggerRefId, reason }));
+      return { ok: false, outcome: "failed", reason, runId } as const;
+    };
+    if (!expiresAt) return failAndClear("invalid-ready-deadline", "Ready checkpoint has no trustworthy swap deadline");
+    const deadline = expiresAt.toISOString();
+    if (ready.kind === "ready" && ready.trigger === "self-upgrade") {
       await step.run("broadcast-ready-deadline", async () => {
         const { agentEventBus } = await import("@/lib/tak/agent-event-bus");
         agentEventBus.broadcastSystem({
@@ -329,26 +343,14 @@ export const quiescenceRun = jobs.createFunction(
 
     const swap = await step.waitForEvent("await-swap-complete", {
       event: QUIESCENCE_SWAP_COMPLETE_EVENT,
-      timeout: new Date(deadline),
+      timeout: expiresAt,
       if: `async.data.runId == "${runId}"`,
     });
 
     if (!swap) {
       // Caller never signaled — coordinator must abandon. Force level back
       // to normal so the system isn't permanently drained.
-      await step.run("enter-failed-no-signal", () =>
-        transitionState(runId, "failed", {
-          outcome: "failed",
-          completionSource: "caller",
-          outcomeNotes: `swap-complete signal never received by ${deadline}`,
-          completedAt: new Date(),
-        }),
-      );
-      await step.run("flip-level-normal-no-signal", () => setQuiescenceLevel("normal", null, new Date(), runId));
-      await step.run("emit-cleared-failed-no-signal", () =>
-        emitCleared({ runId, outcome: "failed", triggerRefId, reason: "no-signal" }),
-      );
-      return { ok: false, outcome: "failed", reason: "no-signal", runId };
+      return failAndClear("no-signal", `swap-complete signal never received by ${deadline}`);
     }
 
     // ─── Step 4e: caller signaled — branch on outcome ────────────────────
@@ -371,7 +373,7 @@ export const quiescenceRun = jobs.createFunction(
           deferReason: null,
           deferSurface: null,
           outcome: "swapping",
-          ...("kind" in ready && ready.trigger === "self-upgrade" ? { readyToSwapDeadlineAt: deadline } : {}),
+          ...(ready.kind === "ready" && ready.trigger === "self-upgrade" ? { readyToSwapDeadlineAt: deadline } : {}),
         });
         return { broadcast: "swapping", runId };
       });
