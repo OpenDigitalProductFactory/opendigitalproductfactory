@@ -108,7 +108,12 @@ function database() {
   } });
   const agentId = "AGT-FIXTURE";
   const userId = "user-fixture";
-  const paramsFingerprint = fingerprintCoworkerInput(s5RehearsalApprovalParams(ownerPin));
+  const approverId = "platform-approver";
+  const approverAlias = { principal: { id: "platform-approver-row", principalId: waiver.ownerPrincipalId, kind: "human", status: "active" } };
+  const human = { isActive: true, isSuperuser: false, groups: [] as { platformRole: { roleId: string } }[],
+    automationVerificationId: null, automationProfile: null, automationSlot: null, automationExpiresAt: null };
+  const platformApprover = { ...human, groups: [{ platformRole: { roleId: "HR-000" } }] };
+  const paramsFingerprint = fingerprintCoworkerInput(s5RehearsalApprovalParams({ ...ownerPin, approverPrincipalId: waiver.ownerPrincipalId }));
   const original = prepareS5ControlCredential({
     executionProfile: "synthetic-rehearsal", receiver: { ...receiver, audience: receiver.receiverRef }, userId,
     now: date(now), expiresAt: date(snapshot.expiresAt), admission: {
@@ -120,8 +125,8 @@ function database() {
     },
   })!;
   const approval = { id: waiver.approvalRef, status: "approved", resolvedAt: null, manifestActionId: "s5-single-synthetic-rehearsal",
-    delegatingUserId: userId, coworkerAgentId: agentId, approvalBindingFingerprint: "bound", inputFingerprint: paramsFingerprint,
-    expiresAt: date(waiver.validUntil), argsJson: { humanApproval: { userId, approvedAt: date(approvalTime).toISOString() } } };
+    delegatingUserId: approverId, coworkerAgentId: agentId, approvalBindingFingerprint: "bound", inputFingerprint: paramsFingerprint,
+    expiresAt: date(waiver.validUntil), argsJson: { humanApproval: { userId: approverId, approvedAt: date(approvalTime).toISOString() } } };
   const permit = { enforcement: "enforced", revokedAt: null, envelopeId: approval.id, workroomId: attempt.workroomId, stageKey: attempt.stageKey,
     shapeRef: pin.shapeRef, actorAgentId: agentId, actorUserId: userId, actorGaid: pinned.subject.gaid, maxUses: 1, useCount: 0,
     notBefore: date(now), expiresAt: date(waiver.validUntil), capabilities: [{ tool: "get_workroom" }] };
@@ -131,24 +136,34 @@ function database() {
       workspaceState: { s5RehearsalAdmission: ownerPin, workroomDrive: { stageKey: attempt.stageKey } } }) },
     mcpApiToken: { findFirst: vi.fn().mockResolvedValue({ ...original.data, revokedAt: null }) },
     coworkerActionEnvelope: { findUnique: vi.fn().mockResolvedValue(approval) },
-    principal: { findUnique: vi.fn(({ where }) => where.id ? { principalId: waiver.ownerPrincipalId, status: "active", kind: "human",
-      aliases: [{ id: "user" }] } : { status: "active", kind: "agent", aliases: [{ aliasValue: pinned.subject.gaid }] }) },
+    principal: { findUnique: vi.fn().mockResolvedValue({ status: "active", kind: "agent", aliases: [{ aliasValue: pinned.subject.gaid }] }) },
+    principalAlias: { findUnique: vi.fn().mockResolvedValue(approverAlias) },
     agent: { findUnique: vi.fn().mockResolvedValue({ id: "agent-row", status: "active", archived: false, toolGrants: [], toolGrantRevocations: [] }) },
     authorityBinding: { findUnique: vi.fn().mockResolvedValue({ bindingId: pinned.authority.bindingRef, status: "active", appliedAgentId: "agent-row",
       resourceRef: pin.shapeRef, resourceType: "work-shape", scopeType: "workroom", grants: [{ grantKey: "work_room_read", mode: "allow" }] }) },
-    user: { findUnique: vi.fn().mockResolvedValue({ isActive: true, automationVerificationId: null, automationProfile: null,
-      automationSlot: null, automationExpiresAt: null }) },
+    user: { findUnique: vi.fn(async ({ where }) => (where.id === approverId ? platformApprover : human)) },
   };
-  sources.access.mockReset().mockResolvedValue({ decision: { level: "content" }, agentPrincipalId: pinned.subject.principalId });
+  sources.access.mockReset().mockResolvedValue({ decision: { level: "content" }, agentPrincipalId: pinned.subject.principalId,
+    authorityContext: { humanPrincipal: { id: "owner-row" } } });
   sources.aliases.mockReset().mockResolvedValue(new Map([[agentId, pinned.subject.gaid]]));
   sources.permit.mockReset().mockResolvedValue(permit);
   sources.mac.mockReset().mockReturnValue({ result: "ok" });
   const handler = createS5RehearsalOwnerHandler({ env, now: () => date(now),
     withOwnerRead: read => read(createS5RehearsalOwnerReads(tx as unknown as Prisma.TransactionClient)) });
-  return { handler, tx, approval, permit, snapshot };
+  return { handler, tx, approval, permit, snapshot, human, platformApprover, approverAlias };
 }
 
 describe("database owner join with client hooks absent", () => {
+  it("holds when the approval belongs to the Workroom requester rather than an independent platform approver", async () => {
+    const f = database();
+    const room = await f.tx.workroom.findUnique();
+    f.tx.coworkerActionEnvelope.findUnique.mockResolvedValueOnce({
+      ...f.approval, delegatingUserId: room.taskRun.userId,
+      argsJson: { humanApproval: { ...f.approval.argsJson.humanApproval, userId: room.taskRun.userId } },
+    });
+    expect((await f.handler(request())).status).toBe(404);
+  });
+
   it("requires current independent approval, permit, subject, Workroom, token and grants", async () => {
     const f = database();
     const response = await f.handler(request());
@@ -156,6 +171,18 @@ describe("database owner join with client hooks absent", () => {
     expect(await response.json()).toEqual({ kind: "observed", snapshot: f.snapshot });
     expect(sources.access).toHaveBeenCalledWith(expect.objectContaining({ workroomId: "room-row", requested: "content" }), f.tx);
     expect(f.tx.coworkerActionEnvelope.findUnique).toHaveBeenCalledExactlyOnceWith({ where: { id: f.approval.id } });
+  });
+
+  it("holds on revoked platform capability, a new Principal behind the approver, or requester alias reuse", async () => {
+    const f = database();
+    f.tx.user.findUnique.mockResolvedValue(f.human);
+    expect((await f.handler(request())).status).toBe(404);
+    f.tx.user.findUnique.mockResolvedValue({ ...f.human, isSuperuser: true });
+    expect((await f.handler(request())).status).toBe(200);
+    f.tx.principalAlias.findUnique.mockResolvedValueOnce({ principal: { ...f.approverAlias.principal, principalId: "another-principal" } });
+    expect((await f.handler(request())).status).toBe(404);
+    f.tx.principalAlias.findUnique.mockResolvedValueOnce({ principal: { ...f.approverAlias.principal, id: "owner-row" } });
+    expect((await f.handler(request())).status).toBe(404);
   });
 
   it("holds when any current owner withdraws permission while the persisted pin is unchanged", async () => {
@@ -170,7 +197,7 @@ describe("database owner join with client hooks absent", () => {
     expect((await f.handler(request())).status).toBe(404);
     sources.aliases.mockResolvedValueOnce(new Map());
     expect((await f.handler(request())).status).toBe(404);
-    f.tx.user.findUnique.mockResolvedValueOnce({ isActive: false });
+    f.tx.user.findUnique.mockResolvedValueOnce({ ...f.human, isActive: false });
     expect((await f.handler(request())).status).toBe(404);
     f.tx.agent.findUnique.mockResolvedValueOnce({ id: "agent-row", status: "active", archived: false, toolGrantRevocations: ["revoked"] });
     expect((await f.handler(request())).status).toBe(404);

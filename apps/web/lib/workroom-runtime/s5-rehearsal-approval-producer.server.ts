@@ -15,6 +15,7 @@ import { commandPayloadBinding, runReceiptedCommand, type ReceiptDb } from "@/li
 import { resolveAuthorityBindingEligibility } from "@/lib/work-management/coordinator-eligibility";
 import { resolveAgentWorkroomAccess } from "@/lib/work-management/workroom-agent-access.server";
 import { readStoredWorkroomDriveState } from "@/lib/work-management/workroom-drive-state";
+import { readS5RehearsalApprover } from "./s5-rehearsal-approver.server";
 import { S5_REHEARSAL_APPROVAL_ACTION } from "./s5-rehearsal-approval-action";
 import { s5ExactRehearsalAttempt, s5RehearsalAdmissionSnapshot } from "./s5-rehearsal-admission-snapshot.server";
 import { S5_REHEARSAL_READ_PATH, s5RehearsalApprovalParams, s5RehearsalOwnerPin } from "./s5-rehearsal-owner.server";
@@ -24,6 +25,7 @@ const snapshot = s5RehearsalAdmissionSnapshot.omit({ qualification: true, expire
 const operation = z.enum(["get_workroom", "read_room_messages", "post_room_message"]);
 export const reviewedS5RehearsalPins = s5RehearsalOwnerPin.pick({ leaseId: true, sourceSha: true, signingPublicKey: true, shapeRef: true }).extend({
   schemaVersion: z.literal("s5-rehearsal-approval-draft.v1"),
+  approverPrincipalId: s5RehearsalAdmissionSnapshot.shape.qualification.shape.ownerPrincipalId,
   expiresAt: z.int().nonnegative(),
   snapshot,
   operations: z.array(operation).min(1).max(3).refine(keys => new Set(keys).size === keys.length),
@@ -31,7 +33,7 @@ export const reviewedS5RehearsalPins = s5RehearsalOwnerPin.pick({ leaseId: true,
 const requestShape = s5ExactRehearsalAttempt.extend({ reviewedPinDigest: z.string().regex(/^[a-f0-9]{64}$/u) });
 type ReviewedPins = z.infer<typeof reviewedS5RehearsalPins>;
 type Locator = z.infer<typeof s5ExactRehearsalAttempt>;
-type Current = { draft: unknown; userId: string; agentId: string; bindingRowId: string };
+type Current = { draft: unknown; approverUserId: string; approverPrincipalId: string; taskUserId: string; agentId: string; bindingRowId: string };
 type PendingIntent = {
   params: ReturnType<typeof s5RehearsalApprovalParams>; binding: CoworkerApprovalBinding;
   bindingRowId: string; now: Date; deadline: Date;
@@ -77,7 +79,8 @@ export function createS5RehearsalApprovalProducer(ports: S5RehearsalProducerPort
         beforeReceiptRead: async (tx, lockedRowId) => {
           const current = await ports.loadCurrent(tx, lockedRowId, attempt, userId);
           const value = reviewedS5RehearsalPins.safeParse(current?.draft);
-          if (!value.success || !current || current.userId !== userId) return false;
+          if (!value.success || !current || current.approverUserId !== userId || current.taskUserId === userId
+            || current.approverPrincipalId !== value.data.approverPrincipalId) return false;
           const pin = value.data;
           const time = now().getTime();
           if (pin.leaseId !== ports.preview.leaseId || pin.sourceSha !== ports.preview.sourceSha
@@ -114,7 +117,7 @@ export function createS5RehearsalApprovalProducer(ports: S5RehearsalProducerPort
             permitId: permitRef, bindingId: S5_REHEARSAL_APPROVAL_ACTION, bindingVersion: 1, gateKey: S5_REHEARSAL_APPROVAL_ACTION,
             authority: "wwmd", shapeRef: pin.shapeRef, stageKey: attempt.stageKey, gateDecisionId: null,
             authorityDecisionId: pending.authorityDecisionId, envelopeId: pending.envelopeId, actorGaid: pin.snapshot.subject.gaid,
-            actorUserId: userId, actorAgentId: current.agentId, workroomId: attempt.workroomId, subjectScope: attempt.stageAttemptRef,
+            actorUserId: current.taskUserId, actorAgentId: current.agentId, workroomId: attempt.workroomId, subjectScope: attempt.stageAttemptRef,
             capabilities: pin.operations.map(tool => ({ tool })), paramHash: computeParamHash(S5_REHEARSAL_APPROVAL_ACTION, params),
             enforcement: "enforced", notBefore: issuedAt, expiresAt: deadline, maxUses: 1, nonce: ports.nonce(), parentPermitId: null,
           };
@@ -138,7 +141,7 @@ function approvalRationale({ params: p, deadline }: PendingIntent): string {
   const { recipient } = p.syntheticTarget;
   return [
     "Approve one synthetic CLI rehearsal attempt and at most one provider request, including retries and reconnects.",
-    `Subject ${p.subject.principalId} (${p.subject.gaid}); Workroom ${p.workroomId}, session ${p.sessionRef}, stage ${p.stageKey}, attempt ${p.stageAttemptRef}.`,
+    `Approving principal ${p.approverPrincipalId}; subject ${p.subject.principalId} (${p.subject.gaid}); Workroom ${p.workroomId}, session ${p.sessionRef}, stage ${p.stageKey}, attempt ${p.stageAttemptRef}.`,
     `Preview ${p.leaseId} at ${p.sourceSha}, DB ${p.syntheticTarget.databaseRef}; fixture ${p.syntheticTarget.fixtureRef}, case ${p.syntheticTarget.caseKey}, destination ${p.syntheticTarget.destinationRef}.`,
     `Data-only recipient (${recipient.authorityRef}, ${recipient.destinationRef}, ${recipient.reservationRef}). Control ${p.receiverRef} on ${p.hostRef} at ${p.resource}, key ${p.signingPublicKey}.`,
     `Issuer ${p.issuer}, origin ${p.originRef}, authority binding ${p.authority.bindingRef}, permit ${p.authority.permitRef}, grants ${p.authority.grantKeys.join(", ")}.`,
@@ -162,15 +165,15 @@ export function s5RehearsalPreviewOwnerPorts(db: Pick<Prisma.TransactionClient, 
       } });
       const task = room?.taskRun;
       if (!room || room.capsuleId !== attempt.workroomId || room.archivedAt || !["ready", "in-progress", "working"].includes(room.status)
-        || !room.requestedByPrincipalId || !task?.currentAgentId || task.userId !== userId
+        || !room.requestedByPrincipalId || !task?.currentAgentId || task.userId === userId
         || task.taskRunId !== attempt.sessionRef || task.archivedAt || !["submitted", "working"].includes(task.status)
         || !isRecord(room.workspaceState) || readStoredWorkroomDriveState(room.workspaceState).currentStageKey !== attempt.stageKey) return null;
       const parsed = reviewedS5RehearsalPins.safeParse(room.workspaceState.s5RehearsalApprovalDraft);
       if (!parsed.success) return null;
       const draft = parsed.data;
       const s = draft.snapshot;
-      const [access, aliases, principal, agent, binding, user] = await Promise.all([
-        resolveAgentWorkroomAccess({ userId, agentId: task.currentAgentId, workroomId: roomRowId, requested: "content" }, owner),
+      const [access, aliases, principal, agent, binding, user, approver] = await Promise.all([
+        resolveAgentWorkroomAccess({ userId: task.userId, agentId: task.currentAgentId, workroomId: roomRowId, requested: "content" }, owner),
         getAgentGaidMap([task.currentAgentId], owner),
         owner.principal.findUnique({ where: { principalId: s.subject.principalId }, select: {
           aliases: { where: { aliasType: "gaid", issuer: "" }, take: 2, select: { aliasValue: true } },
@@ -181,11 +184,13 @@ export function s5RehearsalPreviewOwnerPorts(db: Pick<Prisma.TransactionClient, 
         owner.authorityBinding.findUnique({ where: { bindingId: s.authority.bindingRef }, select: {
           id: true, status: true, scopeType: true, resourceType: true, resourceRef: true, appliedAgentId: true, grants: { select: { mode: true, grantKey: true } },
         } }),
-        owner.user.findUnique({ where: { id: userId }, select: {
+        owner.user.findUnique({ where: { id: task.userId }, select: {
           isActive: true, automationVerificationId: true, automationProfile: true, automationSlot: true, automationExpiresAt: true,
         } }),
+        readS5RehearsalApprover(owner, userId),
       ]);
-      if (!user?.isActive || user.automationVerificationId !== null || user.automationProfile !== null || user.automationSlot !== null
+      if (!approver || approver.id === room.requestedByPrincipalId || approver.principalId !== draft.approverPrincipalId
+        || !user?.isActive || user.automationVerificationId !== null || user.automationProfile !== null || user.automationSlot !== null
         || user.automationExpiresAt !== null || !agent || agent.archived || agent.status !== "active" || !binding || binding.appliedAgentId !== agent.id
         || resolveAuthorityBindingEligibility(draft.shapeRef, [binding]) !== "eligible"
         || access.decision.level !== "content" || access.authorityContext?.humanPrincipal?.id !== room.requestedByPrincipalId
@@ -196,7 +201,8 @@ export function s5RehearsalPreviewOwnerPorts(db: Pick<Prisma.TransactionClient, 
       const mapping = getToolGrantMapping();
       if (!s.authority.grantKeys.every(key => grants.has(key) && allowed.has(key))
         || !draft.operations.every(tool => mapping[tool]?.length && mapping[tool]!.every(key => s.authority.grantKeys.includes(key)))) return null;
-      return { draft, userId, agentId: task.currentAgentId, bindingRowId: binding.id };
+      return { draft, approverUserId: approver.userId, approverPrincipalId: approver.principalId,
+        taskUserId: task.userId, agentId: task.currentAgentId, bindingRowId: binding.id };
     },
     async raisePending(tx, intent) {
       const owner = txOf(tx);
@@ -207,7 +213,8 @@ export function s5RehearsalPreviewOwnerPorts(db: Pick<Prisma.TransactionClient, 
           humanContextRef: binding.actingHumanUserId, agentContextRef: binding.actingAgentId, authorityBindingId: intent.bindingRowId,
           actionKey: S5_REHEARSAL_APPROVAL_ACTION, objectRef: params.workroomId, decision: "require-approval",
           purposeOfUse: "synthetic-rehearsal-approval-request", mode: "proposal", sensitivityLevel: binding.sensitivity,
-          rationale: { inputFingerprint: binding.inputFingerprint, permitRef: params.authority.permitRef },
+          rationale: { inputFingerprint: binding.inputFingerprint, permitRef: params.authority.permitRef,
+            approverPrincipalId: params.approverPrincipalId, sessionRef: params.sessionRef },
         },
         select: { decisionId: true },
       });

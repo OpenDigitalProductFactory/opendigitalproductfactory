@@ -9,9 +9,12 @@ const t = 1_795_560_000_000;
 const preview = { leaseId: "NPEL-FIXTURE", sourceSha: "a".repeat(40), origin: "http://localhost:3001" };
 const exact = { workroomId: "WC-FIXTURE", sessionRef: "run-fixture", stageKey: "coordinate", stageAttemptRef: "attempt-1" };
 const actor = "reviewing-owner";
+const taskUserId = "workroom-requester";
+const approverPrincipalId = "PRN-APPROVER";
 const principal = { principalId: "PRN-AGENT", gaid: "gaid:priv:fixture:agent" };
 const fixture = {
   schemaVersion: "s5-rehearsal-approval-draft.v1", leaseId: preview.leaseId, sourceSha: preview.sourceSha,
+  approverPrincipalId,
   signingPublicKey: Buffer.alloc(44).toString("base64"), shapeRef: "shape@1",
   expiresAt: t + 100_000, operations: ["get_workroom", "post_room_message"],
   snapshot: { ...exact, profile: "synthetic-rehearsal", mode: "read-only-coordination",
@@ -34,7 +37,8 @@ function setup() {
       create: vi.fn(async (args: unknown) => { const d = (args as { data: { commandKey: string; kind: string; payload: unknown } }).data; rows.set(d.commandKey, d); }) },
   };
   const db = { ...tx, $transaction: async <T>(run: (tx: ReceiptDb) => Promise<T>) => run(tx) };
-  const loadCurrent = vi.fn<S5RehearsalProducerPorts["loadCurrent"]>().mockResolvedValue({ draft, userId: actor, agentId: "AGT-FIXTURE", bindingRowId: "binding-row" });
+  const current = { draft, approverUserId: actor, approverPrincipalId, taskUserId, agentId: "AGT-FIXTURE", bindingRowId: "binding-row" };
+  const loadCurrent = vi.fn<S5RehearsalProducerPorts["loadCurrent"]>().mockResolvedValue(current);
   const raisePending = vi.fn<S5RehearsalProducerPorts["raisePending"]>().mockResolvedValue({ envelopeId: "env-a", status: "proposed", expiresAt: new Date(draft.expiresAt), authorityDecisionId: "AUTH-A" });
   const persistPermit = vi.fn<S5RehearsalProducerPorts["persistPermit"]>().mockImplementation(async (_tx, claims, signature) => ({
     ...claims, keyId: signature.keyId, mac: signature.mac, useCount: 0, revokedAt: null, id: "permit-row",
@@ -44,7 +48,7 @@ function setup() {
   const producer = createS5RehearsalApprovalProducer({ db, preview, now, locateRoom: async () => "room-row",
     loadCurrent, raisePending, persistPermit, reservePermitRef: reserve, nonce: () => "nonce", sign: p => signPermit(p, signingOptions),
     verify: p => verifyPermitMac(p, null, signingOptions).result === "ok" });
-  return { producer, draft, request, loadCurrent, raisePending, persistPermit, reserve, now, rows, tx };
+  return { producer, draft, request, current, loadCurrent, raisePending, persistPermit, reserve, now, rows, tx };
 }
 
 describe("S5 preview-only approval producer", () => {
@@ -55,11 +59,11 @@ describe("S5 preview-only approval producer", () => {
     const intent = f.raisePending.mock.calls[0]![1];
     expect(intent.params).toMatchObject({ ...exact, sourceSha: preview.sourceSha, leaseId: preview.leaseId, subject: principal,
       authority: { bindingRef: fixture.snapshot.authority.bindingRef, permitRef, grantKeys: fixture.snapshot.authority.grantKeys },
-      syntheticTarget: fixture.snapshot.syntheticTarget, attemptLimit: 1, requestLimit: 1, deadlineMs: 120_000 });
-    expect(intent.binding.inputFingerprint).toBe(fingerprintCoworkerInput(intent.params));
+      syntheticTarget: fixture.snapshot.syntheticTarget, approverPrincipalId, attemptLimit: 1, requestLimit: 1, deadlineMs: 120_000 });
+    expect(intent.binding).toMatchObject({ actingHumanUserId: actor, inputFingerprint: fingerprintCoworkerInput(intent.params) });
     const [, permit, signature] = f.persistPermit.mock.calls[0]!;
     expect(permit).toMatchObject({ permitId: permitRef, envelopeId: "env-a", authorityDecisionId: "AUTH-A", enforcement: "enforced",
-      stageKey: exact.stageKey, shapeRef: fixture.shapeRef, subjectScope: exact.stageAttemptRef, actorGaid: principal.gaid,
+      stageKey: exact.stageKey, shapeRef: fixture.shapeRef, subjectScope: exact.stageAttemptRef, actorGaid: principal.gaid, actorUserId: taskUserId,
       maxUses: 1, expiresAt: new Date(f.draft.expiresAt) });
     expect(signature).toEqual(signPermit(permit, signingOptions));
     expect(f.rows.size).toBe(1);
@@ -79,7 +83,7 @@ describe("S5 preview-only approval producer", () => {
     const f = setup();
     expect((await f.producer(actor, f.request)).kind).toBe("proposed");
     const changed = { ...f.draft, snapshot: { ...f.draft.snapshot, receiverRef: "control-B" } };
-    f.loadCurrent.mockResolvedValueOnce({ draft: changed, userId: actor, agentId: "AGT-FIXTURE", bindingRowId: "binding-row" });
+    f.loadCurrent.mockResolvedValueOnce({ ...f.current, draft: changed });
     expect(await f.producer(actor, { ...f.request, reviewedPinDigest: s5RehearsalDraftDigest(changed) })).toEqual({ kind: "held" });
     expect(f.raisePending).toHaveBeenCalledOnce();
     expect(f.persistPermit).toHaveBeenCalledOnce();
@@ -93,9 +97,19 @@ describe("S5 preview-only approval producer", () => {
     }
     const altered = reviewedS5RehearsalPins.parse({ ...f.draft,
       snapshot: { ...f.draft.snapshot, syntheticTarget: { ...f.draft.snapshot.syntheticTarget, destinationRef: "other-target" } } });
-    f.loadCurrent.mockResolvedValueOnce({ draft: altered, userId: actor, agentId: "AGT-FIXTURE", bindingRowId: "binding-row" });
+    f.loadCurrent.mockResolvedValueOnce({ ...f.current, draft: altered });
     expect(await f.producer(actor, f.request)).toEqual({ kind: "held" });
     f.now.mockReturnValue(new Date(f.draft.expiresAt));
+    expect(await f.producer(actor, f.request)).toEqual({ kind: "held" });
+    expect(f.raisePending).not.toHaveBeenCalled();
+    expect(f.persistPermit).not.toHaveBeenCalled();
+  });
+
+  it("does not raise an approval for the task actor or a substituted approver", async () => {
+    const f = setup();
+    f.loadCurrent.mockResolvedValueOnce({ ...f.current, approverUserId: taskUserId });
+    expect(await f.producer(taskUserId, f.request)).toEqual({ kind: "held" });
+    f.loadCurrent.mockResolvedValueOnce({ ...f.current, approverPrincipalId: "PRN-SUBSTITUTE" });
     expect(await f.producer(actor, f.request)).toEqual({ kind: "held" });
     expect(f.raisePending).not.toHaveBeenCalled();
     expect(f.persistPermit).not.toHaveBeenCalled();

@@ -1,16 +1,19 @@
 // Temporary admin trigger for BS autonomous pipeline testing.
-// Accepts DPF_MCP_BEARER_TOKEN as Authorization header (contributor-only dev surface).
+// Accepts only a current operator PAT in the Authorization header (BI-38C7C842).
 import { NextResponse } from "next/server";
 import { prisma } from "@dpf/db";
 import { createHash } from "node:crypto";
 
 export async function POST(req: Request) {
-  const authHeader = req.headers.get("authorization") ?? "";
-  const rawToken = authHeader.replace("Bearer ", "").trim();
-
-  const tokenHash = createHash("sha256").update(rawToken).digest("hex");
-  const tokenRow = await prisma.mcpApiToken.findFirst({ where: { tokenHash } });
-  if (!tokenRow) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const rawToken = /^Bearer +([^\s]+)$/iu.exec(req.headers.get("authorization") ?? "")?.[1];
+  const tokenRow = rawToken ? await prisma.mcpApiToken.findUnique({
+    where: { tokenHash: createHash("sha256").update(rawToken).digest("hex") },
+    select: { kind: true, userId: true, revokedAt: true, expiresAt: true },
+  }) : null;
+  if (tokenRow?.kind !== "operator" || tokenRow.revokedAt !== null
+    || (tokenRow.expiresAt !== null && !(tokenRow.expiresAt.getTime() > Date.now()))) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
 
   const body = await req.json().catch(() => ({}));
   const buildId = body?.buildId;

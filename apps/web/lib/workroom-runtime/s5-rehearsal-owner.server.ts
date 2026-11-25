@@ -12,6 +12,7 @@ import { getToolGrantMapping, persistedAgentToolGrants } from "@/lib/tak/agent-g
 import { resolveAuthorityBindingEligibility } from "@/lib/work-management/coordinator-eligibility";
 import { resolveAgentWorkroomAccess } from "@/lib/work-management/workroom-agent-access.server";
 import { readStoredWorkroomDriveState } from "@/lib/work-management/workroom-drive-state";
+import { readS5RehearsalApprover } from "./s5-rehearsal-approver.server";
 import { verifyS5RehearsalQualification } from "./s5-rehearsal-qualification.server";
 import { S5_REHEARSAL_APPROVAL_ACTION } from "./s5-rehearsal-approval-action";
 import { createS5RehearsalAdmissionReader, s5ExactRehearsalAttempt, s5RehearsalAdmissionSnapshot,
@@ -41,14 +42,14 @@ type OwnerReads = {
  * This only names a governed approval shape. The read route does not create,
  * approve, execute or reserve the envelope. */
 export function s5RehearsalApprovalParams(pin: Pick<S5RehearsalOwnerPin, "leaseId" | "sourceSha" | "signingPublicKey"> & {
-  snapshot: Omit<S5RehearsalOwnerPin["snapshot"], "qualification" | "expiresAt">;
+  snapshot: Omit<S5RehearsalOwnerPin["snapshot"], "qualification" | "expiresAt">; approverPrincipalId: string;
 }) {
   const { snapshot: s } = pin;
   return { purpose: S5_REHEARSAL_APPROVAL_ACTION, requestLimit: 1, attemptLimit: 1, deadlineMs: 120_000, profile: s.profile,
     leaseId: pin.leaseId, sourceSha: pin.sourceSha, receiverRef: s.receiverRef, hostRef: s.hostRef, resource: s.resource,
     signingPublicKey: pin.signingPublicKey, originRef: s.originRef, authority: s.authority,
     issuer: s.issuer, workroomId: s.workroomId, sessionRef: s.sessionRef, stageKey: s.stageKey, stageAttemptRef: s.stageAttemptRef,
-    subject: s.subject, syntheticTarget: s.syntheticTarget };
+    subject: s.subject, approverPrincipalId: pin.approverPrincipalId, syntheticTarget: s.syntheticTarget };
 }
 
 /** The private Workroom attempt pin locates records; it does not establish
@@ -76,7 +77,7 @@ export function createS5RehearsalOwnerReads(tx: Prisma.TransactionClient): Owner
       const room = rooms.get(s.workroomId);
       const task = room?.taskRun;
       if (!room || !task?.currentAgentId || !room.requestedByPrincipalId) return null;
-      const [row, envelope, agent, permit, principal, actingOwner] = await Promise.all([
+      const [row, envelope, agent, permit, principal] = await Promise.all([
         tx.mcpApiToken.findFirst({ where: { id: pin.tokenId, kind: S5_WORKROOM_TOKEN_KIND }, select: {
           kind: true, workroomRef: true, runRef: true, agentId: true, userId: true, scope: true, capability: true, resource: true,
           authorityBindingId: true, createdAt: true, expiresAt: true, revokedAt: true, scopes: true, workroomAuthorization: true,
@@ -89,16 +90,11 @@ export function createS5RehearsalOwnerReads(tx: Prisma.TransactionClient): Owner
         tx.principal.findUnique({ where: { principalId: s.subject.principalId }, select: {
           id: true, kind: true, status: true, aliases: { where: { aliasType: "gaid", issuer: "" }, take: 2, select: { aliasValue: true } },
         } }),
-        tx.principal.findUnique({ where: { id: room.requestedByPrincipalId }, select: {
-          principalId: true, status: true, kind: true,
-          aliases: { where: { aliasType: "user", aliasValue: task.userId, issuer: "" }, select: { id: true } },
-        } }),
       ]);
       const t = now.getTime();
       if (!row || row.userId !== task.userId || row.agentId !== task.currentAgentId || !agent || agent.status !== "active" || agent.archived
         || principal?.status !== "active" || principal.kind !== "agent" || principal.aliases.length !== 1
-        || principal.aliases[0]?.aliasValue !== s.subject.gaid || actingOwner?.status !== "active" || actingOwner.kind !== "human"
-        || actingOwner.principalId !== s.qualification.ownerPrincipalId || actingOwner.aliases.length !== 1) return null;
+        || principal.aliases[0]?.aliasValue !== s.subject.gaid) return null;
       const credential = readS5CredentialCeiling(row, { issuer: s.issuer, audience: s.receiverRef, hostRef: s.hostRef, resource: s.resource }, now);
       const projected = credential?.projection;
       if (!projected || credential.expiresAt.getTime() !== s.expiresAt || s.expiresAt > row.createdAt.getTime() + 120_000
@@ -110,15 +106,16 @@ export function createS5RehearsalOwnerReads(tx: Prisma.TransactionClient): Owner
       const marker = isRecord(envelope?.argsJson) ? envelope.argsJson.humanApproval : null;
       const approvalTime = isRecord(marker) && typeof marker.approvedAt === "string" ? Date.parse(marker.approvedAt) : Number.NaN;
       if (!envelope || envelope.status !== "approved" || envelope.resolvedAt !== null || envelope.manifestActionId !== S5_REHEARSAL_APPROVAL_ACTION
-        || envelope.delegatingUserId !== task.userId || envelope.coworkerAgentId !== task.currentAgentId || !envelope.approvalBindingFingerprint
-        || envelope.inputFingerprint !== fingerprintCoworkerInput(s5RehearsalApprovalParams(pin)) || !envelope.expiresAt
-        || !isRecord(marker) || Object.keys(marker).length !== 2 || marker.userId !== task.userId || !(approvalTime > 0 && approvalTime <= t)) return null;
+        || envelope.delegatingUserId === task.userId || envelope.coworkerAgentId !== task.currentAgentId || !envelope.approvalBindingFingerprint
+        || envelope.inputFingerprint !== fingerprintCoworkerInput(s5RehearsalApprovalParams({ ...pin, approverPrincipalId: s.qualification.ownerPrincipalId }))
+        || !envelope.expiresAt || !isRecord(marker) || Object.keys(marker).length !== 2
+        || marker.userId !== envelope.delegatingUserId || !(approvalTime > 0 && approvalTime <= t)) return null;
       if (!permit || verifyPermitMac(permit, null).result !== "ok" || permit.enforcement !== "enforced" || permit.revokedAt !== null
         || permit.envelopeId !== envelope.id || permit.workroomId !== s.workroomId || permit.stageKey !== s.stageKey || permit.shapeRef !== pin.shapeRef
         || permit.actorAgentId !== task.currentAgentId || permit.actorUserId !== task.userId || permit.actorGaid !== s.subject.gaid
         || permit.maxUses !== 1 || permit.useCount !== 0 || !(permit.notBefore.getTime() <= t && t < permit.expiresAt.getTime())
         || !projected.operationKeys.every(key => permit.capabilities.some(c => c.tool === key))) return null;
-      const [binding, access, aliases, ownerUser] = await Promise.all([
+      const [binding, access, aliases, taskUser, approver] = await Promise.all([
         tx.authorityBinding.findUnique({ where: { id: credential.authorityBindingId }, select: {
           bindingId: true, status: true, resourceRef: true, resourceType: true, scopeType: true, appliedAgentId: true,
           grants: { select: { grantKey: true, mode: true } },
@@ -128,12 +125,15 @@ export function createS5RehearsalOwnerReads(tx: Prisma.TransactionClient): Owner
         tx.user.findUnique({ where: { id: task.userId }, select: {
           isActive: true, automationVerificationId: true, automationProfile: true, automationSlot: true, automationExpiresAt: true,
         } }),
+        readS5RehearsalApprover(tx, envelope.delegatingUserId),
       ]);
-      if (!ownerUser?.isActive || ownerUser.automationVerificationId !== null || ownerUser.automationProfile !== null
-        || ownerUser.automationSlot !== null || ownerUser.automationExpiresAt !== null
+      if (!taskUser?.isActive || taskUser.automationVerificationId !== null || taskUser.automationProfile !== null
+        || taskUser.automationSlot !== null || taskUser.automationExpiresAt !== null
+        || !approver || approver.id === room.requestedByPrincipalId || approver.principalId !== s.qualification.ownerPrincipalId
         || !binding || binding.bindingId !== s.authority.bindingRef || binding.appliedAgentId !== agent.id
         || resolveAuthorityBindingEligibility(pin.shapeRef, [binding]) !== "eligible"
-        || access.decision.level !== "content" || access.agentPrincipalId !== s.subject.principalId
+        || access.decision.level !== "content" || access.authorityContext?.humanPrincipal?.id !== room.requestedByPrincipalId
+        || access.agentPrincipalId !== s.subject.principalId
         || aliases.get(task.currentAgentId) !== s.subject.gaid) return null;
       const grants = new Set(persistedAgentToolGrants(agent));
       const granted = new Set(binding.grants.filter(g => g.mode === "allow").map(g => g.grantKey));
@@ -143,7 +143,7 @@ export function createS5RehearsalOwnerReads(tx: Prisma.TransactionClient): Owner
       const exact = { issuer: s.issuer, workroomId: s.workroomId, sessionRef: s.sessionRef, stageKey: s.stageKey,
         stageAttemptRef: s.stageAttemptRef, subject: s.subject, syntheticTarget: s.syntheticTarget };
       const qualification = verifyS5RehearsalQualification({ record: pin.qualificationRecord, approval: {
-        purpose: S5_REHEARSAL_APPROVAL_ACTION, status: "approved", ref: envelope.id, ownerPrincipalId: actingOwner.principalId,
+        purpose: S5_REHEARSAL_APPROVAL_ACTION, status: "approved", ref: envelope.id, ownerPrincipalId: approver.principalId,
         revision: approvalTime, binding: exact, validUntil: Math.min(envelope.expiresAt.getTime(), permit.expiresAt.getTime()),
       } }, exact, t);
       if (!qualification || qualification.approvalRef !== projected.jsi.approvalRef

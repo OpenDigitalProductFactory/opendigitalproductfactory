@@ -1,4 +1,4 @@
-// @exposure private-mesh — loopback Contributor preview and current Workroom owner only.
+// @exposure private-mesh — governed Contributor preview and its current platform approver only.
 import { prisma } from "@dpf/db";
 import { auth } from "@/lib/auth";
 import { envelopeInboxRoute } from "@/lib/coworker/envelope-routes";

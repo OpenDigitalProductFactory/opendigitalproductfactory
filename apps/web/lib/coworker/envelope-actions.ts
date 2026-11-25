@@ -50,6 +50,7 @@ export interface EnvelopeRow {
   manifestActionId: string;
   argsJson: unknown;
   approvalBindingFingerprint?: string | null;
+  inputFingerprint?: string | null;
   authorityDecisionId?: string | null;
   rationale: string;
   status: EnvelopeStatus;
@@ -271,11 +272,15 @@ export async function approveEnvelope(
 ): Promise<EnvelopeActionResult<EnvelopeRow>> {
   const load = await loadEnvelope(envelopeId);
   if (!load.ok) return load;
-  if (approvalActionPolicy(load.envelope.manifestActionId)?.decision === "owner-one-time" && (onBehalf || options?.makeStanding)) {
+  const action = approvalActionPolicy(load.envelope.manifestActionId);
+  if (action?.decision === "owner-one-time" && (onBehalf || options?.makeStanding)) {
     return { ok: false, reason: "This request requires its owner's exact one-time approval.", httpStatus: 409 };
   }
   const authz = authorizeDecider(load.envelope, callerUserId, onBehalf);
   if (authz.refusal) return authz.refusal;
+  if (action && !await action.authorizeDecision(load.envelope, callerUserId).catch(() => false)) {
+    return { ok: false, reason: "This request needs a current independent platform approver.", httpStatus: 403 };
+  }
   const lapsed = await refuseIfLapsed(load.envelope);
   if (lapsed) return lapsed;
   // BI-E5631708: an owner's "don't ask again" rides on the same write as the
