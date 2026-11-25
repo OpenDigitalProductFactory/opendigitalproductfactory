@@ -12,7 +12,7 @@ vi.mock("@/lib/self-upgrade/run-store", () => ({ getRun: vi.fn(async () => ({ ru
 vi.mock("@/lib/self-upgrade/completion", () => ({ getDeployedSha: vi.fn(async () => null), isFeatureBuildDeployed: vi.fn() }));
 vi.mock("@/lib/self-upgrade/cooldown", () => ({ clearCooldown: vi.fn(), recordCooldown: mocks.recordCooldown }));
 vi.mock("@/lib/self-upgrade/notifications", () => ({ emitUpgradeEvent: mocks.emitUpgradeEvent }));
-vi.mock("@/lib/self-upgrade/recovery-point", () => ({ createSelfUpgradeRecoveryPoint: vi.fn(async () => ({ status: "ok" })), summarizeRecoveryPointDegradation: vi.fn(), summarizeRecoveryPointFailure: vi.fn() }));
+vi.mock("@/lib/self-upgrade/recovery-point", () => ({ createSelfUpgradeRecoveryPoint: vi.fn(async () => ({ status: "ok" })), summarizeRecoveryPointFailure: vi.fn() }));
 vi.mock("@/lib/self-upgrade/quiescence", () => ({ failQuiescenceSwap: mocks.failSwap, signalSwapComplete: vi.fn(), signalSwapStarting: vi.fn() }));
 vi.mock("@/lib/self-upgrade/drain-admission", () => ({ guardAdmissionClosedForSwap: mocks.guard }));
 import { finishSelfUpgrade } from "./self-upgrade-swap";
@@ -22,7 +22,7 @@ const context = (quiescenceRunId: string | null, force = false): SelfUpgradeSwap
   promoter: { hostInstallPath: "/host", canonicalInstallPath: "/host", composeProject: "actual-project", healthUrl: "http://health" },
   preflight: { runId: "SUR-COMPAT", targetSha: "a".repeat(40), sourcePath: "/source", hostInstallPath: "/host", canonicalInstallPath: "/host", composeFiles: [], healthUrl: "http://health" },
 });
-beforeEach(() => { vi.clearAllMocks(); mocks.failRun.mockReset().mockResolvedValue({ runId: "SUR-COMPAT", status: "failed" }); mocks.compatibility.mockReset().mockResolvedValue({ ok: true, proof: {} }); mocks.runPromoter.mockResolvedValue({ exitCode: 0, stdout: "", stderr: "" }); mocks.guard.mockResolvedValue({ ok: true }); });
+beforeEach(() => { vi.clearAllMocks(); mocks.failRun.mockReset().mockResolvedValue({ runId: "SUR-COMPAT", status: "failed" }); mocks.compatibility.mockReset().mockResolvedValue({ ok: true, proof: {} }); mocks.runPromoter.mockResolvedValue({ exitCode: 0, stdout: "", stderr: "" }); mocks.guard.mockResolvedValue({ ok: true, data: { reasserted: false } }); });
 
 describe("unconditional final reassessment compatibility", () => {
   it.each([["QR-1", false], ["QR-1", true], [null, false], [null, true]] as const)("refuses incompatible bytes with quiescence=%s force=%s and unchanged handoff/no migration", async (qr, force) => {

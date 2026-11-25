@@ -27,7 +27,6 @@ import { clearCooldown, recordCooldown } from "@/lib/self-upgrade/cooldown";
 import { emitUpgradeEvent } from "@/lib/self-upgrade/notifications";
 import {
   createSelfUpgradeRecoveryPoint,
-  summarizeRecoveryPointDegradation,
   summarizeRecoveryPointFailure,
 } from "@/lib/self-upgrade/recovery-point";
 import { failQuiescenceSwap, signalSwapComplete, signalSwapStarting } from "@/lib/self-upgrade/quiescence";
@@ -126,34 +125,37 @@ export async function finishSelfUpgrade(ctx: SelfUpgradeSwapContext): Promise<Re
   }
   const { runtimeTransitionSecret, hostIdentity } = signingContext;
 
-  const recoveryPoint = await createSelfUpgradeRecoveryPoint({ runId, dryRun });
-  await recordRunRecoveryPoint(runId, recoveryPoint);
-  if (recoveryPoint.status === "degraded") {
-    // A best-effort (derived-store) backup failed — derived stores rebuild
-    // from source, so this does NOT block
-    // the upgrade. Record it loudly for the operator audit trail and proceed.
-    const note = summarizeRecoveryPointDegradation(recoveryPoint);
-    if (note) console.warn(`[self-upgrade] ${runId}: ${note}`);
+  const admissionFailure = (reason: string) => finishFailure(
+    "admission-reopened-before-swap: " + reason,
+    { reason: "admission-reopened-before-swap", excerpt: reason },
+  );
+  if (quiescenceRunId) {
+    const guard = await guardAdmissionClosedForSwap(quiescenceRunId, { forced: ctx.force });
+    if (!guard.ok) return admissionFailure(guard.error);
   }
+  const recoveryPoint = await createSelfUpgradeRecoveryPoint({ runId, dryRun });
   if (recoveryPoint.status === "failed") {
+    await recordRunRecoveryPoint(runId, recoveryPoint);
     const reason = summarizeRecoveryPointFailure(recoveryPoint);
     return finishFailure(reason, { reason: "recovery-point-failed", recoveryPoint, excerpt: reason });
   }
 
-  // Signal swap-starting for audit; record the moment we cross the
-  // ready-to-swap → actually-swapping boundary on the QuiescenceRun.
-  // No-op when quiescenceRunId is null (dryRun path).
-  if (quiescenceRunId) await signalSwapStarting(quiescenceRunId);
-
-  // BI-F9EE05E5: never swap with admission open. The drain may have waited an
-  // hour; if anything reopened admission meanwhile (a portal restart resets
-  // the level on boot), close it again and re-check before the promoter runs.
+  // If admission was reopened, keep the host artifacts for inspection but
+  // don't publish a usable recovery point or proceed with the swap.
   if (quiescenceRunId) {
     const guard = await guardAdmissionClosedForSwap(quiescenceRunId, { forced: ctx.force });
-    if (!guard.ok) {
-      return finishFailure("admission-reopened-before-swap: " + guard.error, { reason: "admission-reopened-before-swap", excerpt: guard.error });
+    const reason = !guard.ok ? guard.error : guard.data.reasserted
+      ? "Admission was reopened during recovery capture. Start a fresh upgrade."
+      : null;
+    if (reason) {
+      await recordRunRecoveryPoint(runId, { ...recoveryPoint, status: "failed", pairedReceipt: null, reason });
+      return admissionFailure(reason);
     }
   }
+  await recordRunRecoveryPoint(runId, recoveryPoint);
+
+  // Mark the ready-to-swap to swapping boundary for the drain audit.
+  if (quiescenceRunId) await signalSwapStarting(quiescenceRunId);
 
   if (!dryRun) {
     const compatibility = await runReassessmentCandidatePreflight({ runId, targetSha: ctx.builtStamp,

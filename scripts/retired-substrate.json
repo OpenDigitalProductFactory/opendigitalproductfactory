@@ -62,7 +62,6 @@
     "apps/web/lib/observability/alert-humanize.ts": "Live: humanizes a stale QdrantDown / Neo4jDown alert or scrape label that an install can still hold until monitoring reloads (BI-31FDC859, BI-49C4EA5D).",
     "apps/web/components/ops/SelfUpgradeClient.test.tsx": "Test fixture: recovery points recorded before BET-5 carry neo4j and qdrant members, and the Upgrade Center still renders them.",
     "apps/web/lib/queue/functions/self-upgrade.test.ts": "Test fixture: pre-BET-5 recovery-point members that the self-upgrade run history still holds.",
-    "apps/web/lib/self-upgrade/recovery-point.test.ts": "Test fixture: legacy recovery-point members must be read back without error.",
     "packages/db/src/seed-platform-backup.ts": "Live: the seed deactivates the neo4j-daily-backup and qdrant-daily-backup ScheduledJob rows that installs predating BET-5 still hold.",
     "packages/db/src/seed-platform-backup.test.ts": "Test of the legacy backup-job deactivation above.",
     "packages/db/data/digital_product_registry.json": "Seeded identity: the infra-neo4j-core and infra-qdrant-vector products stay as retired historical records (docs/data-impact/2026-08-08-retired-datastore-catalog.data-impact.json).",
