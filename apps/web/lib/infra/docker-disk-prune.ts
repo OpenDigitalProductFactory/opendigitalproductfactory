@@ -17,12 +17,12 @@ export type DiskPruneActuatorPort = {
 
 const privateActuatorPrune: DiskPruneActuatorPort = {
   available: async () => {
-    const { usesPrivateActuator } = await import("../../../../scripts/lib/scope-writer-observation.mjs");
+    const { usesPrivateActuator } = await import("@/lib/platform-runtime/actuator-client");
     return usesPrivateActuator();
   },
   prune: async () => {
-    const { pruneActuatorDockerDisk } = await import("../../../../scripts/lib/scope-writer-observation.mjs");
-    return (await pruneActuatorDockerDisk()) as Record<string, unknown>;
+    const { pruneActuatorDockerDisk } = await import("@/lib/platform-runtime/actuator-client");
+    return await pruneActuatorDockerDisk();
   },
 };
 

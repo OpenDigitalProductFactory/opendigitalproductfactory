@@ -33,7 +33,7 @@ import {
 import { recordJobHeartbeat } from "./managed-backup";
 import { resolveManagedScriptPath, runManagedScript } from "./managed-script-path";
 import { managedPostgresConnection } from "./managed-postgres-connection";
-import { usesPrivateActuator } from "../../../../../scripts/lib/scope-writer-observation.mjs";
+import { usesPrivateActuator } from "@/lib/platform-runtime/actuator-client";
 
 const BACKUPS_ROOT = "/backups";
 const TRIAL_RESTORE_SCRIPT_NAME = "postgres-trial-restore.sh";

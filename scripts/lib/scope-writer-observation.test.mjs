@@ -443,3 +443,35 @@ it('carries image, reassessment and runtime protocol requests only to their own 
     assert.deepEqual(received, [['image', image], ['reassessment', reassessment], ['protocol', protocol], ['sandbox-db', database]]);
   });
 });
+
+it('sends only to the canonical actuator socket or a test socket in the temporary directory', async () => {
+  const { isAllowedActuatorSocketPath, readScopeWriterObservation, SCOPE_WRITER_OBSERVER_SOCKET } = await load();
+  assert.equal(isAllowedActuatorSocketPath(SCOPE_WRITER_OBSERVER_SOCKET), true);
+  assert.equal(isAllowedActuatorSocketPath('/tmp/x/obs.sock', '/tmp'), true);
+  for (const target of ['/var/run/docker.sock', '/run/docker.sock', '/tmp/../var/run/docker.sock', '/tmp/x/obs', 'obs.sock', '', null]) {
+    assert.equal(isAllowedActuatorSocketPath(target, '/tmp'), false, String(target));
+  }
+  // Refused before any connection opens: no socket exists at this path.
+  await assert.rejects(readScopeWriterObservation({ socketPath: '/var/run/docker.sock' }), { message: 'scope_writer_observation_unavailable' });
+});
+
+it('detects the actuator mount with one fail-closed rule', async () => {
+  const { usesPrivateActuator, usesPrivateActuatorSync } = await load();
+  const mounted = '1 2 0:1 / /run/dpf-actuator rw - tmpfs tmpfs rw\n';
+  const plain = '1 2 0:1 / / rw - overlay overlay rw\n';
+  const missing = Object.assign(new Error('ENOENT'), { code: 'ENOENT' });
+  const denied = Object.assign(new Error('EACCES'), { code: 'EACCES' });
+  // Read and parsed: the mount table decides.
+  assert.equal(await usesPrivateActuator({ read: async () => mounted, platform: 'linux' }), true);
+  assert.equal(await usesPrivateActuator({ read: async () => plain, platform: 'linux' }), false);
+  assert.equal(usesPrivateActuatorSync({ read: () => plain, platform: 'linux' }), false);
+  // Unknown: treated as mounted, so no raw Docker runs.
+  assert.equal(await usesPrivateActuator({ read: async () => { throw denied; }, platform: 'linux' }), true);
+  assert.equal(await usesPrivateActuator({ read: async () => { throw missing; }, platform: 'linux' }), true);
+  assert.equal(await usesPrivateActuator({ read: async () => null, platform: 'linux' }), true);
+  assert.equal(usesPrivateActuatorSync({ read: () => { throw denied; }, platform: 'linux' }), true);
+  // No /proc off Linux is a definite "not mounted".
+  assert.equal(await usesPrivateActuator({ read: async () => { throw missing; }, platform: 'darwin' }), false);
+  assert.equal(usesPrivateActuatorSync({ read: () => { throw missing; }, platform: 'win32' }), false);
+  assert.equal(usesPrivateActuatorSync({ read: () => { throw denied; }, platform: 'darwin' }), true);
+});

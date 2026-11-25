@@ -29,11 +29,11 @@ export type RestartActuatorPort = {
 
 const privateActuatorRestart: RestartActuatorPort = {
   available: async () => {
-    const { usesPrivateActuator } = await import("../../../../scripts/lib/scope-writer-observation.mjs");
+    const { usesPrivateActuator } = await import("@/lib/platform-runtime/actuator-client");
     return usesPrivateActuator();
   },
   restart: async (service) => {
-    const { restartActuatorService } = await import("../../../../scripts/lib/scope-writer-observation.mjs");
+    const { restartActuatorService } = await import("@/lib/platform-runtime/actuator-client");
     const result: unknown = await restartActuatorService(service);
     const container = (result as { container?: unknown } | null)?.container;
     if (typeof container !== "string" || !/^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}$/.test(container)) {

@@ -165,7 +165,7 @@ export async function executePromotion(
   // source path (protected PR, merge, canonical self-upgrade), whose promoter
   // owns backup and migrations. Refuse before any effect; the promotion stays
   // approved.
-  const observation = await import("../../../../../scripts/lib/scope-writer-observation.mjs");
+  const observation = await import("@/lib/platform-runtime/actuator-client");
   if (await observation.usesPrivateActuator()) {
     return {
       success: false,

@@ -1,6 +1,17 @@
 // Defense-in-depth cleanup for orphaned promoter containers (BI-3EC7FDB0).
-// Durable launches retain their exact container as a replay barrier until the
-// canonical action owner is settled, even if the caller or its reply is lost.
+//
+// Two sweeps, chosen by where the promoter was launched (BI-224F56F1):
+// - Installs without the private actuator keep the original sweep below
+//   (sweepLegacyPromoterContainers): runPromoter's timer lives in the
+//   orchestrator, so a portal killed mid-build (the thing a swap does) leaves a
+//   `docker run --rm` promoter building unattended; this age-gated sweep of
+//   running `dpf-promoter-*` containers is the cron-independent backstop.
+// - The private actuator's durable launches keep their exact container as a
+//   replay barrier until the canonical action owner is settled, even if the
+//   caller or its reply is lost; sweepOrphanedPromoterContainersAtDaemon removes
+//   one only under that settled-owner proof.
+
+import { reconcileActuatorPromoters, usesPrivateActuator } from "@/lib/platform-runtime/actuator-client";
 
 /**
  * Whether a `docker ps` CreatedAt stamp is older than maxAgeMs. Docker renders
@@ -107,15 +118,63 @@ export async function sweepOrphanedPromoterContainersAtDaemon(
     return null;
   }
 }
-import { readFile } from "node:fs/promises";
-import { hasPrivateActuatorMount, reconcileActuatorPromoters } from "../../../../scripts/lib/scope-writer-observation.mjs";
+/**
+ * Force-remove any `dpf-promoter-*` container older than `maxAgeMs` — well past
+ * both runPromoter's self-timeout and a normal ~7-min swap, so a legitimately
+ * in-flight promoter is never touched. Non-fatal; never throws.
+ */
+export async function sweepLegacyPromoterContainers(
+  opts: { maxAgeMs?: number; now?: () => Date; run?: DockerRun } = {},
+  logger: Pick<Console, "log" | "error"> = console,
+): Promise<{ removed: number } | null> {
+  const maxAgeMs = opts.maxAgeMs ?? 30 * 60 * 1000;
+  const now = opts.now?.() ?? new Date();
+  try {
+    const run = opts.run ?? (await defaultDockerRun());
+    const { stdout } = await run(
+      "docker",
+      ["ps", "--filter", "name=dpf-promoter-", "--format", "{{.Names}}\t{{.CreatedAt}}"],
+      { timeout: 15_000 },
+    );
+    let removed = 0;
+    for (const line of stdout.split("\n").map((l) => l.trim()).filter(Boolean)) {
+      const [name, createdAt] = line.split("\t");
+      if (!name) continue;
+      if (!isPromoterContainerStale(createdAt ?? "", now, maxAgeMs)) continue;
+      try {
+        await run("docker", ["rm", "-f", name], { timeout: 15_000 });
+        removed++;
+        logger.log(
+          `[promoter-sweep] force-removed orphaned promoter ${name} (age > ${Math.round(maxAgeMs / 60000)}m)`,
+        );
+      } catch (rmErr) {
+        logger.error(`[promoter-sweep] failed to remove ${name} (non-fatal):`, rmErr);
+      }
+    }
+    return { removed };
+  } catch (err) {
+    const code = (err as { code?: string } | null)?.code;
+    if (code === "ENOENT") {
+      // The docker CLI isn't on PATH — an entirely expected state on Docker-less
+      // runtimes. Log it quietly (info, no stack) so this benign "skip" doesn't
+      // trip the error-log PIR scanner on every sweep interval (BI-PIR-ae7f19b6).
+      logger.log("[promoter-sweep] docker CLI unavailable (ENOENT); nothing to sweep");
+      return null;
+    }
+    // A real docker/daemon failure (timeout, permission, daemon down) — surface it.
+    logger.error("[promoter-sweep] failed (non-fatal):", err);
+    return null;
+  }
+}
 
-
-export async function sweepOrphanedPromoterContainers(opts: Parameters<typeof sweepOrphanedPromoterContainersAtDaemon>[0] = {},
+/** The sweep for this install: the actuator's owner-settled sweep when it is
+ * mounted (fail closed: an unreadable mount table counts as mounted), else the
+ * original legacy sweep. An injected runner always means the legacy sweep. */
+export async function sweepOrphanedPromoterContainers(opts: Parameters<typeof sweepLegacyPromoterContainers>[0] = {},
   logger: Pick<Console, "log" | "error"> = console): Promise<{ removed: number } | null> {
-  if (!opts.run && await readFile("/proc/self/mountinfo").then(hasPrivateActuatorMount, () => false)) {
-    try { return await reconcileActuatorPromoters() as { removed: number }; }
+  if (!opts.run && await usesPrivateActuator()) {
+    try { return await reconcileActuatorPromoters(); }
     catch (error) { logger.error("[promoter-sweep] private actuator unavailable:", error); return null; }
   }
-  return sweepOrphanedPromoterContainersAtDaemon(opts, logger);
+  return sweepLegacyPromoterContainers(opts, logger);
 }

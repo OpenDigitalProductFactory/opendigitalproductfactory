@@ -385,12 +385,12 @@ function shellQuote(value: string): string {
 }
 
 export async function runSandboxRecoveryCommand(command: string, args: string[]): Promise<string> {
-  const observation = await import("../../../../../scripts/lib/scope-writer-observation.mjs");
+  const observation = await import("@/lib/platform-runtime/actuator-client");
   if (command === "docker" && await observation.usesPrivateActuator()) {
     // BI-224F56F1: exec goes to the observed sandbox; start and restart go to
     // the actuator's catalog restart of that sandbox; nothing else runs.
     if (args[0] === "exec") return (await execSandbox(args, { timeout: 30_000 })).stdout;
-    const selected = await observation.readActuatorSandbox() as { containerId?: string; name?: string };
+    const selected = await observation.readActuatorSandbox();
     if ((args[0] !== "start" && args[0] !== "restart") || args.length !== 2
       || (args[1] !== selected.containerId && args[1] !== selected.name)) throw new Error("sandbox_recovery_target_unproven");
     await observation.restartActuatorService("sandbox");

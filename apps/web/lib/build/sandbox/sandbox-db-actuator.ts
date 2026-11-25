@@ -100,7 +100,7 @@ type ActuatorSend = (body: unknown, timeoutMs: number) => Promise<unknown>;
  * local Docker call. */
 export async function sandboxDbThroughActuator(buildId: string | undefined, operation: SandboxDbOperation,
   available?: () => Promise<boolean>, send?: ActuatorSend): Promise<{ ok: boolean; detail: string } | null> {
-  const observation = await import("../../../../../scripts/lib/scope-writer-observation.mjs");
+  const observation = await import("@/lib/platform-runtime/actuator-client");
   if (!await (available ?? observation.usesPrivateActuator)()) return null;
   if (!buildId) return { ok: false, detail: "The qualified portal runs sandbox database steps only for a build's reserved sandbox." };
   try {

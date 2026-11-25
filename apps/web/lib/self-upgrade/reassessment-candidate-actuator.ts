@@ -48,7 +48,7 @@ type ActuatorSend = (body: unknown, timeoutMs: number) => Promise<unknown>;
  * or a malformed proof is a refusal; the portal never probes locally then. */
 export async function reassessmentThroughPrivateActuator(request: { runId: string; targetSha: string; release: boolean },
   available?: () => Promise<boolean>, send?: ActuatorSend): Promise<ReassessmentRuntimeCompatibility | null> {
-  const observation = await import("../../../../scripts/lib/scope-writer-observation.mjs");
+  const observation = await import("@/lib/platform-runtime/actuator-client");
   if (!await (available ?? observation.usesPrivateActuator)()) return null;
   const { refuseReassessmentWithDetail } = await import("@/lib/mcp-task-reassessment-contract");
   let result: unknown;

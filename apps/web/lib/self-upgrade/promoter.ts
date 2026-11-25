@@ -593,7 +593,7 @@ export async function ensurePromoterImage(
 ): Promise<EnsurePromoterResult> {
   const present = await isPromoterAvailable(promoterImage);
   // BI-224F56F1: the qualified portal builds no image; the actuator's candidate stage builds the run's promoter (DI-B3171A8F09DC).
-  if (await (await import("../../../../scripts/lib/scope-writer-observation.mjs")).usesPrivateActuator()) return present
+  if (await (await import("@/lib/platform-runtime/actuator-client")).usesPrivateActuator()) return present
     ? { ok: true, alreadyPresent: true, built: false } : { ok: false, alreadyPresent: false, built: false, skipReason: "build-failed", detail: "The installed promoter image is missing." };
   const action = decidePromoterEnsureAction(
     present,
@@ -755,8 +755,19 @@ import {
 export const buildAdmittedPromoterCommand = (input: PromoterParams, docker = createPromoterDockerRunner(input)) => buildCompatiblePromoterCommand(input, buildPromoterCommand, docker);
 // BI-224F56F1: no socket in the immutable portal; the actuator runs runPromoterAtDaemon after admission and re-runs the swap fence itself (BI-3C3CCC59).
 export const runPromoter = async (params: PromoterParams, assertAdmission?: () => Promise<void>): Promise<PromoterResult> => (await import("./promoter-actuator")).routedOrLocalPromoter(await (await import("./promoter-actuator")).launchThroughPrivateActuator(params, undefined, undefined, assertAdmission), () => runPromoterAtDaemon(params, assertAdmission));
-export async function runPromoterAtDaemon(params: PromoterParams, assertAdmission?: () => Promise<void>): Promise<PromoterResult> {
-  if (params.launchOwner && !params.runtimeTransitionAuthorityOperation && !params.dryRun && params.phase !== "build") {
+/**
+ * Where the launch runs decides how it runs. "actuator": the private actuator,
+ * after its admission, uses the durable owned launch (create/start/wait under
+ * the canonical admission lock, the container kept as a replay barrier).
+ * "local" (the default): an install without the actuator keeps the original
+ * `docker run --rm` launch unchanged, whatever launchOwner says.
+ */
+export type PromoterLaunchSite = "local" | "actuator";
+export const usesDurablePromoterLaunch = (params: PromoterParams, site: PromoterLaunchSite): boolean =>
+  site === "actuator" && Boolean(params.launchOwner) && !params.runtimeTransitionAuthorityOperation && !params.dryRun && params.phase !== "build";
+export async function runPromoterAtDaemon(params: PromoterParams, assertAdmission?: () => Promise<void>,
+  site: PromoterLaunchSite = "local"): Promise<PromoterResult> {
+  if (usesDurablePromoterLaunch(params, site) && params.launchOwner) {
     return (await import("./promoter-launch")).runAdmittedPromoter(params, params.launchOwner, params.promoterImage || DEFAULT_PROMOTER_IMAGE, buildAdmittedPromoterCommand, assertAdmission);
   }
   const docker = createPromoterDockerRunner(params); // A registry pull is also a new host effect: recheck admission first.

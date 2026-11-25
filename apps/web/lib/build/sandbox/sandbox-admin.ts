@@ -336,12 +336,12 @@ export async function diagnoseSandboxReadiness(
 
 export async function inspectDockerContainer(containerId: string): Promise<DockerComposeContainerInfo | null> {
   try {
-    const observation = await import("../../../../../scripts/lib/scope-writer-observation.mjs");
+    const observation = await import("@/lib/platform-runtime/actuator-client");
     if (await observation.usesPrivateActuator()) {
       // BI-224F56F1: the actuator observed this sandbox inside its own bound
       // project, so Compose ownership is proven there; the labels are not
       // re-read here and stay null, which the ownership check does not compare.
-      const selected = await observation.readActuatorSandbox() as { containerId?: string; name?: string; running?: boolean };
+      const selected = await observation.readActuatorSandbox();
       if (!selected.containerId || (containerId !== selected.containerId && containerId !== selected.name)) return null;
       return { containerId: selected.containerId, containerName: selected.name ?? "", status: selected.running ? "running" : "exited",
         running: selected.running === true, composeProjectName: null, composeServiceName: "sandbox", composeWorkingDir: null,

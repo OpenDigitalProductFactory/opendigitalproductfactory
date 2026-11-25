@@ -41,7 +41,7 @@ import {
 import { resolveManagedScriptPath, runManagedScript } from "./managed-script-path";
 import type { AnyBackupManifest, BackupEngineSpec } from "./engine-specs";
 import { managedPostgresConnection } from "./managed-postgres-connection";
-import { usesPrivateActuator } from "../../../../../scripts/lib/scope-writer-observation.mjs";
+import { usesPrivateActuator } from "@/lib/platform-runtime/actuator-client";
 import type { BackupPreflightResult } from "./extension-preflight";
 import { listUnfinishedRestoreJournals } from "./paired-restore-journal";
 

@@ -154,7 +154,7 @@ export async function sourceWriterThroughPrivateActuator<R extends SourceWriterR
   available?: () => Promise<boolean>, send?: ActuatorSend,
 ): Promise<(R["operation"] extends "prepare-upgrade-source" ? PrepareSourceResult
   : R["operation"] extends "write-skill-seed" ? WriteSkillSeedResult : RefreshUpstreamHeadResult) | null> {
-  const observation = await import("../../../../scripts/lib/scope-writer-observation.mjs");
+  const observation = await import("@/lib/platform-runtime/actuator-client");
   if (!await (available ?? observation.usesPrivateActuator)()) return null;
   const timeoutMs = request.operation === "prepare-upgrade-source" ? 21 * 60_000 : request.operation === "write-skill-seed" ? 3 * 60_000 : 4 * 60_000;
   try {

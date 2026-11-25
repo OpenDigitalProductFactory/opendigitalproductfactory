@@ -80,7 +80,7 @@ type ActuatorSend = (body: unknown, timeoutMs: number) => Promise<unknown>;
  * Docker call is refused in the qualified portal, never run locally. */
 export async function doctoolsDockerThroughActuator(args: string[],
   available?: () => Promise<boolean>, send?: ActuatorSend): Promise<DockerResult | null> {
-  const observation = await import("../../../../scripts/lib/scope-writer-observation.mjs");
+  const observation = await import("@/lib/platform-runtime/actuator-client");
   if (!await (available ?? observation.usesPrivateActuator)()) return null;
   const request = doctoolsOperationFor(args);
   if (!request) return { exitCode: 1, stdout: "", stderr: "This Docker operation is not available in the qualified portal." };

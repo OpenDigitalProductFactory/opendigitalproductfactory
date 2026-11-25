@@ -27,7 +27,7 @@ try {
     },
     selfUpgradeRun: { findFirst: async () => (await client.query("SELECT id FROM \"SelfUpgradeRun\" WHERE status IN ('pending','queued','running') LIMIT 1")).rows[0] ?? null },
     runtimeCapabilityTransition: { findFirst: async () => (await client.query("SELECT id FROM \"RuntimeCapabilityTransition\" WHERE status IN ('pending','applying','host_applied','compensating') OR (status='rollback_failed' AND failure->>'recoveryRequired'='true') LIMIT 1")).rows[0] ?? null },
-  } as never);
+  } as never, "canonical");
   process.send!({ stage: "locked" });
   if (await next() !== "write") throw new Error("Unexpected lab command");
   await client.query('INSERT INTO "Effects" (id) VALUES (1)');

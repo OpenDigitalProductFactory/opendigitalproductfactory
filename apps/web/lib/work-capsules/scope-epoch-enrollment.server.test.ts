@@ -11,7 +11,7 @@ vi.mock("@dpf/db", () => ({ prisma: {} }));
 vi.mock("node:fs/promises", { spy: true });
 vi.mock("node:os", { spy: true });
 vi.mock("@/lib/shared/run-process-with-budget", { spy: true });
-import { assertScopeEpochEnrollmentReady, currentScopeWriterContainerId, type ScopeEpochEnrollmentPorts } from "./scope-epoch-enrollment.server";
+import { assertScopeEpochEnrollmentReady, currentScopeWriterContainerId, lockScopeEpochEnrollmentAdmission, type ScopeEpochEnrollmentPorts } from "./scope-epoch-enrollment.server";
 import { SCOPE_EPOCH_WRITER_PATHS } from "./scope-epoch-contract";
 const hash = (bytes: string) => createHash("sha256").update(bytes).digest("hex");
 const now = new Date("2026-10-16T01:03:00Z"), secret = "test-only-key".repeat(8);
@@ -147,8 +147,8 @@ describe("canonical scope epoch enrollment", () => {
   it("joins packaged bytes, authenticated final retirement and fresh exact cohort", async () => {
     const f = fixture(), proof = await assertScopeEpochEnrollmentReady(f.ports), observations = f.commands.length;
     await proof.assertCurrent(f.tx as never);
-    expect(f.locks).toEqual([expect.stringContaining('LOCK TABLE "RuntimeCapabilityTransition"'),
-      expect.stringContaining("runtime-capability-transition"), expect.stringContaining("self-upgrade-admission")]);
+    // Legacy recipe: the original two advisory locks, unchanged.
+    expect(f.locks).toEqual([expect.stringContaining("runtime-capability-transition"), expect.stringContaining("self-upgrade-admission")]);
     expect(f.commands).toHaveLength(observations);
     expect(f.commands.find(args => args[0] === "run")).toEqual(expect.arrayContaining(["--read-only", "--network", "none", "--pull", "never", image]));
   });
@@ -157,8 +157,8 @@ describe("canonical scope epoch enrollment", () => {
     const f = fixture(point);
     const proof = await assertScopeEpochEnrollmentReady(f.ports);
     await proof.assertCurrent(f.tx as never);
-    expect(f.locks).toEqual([expect.stringContaining('LOCK TABLE "RuntimeCapabilityTransition"'),
-      expect.stringContaining("runtime-capability-transition"), expect.stringContaining("self-upgrade-admission")]);
+    // Legacy recipe: the original two advisory locks, unchanged.
+    expect(f.locks).toEqual([expect.stringContaining("runtime-capability-transition"), expect.stringContaining("self-upgrade-admission")]);
   });
   it("holds enrollment when the v2 projections name a different uploads run", async () => {
     const point = makePairedRecoveryPointFixture(recovery.selfUpgradeRunId, recovery.createdAt);
@@ -346,5 +346,37 @@ describe("served scope writer process qualification", () => {
     { realpath: async () => "/tmp/replaced.so" },
   ])("refuses loader, inspector or interpreter substitution", async change => {
     await expect(attestScopeWriterProcess({ ...input(), ...change })).rejects.toThrow("scope_writer_probe_process_unproven");
+  });
+});
+
+describe("lockScopeEpochEnrollmentAdmission modes", () => {
+  const tx = () => {
+    const locks: string[] = [];
+    return { locks,
+      $executeRaw: async (strings: TemplateStringsArray) => { locks.push(strings.join("?")); },
+      $queryRaw: async () => [{ transaction_isolation: "read committed" }],
+      runtimeCapabilityTransition: { findFirst: vi.fn(async (): Promise<unknown> => null) },
+      selfUpgradeRun: { findFirst: vi.fn(async (_args: { where: { status: { in: string[] } } }): Promise<unknown> => null) } };
+  };
+
+  it("keeps the original advisory locks and active statuses on an install without the actuator", async () => {
+    const t = tx();
+    await lockScopeEpochEnrollmentAdmission(t as never);
+    expect(t.locks).toEqual([expect.stringContaining("runtime-capability-transition"), expect.stringContaining("self-upgrade-admission")]);
+    expect(t.selfUpgradeRun.findFirst.mock.calls[0]![0].where.status.in).toEqual(["pending", "queued", "running"]);
+  });
+
+  it("takes the canonical table-then-advisory order and counts completing runs on the actuator path", async () => {
+    const t = tx();
+    await lockScopeEpochEnrollmentAdmission(t as never, "canonical");
+    expect(t.locks).toEqual([expect.stringContaining('LOCK TABLE "RuntimeCapabilityTransition"'),
+      expect.stringContaining("runtime-capability-transition"), expect.stringContaining("self-upgrade-admission")]);
+    expect(t.selfUpgradeRun.findFirst.mock.calls[0]![0].where.status.in).toEqual(["pending", "queued", "running", "completing"]);
+  });
+
+  it("refuses the canonical mode without a raw query port, but not the legacy mode", async () => {
+    const t = { ...tx(), $queryRaw: undefined };
+    await expect(lockScopeEpochEnrollmentAdmission(t as never, "canonical")).rejects.toThrow(/transaction-admission-unavailable/);
+    await expect(lockScopeEpochEnrollmentAdmission(t as never)).resolves.toBeUndefined();
   });
 });

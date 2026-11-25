@@ -24,7 +24,7 @@ import { CONVERTER_CONTAINER_PREFIX, hardenedRunArgs, isPinnedImageReference } f
 import { sharedDoctoolsLimiter, type ConversionLimiter } from "@/lib/documents/conversion/convert";
 import { CONVERTER_TARGET_MIME } from "@/lib/documents/conversion/formats";
 import { resolveDoctoolsImage, type DoctoolsImageResolution } from "@/lib/documents/conversion/image";
-import { runActuatorDoctools, usesPrivateActuator } from "../../../../../scripts/lib/scope-writer-observation.mjs";
+import { runActuatorDoctools, usesPrivateActuator } from "@/lib/platform-runtime/actuator-client";
 import { readTar } from "./tar";
 import {
   validateRenderRequest,

@@ -353,7 +353,7 @@ export async function launchThroughPrivateActuator(params: PromoterParams,
     : params.runtimeTransitionAuthorityOperation && params.phase !== "build"
       ? { kind: "runtime-authority", operation: params.runtimeTransitionAuthorityOperation } : null;
   if (!owner) return null;
-  const observation = await import("../../../../scripts/lib/scope-writer-observation.mjs");
+  const observation = await import("@/lib/platform-runtime/actuator-client");
   if (!await (available ?? observation.usesPrivateActuator)()) return null;
   // BI-3C3CCC59: the caller's drain fence holds before the request; the
   // actuator re-checks it from the database before reclaim and dispatch.
@@ -370,7 +370,7 @@ export async function readinessThroughPrivateActuator(params: PromoterParams & {
   available?: () => Promise<boolean>, send?: ActuatorSend): Promise<PromoterResult | null> {
   const runId = /^dpf-promoter-readiness-(SUR-[A-Za-z0-9-]{1,100})$/.exec(params.containerName ?? "")?.[1];
   if (!runId) return null;
-  const observation = await import("../../../../scripts/lib/scope-writer-observation.mjs");
+  const observation = await import("@/lib/platform-runtime/actuator-client");
   if (!await (available ?? observation.usesPrivateActuator)()) return null;
   const { artifact: _artifact, ...rest } = params;
   void _artifact;
@@ -385,7 +385,7 @@ export async function routedOrLocalPromoter(
   routed: PromoterResult | null, local: () => Promise<PromoterResult>, available?: () => Promise<boolean>,
 ): Promise<PromoterResult> {
   if (routed) return routed;
-  const observation = await import("../../../../scripts/lib/scope-writer-observation.mjs");
+  const observation = await import("@/lib/platform-runtime/actuator-client");
   if (await (available ?? observation.usesPrivateActuator)()) throw new Error("promoter_launch_unroutable_in_qualified_portal");
   return local();
 }

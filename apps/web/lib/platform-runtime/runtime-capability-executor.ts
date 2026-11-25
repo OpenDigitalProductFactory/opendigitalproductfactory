@@ -125,7 +125,7 @@ export async function inspectPackagedReconciliationProtocolAtDaemon(observedHost
 async function inspectPackagedReconciliationProtocol(observedHostSnapshot?: RuntimeReconciliationIntent["observedHost"]) {
   // The server's own identity is proven before anything else is read.
   const expectation = await packagedProtocolExpectation();
-  const observation = await import("../../../../scripts/lib/scope-writer-observation.mjs");
+  const observation = await import("@/lib/platform-runtime/actuator-client");
   if (!await observation.usesPrivateActuator()) return inspectPackagedReconciliationProtocolAtDaemon(observedHostSnapshot, undefined, expectation);
   // BI-224F56F1: the actuator probes; this server re-checks the answer against
   // its own expectation and snapshot, and derives the release identity itself.

@@ -18,7 +18,7 @@ import {
   type BudgetedProcessResult,
 } from "@/lib/shared/run-process-with-budget";
 import { resolveDoctoolsImage, type DoctoolsImageResolution } from "./image";
-import { readActuatorDoctoolsHealth, usesPrivateActuator } from "../../../../../scripts/lib/scope-writer-observation.mjs";
+import { readActuatorDoctoolsHealth, usesPrivateActuator } from "@/lib/platform-runtime/actuator-client";
 
 export const CONVERTER_AVAILABILITY_TTL_MS = 60_000;
 const DOCKER_PROBE_TIMEOUT_MS = 5_000;
@@ -138,7 +138,7 @@ let processProbe: ConverterAvailabilityProbe | undefined;
 export const readConverterAvailabilityAtDaemon = () => check(defaultDeps());
 const probe = () => (processProbe ??= createConverterAvailabilityProbe({ ...defaultDeps(), observeActuator: async () => {
   if (!await usesPrivateActuator()) return null;
-  try { return await readActuatorDoctoolsHealth() as Omit<ConverterAvailability, "checkedAt">; }
+  try { return await readActuatorDoctoolsHealth(); }
   catch { return { available: false, status: "docker-unreachable", byDesign: false, image: null, detail: "the private actuator did not answer" }; }
 } }));
 

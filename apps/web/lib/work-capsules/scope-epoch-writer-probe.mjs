@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
-import { readFile as readPackagedFile, readlink as readKernelLink, realpath as resolvePackagedPath, stat as statPackagedFile } from "node:fs/promises";
+import { constants } from "node:fs";
+import { open as openPackagedFile, readFile as readPackagedFile, readlink as readKernelLink, realpath as resolvePackagedPath, stat as statPackagedFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { isEntryModule } from "../../../../scripts/lib/entry-module.mjs";
@@ -37,7 +38,7 @@ export async function inspectScopeEpochWriters({ root = "/app", readFile = readP
 
 /** Measure the emitted standalone files that dispatch the Workroom tool.
  * The resolved image and hardened launch recipe protect their late loads. */
-export async function inspectServedScopeWriter({ root = "/app", readFile = readPackagedFile,
+export async function inspectServedScopeWriter({ root = "/app", open = openPackagedFile,
   realpath = resolvePackagedPath, stat = statPackagedFile } = {}) {
   try {
     const imageRoot = await realpath(root);
@@ -47,11 +48,19 @@ export async function inspectServedScopeWriter({ root = "/app", readFile = readP
       // These three paths must live at the canonical standalone locations.
       // Reject symlinks into development sources and shared volumes.
       if (await realpath(path) !== path) refuse("served_bundle_unproven");
-      const info = await stat(path);
-      if (!info.isFile() || info.size < 1 || info.size > maxBytes) refuse("served_bundle_unproven");
-      const bytes = await readFile(path);
-      if (bytes.length !== info.size) refuse("served_bundle_unproven");
-      return bytes;
+      // One descriptor for the check and the read: the final component may not
+      // be a symlink, and the size, type and bytes all come from that same open
+      // file, so nothing can be swapped between checking and reading it.
+      const handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
+      try {
+        const info = await handle.stat();
+        if (!info.isFile() || info.size < 1 || info.size > maxBytes) refuse("served_bundle_unproven");
+        const bytes = Buffer.alloc(info.size);
+        const { bytesRead } = await handle.read(bytes, 0, info.size, 0);
+        const { bytesRead: beyond } = await handle.read(Buffer.alloc(1), 0, 1, info.size);
+        if (bytesRead !== info.size || beyond !== 0) refuse("served_bundle_unproven");
+        return bytes;
+      } finally { await handle.close(); }
     }
     const serverDir = join(web, ".next/server");
     const routePath = "app/api/mcp/v1/route.js";

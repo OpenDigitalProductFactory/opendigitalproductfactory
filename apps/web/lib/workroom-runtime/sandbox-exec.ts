@@ -54,10 +54,10 @@ type Deps = {
 };
 
 async function defaultAvailable() {
-  return (await import("../../../../scripts/lib/scope-writer-observation.mjs")).usesPrivateActuator();
+  return (await import("@/lib/platform-runtime/actuator-client")).usesPrivateActuator();
 }
 async function defaultOpen(owner: SandboxExecOwner): Promise<SandboxExecSession> {
-  return (await import("../../../../scripts/lib/scope-writer-observation.mjs")).openActuatorRuntimeSession(owner) as SandboxExecSession;
+  return (await import("@/lib/platform-runtime/actuator-client")).openActuatorRuntimeSession(owner) as SandboxExecSession;
 }
 
 /** Drop-in for `spawn("docker", ["exec", ...])`, routed in the qualified portal. */

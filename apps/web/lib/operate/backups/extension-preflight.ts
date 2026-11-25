@@ -31,7 +31,7 @@
 
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { usesPrivateActuator } from "../../../../../scripts/lib/scope-writer-observation.mjs";
+import { usesPrivateActuator } from "@/lib/platform-runtime/actuator-client";
 
 const execFileAsync = promisify(execFile);
 

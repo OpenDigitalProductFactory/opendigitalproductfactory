@@ -17,6 +17,9 @@ describe("writeMcpJsonToHost", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(fs.readFileSync).mockReset();
+    // A legacy install: the mount table reads and shows no actuator mount.
+    vi.mocked(fs.readFileSync).mockImplementation((path) => path === "/proc/self/mountinfo"
+      ? "10 8 0:1 / / rw - overlay overlay rw\n" : "");
   });
 
   afterEach(() => {
@@ -28,6 +31,13 @@ describe("writeMcpJsonToHost", () => {
     writeMcpJsonToHost(TOKEN, BASE);
     expect(fs.writeFileSync).not.toHaveBeenCalled();
     expect(fs.mkdirSync).not.toHaveBeenCalled();
+  });
+
+  it("writes nothing when the mount table cannot be read (fail closed)", () => {
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.readFileSync).mockImplementation(() => { throw Object.assign(new Error("EACCES"), { code: "EACCES" }); });
+    writeMcpJsonToHost(TOKEN, BASE);
+    expect(fs.writeFileSync).not.toHaveBeenCalled();
   });
 
   it("keeps host setup files under their existing host owner in the qualified portal", () => {

@@ -57,7 +57,8 @@ export default defineConfig({
     // Time-bomb detection (BI-6A4F47B9). A strict no-op unless
     // DPF_CLOCK_SHIFT_DAYS is set, so normal runs pay only the import. See the
     // file header for why a static grep does not work here.
-    setupFiles: ["./vitest.clock-shift-setup.ts"],
+    // No unit test may reach the host's Docker daemon (BI-224F56F1); see the file header.
+    setupFiles: ["./vitest.clock-shift-setup.ts", "./vitest.no-host-docker-setup.ts"],
     include: ["**/*.test.{ts,tsx}"],
     exclude: ["node_modules", ".next"],
     // Each test file gets its own worker process. Without forks, React 18's

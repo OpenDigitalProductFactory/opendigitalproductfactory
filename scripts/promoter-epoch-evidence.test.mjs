@@ -497,7 +497,14 @@ describe('actual served writer bundle evidence', () => {
       [dependency, 'native fixture'], [serverTrace, JSON.stringify({ version: 1, files: ['../../../node_modules/native-holder/binding.node'] })],
       [routeTrace, JSON.stringify({ version: 1, files: [] })]]);
     return { files, root,
-      readFile: async path => { if (!files.has(path)) throw new Error('missing'); return Buffer.from(files.get(path)); },
+      // The served reader checks and reads through one descriptor.
+      open: async path => {
+        if (!files.has(path)) throw new Error('missing');
+        const bytes = Buffer.from(files.get(path));
+        return { stat: async () => ({ isFile: () => true, size: bytes.length }),
+          read: async (buffer, offset, length, position) => ({ bytesRead: bytes.copy(buffer, offset, position, position + length) }),
+          close: async () => {} };
+      },
       stat: async path => ({ isFile: () => files.has(path), size: Buffer.byteLength(files.get(path) ?? '') }),
       realpath: async path => path,
     };
@@ -511,6 +518,17 @@ describe('actual served writer bundle evidence', () => {
     const after = await writerProbe.inspectServedScopeWriter(f);
     assert.equal(after.serverSha256, before.serverSha256);
     assert.notEqual(after.routeSha256, before.routeSha256);
+  });
+
+  it('refuses an emitted file that changes size between its check and its read', async () => {
+    const f = fixture(), open = f.open;
+    await assert.rejects(writerProbe.inspectServedScopeWriter({ ...f, open: async path => {
+      const handle = await open(path);
+      if (path !== route) return handle;
+      // Reports the original size, then holds one byte more than it claimed.
+      return { ...handle, read: async (buffer, offset, length, position) => position >= 1
+        ? { bytesRead: 1 } : handle.read(buffer, offset, length, position) };
+    } }), /scope_writer_probe_served_bundle_unproven/);
   });
 
   it('refuses a missing traced dependency or one resolved outside the immutable image', async () => {

@@ -38,7 +38,7 @@ import { summarizeScriptFailure, type PrismaLike } from "./managed-backup";
 import { resolveManagedScriptPath, runManagedScript } from "./managed-script-path";
 import type { RestoreEngineSpec } from "./engine-specs";
 import { managedPostgresConnection } from "./managed-postgres-connection";
-import { usesPrivateActuator } from "../../../../../scripts/lib/scope-writer-observation.mjs";
+import { usesPrivateActuator } from "@/lib/platform-runtime/actuator-client";
 import { listUnfinishedRestoreJournals } from "./paired-restore-journal";
 
 const BACKUPS_ROOT = "/backups";

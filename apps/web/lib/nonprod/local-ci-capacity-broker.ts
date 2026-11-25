@@ -1,11 +1,11 @@
-import { readFile, statfs } from "node:fs/promises";
+import { statfs } from "node:fs/promises";
 import { cpus, freemem } from "node:os";
 import { dockerSocketGet } from "../platform-runtime/docker-socket.mjs";
 import type { LocalCiHostPressure } from "./local-ci-pool-policy";
 import localCiSlotResources from "./local-ci-slot-resources.json" with {
   type: "json",
 };
-import { hasPrivateActuatorMount, readActuatorCiCapacity } from "../../../../scripts/lib/scope-writer-observation.mjs";
+import { usesPrivateActuator, readActuatorCiCapacity } from "@/lib/platform-runtime/actuator-client";
 
 type MaybePromise<T> = T | Promise<T>;
 
@@ -283,8 +283,8 @@ const DEFAULT_PROBES: LocalCiServerPressureProbes = {
 export async function observeLocalCiServerPressure(
   probes?: LocalCiServerPressureProbes,
 ): Promise<LocalCiHostPressure> {
-  if (!probes && await readFile("/proc/self/mountinfo").then(hasPrivateActuatorMount, () => false)) {
-    const capacity = readActuatorCiCapacity() as ReturnType<typeof observeCiCapacityAtDaemon>;
+  if (!probes && await usesPrivateActuator()) {
+    const capacity = readActuatorCiCapacity();
     probes = {
       ...DEFAULT_PROBES,
       dockerHealthy: async () => {

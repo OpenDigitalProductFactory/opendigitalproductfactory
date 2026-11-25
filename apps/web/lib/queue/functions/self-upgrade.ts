@@ -10,7 +10,7 @@ import { countPendingUpstreamCommits, evaluateReleaseBatch } from "@/lib/self-up
 import { prepareUpgradeSource, defaultGitRunner } from "@/lib/self-upgrade/prepare-source";
 import type { PrepareSourceResult } from "@/lib/self-upgrade/prepare-source";
 import { refreshUpstreamThroughWriter, sourceWriterThroughPrivateActuator } from "@/lib/self-upgrade/source-writer-actuator";
-import { usesPrivateActuator } from "../../../../../scripts/lib/scope-writer-observation.mjs";
+import { usesPrivateActuator } from "@/lib/platform-runtime/actuator-client";
 import {
   runCandidatePreflight,
   runReassessmentCandidatePreflight,

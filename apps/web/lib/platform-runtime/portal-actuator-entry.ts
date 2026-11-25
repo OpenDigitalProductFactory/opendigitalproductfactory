@@ -88,7 +88,8 @@ async function main() {
           return [...context(undefined), ...(installState ? context(installState) : []), ...(signed ? context(signed) : [])];
         },
         activeTransitionIds: activeRuntimeTransitionIds,
-        run: promoter.runPromoterAtDaemon,
+        // The actuator is the only site that uses the durable owned launch.
+        run: (params, assertAdmission) => promoter.runPromoterAtDaemon(params, assertAdmission, "actuator"),
         // BI-3C3CCC59: the actuator derives the swap's drain itself and re-checks it before reclaim and dispatch.
         swapFence: createSwapFence({
           liveDrainIds: async selfUpgradeRunId => {

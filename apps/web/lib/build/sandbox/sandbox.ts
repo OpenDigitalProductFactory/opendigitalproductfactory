@@ -5,7 +5,7 @@
 import { lazyChildProcess, lazyExec } from "@/lib/shared/lazy-node";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 import { ensureGlobalSafeDirectoryCommand } from "@/lib/shared/git-safe-directory";
-import { readActuatorSandbox, readActuatorServiceLogs, restartActuatorService, usesPrivateActuator } from "../../../../../scripts/lib/scope-writer-observation.mjs";
+import { readActuatorSandbox, readActuatorServiceLogs, restartActuatorService, usesPrivateActuator } from "@/lib/platform-runtime/actuator-client";
 import { execSandboxCommandLine, spawnSandboxExec } from "@/lib/workroom-runtime/sandbox-exec";
 
 const localExec = lazyExec();
@@ -384,7 +384,7 @@ export async function startSandbox(containerId: string): Promise<void> {
   if (await usesPrivateActuator()) {
     // The canonical sandbox runs under Compose; a stopped one is restarted by
     // the actuator's catalog restart, and no other container is started.
-    const selected = await readActuatorSandbox() as { containerId?: string; name?: string; running?: boolean };
+    const selected = await readActuatorSandbox();
     if (!selected.containerId || (containerId !== selected.containerId && containerId !== selected.name)) throw new Error("sandbox_target_unproven");
     if (!selected.running) await restartActuatorService("sandbox");
     return;
@@ -650,9 +650,9 @@ server.listen(3000, '0.0.0.0', () => console.log('Preview server on :3000'));
 
 export async function getSandboxLogs(containerId: string, tail: number = 50): Promise<string> {
   if (await usesPrivateActuator()) {
-    const selected = await readActuatorSandbox() as { containerId?: string; name?: string };
+    const selected = await readActuatorSandbox();
     if (containerId !== selected.containerId && containerId !== selected.name) throw new Error("sandbox_target_unproven");
-    const { output } = await readActuatorServiceLogs("sandbox", tail) as { output?: unknown };
+    const { output } = await readActuatorServiceLogs("sandbox", tail);
     if (typeof output !== "string") throw new Error("sandbox_logs_unavailable");
     return output;
   }
@@ -720,7 +720,7 @@ export async function destroyFullSandboxStack(
 export async function isSandboxRunning(containerId: string): Promise<boolean> {
   try {
     if (await usesPrivateActuator()) {
-      const selected = await readActuatorSandbox() as { containerId?: string; name?: string; running?: boolean };
+      const selected = await readActuatorSandbox();
       return (containerId === selected.containerId || containerId === selected.name) && selected.running === true;
     }
     const { stdout } = await exec(`docker inspect -f "{{.State.Running}}" ${containerId}`);

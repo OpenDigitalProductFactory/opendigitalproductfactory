@@ -1,5 +1,4 @@
 import { hostname } from "node:os";
-import { readFile } from "node:fs/promises";
 import { prisma } from "@dpf/db";
 import { dockerSocketGet, dockerSocketStop } from "@/lib/platform-runtime/docker-socket.mjs";
 import { isImmutableGateClaimKey } from "@/lib/gates/gate-run-identity";
@@ -8,7 +7,7 @@ import { deterministicNonprodWaitTaskRunId } from "./durable-wait";
 import { ownsProcessFreeLease } from "./environment-lease-provenance";
 import type { LeaseRow } from "./environment-lease-result";
 import { isRecord } from "../shared/coerce";
-import { hasPrivateActuatorMount, reconcileEndedPreviewRuntimes } from "../../../../scripts/lib/scope-writer-observation.mjs";
+import { usesPrivateActuator, reconcileEndedPreviewRuntimes } from "@/lib/platform-runtime/actuator-client";
 
 type PreviewTask = { taskRunId: string; userId: string; initiatingAgentId?: string | null; progressPayload: unknown; status: string };
 type Container = {
@@ -92,8 +91,8 @@ function containerMatches(container: Container, id: string, project: string, lea
 /** Existing native owners call this after their normal expiry reconciliation.
  * No client, CLI, stored cleanup command, new claim or authority grant is used. */
 export async function fenceEndedPreviewRuntimes(deps?: Dependencies): Promise<PreviewFenceResult> {
-  if (!deps && await readFile("/proc/self/mountinfo").then(hasPrivateActuatorMount, () => false)) {
-    try { return await reconcileEndedPreviewRuntimes() as PreviewFenceResult; }
+  if (!deps && await usesPrivateActuator()) {
+    try { return await reconcileEndedPreviewRuntimes(); }
     catch {
       return { checked: 0, stopped: 0, held: 0, pending: 1, truncated: false,
         outcomes: [{ containerId: "", state: "pending", reason: "actuator-unavailable" }] };

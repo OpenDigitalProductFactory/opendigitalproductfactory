@@ -8,13 +8,12 @@
 // built per launch and never inherits the portal's provider keys.
 
 import type { ChildProcess } from "node:child_process";
-import { readFileSync } from "node:fs";
 
 import { lazyChildProcess } from "@/lib/shared/lazy-node";
 
 import type { JsonRpcStreams } from "./json-rpc-peer";
 import type { WorkroomSessionOwner } from "./sandbox-session-actuator";
-import { hasPrivateActuatorMount, openActuatorRuntimeSession } from "../../../../scripts/lib/scope-writer-observation.mjs";
+import { usesPrivateActuatorSync, openActuatorRuntimeSession } from "@/lib/platform-runtime/actuator-client";
 
 const SANDBOX_CONTAINER = process.env.SANDBOX_CONTAINER_ID ?? "dpf-sandbox-1";
 
@@ -38,9 +37,8 @@ export type RuntimeLauncher = (launch: RuntimeLaunch) => RuntimeProcess;
 const ENV_NAME = /^[A-Z][A-Z0-9_]{0,63}$/;
 
 export const sandboxRuntimeLauncher: RuntimeLauncher = (launch) => {
-  let privateActuator = false;
-  try { privateActuator = hasPrivateActuatorMount(readFileSync("/proc/self/mountinfo")); } catch { /* non-container runtime */ }
-  if (privateActuator) {
+  // Fail closed (actuator-client): an unreadable mount table counts as mounted.
+  if (usesPrivateActuatorSync()) {
     if (!launch.actuatorOwner) throw new Error("workroom_runtime_admission_unproven");
     return openActuatorRuntimeSession(launch.actuatorOwner);
   }

@@ -108,7 +108,7 @@ export async function executeInstallationTeardown(challengeToken: string): Promi
     const { userId } = await requireCapability("manage_platform");
     // BI-224F56F1: the qualified portal has no Docker, so it cannot launch the
     // host-side teardown runner. Refuse before any drain, backup or launch.
-    if (await (await import("../../../../scripts/lib/scope-writer-observation.mjs")).usesPrivateActuator()) {
+    if (await (await import("@/lib/platform-runtime/actuator-client")).usesPrivateActuator()) {
       return err("Teardown is not available from this hardened portal yet. Nothing was changed.");
     }
     const secret = await loadTeardownSecret();

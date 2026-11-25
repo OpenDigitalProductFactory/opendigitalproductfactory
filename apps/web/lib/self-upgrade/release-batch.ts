@@ -171,7 +171,7 @@ export async function countPendingUpstreamCommits(
   input: { hostSourcePath: string; remote: string; branch: string; sinceSha: string },
   gitRun: GitRunner,
   checkoutWritable: () => Promise<boolean> = async () =>
-    !(await (await import("../../../../scripts/lib/scope-writer-observation.mjs")).usesPrivateActuator()),
+    !(await (await import("@/lib/platform-runtime/actuator-client")).usesPrivateActuator()),
 ): Promise<ReleaseBatchTally> {
   const logArgs = buildPendingLogCommand(input).slice(1);
   try {

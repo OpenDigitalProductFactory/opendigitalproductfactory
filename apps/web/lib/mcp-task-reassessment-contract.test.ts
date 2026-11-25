@@ -6,7 +6,7 @@ const actuator = vi.hoisted(() => ({ mounted: vi.fn(async () => false) }));
 vi.mock("../../../scripts/lib/scope-writer-observation.mjs", async (load) => ({ ...await load<object>(), usesPrivateActuator: actuator.mounted }));
 import { REASSESSMENT_OWNERS, REASSESSMENT_OWNER_PATHS, assertReassessmentOwnerSupport,
   validateReassessmentRuntimeCompatibility } from "./shared/reassessment-owner-versions";
-import { readCurrentReassessmentContract, assertCurrentReassessmentContract, readReassessmentImageContract,
+import { configDigestRunner, readCurrentReassessmentContract, assertCurrentReassessmentContract, readReassessmentImageContract,
   reassessmentRefusalDetail } from "./mcp-task-reassessment-contract";
 const sha = (value: string) => createHash("sha256").update(value).digest("hex");
 function fixture() {
@@ -86,5 +86,13 @@ describe("actual executing reassessment owner compatibility", () => {
     expect(f.ports.runDocker).not.toHaveBeenCalled();
     await fresh.readReassessmentImageContract(f.configDigest, f.info.sourceSha, f.ports.runDocker);
     expect(() => fresh.assertCurrentReassessmentContract({ ...f.info, configDigest: f.configDigest })).toThrow(/compatibility-unproven/);
+  });
+});
+
+describe("config digest runner", () => {
+  it("keeps the budgeted, output-capped runner without the actuator and passes none with it", async () => {
+    const local = await configDigestRunner(async () => false);
+    expect(typeof local).toBe("function");
+    await expect(configDigestRunner(async () => true)).resolves.toBeUndefined();
   });
 });

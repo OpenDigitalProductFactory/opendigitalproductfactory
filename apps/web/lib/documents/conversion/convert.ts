@@ -33,7 +33,7 @@ import {
   type ConverterTarget,
 } from "./formats";
 import { resolveDoctoolsImage, type DoctoolsImageResolution } from "./image";
-import { runActuatorDoctools, usesPrivateActuator } from "../../../../../scripts/lib/scope-writer-observation.mjs";
+import { runActuatorDoctools, usesPrivateActuator } from "@/lib/platform-runtime/actuator-client";
 
 export const DEFAULT_MAX_INPUT_BYTES = 50 * 1024 * 1024;
 export const DEFAULT_CONVERSION_TIMEOUT_MS = 120_000;

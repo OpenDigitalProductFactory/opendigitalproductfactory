@@ -115,7 +115,7 @@ type ActuatorSend = (body: unknown, timeoutMs: number) => Promise<unknown>;
  * malformed reply is an error: preflight fails the run, never builds locally. */
 export async function candidateThroughPrivateActuator(request: { runId: string; targetSha: string; release?: string },
   available?: () => Promise<boolean>, send?: ActuatorSend): Promise<ResolvedPromoterArtifact | null> {
-  const observation = await import("../../../../scripts/lib/scope-writer-observation.mjs");
+  const observation = await import("@/lib/platform-runtime/actuator-client");
   if (!await (available ?? observation.usesPrivateActuator)()) return null;
   const body: CandidateRequest = { owner: { kind: "self-upgrade", runId: request.runId },
     input: { targetSha: request.targetSha, ...(request.release ? { release: request.release } : {}) } };

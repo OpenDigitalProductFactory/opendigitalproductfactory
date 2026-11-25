@@ -1,8 +1,10 @@
 import { createServer, request } from 'node:http';
 import { randomBytes } from 'node:crypto';
 import { EventEmitter, once } from 'node:events';
+import { readFileSync } from 'node:fs';
 import { chmod, chown, lstat, readFile, rename } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { dirname, isAbsolute, join, normalize, sep } from 'node:path';
 import { StringDecoder } from 'node:string_decoder';
 import { dockerSocketGet, dockerSocketRestart } from './docker-socket.mjs';
 
@@ -47,8 +49,27 @@ export function hasPrivateActuatorMount(mountinfo) {
   return mountinfo.toString().split('\n').some(line => line.split(' ')[4] === dirname(SCOPE_WRITER_OBSERVER_SOCKET));
 }
 
-export function usesPrivateActuator() {
-  return readFile('/proc/self/mountinfo').then(hasPrivateActuatorMount, () => false);
+// The one switch between the qualified (actuator) path and the legacy local
+// Docker path. Fail closed: a mount table that cannot be read or parsed counts
+// as mounted, so an unknown never reaches raw Docker. Only a successful read
+// that shows no private actuator mount selects the legacy path. A host with no
+// /proc at all (macOS, Windows: ENOENT off Linux) has no container mounts, so
+// it is a definite "not mounted", not an unknown.
+const MOUNTINFO = '/proc/self/mountinfo';
+const mountUnreadable = (error, platform) => !(platform !== 'linux' && error?.code === 'ENOENT');
+
+/** Whether this process has the private actuator mounted. Never rejects. */
+export function usesPrivateActuator({ read = readFile, platform = process.platform } = {}) {
+  return Promise.resolve().then(() => read(MOUNTINFO))
+    .then(hasPrivateActuatorMount, error => mountUnreadable(error, platform))
+    .catch(() => true);
+}
+
+/** Synchronous form of usesPrivateActuator, with the same fail-closed rule. */
+export function usesPrivateActuatorSync({ read = readFileSync, platform = process.platform } = {}) {
+  let mountinfo;
+  try { mountinfo = read(MOUNTINFO); } catch (error) { return mountUnreadable(error, platform); }
+  try { return hasPrivateActuatorMount(mountinfo); } catch { return true; }
 }
 
 /** @typedef {{kind: 'render'} | {kind: 'convert', from?: string, to: string}} DoctoolsOperation */
@@ -328,16 +349,38 @@ export async function publishActuatorSocket(server, { socketPath = SCOPE_WRITER_
   }
 }
 
+/**
+ * The only destinations the actuator client will send to. Request bodies can
+ * carry file data (document bytes, owner requests), so the target is an
+ * allowlist, never a caller's free choice: the canonical actuator socket,
+ * owned by root as the installer creates it, or a test socket that this
+ * process created itself in the OS temporary directory. Anything else,
+ * including another daemon's socket, is refused before a connection opens.
+ */
+export function isAllowedActuatorSocketPath(socketPath, temporaryRoot = tmpdir()) {
+  if (socketPath === SCOPE_WRITER_OBSERVER_SOCKET) return true;
+  if (typeof socketPath !== 'string' || !isAbsolute(socketPath) || normalize(socketPath) !== socketPath) return false;
+  const root = normalize(temporaryRoot).replace(/[\\/]+$/, '');
+  return socketPath.startsWith(`${root}${sep}`) && socketPath.endsWith('.sock');
+}
+
 async function verifyActuatorSocket(socketPath) {
-  if (socketPath === SCOPE_WRITER_OBSERVER_SOCKET) {
-    try {
+  if (!isAllowedActuatorSocketPath(socketPath)) throw unavailable();
+  try {
+    if (socketPath === SCOPE_WRITER_OBSERVER_SOCKET) {
       const [directory, socket] = await Promise.all([lstat(dirname(socketPath)), lstat(socketPath)]);
       if (!directory.isDirectory() || directory.uid !== 0 || (directory.mode & 0o022) !== 0
         || !socket.isSocket() || socket.uid !== 0 || socket.gid !== 1000 || (socket.mode & 0o777) !== 0o660) {
         throw unavailable();
       }
-    } catch { throw unavailable(); }
-  }
+      return;
+    }
+    // A test socket: one this process's user created, never world-writable
+    // (group access mirrors the published actuator socket's 0660).
+    const socket = await lstat(socketPath);
+    const uid = typeof process.getuid === 'function' ? process.getuid() : undefined;
+    if (!socket.isSocket() || (uid !== undefined && socket.uid !== uid) || (socket.mode & 0o002) !== 0) throw unavailable();
+  } catch { throw unavailable(); }
 }
 
 /** Close the connection on refused, stalled, oversized or malformed output. */

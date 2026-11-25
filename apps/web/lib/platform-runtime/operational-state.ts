@@ -9,7 +9,7 @@ import { readFile } from "node:fs/promises";
 import { hostname as osHostname } from "node:os";
 import { prisma } from "@dpf/db";
 import { dockerSocketGet } from "./docker-socket.mjs";
-import { hasPrivateActuatorMount, readActuatorProjectServices } from "../../../../scripts/lib/scope-writer-observation.mjs";
+import { usesPrivateActuator, readActuatorProjectServices } from "@/lib/platform-runtime/actuator-client";
 export { boundedDockerSocketGet } from "./docker-socket.mjs";
 
 import { getErrorMessage } from "@/lib/shared/get-error-message";
@@ -158,8 +158,8 @@ export async function observeDockerProjectServices(
   containerHostname: string = osHostname(),
 ): Promise<Record<string, ObservedServiceState>> {
   try {
-    if (!get && await readFile("/proc/self/mountinfo").then(hasPrivateActuatorMount, () => false)) {
-      return await readActuatorProjectServices() as Record<string, ObservedServiceState>;
+    if (!get && await usesPrivateActuator()) {
+      return await readActuatorProjectServices();
     }
     const dockerGet = get ?? dockerSocketGet;
     const hostname = containerHostname;

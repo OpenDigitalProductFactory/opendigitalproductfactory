@@ -4,7 +4,7 @@ import { prisma } from "@dpf/db";
 import { canonicalJson } from "@dpf/integration-shared/canonical-json";
 import { isRecord } from "@/lib/shared/coerce";
 import { readAttestedMaintenanceRetirement, verifyMaintenanceEpoch } from "../../../../scripts/lib/maintenance-epoch-receipt.mjs";
-import { hasPrivateActuatorMount, readScopeWriterRetirement } from "../../../../scripts/lib/scope-writer-observation.mjs";
+import { usesPrivateActuator, readScopeWriterRetirement } from "@/lib/platform-runtime/actuator-client";
 import { readSuccessfulMaintenanceRecoveryPoint } from "./recovery-eligibility";
 
 export const MAINTENANCE_EPOCH_RECEIPT_PATH = "/dpf-state/maintenance-epoch-retirement.json";
@@ -32,7 +32,7 @@ export async function attachMaintenanceEpochEvidence(deps: {
   // The qualified portal reads the actuator's attested retirement; the legacy
   // recipe reads and verifies the host receipt itself (BI-224F56F1).
   const actuator = deps.readAttested ?? (!deps.readEnvelope
-    && await readFile("/proc/self/mountinfo").then(hasPrivateActuatorMount, () => false) ? readScopeWriterRetirement : undefined);
+    && await usesPrivateActuator() ? readScopeWriterRetirement : undefined);
   let envelope: unknown, payload: unknown, attested: unknown;
   if (actuator) {
     try {

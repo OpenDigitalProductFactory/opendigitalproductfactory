@@ -1,7 +1,23 @@
 import { describe, it, expect, vi } from "vitest";
+
+const mount = vi.hoisted(() => ({ mounted: false, reconcile: vi.fn() }));
+// The legacy sweep's default runner is promisified execFile; never the host's docker in a test.
+const host = vi.hoisted(() => ({ calls: [] as string[][] }));
+vi.mock("node:child_process", () => ({
+  execFile: (_file: string, args: string[], _options: unknown, done: (error: null, value: { stdout: string }) => void) => {
+    host.calls.push(args);
+    done(null, { stdout: "" });
+  },
+}));
+vi.mock("@/lib/platform-runtime/actuator-client", () => ({
+  usesPrivateActuator: async () => mount.mounted,
+  reconcileActuatorPromoters: mount.reconcile,
+}));
+
 import {
   isPromoterContainerStale,
   sweepOrphanedPromoterContainers,
+  sweepOrphanedPromoterContainersAtDaemon,
   type DockerRun,
 } from "./promoter-sweep";
 
@@ -58,7 +74,55 @@ describe("sweepOrphanedPromoterContainers", () => {
     );
   });
 
-  it("force-removes only promoters older than maxAge", async () => {
+  it("force-removes only promoters older than maxAge (legacy install: by name, running only)", async () => {
+    const calls: string[][] = [];
+    const run: DockerRun = async (_file, args) => {
+      calls.push(args);
+      if (args[0] === "ps") {
+        return {
+          stdout:
+            "dpf-promoter-stale\t2026-07-11 11:41:26 +0000 UTC\n" + // ~39 min → stale
+            "dpf-promoter-live\t2026-07-11 12:10:00 +0000 UTC\n", // ~10 min → keep
+        };
+      }
+      return { stdout: "" };
+    };
+    const log = logger();
+    const result = await sweepOrphanedPromoterContainers(
+      { run, now, maxAgeMs: 30 * 60 * 1000 },
+      log,
+    );
+
+    expect(result).toEqual({ removed: 1 });
+    expect(calls[0]).toEqual(["ps", "--filter", "name=dpf-promoter-", "--format", "{{.Names}}\t{{.CreatedAt}}"]);
+    const rmCalls = calls.filter((a) => a[0] === "rm");
+    expect(rmCalls).toEqual([["rm", "-f", "dpf-promoter-stale"]]);
+  });
+
+  it("uses the legacy sweep when detection shows no actuator mount, and the actuator's sweep when it does", async () => {
+    host.calls.length = 0;
+    mount.reconcile.mockReset();
+    mount.mounted = false;
+    await expect(sweepOrphanedPromoterContainers({ now }, logger())).resolves.toEqual({ removed: 0 });
+    expect(host.calls).toEqual([["ps", "--filter", "name=dpf-promoter-", "--format", "{{.Names}}\t{{.CreatedAt}}"]]);
+    expect(mount.reconcile).not.toHaveBeenCalled();
+
+    mount.mounted = true;
+    mount.reconcile.mockResolvedValue({ removed: 2 });
+    await expect(sweepOrphanedPromoterContainers({ now }, logger())).resolves.toEqual({ removed: 2 });
+    mount.reconcile.mockRejectedValue(new Error("down"));
+    await expect(sweepOrphanedPromoterContainers({ now }, logger())).resolves.toBeNull();
+    expect(mount.reconcile).toHaveBeenCalledTimes(2);
+    expect(host.calls).toHaveLength(1);
+    mount.mounted = false;
+  });
+});
+
+describe("sweepOrphanedPromoterContainersAtDaemon (private actuator)", () => {
+  const now = () => new Date("2026-07-11T12:20:00Z");
+  const logger = () => ({ log: vi.fn(), error: vi.fn() });
+
+  it("force-removes an old unlabelled running promoter by full ID", async () => {
     const calls: string[][] = [];
     const run: DockerRun = async (_file, args) => {
       calls.push(args);
@@ -71,15 +135,9 @@ describe("sweepOrphanedPromoterContainers", () => {
       }
       return { stdout: "" };
     };
-    const log = logger();
-    const result = await sweepOrphanedPromoterContainers(
-      { run, now, maxAgeMs: 30 * 60 * 1000 },
-      log,
-    );
-
+    const result = await sweepOrphanedPromoterContainersAtDaemon({ run, now, maxAgeMs: 30 * 60 * 1000 }, logger());
     expect(result).toEqual({ removed: 1 });
-    const rmCalls = calls.filter((a) => a[0] === "rm");
-    expect(rmCalls).toEqual([["rm", "-f", "a".repeat(64)]]);
+    expect(calls.filter((a) => a[0] === "rm")).toEqual([["rm", "-f", "a".repeat(64)]]);
   });
 
   it("keeps a stale guarded reservation while its owner is active", async () => {
@@ -96,7 +154,7 @@ describe("sweepOrphanedPromoterContainers", () => {
       await remove();
       return true;
     });
-    expect(await sweepOrphanedPromoterContainers({ run, now, underSettledOwner }, logger())).toEqual({ removed: 1 });
+    expect(await sweepOrphanedPromoterContainersAtDaemon({ run, now, underSettledOwner }, logger())).toEqual({ removed: 1 });
     expect(underSettledOwner).toHaveBeenCalledTimes(2);
     expect(calls.filter(args => args[0] === "rm")).toEqual([["rm", "-f", "c".repeat(64)]]);
   });
@@ -107,7 +165,7 @@ describe("sweepOrphanedPromoterContainers", () => {
       stdout: `${id}\tdpf-promoter-SUR-OTHER\t2026-07-11 11:41:26 +0000 UTC\texited\tSUR-OTHER\t${"b".repeat(64)}\tother\n`,
     });
     const underSettledOwner = vi.fn();
-    expect(await sweepOrphanedPromoterContainers({ project: "owned", run, now, underSettledOwner }, logger())).toEqual({ removed: 0 });
+    expect(await sweepOrphanedPromoterContainersAtDaemon({ project: "owned", run, now, underSettledOwner }, logger())).toEqual({ removed: 0 });
     expect(run).toHaveBeenCalledTimes(1);
     expect(underSettledOwner).not.toHaveBeenCalled();
   });

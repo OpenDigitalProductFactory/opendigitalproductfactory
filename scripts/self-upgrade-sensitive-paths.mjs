@@ -23,6 +23,11 @@ export const SELF_UPGRADE_SENSITIVE_PATH_RULES = Object.freeze([
   // (BI-AA6FBAD0). The colocated test derives the closure from Dockerfile.promoter
   // and fails if a newly baked file is not owned here.
   rule("promoter-image-closure", "promoterClosure", /^(?:Dockerfile|scripts\/(?:capability-service-catalog\.generated\.json|promoter-migration-envelope\.mjs|runtime-transition-authority\.mjs|rotate-runtime-transition-secret\.mjs|governed-teardown\.mjs|salvage-sweep\.mjs)|scripts\/lib\/(?:transition-signing|resolve-capability-compose-profiles|govern-capability-compose-args|script-argv|git|capability-state-hash|canonical-json|entry-module|local-sandbox-fence)\.mjs)$/),
+  // The private actuator and its authorized source writer and candidate stage
+  // are baked into the promoter image too (BI-224F56F1): the observation
+  // socket contract, the Docker socket client, the source preparation modules
+  // and the candidate build all decide whether an install can upgrade.
+  rule("actuator-promoter-closure", "promoterClosure", /^scripts\/(?:source-writer|promoter-candidate-build)\.mjs$|^scripts\/lib\/(?:scope-writer-observation|docker-socket|error-message|promoter-build-context-sources)\.(?:mjs|d\.mts)$|^scripts\/lib\/upgrade-source\/(?:lfs-materialization|prepare-source|transient-network|version-stamp)\.mjs$/),
 ]);
 
 export function normalizeRepositoryPath(path) {

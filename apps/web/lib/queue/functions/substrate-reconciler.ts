@@ -5,7 +5,6 @@
 
 import { AI_TURN_CLAIM_PREFIX } from "@/lib/nonprod/environment-lease-overseer";
 import { hostname as osHostname } from "node:os";
-import { readFile } from "node:fs/promises";
 
 import { cron } from "@/lib/jobs/triggers";
 import { prisma } from "@dpf/db";
@@ -16,7 +15,7 @@ import { loadOperationalCapabilityState, observeDockerProjectServices } from "@/
 import { getQuiescenceLevel, parseQuiescenceConfig, QUIESCENCE_CONFIG_KEY } from "@/lib/self-upgrade/quiescence";
 import { lockScopeEpochEnrollmentAdmission } from "@/lib/work-capsules/scope-epoch-enrollment.server";
 import type { CapsuleDb } from "@/lib/work-capsules/work-capsule-store-types";
-import { hasPrivateActuatorMount, reconcileActuatorSubstrate } from "../../../../../scripts/lib/scope-writer-observation.mjs";
+import { usesPrivateActuator, reconcileActuatorSubstrate } from "@/lib/platform-runtime/actuator-client";
 import {
   reconcileSubstrate,
   type SubstrateContainer,
@@ -135,7 +134,7 @@ export async function reconcileSubstrateAtDaemon(actuatorProject?: string) {
       if (!actuatorProject) return start(30_000);
       try {
         return await prisma.$transaction(async tx => {
-          await lockScopeEpochEnrollmentAdmission(tx as unknown as CapsuleDb);
+          await lockScopeEpochEnrollmentAdmission(tx as unknown as CapsuleDb, "canonical");
           const config = await tx.platformConfig.findUnique({ where: { key: QUIESCENCE_CONFIG_KEY } });
           if (parseQuiescenceConfig(config?.value).level !== "normal") return err("quiescence");
           const live = await dockerSocketGet(`/containers/${container.id}/json`) as DockerInspect;
@@ -183,7 +182,7 @@ export const substrateReconciler = jobs.createFunction(
       }
     });
     return step.run("reconcile-substrate", async () => {
-      if (await readFile("/proc/self/mountinfo").then(hasPrivateActuatorMount, () => false)) return reconcileActuatorSubstrate();
+      if (await usesPrivateActuator()) return reconcileActuatorSubstrate();
       return reconcileSubstrateAtDaemon();
     });
   },

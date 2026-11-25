@@ -10,7 +10,7 @@ import { attachMaintenanceEpochEvidence } from "@/lib/self-upgrade/maintenance-e
 import { lockCanonicalRuntimeAdmission } from "@/lib/platform-runtime/work-admission";
 import { readSuccessfulMaintenanceRecoveryPoint } from "@/lib/self-upgrade/recovery-eligibility";
 import { verifyMaintenanceEpoch, readAttestedMaintenanceRetirement, observeMaintenanceEnvironments, assertNoCanonicalActuators, hasContinuousMaintenanceStarts } from "../../../../scripts/lib/maintenance-epoch-receipt.mjs";
-import { hasPrivateActuatorMount, readScopeWriterObservation, readScopeWriterRetirement } from "../../../../scripts/lib/scope-writer-observation.mjs";
+import { hasPrivateActuatorMount, readScopeWriterObservation, readScopeWriterRetirement } from "@/lib/platform-runtime/actuator-client";
 import type { ToolResult } from "@/lib/mcp-tool-types";
 import { SCOPE_EPOCH_WRITER_PATHS, validateScopeEpochWriterContract, type ScopeEpochWriterContract } from "./scope-epoch-contract";
 import type { CapsuleDb } from "./work-capsule-store-types";
@@ -169,14 +169,14 @@ async function authenticatedRetirement(ports: ScopeEpochEnrollmentPorts, sourceS
   return { retired, retirementDigest };
 }
 
-function createEnrollmentProof(close?: () => Promise<void>): ScopeEpochEnrollmentProof {
+function createEnrollmentProof(mode: EnrollmentAdmissionMode, close?: () => Promise<void>): ScopeEpochEnrollmentProof {
   const pid = process.pid, processHostname = hostname();
   const checks = new WeakMap<CapsuleDb, Promise<void>>();
   const proof: ScopeEpochEnrollmentProof = { async assertCurrent(tx) {
     if (!brands.has(proof) || pid !== process.pid || processHostname !== hostname()) refuse("process-proof-unproven");
     let checked = checks.get(tx);
     if (!checked) {
-      checked = lockScopeEpochEnrollmentAdmission(tx).then(close);
+      checked = lockScopeEpochEnrollmentAdmission(tx, mode).then(close);
       checks.set(tx, checked);
     }
     return checked;
@@ -194,7 +194,7 @@ async function prepareHardenedEnrollment(ports: ScopeEpochEnrollmentPorts, conta
   if (!attested) refuse("final-retirement-unavailable");
   const { retired, retirementDigest } = await authenticatedRetirement(ports, source, attested);
   if (retired.after.portal.id !== containerId) refuse("current-portal-unproven");
-  return createEnrollmentProof(async () => {
+  return createEnrollmentProof("canonical", async () => {
     try {
       const current = record(await (ports.readClosing ?? readScopeWriterObservation)());
       const launch = record(current?.launch), served = record(current?.served);
@@ -227,6 +227,8 @@ export async function assertScopeEpochEnrollmentReady(ports: ScopeEpochEnrollmen
       read("read-process-cgroup", "/proc/self/cgroup"), read("read-process-mounts", "/proc/self/mountinfo"),
     ]);
     const containerId = await probe("identify-container", () => currentScopeWriterContainerId(cgroup.toString(), mounts.toString()));
+    // The mount table was read above (a failed read refuses enrollment), so this
+    // parses observed bytes: an actuator mount selects the hardened proof.
     if (hasPrivateActuatorMount(mounts)) {
       return await prepareHardenedEnrollment(ports, containerId);
     }
@@ -260,30 +262,46 @@ export async function assertScopeEpochEnrollmentReady(ports: ScopeEpochEnrollmen
     const { retired } = await authenticatedRetirement(ports, local.sourceSha);
     await probe("observe-canonical-actuators", () => assertNoCanonicalActuators({ runDocker: docker }));
     const cohort = await probe("observe-current-cohort", () => observeMaintenanceEnvironments({ project: current.project, runDocker: docker }));
-    if (retired.project !== current.project || retired.daemonId !== cohort.daemonId || cohort.activeProjectPromoter
+    // Legacy recipe: the original cohort comparison, unchanged (BI-224F56F1).
+    if (retired.project !== current.project || retired.daemonId !== cohort.daemonId
       || retired.after.portal.id !== containerId || canonicalJson(retired.after) !== canonicalJson(cohort.environments)
       || retired.retiredContainerIds.some((id: string) => cohort.inventory.includes(id))
       || canonicalJson(await inspect()) !== canonicalJson(current)) refuse("current-cohort-unproven");
-    return createEnrollmentProof();
+    return createEnrollmentProof("legacy");
   } catch (error) {
     return refuseProbe("assemble-enrollment-proof", error);
   }
 }
 
 
-/** Existing durable admission protocol, reused by the qualified scope writer. */
-export async function lockScopeEpochEnrollmentAdmission(tx: CapsuleDb): Promise<void> {
+/**
+ * Existing durable admission protocol, reused by the qualified scope writer.
+ *
+ * "legacy" (the default) is the original protocol for installs without the
+ * private actuator: the two advisory locks, and an active run is pending,
+ * queued or running. "canonical" is for the hardened portal and the
+ * actuator's own admissions: it shares the durable launcher's
+ * table-before-advisory lock order (avoiding inversion with transition
+ * settlement) and also counts a completing run as active.
+ */
+export type EnrollmentAdmissionMode = "legacy" | "canonical";
+export async function lockScopeEpochEnrollmentAdmission(tx: CapsuleDb, mode: EnrollmentAdmissionMode = "legacy"): Promise<void> {
   const admission = tx as unknown as Partial<Parameters<typeof lockCanonicalRuntimeAdmission>[0]> & {
     selfUpgradeRun?: { findFirst(args: unknown): Promise<unknown> };
     runtimeCapabilityTransition?: { findFirst(args: unknown): Promise<unknown> };
   };
-  if (!admission.$executeRaw || !admission.$queryRaw || !admission.selfUpgradeRun?.findFirst
+  if (!admission.$executeRaw || (mode === "canonical" && !admission.$queryRaw) || !admission.selfUpgradeRun?.findFirst
     || !admission.runtimeCapabilityTransition?.findFirst) refuse("transaction-admission-unavailable");
-  // Share the producer's table-before-advisory order to avoid inversion with
-  // transition settlement. The Workroom row is still taken afterwards.
-  await lockCanonicalRuntimeAdmission(admission as Parameters<typeof lockCanonicalRuntimeAdmission>[0]);
+  if (mode === "canonical") {
+    await lockCanonicalRuntimeAdmission(admission as Parameters<typeof lockCanonicalRuntimeAdmission>[0]);
+  } else {
+    // Existing admission keys, one order, no Docker or filesystem I/O here.
+    await admission.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('runtime-capability-transition'))`;
+    await admission.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('self-upgrade-admission'))`;
+  }
+  const activeRuns = mode === "canonical" ? ["pending", "queued", "running", "completing"] : ["pending", "queued", "running"];
   if (await admission.runtimeCapabilityTransition.findFirst({ where: { OR: [{ status: { in: ["pending", "applying", "host_applied", "compensating"] } }, { status: "rollback_failed", failure: { path: ["recoveryRequired"], equals: true } }] }, select: { id: true } })
-    || await admission.selfUpgradeRun.findFirst({ where: { status: { in: ["pending", "queued", "running", "completing"] } }, select: { id: true } })) refuse("canonical-transition-active");
+    || await admission.selfUpgradeRun.findFirst({ where: { status: { in: activeRuns } }, select: { id: true } })) refuse("canonical-transition-active");
   // A terminal history row is not a global revision. Continuing actuator
   // and actual portal compatibility floors, not a history heuristic, exclude
   // later unaware writers. Active/recovery admissions remain serialized.

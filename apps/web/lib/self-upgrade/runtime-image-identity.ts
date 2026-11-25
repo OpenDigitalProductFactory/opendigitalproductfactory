@@ -1,7 +1,7 @@
 import { hostname } from "node:os";
 import { spawn } from "node:child_process";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
-import { readActuatorPortalImage, usesPrivateActuator } from "../../../../scripts/lib/scope-writer-observation.mjs";
+import { readActuatorPortalImage, usesPrivateActuator } from "@/lib/platform-runtime/actuator-client";
 
 const CONFIG_DIGEST = /^sha256:[a-f0-9]{64}$/;
 
@@ -58,7 +58,7 @@ export async function readCurrentContainerConfigDigest(
   if (!containerId.trim()) return null;
   if (!runDocker && await usesPrivateActuator()) {
     try {
-      const actual = await readActuatorPortalImage() as { image?: string; containerId?: string };
+      const actual = await readActuatorPortalImage();
       if (!/^(?:[a-f0-9]{12}|[a-f0-9]{64})$/.test(containerId) || typeof actual.containerId !== "string"
         || !actual.containerId.startsWith(containerId) || typeof actual.image !== "string") return null;
       return parseContainerConfigDigest(actual.image);

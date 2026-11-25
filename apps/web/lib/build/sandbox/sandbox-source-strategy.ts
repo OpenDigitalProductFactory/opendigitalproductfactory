@@ -7,7 +7,7 @@ import {
   execInSandbox,
   quotePosixArg,
 } from "@/lib/sandbox";
-import { hasPrivateActuatorMount } from "../../../../../scripts/lib/scope-writer-observation.mjs";
+import { usesPrivateActuatorSync } from "@/lib/platform-runtime/actuator-client";
 
 const exec = lazyExec();
 
@@ -111,8 +111,8 @@ export class LocalSourceStrategy implements SandboxSourceStrategy {
     }
 
     const { statSync, readFileSync } = lazyFs();
-    let hardened = false;
-    try { hardened = hasPrivateActuatorMount(readFileSync("/proc/self/mountinfo")); } catch { /* local host */ }
+    // Fail closed (actuator-client): an unreadable mount table counts as mounted.
+    const hardened = usesPrivateActuatorSync({ read: path => readFileSync(path) });
     const sourcePaths = buildSourcePaths(pickSandboxSourceRoot(process.env.PROJECT_ROOT, hardened, path => {
       try { return statSync(path).isFile(); } catch { return false; }
     }));

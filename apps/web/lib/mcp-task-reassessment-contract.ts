@@ -3,7 +3,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { hostname } from "node:os";
 import { readFile } from "node:fs/promises";
 import { readCurrentContainerConfigDigest } from "./self-upgrade/runtime-image-identity";
-import { readActuatorReassessmentProof, usesPrivateActuator } from "../../../scripts/lib/scope-writer-observation.mjs";
+import { readActuatorReassessmentProof, usesPrivateActuator } from "@/lib/platform-runtime/actuator-client";
 import { runProcessWithBudget } from "./shared/run-process-with-budget";
 import { currentReassessmentExecution } from "./routing/reassessment-execution-scope";
 import { REASSESSMENT_OWNERS, REASSESSMENT_OWNER_PATHS, REASSESSMENT_OWNER_VERSIONS,
@@ -25,8 +25,14 @@ const defaultRunDocker: ReassessmentContractPorts["runDocker"] = async args => {
   if (result.outputLimitExceeded) refuseReassessmentWithDetail("docker-output-oversized");
   return result;
 };
+/** The config-digest runner: an install without the actuator keeps the budgeted,
+ * output-capped runner; the qualified portal passes none, so the digest comes
+ * from the actuator's observation (runtime-image-identity). */
+export async function configDigestRunner(mounted: () => Promise<boolean> = usesPrivateActuator) {
+  return await mounted() ? undefined : defaultRunDocker;
+}
 const defaultPorts: ReassessmentContractPorts = {
-  readCurrentConfigDigest: () => readCurrentContainerConfigDigest(), readFile, runDocker: defaultRunDocker,
+  readCurrentConfigDigest: async () => readCurrentContainerConfigDigest(await configDigestRunner()), readFile, runDocker: defaultRunDocker,
 };
 function sameInfo(left: ReassessmentCapabilityInfo, right: ReassessmentCapabilityInfo): boolean {
   return left.sourceSha === right.sourceSha && left.sourceContentHash === right.sourceContentHash && left.contractSha256 === right.contractSha256
