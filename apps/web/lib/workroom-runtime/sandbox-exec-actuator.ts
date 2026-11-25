@@ -21,6 +21,8 @@ export type SandboxExecOwner = {
   workdir: string | null;
   user: string | null;
   interactive: boolean;
+  /** `docker exec -d`: the command outlives the request (a dev server). */
+  detach: boolean;
 };
 type SandboxIdentity = { containerId: string; running: boolean };
 
@@ -33,7 +35,7 @@ const plain = (value: string) => !value.includes("\0");
 
 /** A request the actuator will run, or a refusal. Exact keys only. */
 export function readSandboxExecOwner(value: unknown): SandboxExecOwner {
-  if (!isRecord(value) || Object.keys(value).length !== 6 || value.kind !== "sandbox-exec"
+  if (!isRecord(value) || Object.keys(value).length !== 7 || value.kind !== "sandbox-exec"
     || !Array.isArray(value.command) || value.command.length < 1 || value.command.length > 256
     || !value.command.every(arg => typeof arg === "string" && arg.length <= ARG_LIMIT && plain(arg))
     || (value.command[0] as string).length === 0
@@ -42,17 +44,20 @@ export function readSandboxExecOwner(value: unknown): SandboxExecOwner {
     || !(value.workdir === null || (typeof value.workdir === "string" && WORKDIR.test(value.workdir)
       && !value.workdir.split("/").some(part => part === "..")))
     || !(value.user === null || (typeof value.user === "string" && USER.test(value.user)))
-    || typeof value.interactive !== "boolean") throw refuse();
+    || typeof value.interactive !== "boolean" || typeof value.detach !== "boolean"
+    || (value.detach && value.interactive)) throw refuse();
   return { kind: "sandbox-exec", command: [...value.command] as string[], env: { ...value.env } as Record<string, string>,
-    workdir: value.workdir as string | null, user: value.user as string | null, interactive: value.interactive };
+    workdir: value.workdir as string | null, user: value.user as string | null, interactive: value.interactive,
+    detach: value.detach };
 }
 
 /** The fixed Docker argv. Values travel in the child's environment, never argv. */
 export function buildSandboxExecArgs(owner: SandboxExecOwner, containerId: string): string[] {
-  return ["--host", "unix:///var/run/docker.sock", "exec", ...(owner.interactive ? ["-i"] : []),
+  return ["--host", "unix:///var/run/docker.sock", "exec", ...(owner.interactive ? ["-i"] : []), ...(owner.detach ? ["-d"] : []),
     ...(owner.workdir ? ["-w", owner.workdir] : []), ...(owner.user ? ["-u", owner.user] : []),
     ...Object.keys(owner.env).flatMap(name => ["-e", name]), containerId,
-    "timeout", "-k", "3", "24h", ...owner.command];
+    // A detached command is not tied to this stream; the sandbox owns its lifetime.
+    ...(owner.detach ? [] : ["timeout", "-k", "3", "24h"]), ...owner.command];
 }
 
 /** Actuator side. A refused request never reaches Docker. */

@@ -5,9 +5,17 @@
 import { lazyChildProcess, lazyExec } from "@/lib/shared/lazy-node";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 import { ensureGlobalSafeDirectoryCommand } from "@/lib/shared/git-safe-directory";
-import { readActuatorSandbox, readActuatorServiceLogs, usesPrivateActuator } from "../../../../../scripts/lib/scope-writer-observation.mjs";
+import { readActuatorSandbox, readActuatorServiceLogs, restartActuatorService, usesPrivateActuator } from "../../../../../scripts/lib/scope-writer-observation.mjs";
+import { execSandboxCommandLine, spawnSandboxExec } from "@/lib/workroom-runtime/sandbox-exec";
 
-const exec = lazyExec();
+const localExec = lazyExec();
+/** BI-224F56F1: every Docker line goes through execSandboxCommandLine. Without
+ * the actuator it runs as before; in the qualified portal only a plain
+ * `docker exec` into the observed sandbox runs, and any other Docker line
+ * (create, network, remove) is refused. */
+const exec: typeof localExec = (command, options) => (command.startsWith("docker ")
+  ? execSandboxCommandLine(command, options as { timeout?: number; maxBuffer?: number })
+  : localExec(command, options));
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -373,8 +381,47 @@ export async function createSandbox(
 }
 
 export async function startSandbox(containerId: string): Promise<void> {
+  if (await usesPrivateActuator()) {
+    // The canonical sandbox runs under Compose; a stopped one is restarted by
+    // the actuator's catalog restart, and no other container is started.
+    const selected = await readActuatorSandbox() as { containerId?: string; name?: string; running?: boolean };
+    if (!selected.containerId || (containerId !== selected.containerId && containerId !== selected.name)) throw new Error("sandbox_target_unproven");
+    if (!selected.running) await restartActuatorService("sandbox");
+    return;
+  }
   await exec(`docker start ${containerId}`);
 }
+
+/** Copy fixed paths of this portal's image into the sandbox. In the qualified
+ * portal a local tar of /app streams into the sandbox's own extract. */
+async function copyPortalPathsIntoSandbox(containerId: string, legacyCommand: string, tarArgs: string[],
+  sandboxCommand: string[], timeoutMs: number): Promise<void> {
+  if (!await usesPrivateActuator()) { await exec(legacyCommand, { timeout: timeoutMs }); return; }
+  await new Promise<void>((resolve, reject) => {
+    const tar = lazyChildProcess().spawn("tar", tarArgs, { stdio: ["ignore", "pipe", "pipe"] });
+    const sink = spawnSandboxExec(["exec", "-i", containerId, ...sandboxCommand], { stdio: ["pipe", "pipe", "pipe"] });
+    let tarCode: number | null | undefined, sinkCode: number | null | undefined, stderr = "", settled = false;
+    const finish = (error?: Error) => {
+      if (settled) return;
+      settled = true; clearTimeout(timer);
+      if (error) reject(error); else resolve();
+    };
+    const timer = setTimeout(() => { tar.kill(); sink.kill(); finish(new Error("Command failed: sandbox copy timed out")); }, timeoutMs);
+    const settle = () => {
+      if (tarCode === undefined || sinkCode === undefined) return;
+      if (tarCode === 0 && sinkCode === 0) finish();
+      else finish(new Error(`Command failed: sandbox copy exited ${tarCode}/${sinkCode}\n${stderr.slice(-2048)}`));
+    };
+    tar.stdout.pipe(sink.stdin);
+    tar.stderr.on("data", (chunk: Buffer) => { stderr += chunk.toString("utf8"); });
+    sink.stderr.on("data", (chunk: Buffer) => { stderr += chunk.toString("utf8"); });
+    sink.stdout.resume();
+    tar.on("error", error => { sink.kill(); finish(error); });
+    tar.on("close", code => { tarCode = code; settle(); });
+    sink.on("close", code => { sinkCode = code; settle(); });
+  });
+}
+const extractIntoWorkspace = ["tar", "-xf", "-", "-C", "/workspace"];
 
 /**
  * Initialize the sandbox workspace with the project source.
@@ -385,7 +432,7 @@ export async function startSandbox(containerId: string): Promise<void> {
 export async function initializeSandboxWorkspace(containerId: string): Promise<void> {
   // Start only the destination. The source tar reads this portal's image.
   console.log(`[sandbox-init] sandbox=${containerId}`);
-  await exec(`docker start ${containerId}`);
+  await startSandbox(containerId);
   console.log(`[sandbox-init] container started`);
 
   // Copy project source via tar pipe (docker cp between containers is not supported).
@@ -393,28 +440,29 @@ export async function initializeSandboxWorkspace(containerId: string): Promise<v
   // Copy root config files one at a time (more reliable than multi-file tar which can fail silently)
   const rootFiles = ["package.json", "pnpm-workspace.yaml", "pnpm-lock.yaml", "tsconfig.base.json"];
   for (const f of rootFiles) {
-    await exec(
+    await copyPortalPathsIntoSandbox(containerId,
       `tar -cf - -C /app ${f} | docker exec -i ${quotePosixArg(containerId)} tar -xf - -C /workspace`,
-      { timeout: 10_000 },
+      ["-cf", "-", "-C", "/app", f], extractIntoWorkspace, 10_000,
     ).catch(() => console.log(`[sandbox-init] ${f} not found, skipping`));
   }
   console.log("[sandbox-init] root files done");
 
-  await exec(
+  await copyPortalPathsIntoSandbox(containerId,
     `tar -cf - -C /app packages | docker exec -i ${quotePosixArg(containerId)} tar -xf - -C /workspace`,
-    { timeout: 60_000 },
+    ["-cf", "-", "-C", "/app", "packages"], extractIntoWorkspace, 60_000,
   );
   console.log("[sandbox-init] packages/ copied");
 
-  await exec(
+  await copyPortalPathsIntoSandbox(containerId,
     buildSandboxRootScriptsCopyCommand(containerId),
-    { timeout: 20_000 },
+    ["-cf", "-", "-C", "/app", "scripts"], extractIntoWorkspace, 20_000,
   ).catch(() => console.log("[sandbox-init] scripts/ not found, skipping"));
   console.log("[sandbox-init] scripts/ copied");
 
-  await exec(
+  await copyPortalPathsIntoSandbox(containerId,
     buildSandboxAppsWebCopyCommand(containerId),
-    { timeout: 60_000 },
+    ["--exclude=apps/web/node_modules", "--exclude=apps/web/.next", "--exclude=apps/web/tsconfig.tsbuildinfo", "-cf", "-", "-C", "/app", "apps/web"],
+    ["sh", "-c", "mkdir -p /workspace/apps && tar -xf - -C /workspace"], 60_000,
   );
   console.log("[sandbox-init] apps/web/ copied");
 
@@ -465,10 +513,9 @@ export async function execInSandboxWithStdin(
   command: string,
   input: string,
 ): Promise<string> {
-  const { spawn } = lazyChildProcess();
   const safeCommand = prefixSafeWorkspaceCommand(command);
   return new Promise((resolve, reject) => {
-    const child = spawn("docker", ["exec", "-i", containerId, "sh", "-c", safeCommand], {
+    const child = spawnSandboxExec(["exec", "-i", containerId, "sh", "-c", safeCommand], {
       stdio: ["pipe", "pipe", "pipe"],
       windowsHide: true,
     });

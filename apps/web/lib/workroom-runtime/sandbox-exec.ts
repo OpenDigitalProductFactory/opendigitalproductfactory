@@ -11,7 +11,7 @@ import { EventEmitter } from "node:events";
 import { PassThrough, Writable } from "node:stream";
 import type { ChildProcess, ChildProcessWithoutNullStreams, SpawnOptions } from "node:child_process";
 
-import { lazyChildProcess } from "@/lib/shared/lazy-node";
+import { lazyChildProcess, lazyExec } from "@/lib/shared/lazy-node";
 import type { RuntimeProcess } from "./sandbox-launcher";
 import { readSandboxExecOwner, type SandboxExecOwner } from "./sandbox-exec-actuator";
 
@@ -21,11 +21,12 @@ export const QUALIFIED_PORTAL_DOCKER_REFUSAL = "This Docker operation is not ava
 /** The `docker exec` argv as a sandbox-exec request, or null. */
 export function sandboxExecOwnerFor(args: readonly string[], env: NodeJS.ProcessEnv = process.env): SandboxExecOwner | null {
   if (args[0] !== "exec") return null;
-  const owner: SandboxExecOwner = { kind: "sandbox-exec", command: [], env: {}, workdir: null, user: null, interactive: false };
+  const owner: SandboxExecOwner = { kind: "sandbox-exec", command: [], env: {}, workdir: null, user: null, interactive: false, detach: false };
   let index = 1;
   for (; index < args.length && args[index].startsWith("-"); index++) {
     const flag = args[index];
     if (flag === "-i" || flag === "--interactive") { owner.interactive = true; continue; }
+    if (flag === "-d" || flag === "--detach") { owner.detach = true; continue; }
     const value = args[++index];
     if (value === undefined) return null;
     if (flag === "-w" || flag === "--workdir") owner.workdir = value;
@@ -203,8 +204,7 @@ export function splitHostCommand(line: string): string[] | null {
 export async function execSandboxCommandLine(line: string, options: { timeout?: number; maxBuffer?: number } = {},
   deps: Deps = {}): Promise<SandboxExecResult> {
   if (!await (deps.available ?? defaultAvailable)().catch(() => true)) {
-    const { promisify } = await import("node:util");
-    const { stdout, stderr } = await promisify(lazyChildProcess().exec)(line, { ...options, encoding: "utf8" });
+    const { stdout, stderr } = await lazyExec()(line, options);
     return { stdout: String(stdout), stderr: String(stderr) };
   }
   const argv = splitHostCommand(line);

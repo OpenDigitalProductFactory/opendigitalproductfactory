@@ -18,7 +18,10 @@ export async function legacySandboxExec() {
     spawnSandboxExec: (args: readonly string[], options?: object) => (options === undefined
       ? lazy.lazyChildProcess().spawn("docker", args as string[])
       : lazy.lazyChildProcess().spawn("docker", args as string[], options)),
-    execSandboxCommandLine: (line: string, options?: object) =>
-      (promisify(lazy.lazyChildProcess().exec) as (line: string, options?: object) => Promise<{ stdout: string; stderr: string }>)(line, options),
+    execSandboxCommandLine: (line: string, options?: object) => {
+      let run: ((line: string, options?: object) => Promise<{ stdout: string; stderr: string }>) | undefined;
+      try { run = lazy.lazyExec() as typeof run; } catch { run = undefined; }
+      return (run ?? (promisify(lazy.lazyChildProcess().exec) as (line: string, options?: object) => Promise<{ stdout: string; stderr: string }>))(line, options);
+    },
   };
 }

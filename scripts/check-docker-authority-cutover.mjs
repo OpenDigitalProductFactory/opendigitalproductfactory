@@ -51,7 +51,7 @@ export const DOCKER_AUTHORITY_REGISTRY = Object.freeze({
   "apps/web/lib/build/sandbox/sandbox-db.ts": { class: "pending", count: 6, reason: "Writer-reachable raw Docker call; migrate to a typed actuator operation before the immutable recipe." },
   "apps/web/lib/build/sandbox/sandbox-promotion.ts": { class: "pending", count: 4, reason: "Writer-reachable raw Docker call; migrate to a typed actuator operation before the immutable recipe." },
   "apps/web/lib/build/sandbox/sandbox-recovery.ts": { class: "routed", count: 1, reason: "runSandboxRecoveryCommand: exec through the actuator, start and restart through its catalog sandbox restart, anything else refused when the mount is present." },
-  "apps/web/lib/build/sandbox/sandbox.ts": { class: "pending", count: 20, reason: "Writer-reachable raw Docker call; migrate to a typed actuator operation before the immutable recipe." },
+  "apps/web/lib/build/sandbox/sandbox.ts": { class: "routed", count: 18, reason: "Every Docker line goes through execSandboxCommandLine (exec into the observed sandbox, anything else refused when the actuator is mounted); portal copies stream a local tar into the sandbox; start uses the catalog sandbox restart." },
   "apps/web/lib/coworker/service-converge-report.ts": { class: "message", count: 1, reason: "A literal matched against recorded admin_run_command parameters; it runs nothing (the executing tool is admin-pack)." },
   "apps/web/lib/documents/conversion/availability.ts": { class: "routed", count: 1, reason: "readActuatorDoctoolsHealth when the actuator mount is present." },
   "apps/web/lib/documents/conversion/command.ts": { class: "routed", count: 1, reason: "Builds converter argv shared by the actuator and the mount-absent fallback; spawns nothing itself." },

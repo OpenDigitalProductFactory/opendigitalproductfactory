@@ -91,6 +91,10 @@ COPY scripts/lib/canonical-json.mjs ./scripts/lib/
 # The local-CI status set is shared by the gate scripts and the MCP evidence
 # handler, so the build stage needs it too (BI-C59AC8AF).
 COPY scripts/lib/local-integration-status.mjs ./scripts/lib/
+# Self-upgrade source preparation is shared with the source writer the actuator
+# launches (BI-224F56F1); the portal imports the same closure.
+COPY scripts/lib/upgrade-source/ ./scripts/lib/upgrade-source/
+COPY scripts/lib/error-message.mjs ./scripts/lib/
 # Build Studio carries a build's recorded gate decisions into its PR using the
 # same trailer names the readiness gates read (BI-BA6EDCDD).
 COPY scripts/lib/pr-trailer-contract.mjs ./scripts/lib/
@@ -263,6 +267,10 @@ COPY scripts/lib/git-changed-files.mjs ./scripts/lib/
 COPY scripts/lib/git.mjs ./scripts/lib/
 COPY scripts/lib/entry-module.mjs ./scripts/lib/
 COPY scripts/lib/local-integration-status.mjs ./scripts/lib/
+# Self-upgrade source preparation is shared with the source writer the actuator
+# launches (BI-224F56F1); the portal imports the same closure.
+COPY scripts/lib/upgrade-source/ ./scripts/lib/upgrade-source/
+COPY scripts/lib/error-message.mjs ./scripts/lib/
 COPY scripts/module-size-baseline.txt ./scripts/
 COPY scripts/prose-lint-baseline.json ./scripts/
 COPY scripts/style-drift-baseline.json ./scripts/

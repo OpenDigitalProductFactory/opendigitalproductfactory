@@ -6,7 +6,7 @@ import { buildSandboxExecArgs, createSandboxExecActuator, readSandboxExecOwner, 
 import { execSandbox, sandboxExecOwnerFor, spawnSandboxExec, type SandboxExecSession } from "./sandbox-exec";
 
 const owner = (overrides: Partial<SandboxExecOwner> = {}): SandboxExecOwner => ({
-  kind: "sandbox-exec", command: ["sh", "-c", "echo ok"], env: {}, workdir: null, user: null, interactive: false, ...overrides });
+  kind: "sandbox-exec", command: ["sh", "-c", "echo ok"], env: {}, workdir: null, user: null, interactive: false, detach: false, ...overrides });
 const sandboxId = "c".repeat(64);
 
 function fakeSession(script: (input: Buffer[], session: { out: (text: string) => void; close: (code: number | null) => void }) => void) {
@@ -41,6 +41,7 @@ describe("readSandboxExecOwner", () => {
       owner({ workdir: "relative" }),
       owner({ user: "root --privileged" }),
       { ...owner(), interactive: "yes" },
+      owner({ detach: true, interactive: true }),
     ]) expect(() => readSandboxExecOwner(bad)).toThrow("sandbox_exec_admission_refused");
   });
 
@@ -49,6 +50,8 @@ describe("readSandboxExecOwner", () => {
     expect(args).toEqual(["--host", "unix:///var/run/docker.sock", "exec", "-i", "-w", "/workspace", "-u", "node", "-e", "TOKEN",
       sandboxId, "timeout", "-k", "3", "24h", "sh", "-c", "echo ok"]);
     expect(args.join(" ")).not.toMatch(/secret|--privileged/);
+    expect(buildSandboxExecArgs(owner({ detach: true }), sandboxId)).toEqual(["--host", "unix:///var/run/docker.sock", "exec", "-d",
+      sandboxId, "sh", "-c", "echo ok"]);
   });
 });
 
@@ -75,7 +78,8 @@ describe("sandboxExecOwnerFor", () => {
   it("reads the canonical sandbox's exec argv and nothing else", () => {
     expect(sandboxExecOwnerFor(["exec", "-i", "-e", "OPENAI_API_KEY=", "-e", "TOKEN", "--user", "node", "-w", "/workspace",
       "dpf-sandbox-1", "node", "-e", "1"], { TOKEN: "t" } as unknown as NodeJS.ProcessEnv))
-      .toEqual({ kind: "sandbox-exec", command: ["node", "-e", "1"], env: { OPENAI_API_KEY: "", TOKEN: "t" }, workdir: "/workspace", user: "node", interactive: true });
+      .toEqual({ kind: "sandbox-exec", command: ["node", "-e", "1"], env: { OPENAI_API_KEY: "", TOKEN: "t" }, workdir: "/workspace", user: "node", interactive: true, detach: false });
+    expect(sandboxExecOwnerFor(["exec", "-d", "dpf-sandbox-1", "sh", "-c", "node server.js"])).toMatchObject({ detach: true, interactive: false });
     expect(sandboxExecOwnerFor(["exec", "dpf-portal-1", "sh"])).toBeNull();
     expect(sandboxExecOwnerFor(["exec", "--privileged", "dpf-sandbox-1", "sh"])).toBeNull();
     expect(sandboxExecOwnerFor(["exec", "-t", "dpf-sandbox-1", "sh"])).toBeNull();

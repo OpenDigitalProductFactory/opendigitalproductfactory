@@ -35,3 +35,25 @@ describe("sandbox admin and recovery in the qualified portal (BI-224F56F1)", () 
     expect(actuator.restart).toHaveBeenCalledTimes(2);
   });
 });
+
+describe("sandbox.ts exec lines under the host command check", () => {
+  it("every built docker exec line reads as a canonical sandbox exec request", async () => {
+    const { sandboxExecOwnerFor, splitHostCommand } = await vi.importActual<typeof import("@/lib/workroom-runtime/sandbox-exec")>("@/lib/workroom-runtime/sandbox-exec");
+    const sandbox = await import("./sandbox");
+    const c = "dpf-sandbox-1";
+    const lines = [
+      sandbox.buildDockerExecSandboxCommand(c, "git -C /workspace status --porcelain"),
+      sandbox.buildSandboxNextDevLaunchCommand(c),
+      `docker exec ${c} sh -c ${JSON.stringify(sandbox.buildSandboxWorkspaceCleanupCommand())}`,
+      `docker exec ${c} sh -c ${JSON.stringify(sandbox.buildSandboxDevServerStopCommand())}`,
+      `docker exec ${c} sh -c ${JSON.stringify(sandbox.buildSandboxNextDevReadinessCommand())}`,
+      `docker exec ${c} sh -c "cd /workspace && { CI=true pnpm install --frozen-lockfile 2>&1 || CI=true pnpm install 2>&1; }"`,
+      `docker exec ${c} sh -c "ss -tlnp 2>/dev/null | grep ':3000' || echo none"`,
+    ];
+    for (const line of lines) {
+      const argv = splitHostCommand(line);
+      expect(argv, line).not.toBeNull();
+      expect(sandboxExecOwnerFor(argv!.slice(1)), line).not.toBeNull();
+    }
+  });
+});
