@@ -26,6 +26,7 @@ import { PREGATE_LIVE_VERDICTS, PREGATE_VERDICTS } from "./lib/pregate-status.mj
 import { isEntryModule } from "./lib/entry-module.mjs";
 import { scriptArgv } from "./lib/script-argv.mjs";
 import { resolveHostCommandInvocation } from "./lib/host-command-invocation.mjs";
+import { inspectDpf2CiReservation, waitForDpf2Reservation } from "./lib/local-convergence-lock.mjs";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -51,6 +52,7 @@ export function parseGateStatus(output) {
 export async function waitForGate({
   runGate,
   readStatus,
+  inspectReservation,
   sleep,
   now = () => Date.now(),
   log = () => {},
@@ -89,6 +91,23 @@ export async function waitForGate({
     if (watching) {
       log({ cycle, elapsedMs: now() - startedAt, kind: "watching", summary: "observing the existing durable attempt; no new claim", code: null });
     } else {
+      if (inspectReservation) {
+        let waited = false;
+        const reservation = await waitForDpf2Reservation({
+          inspect: inspectReservation, now, deadline: deadlineAt, sleep,
+          notice: summary => {
+            waited = true;
+            log({ cycle, elapsedMs: now() - startedAt, kind: "dpf2-reservation", summary, code: null });
+          },
+        });
+        if (reservation !== "clear") {
+          return { outcome: "deadline", exitCode: GATE_EXIT.ABANDONED_OR_UNRECORDED, attempts,
+            verdict: classifyGateExit({ code: GATE_EXIT.DPF2_RESERVATION_TIMEOUT }) };
+        }
+        // Another local caller could have recorded a verdict or resumed a
+        // durable claim while this wrapper waited without custody.
+        if (waited) continue;
+      }
       const { code, launchError } = await runGate();
       let verdict = classifyGateExit({ code });
       if (verdict.kind === "spawn-failed" && launchError) {
@@ -108,6 +127,9 @@ export async function waitForGate({
       lastVerdict = verdict;
       attempts.push({ attempt: attempts.length + 1, code, kind: verdict.kind, elapsedMs: now() - startedAt });
       log({ cycle, elapsedMs: now() - startedAt, ...verdict, code });
+      if (code === GATE_EXIT.DPF2_RESERVATION_TIMEOUT) {
+        return { outcome: "deadline", exitCode: GATE_EXIT.ABANDONED_OR_UNRECORDED, verdict, attempts };
+      }
       if (!verdict.retry) {
         if (verdict.kind === "spawn-failed") return { outcome: "inconclusive", exitCode: GATE_EXIT.ABANDONED_OR_UNRECORDED, verdict, attempts };
         if (verdict.verdict === "pass") return { outcome: "passed", exitCode: 0, verdict, attempts };
@@ -197,6 +219,7 @@ export async function main(argv = process.argv.slice(2)) {
   }
 
   const result = await waitForGate({
+    inspectReservation: inspectDpf2CiReservation,
     deadlineMinutes: options.deadlineMinutes ?? DEFAULTS.deadlineMinutes,
     // Foreground and UNPIPED — the runbook lists redirecting pregate's output as
     // the most common way to lose a run, so the console goes straight through.

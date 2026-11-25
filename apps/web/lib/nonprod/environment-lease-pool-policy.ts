@@ -241,7 +241,11 @@ export async function resolveNonprodPoolPolicy(input: {
   // broker contract to enforce. A valid configured singleton still requires
   // canonical pressure: "one requested" is not permission to admit on an
   // unsafe host.
-  if (preliminary.config === null) return withHostReservation(preliminary);
+  // The foreign reservation is already a hard contraction from the only
+  // observer in the Mac's namespace. No portal-side probe can clear it.
+  if (preliminary.config === null || clientPressure.dpf2ReservationActive === true) {
+    return withHostReservation(preliminary);
+  }
 
   const sampleServer = async (): Promise<LocalCiHostPressure> => {
     try {

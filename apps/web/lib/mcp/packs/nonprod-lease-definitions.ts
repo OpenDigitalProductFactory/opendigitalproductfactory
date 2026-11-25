@@ -12,6 +12,7 @@ const hostPressureSchema = {
     diskFreeBytes: { type: "number" },
     dockerHealthy: { type: "boolean" },
     convergenceActive: { type: "boolean" },
+    dpf2ReservationActive: { type: "boolean" },
     fencesHealthy: { type: "boolean" },
     evidenceIsolationHealthy: { type: "boolean" },
   },

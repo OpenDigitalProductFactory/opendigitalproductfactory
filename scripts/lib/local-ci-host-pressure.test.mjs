@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -9,6 +9,21 @@ import {
   sampleLocalCiHostPressure,
   summarizeLocalCiPressureSamples,
 } from "./local-ci-host-pressure.mjs";
+
+test("a live foreign reservation contracts host pressure even with no DPF convergence", async (t) => {
+  const directory = mkdtempSync(join(tmpdir(), "dpf2-pressure-"));
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
+  const dpf2LockPath = join(directory, "dpf2-local-ci.lock");
+  writeFileSync(dpf2LockPath, JSON.stringify({ pid: process.pid, token: "fixture" }));
+  const sample = await sampleLocalCiHostPressure({
+    rootPath: directory,
+    dpf2LockPath,
+    deps: { delay: async () => {}, dockerHealthy: () => true, convergenceActive: () => false },
+  });
+  assert.equal(sample.dpf2ReservationActive, true);
+  assert.equal(sample.convergenceActive, true, "older brokers must also see the contraction");
+  assert.equal(existsSync(dpf2LockPath), true);
+});
 
 test("calculates sustained CPU from aggregate idle and total deltas", () => {
   assert.equal(

@@ -38,6 +38,7 @@ export type LocalCiHostPressure = {
   diskFreeBytes?: number;
   dockerHealthy?: boolean;
   convergenceActive?: boolean;
+  dpf2ReservationActive?: boolean;
   fencesHealthy?: boolean;
   evidenceIsolationHealthy?: boolean;
   /** Server probes that could not be read this sample, by name (2026-09-24). */
@@ -481,7 +482,7 @@ function unavailable(input: {
   requestedCapacity: 1 | 2;
   manifestCapacity: number;
   reason: string;
-  config: LocalCiPoolConfig;
+  config: LocalCiPoolConfig | null;
   headroom?: LocalCiHeadroomShortfall;
 }): ResolvedLocalCiPoolPolicy {
   return {
@@ -588,19 +589,20 @@ export function resolveLocalCiPoolPolicy(input: {
   const derived = configError
     ? deriveLocalCiCapacityFromInstallation(input.installation)
     : null;
-  if (configError && !derived) {
-    return singleton({
-      source: "default",
-      manifestCapacity,
-      reason: configError,
-    });
-  }
-  if (configError && derived && derived.requestedCapacity === 1) {
-    return singleton({
-      source: "installation-profile",
+  const reservationReason = input.host.dpf2ReservationActive === true ? "dpf2-ci-reservation" : null;
+  if (configError && (!derived || derived.requestedCapacity === 1)) {
+    const source = derived ? "installation-profile" : "default";
+    if (reservationReason) return unavailable({
+      source,
       requestedCapacity: 1,
       manifestCapacity,
-      reason: derived.reason,
+      reason: reservationReason,
+      config: null,
+    });
+    return singleton({
+      source,
+      manifestCapacity,
+      reason: derived?.reason ?? configError,
     });
   }
 
@@ -612,7 +614,7 @@ export function resolveLocalCiPoolPolicy(input: {
   const source: LocalCiPoolPolicySource = override?.source
     ?? (derived ? "installation-profile" : "platform-config");
 
-  const rollbackReason = hostRollbackReason(
+  const rollbackReason = reservationReason ?? hostRollbackReason(
     input.host,
     config,
     input.now ?? new Date(),

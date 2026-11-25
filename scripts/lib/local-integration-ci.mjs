@@ -228,7 +228,8 @@ export function metadataMergeConflictForRun(metadata, { leaseId = "", sha = "" }
   return conflict;
 }
 
-export function executeLocalIntegrationPlan(plan, {
+export async function executeLocalIntegrationPlan(plan, {
+  beforeCommand,
   spawnSyncImpl = spawnSync,
   baseEnv = process.env,
   platform = process.platform,
@@ -238,6 +239,8 @@ export function executeLocalIntegrationPlan(plan, {
 } = {}) {
   let completedCommandCount = 0;
   for (const command of plan.commands) {
+    const blocked = await beforeCommand?.(command);
+    if (blocked) return { status: blocked, completedCommandCount, failedCommand: null, diagnostics: null };
     log(`[local-integration-ci] ${command.join(" ")}`);
     const logicalInvocation = resolveCommandInvocation(command, baseEnv);
     const hostInvocation = resolveHostCommandInvocation(

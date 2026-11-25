@@ -24,6 +24,7 @@ export const LOCAL_INTEGRATION_STATUSES = Object.freeze([
   "blocked_sandbox_drift",
   "blocked_control_plane_starvation",
   "blocked_child_signal_death",
+  "blocked_dpf2_reservation",
 ]);
 
 /** True when `value` is a status the recorder will accept. */
@@ -41,7 +42,7 @@ export function isLocalIntegrationStatus(value) {
  */
 export function fallbackStatusForUnknown(status) {
   return {
-    status: "failed",
+    status: status === "blocked_dpf2_reservation" ? "blocked_control_plane_starvation" : "failed",
     summaryPrefix: `[${String(status).toUpperCase()} — not product evidence]`,
   };
 }

@@ -178,6 +178,36 @@ TypeScript errors only surface in `next build`, not in `vitest` or IDE checks. R
 
 **Step zero for live-install functional verification.** Before driving any feature's happy path on the live install (gate #3 above for a runtime-bound change), run the preflight — `pnpm verify:preflight [-- --feature-sha <sha>] [-- --portal-url <url>]` — and follow its verdict via the `dpf-verify-on-live-install` skill. The preflight returns one deterministic verdict (`CAN-TEST` / `MUST-ADVANCE` / `BLOCKED`) and one next action, replacing the hand-rolled `git rev-parse` + `curl /api/platform/version` skew check. **The BLOCKED stop-rule is binding:** when the governed advance is blocked by an unrelated defect (e.g. main does not build in Docker), file a BI for that blocker and STOP the verification task — do not let it silently become a multi-hour build-infra fix. Single source of truth: [`docs/superpowers/specs/2026-06-06-procedural-functional-verification-design.md`](../superpowers/specs/2026-06-06-procedural-functional-verification-design.md).
 
+### DPF2 quiet windows on the shared Mac
+
+Before host preflight, local-CI execution, dependency convergence and each
+subsequent gate command, the host runner rechecks DPF2's `/tmp/dpf2-local-ci.lock`
+(BI-577A2F9F). Every client uses the same runner. A queued claim can also report
+`dpf2-ci-reservation` as the broker's zero-capacity reason. The portal uses
+the client's observation because it does not share the Mac's PID or temp-file
+namespace. The reservation can only reduce capacity.
+
+The observer uses DPF2's `scripts/ci-slot.mjs` ownership rules. A positive PID
+with a nonempty token is live when the PID exists, including when a signal-zero
+probe returns permission denied. An incomplete file stays blocking during the
+owner's two-second write grace. A dead PID or an expired corrupt file is stale.
+A missing file means no reservation; an unreadable file or indeterminate PID
+probe waits conservatively. DPF never rewrites, unlinks, or reclaims the file
+or publishes its token.
+
+Local phase waits report the reason, PID and acquisition time if readable,
+recheck every 30 seconds or at the deadline and resume on release within the wait
+budget. A deadline is an infrastructure result without a product verdict.
+If it expires after execution started, the run records
+`blocked_dpf2_reservation`. It does not cancel a phase already running just
+because a reservation appears.
+
+**This is a one-sided start check, not mutual exclusion.** DPF can observe
+DPF2's file absent and DPF2 can observe DPF idle before either takes its own
+reservation. Both can then start. Keep the Mac-wide check-in with the
+convergence coordinator until a shared admission boundary closes that race.
+This change grants no new authority over the host or the other repository.
+
 **The overseer orders shared test machines and bounds every hold (BI-218A4555, extending BI-995E9530).** Queues on `local-integration-ci` and `host-heavy-resource` are not first-come. Gates and local AI review turns go first and take turns; then served-target verification runs; then previews. Every 30 minutes waited lifts a waiter one step. A session (and its executor) that was just served waits a bounded extra time, so it cannot re-take the slot ahead of others. Past its class bound (gate 30 min, verification 45 min, preview 20 min, host check 45 min) a hold renews only while nobody from another session waits; otherwise renewal returns `lease_lost` / `yielded`, the lease `phase` records `yielded:<class>:hold-bound`, and the supervisor stops the work. A contended renewal is also capped at the bound. A queued claim returns its policy position, `estimatedWaitMs` and `queueReason`; `pnpm run pregate:status` prints them, and `list_nonprod_environment_leases` returns the `overseer` view for every queue. A deferred local AI dispatch holds one `inference-turn:local` row in the queue; while it leads, gates wait for at most 6 minutes for the review to take its turn. If a long hold stops while others were queued, that is the bound, not a fault. Policy: `apps/web/lib/nonprod/environment-lease-overseer.ts`; design: `docs/superpowers/specs/2026-11-12-test-machine-overseer-design.md`.
 
 **Waiting for a queued gate: resume its durable identity.** A queue admission is pending evidence. Exit 75 hands the same lease, candidate SHA, worktree and owner session to the canonical detached resumer when available. Observe the recorded task and `pregate:status`; do not loop over fresh `pregate` claims. If the resumer could not start, retain the recorded resume identity and report recovery unavailable instead of abandoning the request or making a new claim. Terminal claims stop. A new attempt follows reconciliation and has its own explicit identity. The current wrapper exits 7 for abandoned admission or an uncorroborated zero runner exit; only a SHA-bound PASS is a pass. A killed test child or missing failure receipt is inconclusive: read the slot log and stage receipt before calling it a product failure.

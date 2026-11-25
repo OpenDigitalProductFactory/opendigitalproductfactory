@@ -264,6 +264,46 @@ test("an unreadable status is treated as no verdict, never as a pass", async () 
   assert.equal(result.outcome, "inconclusive");
 });
 
+test("gate:wait starts exactly one attempt after the DPF2 holder releases", async () => {
+  const entries = [];
+  let clock = 0;
+  let launches = 0;
+  const since = "2026-11-25T18:58:00.000Z";
+  const result = await waitForGate({
+    readStatus: noStatus,
+    runGate: async () => {
+      assert.equal(clock, 30_000);
+      launches++;
+      return { code: 0 };
+    },
+    inspectReservation: () => clock === 0
+      ? { status: "held", pid: 123, since }
+      : { status: "free" },
+    now: () => clock,
+    sleep: async ms => { clock += ms; },
+    log: entry => entries.push(entry),
+  });
+  assert.equal(result.outcome, "passed");
+  assert.equal(launches, 1);
+  assert.match(entries[0].summary, /DPF2.*held.*123.*2026-11-25/);
+});
+
+test("gate:wait reaches its deadline without launching or claiming if the reservation cannot be read", async () => {
+  let clock = 0;
+  const result = await waitForGate({
+    readStatus: noStatus,
+    runGate: () => assert.fail("must not launch"),
+    inspectReservation: () => ({ status: "unreadable" }),
+    now: () => clock,
+    sleep: async ms => { clock += ms; },
+    deadlineMinutes: 0.25,
+  });
+  assert.equal(clock, 15_000);
+  assert.equal(result.outcome, "deadline");
+  assert.equal(result.exitCode, GATE_EXIT.ABANDONED_OR_UNRECORDED);
+  assert.equal(result.attempts.length, 0);
+});
+
 test("backoff ramps and then holds", () => {
   assert.equal(delayForAttempt(1), 20);
   assert.equal(delayForAttempt(3), 40);

@@ -5,6 +5,7 @@ export declare const LOCAL_INTEGRATION_STATUSES: readonly [
   "blocked_sandbox_drift",
   "blocked_control_plane_starvation",
   "blocked_child_signal_death",
+  "blocked_dpf2_reservation",
 ];
 
 export type LocalIntegrationStatus = (typeof LOCAL_INTEGRATION_STATUSES)[number];
@@ -14,6 +15,6 @@ export declare function isLocalIntegrationStatus(
 ): value is LocalIntegrationStatus;
 
 export declare function fallbackStatusForUnknown(status: string): {
-  status: "failed";
+  status: "failed" | "blocked_control_plane_starvation";
   summaryPrefix: string;
 };
