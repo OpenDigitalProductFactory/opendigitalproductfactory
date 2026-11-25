@@ -7,6 +7,7 @@ import { canonicalJson } from "@dpf/integration-shared/canonical-json";
 import { isRecord } from "@/lib/shared/coerce";
 import { runProcessWithBudget } from "@/lib/shared/run-process-with-budget";
 import { attachMaintenanceEpochEvidence } from "@/lib/self-upgrade/maintenance-epoch-evidence";
+import { readSuccessfulMaintenanceRecoveryPoint } from "@/lib/self-upgrade/recovery-eligibility";
 import { verifyMaintenanceEpoch, observeMaintenanceEnvironments, assertNoCanonicalActuators } from "../../../../scripts/lib/maintenance-epoch-receipt.mjs";
 import type { ToolResult } from "@/lib/mcp-tool-types";
 import { SCOPE_EPOCH_WRITER_PATHS, validateScopeEpochWriterContract, type ScopeEpochWriterContract } from "./scope-epoch-contract";
@@ -168,11 +169,10 @@ export async function assertScopeEpochEnrollmentReady(ports: ScopeEpochEnrollmen
     if (imported.status === "raced") refuse("retirement-attachment-raced");
     if (imported.status !== "attached" && imported.status !== "replayed") refuse("final-retirement-unavailable");
     const run = await probe("read-upgrade-run", () => ports.readRun(imported.runId));
-    const evidence = record(run?.completionEvidence), recovery = record(evidence?.recoveryPoint), readiness = record(evidence?.readiness);
+    const evidence = record(run?.completionEvidence), readiness = record(evidence?.readiness);
+    const recovery = run ? readSuccessfulMaintenanceRecoveryPoint(evidence?.recoveryPoint, run.runId) : null;
     if (!run || run.status !== "succeeded" || run.targetSha !== local.sourceSha || run.deployedSha !== local.sourceSha || !run.startedAt
-      || recovery?.schemaVersion !== 1 || recovery.status !== "ok" || recovery.trigger !== "pre-upgrade-recovery"
-      || recovery.selfUpgradeRunId !== run.runId || typeof recovery.createdAt !== "string" || !Array.isArray(recovery.members)
-      || !recovery.members.length || recovery.members.some(member => !isRecord(member) || member.target !== "postgres" || member.status !== "ok" || typeof member.runId !== "string" || !member.runId.trim())
+      || !recovery
       || readiness?.result !== "ready" || readiness.mode !== "enforced" || readiness.targetSha !== local.sourceSha || typeof readiness.imageDigest !== "string") refuse("matching-canonical-run-unproven");
     const secret = (await read("read-transition-secret", "/dpf-state/runtime-transition.secret")).toString().trim();
     const retired = await probe("verify-maintenance-retirement", () => verifyMaintenanceEpoch(evidence!.maintenanceEpochRetirement, secret, { runId: run.runId,

@@ -89,6 +89,23 @@ function readMembership(
   return { membership: "paired", backupRunIds: { postgres: pg.runId, uploads: upload.runId } };
 }
 
+/** Admit a complete recovery point to the signed maintenance digest only. */
+export function readSuccessfulMaintenanceRecoveryPoint(
+  value: unknown, expectedRunId: string,
+): (Record<string, unknown> & { createdAt: string }) | null {
+  const raw = record(value);
+  if (!raw || raw.selfUpgradeRunId !== expectedRunId || typeof raw.createdAt !== "string"
+    || !Number.isFinite(Date.parse(raw.createdAt))) return null;
+  const parsed = parseRecoveryPoint(raw);
+  if (!parsed || parsed.status !== "ok") return null;
+  const { membership } = readMembership(parsed, raw);
+  if (parsed.schemaVersion === 1
+    ? membership !== "legacy-postgres" || parsed.members.length !== 1
+    : membership !== "paired") return null;
+  // Do not reconstruct or strip fields. The signer committed the original record.
+  return raw as Record<string, unknown> & { createdAt: string };
+}
+
 /** A saved backup is evidence of backup creation, never authority to rewind history. */
 export function getSelfUpgradeRecoveryState(run: {
   status: string; completionEvidence?: unknown;
