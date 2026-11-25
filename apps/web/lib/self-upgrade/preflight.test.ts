@@ -8,6 +8,8 @@ const fsMocks = vi.hoisted(() => ({ readFile: vi.fn() }));
 vi.mock("node:fs/promises", () => ({ readFile: fsMocks.readFile }));
 const candidateStage = vi.hoisted(() => ({ candidateThroughPrivateActuator: vi.fn(async (..._args: unknown[]): Promise<unknown> => null) }));
 vi.mock("./promoter-candidate-actuator", () => candidateStage);
+const reassessmentStage = vi.hoisted(() => ({ reassessmentThroughPrivateActuator: vi.fn(async (..._args: unknown[]): Promise<unknown> => null) }));
+vi.mock("./reassessment-candidate-actuator", () => reassessmentStage);
 
 describe("reassessment candidate compatibility", () => {
   const configDigest = `sha256:${"d".repeat(64)}`;
@@ -21,6 +23,17 @@ describe("reassessment candidate compatibility", () => {
     return { runId: "SUR-COMPAT", targetSha: sourceSha, composeProject: "actual-project", stage: "preflight" as const,
       failRun: vi.fn(), emitFailure: vi.fn(), recordCompatibility: vi.fn(), runDocker };
   };
+  it("records the actuator's proof for the run and probes nothing locally (BI-224F56F1)", async () => {
+    const { runDocker: _runDocker, ...p } = ports();
+    void _runDocker;
+    const proof = { ...info, configDigest };
+    reassessmentStage.reassessmentThroughPrivateActuator.mockResolvedValueOnce(proof);
+    const result = await runReassessmentCandidatePreflight({ ...p, stage: "preflight" } as never);
+    expect(result).toEqual({ ok: true, data: { proof } });
+    expect(reassessmentStage.reassessmentThroughPrivateActuator).toHaveBeenCalledWith({ runId: "SUR-COMPAT", targetSha: sourceSha, release: false });
+    expect(p.recordCompatibility).toHaveBeenCalledWith("SUR-COMPAT", { stage: "preflight", observedAt: expect.any(String), proof });
+  });
+
   it("resolves the source candidate once and probes only its immutable config digest", async () => {
     const p = ports();
     const result = await runReassessmentCandidatePreflight(p);

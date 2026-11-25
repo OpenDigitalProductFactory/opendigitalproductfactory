@@ -22,6 +22,7 @@ async function main() {
       sourceWriter: (body: unknown) => Promise<unknown>;
       promoterCandidate: (body: unknown) => Promise<unknown>;
       doctoolsImage: (body: unknown) => Promise<unknown>;
+      reassessmentCandidate: (body: unknown) => Promise<unknown>;
     }): Promise<void>;
   };
   let previewPass: ReturnType<typeof fenceEndedPreviewRuntimesAtDaemon> | undefined;
@@ -159,6 +160,25 @@ async function main() {
       return createDoctoolsImageOperator({
         ghcrOwner: process.env.GHCR_OWNER?.trim().toLowerCase(),
         run: (args, options) => runProcessWithBudget("docker", args, options),
+      })(body);
+    },
+    reassessmentCandidate: async body => {
+      const [{ createReassessmentCandidateProver }, { proveReassessmentCandidate }, { readFreshVerifiedReleaseTarget }, { runProcessWithBudget }] = await Promise.all([
+        import("../self-upgrade/reassessment-candidate-actuator"), import("../self-upgrade/preflight"),
+        import("../release-health/state"), import("../shared/run-process-with-budget"),
+      ]);
+      return createReassessmentCandidateProver({
+        project,
+        readRun: async runId => {
+          const { prisma } = await import("@dpf/db");
+          return prisma.selfUpgradeRun.findUnique({ where: { runId }, select: { status: true, deployedSha: true } });
+        },
+        readVerifiedRelease: () => readFreshVerifiedReleaseTarget(),
+        prove: input => proveReassessmentCandidate({ ...input, runDocker: async args => {
+          const nameIndex = args.indexOf("--name");
+          return runProcessWithBudget("docker", args, { timeoutMs: 60_000, maxStdoutBytes: 8192,
+            ...(nameIndex >= 0 ? { containerName: args[nameIndex + 1] } : {}) });
+        } }),
       })(body);
     },
     doctools: createDoctoolsActuator(project),

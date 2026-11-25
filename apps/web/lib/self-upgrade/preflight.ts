@@ -31,6 +31,40 @@ export type CandidatePreflightResult =
 export type ReassessmentCandidatePreflightResult = ActionSuccess<{ proof?: ReassessmentRuntimeCompatibility }>
   | { ok: false; reason: "reassessment-compatibility-unproven" };
 
+/** The candidate's packaged-owner proof itself. Throws a reassessment refusal.
+ * The private actuator runs this same proof for the qualified portal. */
+export async function proveReassessmentCandidate(input: {
+  targetSha: string; composeProject?: string; release?: VerifiedReleaseIdentity;
+  runDocker: ReassessmentContractPorts["runDocker"];
+}): Promise<ReassessmentRuntimeCompatibility> {
+  const { targetSha, runDocker } = input, releaseDigest = input.release?.configDigest, hasRelease = input.release !== undefined;
+  if (!/^[a-f0-9]{40}$/.test(targetSha)) refuseReassessmentWithDetail("target-sha-invalid");
+  if (hasRelease && (typeof releaseDigest !== "string" || !/^sha256:[a-f0-9]{64}$/.test(releaseDigest))) refuseReassessmentWithDetail("release-identity-invalid");
+  const project = input.composeProject ?? "dpf";
+  if (!releaseDigest && !/^[a-z0-9][a-z0-9_-]*$/.test(project)) refuseReassessmentWithDetail("compose-project-invalid");
+  const inspect = async () => {
+    const result = await runDocker(["image", "inspect", "--format", "{{.Id}}", `${project}-portal`]);
+    const value = result.stdout.trim();
+    if (result.exitCode !== 0 || !/^sha256:[a-f0-9]{64}$/.test(value)) {
+      refuseReassessmentWithDetail(`source-image-unresolved (${project}-portal): ${(result.stderr.trim() || value || "no id").slice(0, 300)}`);
+    }
+    return value;
+  };
+  const release = input.release;
+  // BI-A9BA9583: the engine names a pulled release by its config digest on
+  // the classic image store but by its index (channel) digest on the
+  // containerd store; release-image-reference.ts resolves either.
+  const resolveRelease = async (): Promise<{ ref: string; id: string }> => {
+    const resolution = await resolvePulledReleaseImage(runDocker, `ghcr.io/${release!.ghcrOwner}/dpf-portal`, release!);
+    return resolution.image ?? refuseReassessmentWithDetail(`release-image-unresolved: ${resolution.attempts.join("; ")}`);
+  };
+  const resolved = release ? await resolveRelease() : null;
+  const configDigest = resolved?.id ?? await inspect();
+  const proof = await readReassessmentImageContract(configDigest, targetSha, runDocker);
+  if (!releaseDigest && await inspect() !== configDigest) refuseReassessmentWithDetail(`image-moved: ${project}-portal changed during the probe`);
+  return proof;
+}
+
 /** Prove the candidate's packaged owners without branding the executing portal. */
 export async function runReassessmentCandidatePreflight(params: {
   runId: string; targetSha: string; composeProject?: string; release?: VerifiedReleaseIdentity; dryRun?: boolean;
@@ -38,7 +72,6 @@ export async function runReassessmentCandidatePreflight(params: {
   runDocker?: ReassessmentContractPorts["runDocker"];
 }): Promise<ReassessmentCandidatePreflightResult> {
   if (params.dryRun) return ok({});
-  const targetSha = params.targetSha, releaseDigest = params.release?.configDigest, hasRelease = params.release !== undefined;
   const runDocker: ReassessmentContractPorts["runDocker"] = params.runDocker ?? (async args => {
     const nameIndex = args.indexOf("--name");
     const result = await runProcessWithBudget("docker", args, { timeoutMs: 60_000, maxStdoutBytes: 8192,
@@ -47,30 +80,10 @@ export async function runReassessmentCandidatePreflight(params: {
     return result;
   });
   try {
-    if (!/^[a-f0-9]{40}$/.test(targetSha)) refuseReassessmentWithDetail("target-sha-invalid");
-    if (hasRelease && (typeof releaseDigest !== "string" || !/^sha256:[a-f0-9]{64}$/.test(releaseDigest))) refuseReassessmentWithDetail("release-identity-invalid");
-    const project = params.composeProject ?? "dpf";
-    if (!releaseDigest && !/^[a-z0-9][a-z0-9_-]*$/.test(project)) refuseReassessmentWithDetail("compose-project-invalid");
-    const inspect = async () => {
-      const result = await runDocker(["image", "inspect", "--format", "{{.Id}}", `${project}-portal`]);
-      const value = result.stdout.trim();
-      if (result.exitCode !== 0 || !/^sha256:[a-f0-9]{64}$/.test(value)) {
-        refuseReassessmentWithDetail(`source-image-unresolved (${project}-portal): ${(result.stderr.trim() || value || "no id").slice(0, 300)}`);
-      }
-      return value;
-    };
-    const release = params.release;
-    // BI-A9BA9583: the engine names a pulled release by its config digest on
-    // the classic image store but by its index (channel) digest on the
-    // containerd store; release-image-reference.ts resolves either.
-    const resolveRelease = async (): Promise<{ ref: string; id: string }> => {
-      const resolution = await resolvePulledReleaseImage(runDocker, `ghcr.io/${release!.ghcrOwner}/dpf-portal`, release!);
-      return resolution.image ?? refuseReassessmentWithDetail(`release-image-unresolved: ${resolution.attempts.join("; ")}`);
-    };
-    const resolved = release ? await resolveRelease() : null;
-    const configDigest = resolved?.id ?? await inspect();
-    const proof = await readReassessmentImageContract(configDigest, targetSha, runDocker);
-    if (!releaseDigest && await inspect() !== configDigest) refuseReassessmentWithDetail(`image-moved: ${project}-portal changed during the probe`);
+    // BI-224F56F1: in the qualified portal the actuator runs the same proof for this run.
+    const proof = (params.runDocker ? null : await (await import("./reassessment-candidate-actuator"))
+      .reassessmentThroughPrivateActuator({ runId: params.runId, targetSha: params.targetSha, release: params.release !== undefined }))
+      ?? await proveReassessmentCandidate({ targetSha: params.targetSha, composeProject: params.composeProject, release: params.release, runDocker });
     try {
       await params.recordCompatibility(params.runId, { stage: params.stage, observedAt: new Date().toISOString(), proof });
     } catch (error) { refuseReassessmentWithDetail(`proof-unrecorded: ${getErrorMessage(error)}`); }
