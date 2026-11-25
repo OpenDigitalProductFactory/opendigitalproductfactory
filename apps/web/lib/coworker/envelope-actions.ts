@@ -21,6 +21,7 @@ import { createAuthorizationDecisionLog } from "@/lib/governance-data";
 import { isRecord } from "@/lib/shared/coerce";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 import { humanApprovalMarker } from "./human-approved-execution";
+import { S5_REHEARSAL_APPROVAL_ACTION } from "@/lib/workroom-runtime/s5-rehearsal-approval-action";
 import { labelOnBehalfDecision, readOnBehalfDecision, type OnBehalfDecision } from "./on-behalf-decision";
 import {
   buildStandingRuling,
@@ -270,6 +271,9 @@ export async function approveEnvelope(
 ): Promise<EnvelopeActionResult<EnvelopeRow>> {
   const load = await loadEnvelope(envelopeId);
   if (!load.ok) return load;
+  if (load.envelope.manifestActionId === S5_REHEARSAL_APPROVAL_ACTION && (onBehalf || options?.makeStanding)) {
+    return { ok: false, reason: "The rehearsal requires its owner’s exact one-time approval.", httpStatus: 409 };
+  }
   const authz = authorizeDecider(load.envelope, callerUserId, onBehalf);
   if (authz.refusal) return authz.refusal;
   const lapsed = await refuseIfLapsed(load.envelope);

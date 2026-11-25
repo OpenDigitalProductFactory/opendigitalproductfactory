@@ -50,6 +50,16 @@ function makeRequest() {
 }
 
 describe("POST /api/agent/envelope/:envelopeId/approve", () => {
+  it("records the exact S5 decision without invoking the approved-call runner", async () => {
+    authMock.mockResolvedValue({ user: { id: "u1" } });
+    approveEnvelopeMock.mockResolvedValue({ ok: true, envelope: { id: "env-1", status: "approved", manifestActionId: "s5-single-synthetic-rehearsal" } });
+    const { POST } = await import("./route");
+    const response = await POST(makeRequest(), makeContext("env-1"));
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ ok: true, execution: { status: "not-run" } });
+    expect(runApprovedMock).not.toHaveBeenCalled();
+    expect(recordOutcomeMock).not.toHaveBeenCalled();
+  });
   it("does not invite another approval when only receipt persistence fails", async () => {
     authMock.mockResolvedValue({ user: { id: "u1" } });
     approveEnvelopeMock.mockResolvedValue({ ok: true, envelope: { id: "env-1", status: "approved" } });

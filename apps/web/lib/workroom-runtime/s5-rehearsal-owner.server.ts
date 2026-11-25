@@ -13,12 +13,12 @@ import { resolveAuthorityBindingEligibility } from "@/lib/work-management/coordi
 import { resolveAgentWorkroomAccess } from "@/lib/work-management/workroom-agent-access.server";
 import { readStoredWorkroomDriveState } from "@/lib/work-management/workroom-drive-state";
 import { verifyS5RehearsalQualification } from "./s5-rehearsal-qualification.server";
+import { S5_REHEARSAL_APPROVAL_ACTION } from "./s5-rehearsal-approval-action";
 import { createS5RehearsalAdmissionReader, s5ExactRehearsalAttempt, s5RehearsalAdmissionSnapshot,
   type S5RehearsalAdmissionReadPorts } from "./s5-rehearsal-admission-snapshot.server";
 
 export const S5_REHEARSAL_READ_PATH = "/api/internal/s5-rehearsal-admission";
 const MAX_PROOF_MS = 15_000;
-const OWNER_APPROVAL_ACTION = "s5-single-synthetic-rehearsal";
 const ref = z.string().min(1).max(256).regex(/^\S+$/u);
 const sha = z.string().regex(/^[a-f0-9]{40}$/u);
 export const s5RehearsalOwnerPin = z.strictObject({
@@ -40,9 +40,11 @@ type OwnerReads = {
 /** The approved call is exact, including the 1-request/120s limits and receiver.
  * This only names a governed approval shape. The read route does not create,
  * approve, execute or reserve the envelope. */
-export function s5RehearsalApprovalParams(pin: S5RehearsalOwnerPin) {
+export function s5RehearsalApprovalParams(pin: Pick<S5RehearsalOwnerPin, "leaseId" | "sourceSha" | "signingPublicKey"> & {
+  snapshot: Omit<S5RehearsalOwnerPin["snapshot"], "qualification" | "expiresAt">;
+}) {
   const { snapshot: s } = pin;
-  return { purpose: OWNER_APPROVAL_ACTION, requestLimit: 1, attemptLimit: 1, deadlineMs: 120_000, profile: s.profile,
+  return { purpose: S5_REHEARSAL_APPROVAL_ACTION, requestLimit: 1, attemptLimit: 1, deadlineMs: 120_000, profile: s.profile,
     leaseId: pin.leaseId, sourceSha: pin.sourceSha, receiverRef: s.receiverRef, hostRef: s.hostRef, resource: s.resource,
     signingPublicKey: pin.signingPublicKey, originRef: s.originRef, authority: s.authority,
     issuer: s.issuer, workroomId: s.workroomId, sessionRef: s.sessionRef, stageKey: s.stageKey, stageAttemptRef: s.stageAttemptRef,
@@ -107,7 +109,7 @@ export function createS5RehearsalOwnerReads(tx: Prisma.TransactionClient): Owner
         || projected.bindingRef !== s.authority.bindingRef || projected.permitRef !== s.authority.permitRef) return null;
       const marker = isRecord(envelope?.argsJson) ? envelope.argsJson.humanApproval : null;
       const approvalTime = isRecord(marker) && typeof marker.approvedAt === "string" ? Date.parse(marker.approvedAt) : Number.NaN;
-      if (!envelope || envelope.status !== "approved" || envelope.resolvedAt !== null || envelope.manifestActionId !== OWNER_APPROVAL_ACTION
+      if (!envelope || envelope.status !== "approved" || envelope.resolvedAt !== null || envelope.manifestActionId !== S5_REHEARSAL_APPROVAL_ACTION
         || envelope.delegatingUserId !== task.userId || envelope.coworkerAgentId !== task.currentAgentId || !envelope.approvalBindingFingerprint
         || envelope.inputFingerprint !== fingerprintCoworkerInput(s5RehearsalApprovalParams(pin)) || !envelope.expiresAt
         || !isRecord(marker) || Object.keys(marker).length !== 2 || marker.userId !== task.userId || !(approvalTime > 0 && approvalTime <= t)) return null;
@@ -141,7 +143,7 @@ export function createS5RehearsalOwnerReads(tx: Prisma.TransactionClient): Owner
       const exact = { issuer: s.issuer, workroomId: s.workroomId, sessionRef: s.sessionRef, stageKey: s.stageKey,
         stageAttemptRef: s.stageAttemptRef, subject: s.subject, syntheticTarget: s.syntheticTarget };
       const qualification = verifyS5RehearsalQualification({ record: pin.qualificationRecord, approval: {
-        purpose: OWNER_APPROVAL_ACTION, status: "approved", ref: envelope.id, ownerPrincipalId: actingOwner.principalId,
+        purpose: S5_REHEARSAL_APPROVAL_ACTION, status: "approved", ref: envelope.id, ownerPrincipalId: actingOwner.principalId,
         revision: approvalTime, binding: exact, validUntil: Math.min(envelope.expiresAt.getTime(), permit.expiresAt.getTime()),
       } }, exact, t);
       if (!qualification || qualification.approvalRef !== projected.jsi.approvalRef
@@ -159,7 +161,7 @@ export type S5RehearsalOwnerPorts = {
   now?: () => Date;
 };
 
-function previewIdentity(env: S5RehearsalOwnerPorts["env"]) {
+export function previewIdentity(env: S5RehearsalOwnerPorts["env"]) {
   if (env.DPF_ENVIRONMENT !== "dev" || env.DPF_ENVIRONMENT_CLASS !== "development") return null;
   const leaseId = ref.safeParse(env.DPF_PREVIEW_LEASE_ID);
   const sourceSha = sha.safeParse(env.DPF_PREVIEW_SOURCE_SHA);

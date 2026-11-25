@@ -2467,6 +2467,16 @@
         "read-interface"
       ]
     },
+    "docs/architecture/s5-rehearsal-approval-producer.md": {
+      "publicHref": "/architecture/s5-rehearsal-approval-producer/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "one-shot-s5-rehearsal-approval",
+        "request-on-the-exact-contributor-preview"
+      ]
+    },
     "docs/architecture/scoped-judgment-adoption.md": {
       "publicHref": "/architecture/scoped-judgment-adoption/",
       "portalHref": null,
