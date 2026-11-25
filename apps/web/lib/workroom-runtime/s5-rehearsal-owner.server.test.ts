@@ -3,6 +3,7 @@ import type { Prisma } from "@dpf/db";
 import { prepareS5ControlCredential } from "@/lib/auth/s5-room-credential.server";
 import { generateInstanceSigningKeypair, signIdentityStatement } from "@/lib/federation/instance-identity";
 import { fingerprintCoworkerInput } from "@/lib/govern/authority/coworker-authority-decision";
+import { computeParamHash } from "@/lib/gpp/param-hash";
 import { createS5RehearsalOwnerHandler, createS5RehearsalOwnerReads, S5_REHEARSAL_READ_PATH, s5RehearsalApprovalParams,
   s5RehearsalOwnerPin, s5RehearsalReadStatement, type S5RehearsalOwnerPorts } from "./s5-rehearsal-owner.server";
 
@@ -113,7 +114,9 @@ function database() {
   const human = { isActive: true, isSuperuser: false, groups: [] as { platformRole: { roleId: string } }[],
     automationVerificationId: null, automationProfile: null, automationSlot: null, automationExpiresAt: null };
   const platformApprover = { ...human, groups: [{ platformRole: { roleId: "HR-000" } }] };
-  const paramsFingerprint = fingerprintCoworkerInput(s5RehearsalApprovalParams({ ...ownerPin, approverPrincipalId: waiver.ownerPrincipalId }));
+  const params = s5RehearsalApprovalParams({ ...ownerPin, approverPrincipalId: waiver.ownerPrincipalId,
+    operations: ["get_workroom"], expiresAt: waiver.validUntil });
+  const paramsFingerprint = fingerprintCoworkerInput(params);
   const original = prepareS5ControlCredential({
     executionProfile: "synthetic-rehearsal", receiver: { ...receiver, audience: receiver.receiverRef }, userId,
     now: date(now), expiresAt: date(snapshot.expiresAt), admission: {
@@ -126,10 +129,13 @@ function database() {
   })!;
   const approval = { id: waiver.approvalRef, status: "approved", resolvedAt: null, manifestActionId: "s5-single-synthetic-rehearsal",
     delegatingUserId: approverId, coworkerAgentId: agentId, approvalBindingFingerprint: "bound", inputFingerprint: paramsFingerprint,
+    authorityDecisionId: "AUTH-FIXTURE",
     expiresAt: date(waiver.validUntil), argsJson: { humanApproval: { userId: approverId, approvedAt: date(approvalTime).toISOString() } } };
   const permit = { enforcement: "enforced", revokedAt: null, envelopeId: approval.id, workroomId: attempt.workroomId, stageKey: attempt.stageKey,
     shapeRef: pin.shapeRef, actorAgentId: agentId, actorUserId: userId, actorGaid: pinned.subject.gaid, maxUses: 1, useCount: 0,
-    notBefore: date(now), expiresAt: date(waiver.validUntil), capabilities: [{ tool: "get_workroom" }] };
+    notBefore: date(now), expiresAt: date(waiver.validUntil), capabilities: [{ tool: "get_workroom" }],
+    bindingId: "s5-single-synthetic-rehearsal", authorityDecisionId: approval.authorityDecisionId,
+    subjectScope: attempt.stageAttemptRef, paramHash: computeParamHash("s5-single-synthetic-rehearsal", params) };
   const tx = {
     workroom: { findUnique: vi.fn().mockResolvedValue({ id: "room-row", status: "ready", archivedAt: null, requestedByPrincipalId: "owner-row",
       taskRun: { taskRunId: attempt.sessionRef, status: "working", archivedAt: null, userId, currentAgentId: agentId },
@@ -182,6 +188,18 @@ describe("database owner join with client hooks absent", () => {
     f.tx.principalAlias.findUnique.mockResolvedValueOnce({ principal: { ...f.approverAlias.principal, principalId: "another-principal" } });
     expect((await f.handler(request())).status).toBe(404);
     f.tx.principalAlias.findUnique.mockResolvedValueOnce({ principal: { ...f.approverAlias.principal, id: "owner-row" } });
+    expect((await f.handler(request())).status).toBe(404);
+  });
+
+  it("holds when the permit's shape, operations, or absolute deadline differ from the approval", async () => {
+    const f = database();
+    sources.permit.mockResolvedValueOnce({ ...f.permit, shapeRef: "substitute" });
+    expect((await f.handler(request())).status).toBe(404);
+    sources.permit.mockResolvedValueOnce({ ...f.permit, capabilities: [...f.permit.capabilities, { tool: "post_room_message" }] });
+    expect((await f.handler(request())).status).toBe(404);
+    const later = new Date(f.permit.expiresAt.getTime() + 1);
+    f.tx.coworkerActionEnvelope.findUnique.mockResolvedValueOnce({ ...f.approval, expiresAt: later });
+    sources.permit.mockResolvedValueOnce({ ...f.permit, expiresAt: later });
     expect((await f.handler(request())).status).toBe(404);
   });
 

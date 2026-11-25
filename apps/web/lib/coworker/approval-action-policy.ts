@@ -1,17 +1,12 @@
 import { S5_REHEARSAL_APPROVAL_ACTION } from "@/lib/workroom-runtime/s5-rehearsal-approval-action";
-
-type DecisionEnvelope = {
-  authorityDecisionId?: string | null;
-  inputFingerprint?: string | null;
-  approvalBindingFingerprint?: string | null;
-  delegatingUserId: string;
-  coworkerAgentId: string;
-};
+import type { S5DecisionEnvelope } from "@/lib/workroom-runtime/s5-rehearsal-approver.server";
+import type { Prisma } from "@dpf/db";
 
 type ApprovalActionPolicy = {
   completion: "decision-only";
   decision: "owner-one-time";
-  authorizeDecision: (envelope: DecisionEnvelope, userId: string) => Promise<boolean>;
+  commitDecision: <T extends { ok: boolean }>(envelope: S5DecisionEnvelope, userId: string,
+    write: (tx: Prisma.TransactionClient) => Promise<T>) => Promise<T | null>;
 };
 
 // Server-owned registrations for envelope actions that are not executable
@@ -19,8 +14,8 @@ type ApprovalActionPolicy = {
 const POLICIES: ReadonlyMap<string, ApprovalActionPolicy> = new Map([
   [S5_REHEARSAL_APPROVAL_ACTION, {
     completion: "decision-only", decision: "owner-one-time",
-    authorizeDecision: async (envelope, userId) =>
-      (await import("@/lib/workroom-runtime/s5-rehearsal-approver.server")).canDecideS5RehearsalEnvelope(envelope, userId),
+    commitDecision: async (envelope, userId, write) =>
+      (await import("@/lib/workroom-runtime/s5-rehearsal-approval-producer.server")).commitS5RehearsalApproval(envelope, userId, write),
   }],
 ]);
 

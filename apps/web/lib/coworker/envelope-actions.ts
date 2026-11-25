@@ -197,7 +197,9 @@ async function refuseIfLapsed(envelope: EnvelopeRow): Promise<EnvelopeActionResu
   }
   return {
     ok: false,
-    reason: "This request's decision window closed before it was answered, so it has expired. Your coworker can ask again.",
+    reason: approvalActionPolicy(envelope.manifestActionId)
+      ? "This rehearsal attempt expired and cannot be reopened."
+      : "This request's decision window closed before it was answered, so it has expired. Your coworker can ask again.",
     httpStatus: 409,
   };
 }
@@ -210,10 +212,15 @@ async function refuseIfLapsed(envelope: EnvelopeRow): Promise<EnvelopeActionResu
 async function writeDecision(
   envelope: EnvelopeRow,
   data: { status: "approved" | "declined" | "cancelled"; resolvedAt?: Date; argsJson?: Prisma.InputJsonObject },
+  boundTx?: Prisma.TransactionClient,
 ): Promise<EnvelopeActionResult<EnvelopeRow>> {
-  const claimed = await prisma.coworkerActionEnvelope.updateMany({
+  const claimed = await (boundTx ?? prisma).coworkerActionEnvelope.updateMany({
     where: {
       id: envelope.id, status: envelope.status, resolvedAt: null,
+      ...(boundTx ? { manifestActionId: envelope.manifestActionId, authorityDecisionId: envelope.authorityDecisionId,
+        inputFingerprint: envelope.inputFingerprint, approvalBindingFingerprint: envelope.approvalBindingFingerprint,
+        delegatingUserId: envelope.delegatingUserId, coworkerAgentId: envelope.coworkerAgentId, expiresAt: envelope.expiresAt,
+        argsJson: { equals: envelope.argsJson as Prisma.InputJsonObject } } : {}),
       // The decision window may close after refuseIfLapsed reads it. A
       // cancellation can still stop unreserved work after the window closes.
       ...(data.status === "cancelled" ? {} : {
@@ -278,9 +285,6 @@ export async function approveEnvelope(
   }
   const authz = authorizeDecider(load.envelope, callerUserId, onBehalf);
   if (authz.refusal) return authz.refusal;
-  if (action && !await action.authorizeDecision(load.envelope, callerUserId).catch(() => false)) {
-    return { ok: false, reason: "This request needs a current independent platform approver.", httpStatus: 403 };
-  }
   const lapsed = await refuseIfLapsed(load.envelope);
   if (lapsed) return lapsed;
   // BI-E5631708: an owner's "don't ask again" rides on the same write as the
@@ -301,19 +305,21 @@ export async function approveEnvelope(
   // Bound authority envelopes store metadata, not executable arguments. Screen
   // action envelopes replay argsJson verbatim, so never add metadata to them.
   const boundArgs = boundAuthorityArgs(load.envelope);
-  const marker = humanApprovalMarker(callerUserId);
-  const data = {
-    status: "approved" as const,
-    // BI-E6E2E704: distinguish an authenticated person's decision from a
-    // policy-projected envelope. Preserve the existing exact-call binding.
-    // BI-7BCC87BB: an on-behalf approval names the admin, the owner and why.
-    ...(boundArgs ? { argsJson: {
-      ...boundArgs,
-      humanApproval: authz.reason
-        ? { ...marker, by: callerUserId, onBehalfOf: load.envelope.delegatingUserId, reason: authz.reason }
-        : marker,
-      ...(standing?.recorded ? { standingRuling: standing.ruling } : {}),
-    } as Prisma.InputJsonObject } : {}),
+  const decisionData = () => {
+    const marker = humanApprovalMarker(callerUserId);
+    return {
+      status: "approved" as const,
+      // BI-E6E2E704: distinguish an authenticated person's decision from a
+      // policy-projected envelope. Preserve the existing exact-call binding.
+      // BI-7BCC87BB: an on-behalf approval names the admin, the owner and why.
+      ...(boundArgs ? { argsJson: {
+        ...boundArgs,
+        humanApproval: authz.reason
+          ? { ...marker, by: callerUserId, onBehalfOf: load.envelope.delegatingUserId, reason: authz.reason }
+          : marker,
+        ...(standing?.recorded ? { standingRuling: standing.ruling } : {}),
+      } as Prisma.InputJsonObject } : {}),
+    };
   };
   // Approving does NOT mark the waiting task working here, and must not.
   // Marking it working at approval time makes the resume's CAS on
@@ -325,7 +331,10 @@ export async function approveEnvelope(
   // `expiresAt` first: outward requests close after 15 minutes, everything
   // else after seven days (approval-lifetime.ts, BI-0012E6CA), and execution
   // re-checks freshness against the call's current classification.
-  const decided = await writeDecision(load.envelope, data);
+  const decided = action
+    ? await action.commitDecision(load.envelope, callerUserId, tx => writeDecision(load.envelope, decisionData(), tx)).catch(() => null)
+    : await writeDecision(load.envelope, decisionData());
+  if (!decided) return { ok: false, reason: "This rehearsal needs a current independent platform approver and its original pins. Check the saved decision before retrying.", httpStatus: 403 };
   if (decided.ok && authz.reason) await auditOnBehalf(load.envelope, callerUserId, authz.reason, "approve");
   return decided.ok && standing ? { ...decided, standing } : decided;
 }

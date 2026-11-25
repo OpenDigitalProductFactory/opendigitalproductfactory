@@ -5,6 +5,7 @@ import { readS5CredentialCeiling, S5_WORKROOM_TOKEN_KIND } from "@/lib/auth/s5-r
 import { verifyIdentityStatement } from "@/lib/federation/instance-identity";
 import { fingerprintCoworkerInput } from "@/lib/govern/authority/coworker-authority-decision";
 import { verifyPermitMac } from "@/lib/gpp/permit-handle";
+import { computeParamHash } from "@/lib/gpp/param-hash";
 import { readGppPermitForEvidence } from "@/lib/gpp/permit-store";
 import { getAgentGaidMap } from "@/lib/identity/principal-linking";
 import { isRecord } from "@/lib/shared/coerce";
@@ -22,6 +23,8 @@ export const S5_REHEARSAL_READ_PATH = "/api/internal/s5-rehearsal-admission";
 const MAX_PROOF_MS = 15_000;
 const ref = z.string().min(1).max(256).regex(/^\S+$/u);
 const sha = z.string().regex(/^[a-f0-9]{40}$/u);
+export const s5RehearsalOperations = z.array(z.enum(["get_workroom", "read_room_messages", "post_room_message"]))
+  .min(1).max(3).refine(keys => new Set(keys).size === keys.length);
 export const s5RehearsalOwnerPin = z.strictObject({
   schemaVersion: z.literal("s5-rehearsal-owner.v1"),
   leaseId: ref, sourceSha: sha, status: z.literal("active"),
@@ -41,15 +44,17 @@ type OwnerReads = {
 /** The approved call is exact, including the 1-request/120s limits and receiver.
  * This only names a governed approval shape. The read route does not create,
  * approve, execute or reserve the envelope. */
-export function s5RehearsalApprovalParams(pin: Pick<S5RehearsalOwnerPin, "leaseId" | "sourceSha" | "signingPublicKey"> & {
+export function s5RehearsalApprovalParams(pin: Pick<S5RehearsalOwnerPin, "leaseId" | "sourceSha" | "signingPublicKey" | "shapeRef"> & {
   snapshot: Omit<S5RehearsalOwnerPin["snapshot"], "qualification" | "expiresAt">; approverPrincipalId: string;
+  operations: z.infer<typeof s5RehearsalOperations>; expiresAt: number;
 }) {
   const { snapshot: s } = pin;
   return { purpose: S5_REHEARSAL_APPROVAL_ACTION, requestLimit: 1, attemptLimit: 1, deadlineMs: 120_000, profile: s.profile,
     leaseId: pin.leaseId, sourceSha: pin.sourceSha, receiverRef: s.receiverRef, hostRef: s.hostRef, resource: s.resource,
     signingPublicKey: pin.signingPublicKey, originRef: s.originRef, authority: s.authority,
     issuer: s.issuer, workroomId: s.workroomId, sessionRef: s.sessionRef, stageKey: s.stageKey, stageAttemptRef: s.stageAttemptRef,
-    subject: s.subject, approverPrincipalId: pin.approverPrincipalId, syntheticTarget: s.syntheticTarget };
+    subject: s.subject, approverPrincipalId: pin.approverPrincipalId, syntheticTarget: s.syntheticTarget,
+    shapeRef: pin.shapeRef, operations: pin.operations, expiresAt: pin.expiresAt };
 }
 
 /** The private Workroom attempt pin locates records; it does not establish
@@ -107,14 +112,22 @@ export function createS5RehearsalOwnerReads(tx: Prisma.TransactionClient): Owner
       const approvalTime = isRecord(marker) && typeof marker.approvedAt === "string" ? Date.parse(marker.approvedAt) : Number.NaN;
       if (!envelope || envelope.status !== "approved" || envelope.resolvedAt !== null || envelope.manifestActionId !== S5_REHEARSAL_APPROVAL_ACTION
         || envelope.delegatingUserId === task.userId || envelope.coworkerAgentId !== task.currentAgentId || !envelope.approvalBindingFingerprint
-        || envelope.inputFingerprint !== fingerprintCoworkerInput(s5RehearsalApprovalParams({ ...pin, approverPrincipalId: s.qualification.ownerPrincipalId }))
-        || !envelope.expiresAt || !isRecord(marker) || Object.keys(marker).length !== 2
+        || !envelope.expiresAt || !envelope.authorityDecisionId || !isRecord(marker) || Object.keys(marker).length !== 2
         || marker.userId !== envelope.delegatingUserId || !(approvalTime > 0 && approvalTime <= t)) return null;
       if (!permit || verifyPermitMac(permit, null).result !== "ok" || permit.enforcement !== "enforced" || permit.revokedAt !== null
-        || permit.envelopeId !== envelope.id || permit.workroomId !== s.workroomId || permit.stageKey !== s.stageKey || permit.shapeRef !== pin.shapeRef
+        || permit.envelopeId !== envelope.id || permit.authorityDecisionId !== envelope.authorityDecisionId
+        || permit.bindingId !== S5_REHEARSAL_APPROVAL_ACTION || permit.subjectScope !== s.stageAttemptRef
+        || permit.workroomId !== s.workroomId || permit.stageKey !== s.stageKey || permit.shapeRef !== pin.shapeRef
         || permit.actorAgentId !== task.currentAgentId || permit.actorUserId !== task.userId || permit.actorGaid !== s.subject.gaid
         || permit.maxUses !== 1 || permit.useCount !== 0 || !(permit.notBefore.getTime() <= t && t < permit.expiresAt.getTime())
+        || permit.expiresAt.getTime() !== envelope.expiresAt.getTime() || s.expiresAt > permit.expiresAt.getTime()
         || !projected.operationKeys.every(key => permit.capabilities.some(c => c.tool === key))) return null;
+      const operations = s5RehearsalOperations.safeParse(permit.capabilities.map(c => c.tool));
+      if (!operations.success) return null;
+      const params = s5RehearsalApprovalParams({ ...pin, approverPrincipalId: s.qualification.ownerPrincipalId,
+        operations: operations.data, expiresAt: permit.expiresAt.getTime() });
+      if (envelope.inputFingerprint !== fingerprintCoworkerInput(params)
+        || permit.paramHash !== computeParamHash(S5_REHEARSAL_APPROVAL_ACTION, params)) return null;
       const [binding, access, aliases, taskUser, approver] = await Promise.all([
         tx.authorityBinding.findUnique({ where: { id: credential.authorityBindingId }, select: {
           bindingId: true, status: true, resourceRef: true, resourceType: true, scopeType: true, appliedAgentId: true,

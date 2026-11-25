@@ -1,5 +1,5 @@
 import "server-only";
-import { prisma, type Prisma } from "@dpf/db";
+import type { Prisma } from "@dpf/db";
 import { currentUserContextFromRecord } from "@/lib/govern/current-user-context";
 import { can } from "@/lib/govern/permissions";
 import { isRecord } from "@/lib/shared/coerce";
@@ -25,29 +25,31 @@ export async function readS5RehearsalApprover(tx: Pick<Prisma.TransactionClient,
   return actor && can(actor, "manage_platform") ? { userId, id: alias.principal.id, principalId: alias.principal.principalId } : null;
 }
 
-/** Registered decision authorization. Re-read the producer's authority event
- * and current requester rather than mistaking an Inbox card for authority. */
-export async function canDecideS5RehearsalEnvelope(envelope: {
+export type S5DecisionEnvelope = {
+  id: string; manifestActionId: string; expiresAt?: Date | null; argsJson: unknown;
   authorityDecisionId?: string | null; inputFingerprint?: string | null; approvalBindingFingerprint?: string | null;
   delegatingUserId: string; coworkerAgentId: string;
-}, userId: string) {
+};
+
+/** Durable locator only. The decision transaction re-reads the event, locks
+ * the room, verifies reviewed pins and re-resolves the current approver. */
+export async function readS5RehearsalDecision(db: Pick<Prisma.TransactionClient, "authorizationDecisionLog">,
+  envelope: S5DecisionEnvelope, userId: string) {
   if (envelope.delegatingUserId !== userId || !envelope.authorityDecisionId || !envelope.inputFingerprint
-    || !envelope.approvalBindingFingerprint) return false;
-  const [approver, decision] = await Promise.all([
-    readS5RehearsalApprover(prisma, userId),
-    prisma.authorizationDecisionLog.findUnique({ where: { decisionId: envelope.authorityDecisionId }, select: {
+    || !envelope.approvalBindingFingerprint || envelope.manifestActionId !== S5_REHEARSAL_APPROVAL_ACTION) return null;
+  const decision = await db.authorizationDecisionLog.findUnique({ where: { decisionId: envelope.authorityDecisionId }, select: {
       actorType: true, actorRef: true, humanContextRef: true, agentContextRef: true, actionKey: true, objectRef: true,
-      decision: true, purposeOfUse: true, rationale: true,
-    } }),
-  ]);
-  if (!approver || !decision || decision.actorType !== "human" || decision.actorRef !== userId || decision.humanContextRef !== userId
+      decision: true, purposeOfUse: true, rationale: true, authorityBindingId: true,
+  } });
+  if (!decision || decision.actorType !== "human" || decision.actorRef !== userId || decision.humanContextRef !== userId
     || decision.agentContextRef !== envelope.coworkerAgentId || decision.actionKey !== S5_REHEARSAL_APPROVAL_ACTION
     || decision.decision !== "require-approval" || decision.purposeOfUse !== "synthetic-rehearsal-approval-request"
-    || !decision.objectRef || !isRecord(decision.rationale) || decision.rationale.approverPrincipalId !== approver.principalId
-    || decision.rationale.inputFingerprint !== envelope.inputFingerprint || typeof decision.rationale.sessionRef !== "string") return false;
-  const room = await prisma.workroom.findUnique({ where: { capsuleId: decision.objectRef }, select: {
-    archivedAt: true, requestedByPrincipalId: true, taskRun: { select: { archivedAt: true, taskRunId: true, userId: true } },
-  } });
-  return !!room?.requestedByPrincipalId && room.requestedByPrincipalId !== approver.id && room.archivedAt === null
-    && room.taskRun?.archivedAt === null && room.taskRun.taskRunId === decision.rationale.sessionRef && room.taskRun.userId !== userId;
+    || !decision.objectRef || !decision.authorityBindingId || !isRecord(decision.rationale)
+    || decision.rationale.inputFingerprint !== envelope.inputFingerprint) return null;
+  const { approverPrincipalId, reviewedPinDigest, permitRef, sessionRef, stageKey, stageAttemptRef } = decision.rationale;
+  if (typeof approverPrincipalId !== "string" || typeof permitRef !== "string"
+    || typeof reviewedPinDigest !== "string" || !/^[a-f0-9]{64}$/u.test(reviewedPinDigest)
+    || typeof sessionRef !== "string" || typeof stageKey !== "string" || typeof stageAttemptRef !== "string") return null;
+  return { approverPrincipalId, reviewedPinDigest, permitRef, bindingRowId: decision.authorityBindingId,
+    attempt: { workroomId: decision.objectRef, sessionRef, stageKey, stageAttemptRef } };
 }

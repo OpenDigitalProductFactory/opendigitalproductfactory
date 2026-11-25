@@ -68,6 +68,6 @@ When an ordinary in-portal write needs your approval, the coworker ends that tur
 
 Authorizing a new executable platform request starts its exact saved call through the existing permission checks. The outcome distinguishes execution, refusal and a request that could not run. A repeated completion returns the recorded outcome rather than running the action twice. Approval alone still does not prove execution.
 
-The one-shot S5 synthetic rehearsal request on a Contributor preview is decision-only. Approving it records the owner's decision for the linked permit. It does not start or resume a task, send a request to a provider, or grant production access.
+The one-shot S5 synthetic rehearsal request on a Contributor preview is decision-only. Approving it records the owner's decision and issues the linked permit. It does not start or resume a task, send a request to a provider, or grant production access. If the approval window closes, that attempt is spent. **Ask again** cannot reopen it.
 
 If the platform cannot safely retain the exact arguments for a delayed call, it refuses before asking for approval. Existing unmarked historical requests keep their previous handling; they are not silently replayed. External connections retain their own credential checks. This repair does not grant new permissions or remove consequential approvals.
