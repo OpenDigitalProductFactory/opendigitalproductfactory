@@ -1,9 +1,14 @@
 import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, readFile, realpath, rename, rm, symlink, writeFile } from "node:fs/promises";
+import { lstat, mkdir, mkdtemp, readFile, readdir, realpath, rename, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { assertCoveredUploadCollisions, captureRestoreUploadRoots, inspectRestoreUploadDestinations, publishRestoreUploadFile } from "./restore-upload-destinations";
+
+vi.mock("node:fs/promises", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:fs/promises")>();
+  return { ...actual, lstat: vi.fn(actual.lstat), readdir: vi.fn(actual.readdir) };
+});
 
 const sha = (content: string) => createHash("sha256").update(content).digest("hex");
 const member = (path: string, content: string, root = "upload-store") => ({ root, path, sha256: sha(content) });
@@ -14,7 +19,11 @@ beforeEach(async () => {
   receiverPath = join(workspace, "uploads");
   await mkdir(receiverPath);
 });
-afterEach(async () => { await rm(workspace, { recursive: true, force: true }); });
+afterEach(async () => {
+  vi.mocked(lstat).mockReset();
+  vi.mocked(readdir).mockReset();
+  await rm(workspace, { recursive: true, force: true });
+});
 
 describe.skipIf(process.platform !== "linux")("managed upload restore receiving roots", () => {
   it("distinguishes missing files, matching no-ops, and originals requiring safety coverage without writing", async () => {
@@ -77,4 +86,31 @@ describe.skipIf(process.platform !== "linux")("managed upload restore receiving 
     await expect(publishRestoreUploadFile(root!, undo)).resolves.toBeNull();
     await expect(readFile(target)).rejects.toMatchObject({ code: "ENOENT" });
   });
+  it("validates a newly opened publication directory before writing to it", async () => {
+    const [root] = await captureRestoreUploadRoots([{ name: "upload-store", path: receiverPath }]);
+    async function* content() { yield Buffer.from("fixture"); }
+    const payload = () => ({ sizeBytes: 7, content: content() });
+    const intent = { rootName: "upload-store", relativePath: "new-parent/file", beforeSha256: null, afterSha256: sha("fixture") };
+    const readNames = readdir as (path: string) => Promise<string[]>;
+    vi.mocked(readNames).mockResolvedValueOnce(["unexpected-entry"]);
+    await expect(publishRestoreUploadFile(root!, intent, payload())).rejects.toThrow(/not a fresh receiver directory/i);
+    await expect(readFile(join(receiverPath, intent.relativePath))).rejects.toMatchObject({ code: "ENOENT" });
+
+    const lookup = lstat as (path: string, options: { bigint: true }) => Promise<import("node:fs").BigIntStats>;
+    const actual = await vi.importActual<typeof import("node:fs/promises")>("node:fs/promises");
+    vi.mocked(lookup).mockImplementationOnce(async (path, options) => {
+      const stat = await actual.lstat(path, options);
+      return Object.assign(stat, { ino: stat.ino + 1n });
+    });
+    const changed = { ...intent, relativePath: "changed-parent/file" };
+    await expect(publishRestoreUploadFile(root!, changed, payload())).rejects.toThrow(/identity changed/i);
+    await expect(readFile(join(receiverPath, changed.relativePath))).rejects.toMatchObject({ code: "ENOENT" });
+
+    const empty = { ...intent, relativePath: "empty-parent/file" };
+    await expect(publishRestoreUploadFile(root!, empty, payload())).resolves.toBe(sha("fixture"));
+    const sibling = { ...intent, relativePath: "empty-parent/sibling" };
+    await expect(publishRestoreUploadFile(root!, sibling, payload())).resolves.toBe(sha("fixture"));
+    await expect(readFile(join(receiverPath, sibling.relativePath), "utf8")).resolves.toBe("fixture");
+  });
+
 });
