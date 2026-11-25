@@ -160,3 +160,64 @@ describe("placeholder accounts on reserved domains are not customer contacts (BI
     expect(result.routeContext.residencyPolicy).not.toBe("local_only");
   });
 });
+
+describe("review fixture mailbox contact screening", () => {
+  const address = (local: string, domain = "example.test") => `${local}@${domain}`;
+  const reviewRecipient = address("review");
+  const realRecipient = address("review", "mail.company.com");
+  const personShaped = address("jane.doe");
+
+  it("leaves the exact inbox approval fixture eligible for permitted external review", () => {
+    const result = screenInferencePayload({
+      systemPrompt: "Review the committed source change.",
+      messages: [{ role: "user", content: `const approval = { payment: { amount: 125, currency: "USD", recipient: "${reviewRecipient}" } };` }],
+      taskType: "build-review",
+      routeContext: { sensitivity: "development", allowedProviders: ["openai", "local"] },
+      sourceCodeProvenance: { repository: "OpenDigitalProductFactory/opendigitalproductfactory", visibility: "public" },
+    });
+    expect(result.receipt.classifiedDataClasses).not.toContain("customer-records");
+    expect(result.routeContext.residencyPolicy).not.toBe("local_only");
+  });
+
+  const sourceCodeProvenance = { repository: "OpenDigitalProductFactory/opendigitalproductfactory", visibility: "public" } as const;
+  const reviewContacts = (content: string) => classifyInferencePayload({
+    systemPrompt: "", messages: [{ role: "user", content }], taskType: "build-review", sourceCodeProvenance,
+  }).matches.filter((match) => match.reason === "contact-detail");
+
+  it("keeps the same quoted text classified outside qualified source review", () => {
+    const content = `recipient: "${reviewRecipient}"`;
+    expect(contacts(content)).toHaveLength(1);
+    for (const context of [{ taskType: "build-review" }, { sourceCodeProvenance }]) {
+      expect(classifyInferencePayload({ ...context, systemPrompt: "", messages: [{ role: "user", content }] })
+        .matches.filter((match) => match.reason === "contact-detail")).toHaveLength(1);
+    }
+  });
+
+  it("keeps the exception exact and preserves adjacent contact evidence", () => {
+    expect(reviewContacts(`recipient: "${reviewRecipient}"`)).toHaveLength(0);
+    expect(reviewContacts(`{ label: "Recipient", value: "${reviewRecipient}" }`)).toHaveLength(0);
+    for (const text of [
+      reviewRecipient,
+      `Customer recipient: "${reviewRecipient}"`,
+      `{ label: "Customer Recipient", value: "${reviewRecipient}" }`,
+      `{ label: "Recipient", value: "${realRecipient}" }`,
+      `Customer contact: ${reviewRecipient}`,
+      `recipient: "${reviewRecipient}.evil.test"`,
+      `recipient: "${address("review1")}"`,
+      `recipient: "${address("review", "other.test")}"`,
+      `recipient: "${realRecipient}"`,
+      `recipient: "${reviewRecipient}" and actual contact ${personShaped}`,
+    ]) expect(reviewContacts(text)).toHaveLength(1);
+  });
+
+  it("never overrides an explicit local-only route", () => {
+    const result = screenInferencePayload({
+      systemPrompt: "",
+      messages: [{ role: "user", content: `const fixture = { recipient: "${reviewRecipient}" };` }],
+      taskType: "build-review",
+      sourceCodeProvenance,
+      routeContext: { sensitivity: "internal", residencyPolicy: "local_only" },
+    });
+    expect(result.routeContext.residencyPolicy).toBe("local_only");
+  });
+});
