@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { capabilityBackupReceipt, runCapabilityOwnedBackupSteps, runPairedUploadsBackupStep, runScheduledCoreAndCapabilityBackups, selectCapabilityBackupServices } from "./postgres-daily-backup";
+import { capabilityBackupReceipt, runCapabilityOwnedBackupSteps, runPairedUploadsBackupStep, runScheduledCoreAndCapabilityBackups, selectCapabilityBackupServices, selectScheduledPairedTrial } from "./postgres-daily-backup";
 
 describe("capability-owned backup selection", () => {
   it("keeps postgres scheduled and selects enabled targets from the projection", () => {
@@ -67,5 +67,18 @@ describe("paired upload-store backup (BI-1C6BF6B6)", () => {
     const result = await runPairedUploadsBackupStep(step, "s", { runId: "pg-run-2", status: "failed" }, uploads);
     expect(uploads).not.toHaveBeenCalled();
     expect(result).toEqual({ status: "skipped", reason: "the paired Postgres backup did not finish ok" });
+  });
+
+  it("passes only the current scheduled results to the paired trial", () => {
+    const pg = { status: "ok", runId: "pg-current" };
+    expect(selectScheduledPairedTrial(pg, { status: "ok", runId: "uploads-current" })).toEqual({
+      sourceBackupRunId: "pg-current", uploadsBackupRunId: "uploads-current",
+    });
+    expect(selectScheduledPairedTrial(pg, { status: "failed", runId: "uploads-failed" })).toEqual({
+      sourceBackupRunId: "pg-current", uploadsBackupRunId: null,
+    });
+    expect(selectScheduledPairedTrial({ status: "failed", runId: "pg-failed" }, { status: "ok", runId: "unrelated" })).toEqual({
+      sourceBackupRunId: "pg-failed", uploadsBackupRunId: null,
+    });
   });
 });

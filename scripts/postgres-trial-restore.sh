@@ -59,10 +59,24 @@ DB_CONTAINER="${DPF_PRODUCTION_DB_CONTAINER:-dpf-postgres-1}"
 TRIAL_DB_PREFIX="${TRIAL_DB_PREFIX:-dpf_trial_}"
 ASSERT_TABLES="${ASSERT_TABLES:-BacklogItem,Epic,ModelProvider,User}"
 LOG_PATH="${LOG_PATH:-${DUMP_PATH}.trial-restore-log.txt}"
+PAIRED_UPLOADS_RUN="${DPF_PAIRED_TRIAL_UPLOADS_RUN_ID:-}"
+TRIAL_ROWS=""
 
 [ -n "$DUMP_PATH" ] || fail "DUMP_PATH not set" 2
 [ -r "$DUMP_PATH" ] || fail "dump not readable at $DUMP_PATH" 2
 command -v docker >/dev/null 2>&1 || fail "docker CLI not available in runner image" 2
+
+INPUT_DUMP="$DUMP_PATH"
+if [ -n "$PAIRED_UPLOADS_RUN" ]; then
+  EXPECTED_DUMP_SHA="${DPF_PAIRED_TRIAL_POSTGRES_SHA256:-}"
+  case "$EXPECTED_DUMP_SHA" in *[!0-9a-f]*) fail "invalid paired trial dump digest" 2;; esac
+  [ "${#EXPECTED_DUMP_SHA}" -eq 64 ] || fail "invalid paired trial dump digest" 2
+  exec 3< "$DUMP_PATH"
+  INPUT_DUMP="/proc/self/fd/3"
+  [ -f "$INPUT_DUMP" ] || fail "paired trial dump is not a regular file" 2
+  ACTUAL_DUMP_SHA="$(sha256sum < "$INPUT_DUMP")" || fail "could not read paired trial dump" 2
+  [ "${ACTUAL_DUMP_SHA%% *}" = "$EXPECTED_DUMP_SHA" ] || fail "paired trial dump digest changed" 2
+fi
 
 # Garbage-collect any stragglers from previous failed runs (>24h old).
 # Names match TRIAL_DB_PREFIX*; we drop unconditionally since these DBs are
@@ -84,7 +98,7 @@ TRIAL_DB="${TRIAL_DB_PREFIX}$(date +%s)_$$"
 
 STARTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 STARTED_EPOCH="$(date +%s)"
-SIZE_BYTES="$(wc -c < "$DUMP_PATH" | tr -d ' ')"
+SIZE_BYTES="$(wc -c < "$INPUT_DUMP" | tr -d ' ')"
 
 log "starting trial restore trial_db=$TRIAL_DB dump=$DUMP_PATH size=$SIZE_BYTES"
 
@@ -93,6 +107,7 @@ log "starting trial restore trial_db=$TRIAL_DB dump=$DUMP_PATH size=$SIZE_BYTES"
 # exit code 6 if cleanup orphans the DB.
 CLEANUP_OK=1
 cleanup() {
+  if [ -n "$TRIAL_ROWS" ]; then rm -f "$TRIAL_ROWS" || :; fi
   log "cleaning up trial DB $TRIAL_DB"
   if ! docker exec "$DB_CONTAINER" psql -U "$POSTGRES_USER" -d postgres \
        -c "DROP DATABASE IF EXISTS \"$TRIAL_DB\";" >> "$LOG_PATH" 2>&1; then
@@ -125,7 +140,7 @@ if ! docker exec -i "$DB_CONTAINER" pg_restore \
      --no-owner --no-privileges \
      -U "$POSTGRES_USER" \
      -d "$TRIAL_DB" \
-     < "$DUMP_PATH" >> "$LOG_PATH" 2>&1; then
+     < "$INPUT_DUMP" >> "$LOG_PATH" 2>&1; then
   EXIT=$?
   log "pg_restore exit=$EXIT — tail of log:"
   tail -n 20 "$LOG_PATH" >&2 || true
@@ -153,6 +168,30 @@ for table in $ASSERT_TABLES; do
   fi
 done
 unset IFS
+
+# Read the restored SQL references only from this trial database, before it
+# is dropped. Keep the psql exit code separate from the verifier's result.
+if [ -z "$ASSERTION_FAIL" ] && [ -n "$PAIRED_UPLOADS_RUN" ]; then
+  TRIAL_ROWS="$(mktemp "${TMPDIR:-/tmp}/dpf-trial-rows.XXXXXXXX")"
+  SCRIPT_DIR="$(CDPATH= cd "$(dirname "$0")" && pwd -P)"
+  BLOB_SQL="$(cat <<'SQL'
+SELECT json_build_object('table', 'DocumentBlob', 'id', "id", 'storageKey', "storageKey", 'sha256', "sha256")
+FROM "DocumentBlob"
+UNION ALL
+SELECT json_build_object('table', 'MediaAsset', 'id', "id", 'storageKey', "storageKey", 'sha256', "sha256")
+FROM "MediaAsset";
+SQL
+)"
+  if ! docker exec "$DB_CONTAINER" psql -U "$POSTGRES_USER" -d "$TRIAL_DB" \
+       -X -q -t -A --set=ON_ERROR_STOP=1 -c "$BLOB_SQL" > "$TRIAL_ROWS" 2>> "$LOG_PATH"; then
+    ASSERTION_FAIL="uploads-trial-row-query-failed"
+  elif ! UPLOADS_RECEIPT="$(node "$SCRIPT_DIR/verify-uploads-trial.mjs" < "$TRIAL_ROWS" 2>> "$LOG_PATH")"; then
+    ASSERTION_FAIL="uploads-trial-verification-failed"
+  else
+    printf '%s\n' "$UPLOADS_RECEIPT" >> "$LOG_PATH"
+    printf '%s\n' "$UPLOADS_RECEIPT"
+  fi
+fi
 
 FINISHED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 FINISHED_EPOCH="$(date +%s)"

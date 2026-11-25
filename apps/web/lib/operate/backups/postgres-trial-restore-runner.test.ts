@@ -16,7 +16,7 @@ vi.mock("@dpf/db", () => ({
   },
 }));
 
-import { parseResultLine, runPostgresTrialRestore, type ScriptOutcome } from "./postgres-trial-restore-runner";
+import { parsePairedUploadsTrialReceipt, parseResultLine, runPostgresTrialRestore, type ScriptOutcome } from "./postgres-trial-restore-runner";
 import { prisma } from "@dpf/db";
 
 type Mock = ReturnType<typeof vi.fn>;
@@ -78,6 +78,26 @@ describe("parseResultLine", () => {
   });
 });
 
+describe("paired upload trial result evidence", () => {
+  const expected = { postgresRunId: "pg-approved", uploadsRunId: "uploads-approved" };
+  const report = { ...expected, referencedCount: 2, deletedCount: 1, orphanCount: 1, orphanPaths: ["media/sha256/ab/orphan"] };
+  const receipt = (value: unknown) => `UPLOADS_TRIAL ${JSON.stringify(value)}\nRESULT ok duration_ms=10\n`;
+
+  it("accepts only a single receipt naming the exact expected members", () => {
+    expect(parsePairedUploadsTrialReceipt(receipt(report), expected)).toEqual(report);
+    expect(parsePairedUploadsTrialReceipt(receipt({ ...report, uploadsRunId: "stale-run" }), expected)).toBeNull();
+    expect(parsePairedUploadsTrialReceipt(receipt(report) + receipt(report), expected)).toBeNull();
+    expect(parsePairedUploadsTrialReceipt("RESULT ok duration_ms=10\n", expected)).toBeNull();
+  });
+
+  it("refuses inconsistent or malformed upload reports", () => {
+    expect(parsePairedUploadsTrialReceipt(receipt({ ...report, orphanCount: 0 }), expected)).toBeNull();
+    expect(parsePairedUploadsTrialReceipt(receipt({ ...report, deletedCount: 3 }), expected)).toBeNull();
+    expect(parsePairedUploadsTrialReceipt(receipt({ ...report, referencedCount: "2" }), expected)).toBeNull();
+    expect(parsePairedUploadsTrialReceipt("UPLOADS_TRIAL invalid-json\n", expected)).toBeNull();
+  });
+});
+
 describe("runPostgresTrialRestore", () => {
   const okScript: ScriptOutcome = {
     ok: true,
@@ -85,6 +105,94 @@ describe("runPostgresTrialRestore", () => {
     stderr: "",
     exitCode: 0,
   };
+
+  it("fails a required pair before spawning if capture custody is missing or if the uploads run failed", async () => {
+    const { promises: fs } = await import("node:fs");
+    const accessSpy = vi.spyOn(fs, "access").mockResolvedValue(undefined);
+    const runScript = vi.fn(async () => okScript);
+    const pg = { id: "pg-daily", target: "postgres", status: "ok", prunedAt: null, storagePath: "postgres/daily", sha256: "a".repeat(64) };
+    try {
+      for (const uploadsBackupRunId of ["uploads-daily", null]) {
+        findUniqueMock.mockImplementation(async ({ where: { id } }) => id === pg.id ? pg
+          : { id, target: "uploads", status: "ok", prunedAt: null, storagePath: "uploads/daily", sha256: "b".repeat(64) });
+        const result = await runPostgresTrialRestore({
+          sourceBackupRunId: pg.id, uploadsBackupRunId, runScript,
+          readCustody: async () => { throw new Error("fixture custody missing"); },
+        });
+        expect(result).toMatchObject({ status: "failed", reason: expect.stringMatching(/upload.*(capture|custody)/i) });
+      }
+      expect(runScript).not.toHaveBeenCalled();
+      expect(findManyMock).not.toHaveBeenCalled();
+      expect(createMock).toHaveBeenCalledWith(expect.objectContaining({
+        data: expect.objectContaining({ status: "failed", sourceBackupRunId: pg.id }),
+      }));
+      expect(notificationCreateMock).toHaveBeenCalledWith(expect.objectContaining({
+        data: expect.objectContaining({ subjectId: "paired-postgres-uploads" }),
+      }));
+    } finally {
+      accessSpy.mockRestore();
+    }
+  });
+
+  it("does not substitute a different latest dump when the scheduled Postgres capture is missing", async () => {
+    const runScript = vi.fn(async () => okScript);
+    const result = await runPostgresTrialRestore({ uploadsBackupRunId: null, runScript });
+    expect(result).toMatchObject({ status: "failed", restoreId: null, verificationScope: "paired" });
+    expect(findManyMock).not.toHaveBeenCalled();
+    expect(runScript).not.toHaveBeenCalled();
+    expect(createMock).not.toHaveBeenCalled(); // there is no source row for the required relation
+    expect(scheduledJobUpdateMock).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ lastStatus: "failed" }),
+    }));
+  });
+
+  it("requires exact paired proof in the script result and returns the verified orphan report", async () => {
+    const { promises: fs } = await import("node:fs");
+    const accessSpy = vi.spyOn(fs, "access").mockResolvedValue(undefined);
+    const pg = { id: "pg-daily", target: "postgres", status: "ok", prunedAt: null, storagePath: "postgres/daily", sha256: "a".repeat(64) };
+    const uploads = { id: "uploads-daily", target: "uploads", status: "ok", prunedAt: null, storagePath: "uploads/daily", sha256: "b".repeat(64) };
+    const manifestSha256 = "c".repeat(64);
+    const receipt = { postgresRunId: pg.id, uploadsRunId: uploads.id, referencedCount: 2, deletedCount: 0, orphanCount: 1, orphanPaths: ["media/sha256/ab/fixture"] };
+    try {
+      findUniqueMock.mockImplementation(async ({ where: { id } }) => id === pg.id ? pg : uploads);
+      const input = {
+        sourceBackupRunId: pg.id, uploadsBackupRunId: uploads.id,
+        readCustody: async () => ({
+          schemaVersion: 1 as const, runId: uploads.id, storagePath: uploads.storagePath, archiveSha256: uploads.sha256,
+          pairedPostgresRunId: pg.id, pairedPostgresSha256: pg.sha256, manifestSha256,
+        }),
+      };
+      const missing = await runPostgresTrialRestore({ ...input, runScript: async () => okScript });
+      expect(missing).toMatchObject({ status: "failed", reason: expect.stringMatching(/paired.*evidence/i) });
+      const runWrongPair = vi.fn(async () => okScript);
+      const wrongPair = await runPostgresTrialRestore({
+        ...input,
+        readCustody: async () => ({ ...await input.readCustody(), pairedPostgresRunId: "different-postgres" }),
+        runScript: runWrongPair,
+      });
+      expect(wrongPair).toMatchObject({ status: "failed", reason: expect.stringMatching(/custody.*exact/i) });
+      expect(runWrongPair).not.toHaveBeenCalled();
+      const success = await runPostgresTrialRestore({ ...input, runScript: async (_, env) => {
+        expect(env).toMatchObject({ DPF_PAIRED_TRIAL_UPLOADS_RUN_ID: uploads.id, DPF_PAIRED_TRIAL_MANIFEST_SHA256: manifestSha256,
+          DPF_PAIRED_TRIAL_POSTGRES_RUN_ID: pg.id, DPF_PAIRED_TRIAL_POSTGRES_SHA256: pg.sha256 });
+        return { ...okScript, stdout: `UPLOADS_TRIAL ${JSON.stringify(receipt)}\n${okScript.stdout}` };
+      } });
+      expect(success).toMatchObject({ status: "ok", pairedUploads: receipt });
+      const failed = await runPostgresTrialRestore({
+        ...input,
+        runScript: async () => ({
+          ...okScript,
+          stdout: `UPLOADS_TRIAL ${JSON.stringify(receipt)}\nRESULT failed duration_ms=10 reason=postgres-failed\n`,
+          exitCode: 4,
+          ok: false,
+        }),
+      });
+      expect(failed).toMatchObject({ status: "failed", reason: "postgres-failed", verificationScope: "paired" });
+      expect(failed.pairedUploads).toBeUndefined();
+    } finally {
+      accessSpy.mockRestore();
+    }
+  });
 
   it("trial-restores the explicitly requested backup instead of a newer unrelated run", async () => {
     const { promises: fs } = await import("node:fs");
