@@ -14,7 +14,7 @@ import { recordWorkCapsuleActivity as recordActivity } from "./work-capsule-acti
 import { intentsConflict, scopeValuesOverlap } from "./work-capsule-scope-overlap";
 import { hasBoundCommandTransaction } from "./receipted-tool";
 import { isScopeReleaseEpoch } from "./scope-release-targets";
-import { assertScopeEpochEnrollmentReady, preparedScopeEpochEnrollment, retainPreparedScopeEpochEnrollment } from "./scope-epoch-enrollment.server";
+import { assertScopeEpochEnrollmentReady, preparedScopeEpochEnrollment, retainPreparedScopeEpochEnrollment, scopeEpochEnrollmentRefusal } from "./scope-epoch-enrollment.server";
 import type { CapsuleDb, WorkCapsuleActor } from "./work-capsule-store-types";
 
 type ScopeClaimInput = Pick<ScopeClaim, "kind" | "value" | "intent">;
@@ -262,7 +262,7 @@ export const prepareScopeClaim: NonNullable<ReceiptedWorkroomToolOptions["prepar
         retainPreparedScopeEpochEnrollment(tx, proof);
       } } : {}) };
   } catch (error) {
-    return { refusal: { success: false, error: "scope_claim_precondition_failed",
+    return { refusal: scopeEpochEnrollmentRefusal(error) ?? { success: false, error: "scope_claim_precondition_failed",
       message: error instanceof Error ? error.message : "Scope acquisition qualification is unavailable." } };
   }
 };
