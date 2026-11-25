@@ -10,7 +10,9 @@ const merged = vi.hoisted(() => ({ source: vi.fn() }));
 vi.mock("./merged-repair-source", () => ({ defaultLoadMergedRepairSource: merged.source }));
 vi.mock("./reviewer-identity", async (importOriginal) => ({
   ...await importOriginal<typeof import("./reviewer-identity")>(),
-  resolveReviewerIdentity: async () => ({ principalId: "principal-reviewer", kind: "coworker" }),
+  resolveReviewerIdentity: async (_db: unknown, actor: { reviewerAgentId: string | null }) => ({
+    principalId: actor.reviewerAgentId === "AGT-OTHER" ? "principal-other" : "principal-reviewer", kind: "coworker",
+  }),
 }));
 vi.mock("@dpf/db", () => ({ Prisma: { TransactionIsolationLevel: { Serializable: "Serializable" } }, prisma: {
   backlogItem: { findUnique: io.item }, authorizationDecisionLog: { findUnique: io.decision }, $transaction: io.transaction,
@@ -47,6 +49,40 @@ beforeEach(() => {
   io.transaction.mockImplementation(async (work) => work({ $queryRaw: io.lock,
     backlogItem: { findUnique: io.item }, workroom: { findUnique: io.room },
     backlogItemActivity: { findMany: async () => [], create: io.append } }));
+});
+
+describe("dependency disposition receipt publication", () => {
+  const disposition = { ...args, gate: "dependency-disposition" as const, allowedGates: ["dependency-disposition"] as const,
+    actionKey: "record_initiative_evidence", requiredGrant: "initiative_evidence_write",
+    workroomRef: undefined, expectedCurrentBaselineId: undefined, requiresIndependentReviewer: false };
+  beforeEach(() => {
+    io.decision.mockResolvedValue({ decisionId: "AUTH-1", decision: "allow", actionKey: disposition.actionKey,
+      policyVersion: "PV-1", organizationId: null, rationale: {} });
+  });
+  it("refuses a reviewer who becomes the claimant while the artifact is verified", async () => {
+    const item = { id: "item-row", itemId: args.itemId, organizationId: null, featureBuilds: [] };
+    io.item.mockResolvedValueOnce({ ...item, claimedByAgentId: "AGT-OTHER" })
+      .mockResolvedValueOnce({ ...item, claimedByAgentId: disposition.reviewerAgentId });
+    expect(await recordInitiativeGateReceipt(disposition)).toMatchObject({ ok: false, code: "reviewer-not-independent" });
+    expect(io.append).not.toHaveBeenCalled();
+  });
+  it("requires artifact-author separation even for a direct disposition call", async () => {
+    io.artifact.mockResolvedValue({ ok: true, artifact: { ref: artifactRef, digest: `sha256:${"a".repeat(64)}`,
+      authorPrincipalId: "principal-reviewer", authorAgentId: disposition.reviewerAgentId, bytes: Buffer.from("canonical design") } });
+    expect(await recordInitiativeGateReceipt(disposition)).toMatchObject({ ok: false, code: "reviewer-not-independent" });
+    expect(io.append).not.toHaveBeenCalled();
+  });
+  it("checks claimant principal identity across distinct coworker IDs", async () => {
+    io.item.mockResolvedValue({ id: "item-row", itemId: args.itemId, organizationId: null, featureBuilds: [],
+      claimedByAgentId: "AGT-LINKED-TO-SAME-PRINCIPAL" });
+    expect(await recordInitiativeGateReceipt(disposition)).toMatchObject({ ok: false, code: "reviewer-not-independent" });
+    expect(io.append).not.toHaveBeenCalled();
+  });
+  it("publishes a disposition attributed to a different reviewer and claimant", async () => {
+    io.item.mockResolvedValue({ id: "item-row", itemId: args.itemId, organizationId: null, featureBuilds: [], claimedByAgentId: "AGT-OTHER" });
+    expect(await recordInitiativeGateReceipt(disposition)).toMatchObject({ ok: true });
+    expect(io.append).toHaveBeenCalledOnce();
+  });
 });
 
 describe("bound historical plan receipt publication", () => {
