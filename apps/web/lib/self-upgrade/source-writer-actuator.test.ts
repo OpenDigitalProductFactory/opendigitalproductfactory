@@ -4,10 +4,12 @@ import {
   buildSourceWriterArgs,
   createSourceWriterLauncher,
   refreshUpstreamThroughWriter,
+  writeSkillSeedThroughWriter,
   sourceWriterThroughPrivateActuator,
 } from "./source-writer-actuator";
 import type { SelfUpgradeConfig } from "./config";
 import type { PromoterInstallBinding } from "./promoter-actuator";
+import type { AppliedSkillRevision } from "./source-writer-actuator";
 
 const runId = "SUR-ABC123";
 const binding: PromoterInstallBinding = { project: "dpf", installPath: "/Users/op/dpf" };
@@ -119,6 +121,55 @@ describe("createSourceWriterLauncher", () => {
     const launch = createSourceWriterLauncher({ binding, readConfig: async () => config, readRunStatus: async () => "running",
       now: () => 0, run: async () => ok("not json") });
     await expect(launch(prepare())).rejects.toThrow("source_writer_result_invalid");
+  });
+});
+
+describe("write-skill-seed admission", () => {
+  const revision: AppliedSkillRevision = { skillId: "dpf-example", category: "platform", content: "# approved\n",
+    proposalStatus: "reviewed", isLatest: true, matchesDefinition: true };
+  const seed = (revisionId = "SREV-ABCD1234", input: Record<string, unknown> = {}) =>
+    ({ owner: { kind: "skill-revision", revisionId }, operation: "write-skill-seed", input });
+  function seedHarness(read: AppliedSkillRevision | null) {
+    const launched: string[][] = [];
+    const launch = createSourceWriterLauncher({
+      binding, readConfig: async () => config, readRunStatus: async () => null, now: () => 0,
+      readAppliedSkillRevision: async () => read, sha256: () => "f".repeat(64),
+      run: async (args) => { launched.push(args); return ok('{"ok":true,"status":"written","path":"skills/platform/dpf-example.skill.md"}\n'); },
+    });
+    return { launch, launched };
+  }
+
+  it("writes the body the actuator re-read, never one from the request", async () => {
+    const { launch, launched } = seedHarness(revision);
+    await expect(launch(seed())).resolves.toEqual({ ok: true, status: "written", path: "skills/platform/dpf-example.skill.md" });
+    expect(launched[0]).toContain(`DPF_SOURCE_WRITER_INPUT=${JSON.stringify({ category: "platform", skillId: "dpf-example",
+      content: "# approved\n", sha256: "f".repeat(64) })}`);
+    expect(launched[0]!.slice(-1)).toEqual(["write-skill-seed"]);
+  });
+
+  it.each([
+    ["an unreviewed proposal", { proposalStatus: "open" }],
+    ["a superseded revision", { isLatest: false }],
+    ["a body the definition no longer holds", { matchesDefinition: false }],
+    ["an unsafe category", { category: "../etc" }],
+  ])("refuses %s", async (_label, overrides) => {
+    const { launch, launched } = seedHarness({ ...revision, ...overrides });
+    await expect(launch(seed())).rejects.toThrow("source_writer_admission_refused");
+    expect(launched).toHaveLength(0);
+  });
+
+  it("refuses unknown revisions, malformed ids and any caller-supplied input", async () => {
+    const { launch, launched } = seedHarness(null);
+    await expect(launch(seed())).rejects.toThrow("source_writer_admission_refused");
+    const known = seedHarness(revision);
+    await expect(known.launch(seed("SREV-1; rm"))).rejects.toThrow("source_writer_admission_refused");
+    await expect(known.launch(seed("SREV-ABCD1234", { content: "# mine" }))).rejects.toThrow("source_writer_admission_refused");
+    expect([...launched, ...known.launched]).toHaveLength(0);
+  });
+
+  it("reports a lost writer reply as a failed write", async () => {
+    await expect(writeSkillSeedThroughWriter("SREV-ABCD1234", async () => true, async () => { throw new Error("lost"); }))
+      .resolves.toEqual({ ok: false, status: "write-failed" });
   });
 });
 

@@ -6,14 +6,18 @@
 // the canonical promoter image, launched by the private actuator only for an
 // admitted owner, with the install checkout as its only writable source mount
 // at /host-dpf (the same path the portal reads, so existing workspaces keep
-// their origin). It runs a fixed set of operations. Inputs are refnames and
-// flags, never paths, options or git argv.
+// their origin). It runs a fixed set of operations. Inputs are refnames, flags
+// and an approved skill body the actuator read from the database, never paths,
+// options or git argv.
 //
 //   node source-writer.mjs <operation>    (input JSON in DPF_SOURCE_WRITER_INPUT)
 //
 // The result is one JSON line on stdout. Exit 0 carries any governed result,
 // including prep refusals such as merge conflicts. Exit 2 is an invalid request.
 
+import { createHash } from "node:crypto";
+import { lstatSync, realpathSync, writeFileSync } from "node:fs";
+import { dirname } from "node:path";
 import { pathToFileURL } from "node:url";
 import { scriptArgv } from "./lib/script-argv.mjs";
 import { defaultGitRunner, prepareUpgradeSource } from "./lib/upgrade-source/prepare-source.mjs";
@@ -21,6 +25,11 @@ import { defaultGitRunner, prepareUpgradeSource } from "./lib/upgrade-source/pre
 export const SOURCE_WRITER_ROOT = "/host-dpf";
 const WORKSPACE = `${SOURCE_WRITER_ROOT}/.upgrade-workspace`;
 const MAX_INPUT_BYTES = 4096;
+// An approved skill body travels in the input; seeds are ~20 KB today. The
+// environment string stays well under the kernel's 128 KiB per-string limit.
+const MAX_SEED_INPUT_BYTES = 96 * 1024;
+const MAX_SEED_CONTENT_BYTES = 64 * 1024;
+const SEED_NAME = /^[a-z0-9][a-z0-9-]{0,99}$/;
 const REMOTE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 
 const invalid = () => { throw new Error("source_writer_request_invalid"); };
@@ -39,7 +48,8 @@ function exactKeys(value, keys) {
 }
 
 export function parseSourceWriterRequest(operation, raw) {
-  if (typeof raw !== "string" || Buffer.byteLength(raw) > MAX_INPUT_BYTES) return invalid();
+  const limit = operation === "write-skill-seed" ? MAX_SEED_INPUT_BYTES : MAX_INPUT_BYTES;
+  if (typeof raw !== "string" || Buffer.byteLength(raw) > limit) return invalid();
   let input;
   try { input = JSON.parse(raw); } catch { return invalid(); }
   if (operation === "prepare-upgrade-source") {
@@ -52,11 +62,47 @@ export function parseSourceWriterRequest(operation, raw) {
     if (!exactKeys(input, ["remote", "branch"]) || !REMOTE.test(input.remote ?? "") || !isRefname(input.branch)) return invalid();
     return { operation, input };
   }
+  if (operation === "write-skill-seed") {
+    if (!exactKeys(input, ["category", "skillId", "content", "sha256"]) || !SEED_NAME.test(input.category ?? "")
+      || !SEED_NAME.test(input.skillId ?? "") || typeof input.content !== "string"
+      || Buffer.byteLength(input.content) > MAX_SEED_CONTENT_BYTES
+      || createHash("sha256").update(input.content).digest("hex") !== input.sha256) return invalid();
+    return { operation, input };
+  }
   return invalid();
+}
+
+/** The seed paths a skill may live at, in the same order as seed-parity.ts. */
+export function skillSeedCandidates(category, skillId, root = SOURCE_WRITER_ROOT) {
+  return [
+    `skills/${category}/${skillId}.skill.md`,
+    `packages/dpf-skill-pack/skills/${skillId}/SKILL.md`,
+  ].map((relative) => ({ relative, absolute: `${root}/${relative}` }));
+}
+
+/**
+ * Overwrite an existing seed file with an approved body. Never creates one
+ * (decision DI-36D36FEBF4BA): a missing seed stays visible as no-seed-file.
+ * Only a regular file whose real directory is still inside the checkout is
+ * written, so a symlink cannot redirect the write.
+ */
+export function writeSkillSeedFile(input, root = SOURCE_WRITER_ROOT, fs = { lstatSync, realpathSync, writeFileSync }) {
+  const realRoot = fs.realpathSync(root);
+  for (const candidate of skillSeedCandidates(input.category, input.skillId, root)) {
+    let stat;
+    try { stat = fs.lstatSync(candidate.absolute); } catch { continue; }
+    if (!stat.isFile()) continue;
+    const realDir = fs.realpathSync(dirname(candidate.absolute));
+    if (realDir !== realRoot && !realDir.startsWith(`${realRoot}/`)) continue;
+    try { fs.writeFileSync(candidate.absolute, input.content, "utf8"); } catch { return { ok: false, status: "write-failed" }; }
+    return { ok: true, status: "written", path: candidate.relative };
+  }
+  return { ok: false, status: "no-seed-file" };
 }
 
 export async function runSourceWriter(request, run = defaultGitRunner) {
   const { operation, input } = request;
+  if (operation === "write-skill-seed") return writeSkillSeedFile(input);
   if (operation === "prepare-upgrade-source") {
     return prepareUpgradeSource({
       sourceMode: input.sourceMode, hostSourcePath: SOURCE_WRITER_ROOT, remote: input.remote, branch: input.branch,

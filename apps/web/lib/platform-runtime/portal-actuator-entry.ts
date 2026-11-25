@@ -96,9 +96,11 @@ async function main() {
     },
     sourceWriter: async body => {
       sourceWriterLauncher ??= (async () => {
-        const [{ createSourceWriterLauncher }, { readPromoterInstallBinding }, { getSelfUpgradeConfig }, { runProcessWithBudget }] = await Promise.all([
+        const [{ createSourceWriterLauncher }, { readPromoterInstallBinding }, { getSelfUpgradeConfig }, { runProcessWithBudget },
+          { readAppliedSkillRevision }, { createHash }] = await Promise.all([
           import("../self-upgrade/source-writer-actuator"), import("../self-upgrade/promoter-actuator"),
           import("../self-upgrade/config"), import("../shared/run-process-with-budget"),
+          import("../skills/seed-writeback"), import("node:crypto"),
         ]);
         return createSourceWriterLauncher({
           binding: readPromoterInstallBinding(process.env),
@@ -107,6 +109,8 @@ async function main() {
             const { prisma } = await import("@dpf/db");
             return (await prisma.selfUpgradeRun.findUnique({ where: { runId }, select: { status: true } }))?.status ?? null;
           },
+          readAppliedSkillRevision,
+          sha256: content => createHash("sha256").update(content).digest("hex"),
           run: (args, options) => runProcessWithBudget("docker", args, options),
         });
       })();

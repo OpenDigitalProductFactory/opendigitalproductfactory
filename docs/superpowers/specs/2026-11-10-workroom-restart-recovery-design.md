@@ -186,8 +186,12 @@ short-lived source-writer container from the canonical promoter image. It
 uses a fixed entrypoint, a fixed operation set, and the install checkout as
 its only writable source mount. Each launch is keyed on an existing owner and
 rereads that owner before writing: the admitted self-upgrade run for
-workspace preparation and ref publication, and a bounded freshness refresh
-for remote fetches. The container is named and labeled per owner, like an
+workspace preparation and ref publication, a bounded freshness refresh
+for remote fetches, and the applied revision of a reviewed skill proposal for
+seed write-back. For the seed, the actuator rereads that revision and sends
+its body only while it is the skill's latest revision and still equals the
+live definition, so the portal never supplies the bytes written. The writer
+overwrites an existing seed file and never creates one. The container is named and labeled per owner, like an
 admitted promoter, and settles a lost reply by exact readback. Neither the
 portal nor the actuator holds a writable source mount. Later owners, such as
 Build Studio commits, contribution branches and Hive Mind contributions, are

@@ -97,7 +97,7 @@ export const SOURCE_WRITE_REGISTRY = {
   "apps/web/lib/self-upgrade/release-batch-status.ts": { class: "routed", count: 1, reason: "The fresh tally refreshes upstream through the authorized source writer when the actuator is mounted." },
   "apps/web/lib/self-upgrade/release-batch.ts": { class: "routed", count: 3, reason: "Argv builders, and the shallow deepen is skipped when the actuator is mounted (the tally fails open)." },
   "apps/web/lib/self-upgrade/version.ts": { class: "routed", count: 4, reason: "Argv builders, and the target freshen goes through the authorized source writer when the actuator is mounted." },
-  "apps/web/lib/skills/seed-writeback.ts": { class: "pending", count: 1, reason: "Writes an approved skill body into the install checkout; needs an owner-keyed source-writer operation." },
+  "apps/web/lib/skills/seed-writeback.ts": { class: "routed", count: 1, reason: "Approved bodies go through the authorized source writer, keyed on the applied revision, when the actuator is mounted." },
   "apps/web/lib/work-capsules/git-scanner.ts": { class: "routed", count: 1, reason: "The /host-dpf trunk refresh goes through the authorized source writer; other clones are writable volumes." },
 };
 
