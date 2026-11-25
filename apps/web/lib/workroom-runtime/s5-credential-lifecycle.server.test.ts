@@ -63,10 +63,23 @@ describe("S5 Control credential lifecycle, with no client hooks", () => {
     expect(issued).toMatchObject({ kind: "issued", tokenId: "token-a", plaintext: expect.stringMatching(/^dpfroom_/u) });
     expect(trace).toEqual(["command lock", "owner locks", "room lock", "access"]);
     expect(composeAdmission).toHaveBeenCalledWith(tx, attempt);
-    expect(pinToken).toHaveBeenCalledWith(tx, active, "token-a");
+    expect(pinToken).toHaveBeenCalledWith(tx, active, "token-a", active.permitExpiresAt.getTime());
     expect(JSON.stringify([...receipts.values()])).not.toContain(issued.kind === "issued" ? issued.plaintext : "dpfroom_");
     expect(await lifecycle.issue(mint)).toEqual({ kind: "held" });
     expect(create).toHaveBeenCalledOnce();
+  });
+
+  it("persists the DPF-clock rehearsal deadline in the token, owner pin and mint receipt, not a request echo", async () => {
+    const rehearsal = { ...active, permitExpiresAt: new Date(now.getTime() + 600_000), executionProfile: "synthetic-rehearsal" as const };
+    const deadline = now.getTime() + 120_000;
+    readAttempt.mockResolvedValue(rehearsal);
+    const withEcho = { ...mint, expiresAt: now.getTime() + 600_000 };
+    expect(await lifecycle.issue(withEcho)).toEqual({ kind: "held" });
+    expect(create).not.toHaveBeenCalled();
+    expect(await lifecycle.issue(mint)).toMatchObject({ kind: "issued", expiresAt: deadline });
+    expect(create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ expiresAt: new Date(deadline) }) }));
+    expect(pinToken).toHaveBeenCalledWith(tx, rehearsal, "token-a", deadline);
+    expect(receipts.get(mint.commandId)?.payload).toMatchObject({ result: { kind: "issued", tokenId: "token-a", expiresAt: deadline } });
   });
 
   it("holds without current access, the dependency locks, an exact active attempt or current admission", async () => {

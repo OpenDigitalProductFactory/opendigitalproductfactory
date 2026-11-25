@@ -43,6 +43,8 @@ export type S5ProposalPorts = {
   checkResultAccess: (tx: ReceiptDb, actor: ProposalActor, observation: S5ProposalObservation) => Promise<boolean>;
   /** The owner re-reads all live state under the effect fence. Hold on missing/stale evidence. */
   readCurrentProposalAuthority: (tx: ReceiptDb, actor: ProposalActor, call: S5ProposalCall) => Promise<LiveProposalAuthority | null>;
+  /** Protected adapters can require a final clock check with no awaited work before the insert. */
+  beforeProposalWrite?: () => boolean;
 };
 
 const recordedProposal = z.strictObject({ kind: z.literal("proposal-recorded"), operationId, proposalRef: ref });
@@ -115,6 +117,8 @@ export function createS5QuietProposalBroker(ports: S5ProposalPorts) {
             || current.workroomId !== call.workroomId || current.sessionRef !== call.sessionRef || current.stageKey !== call.stageKey || current.stageAttemptRef !== call.stageAttemptRef
             || current.caseKey !== call.caseKey || !current.operationKeys.includes(operation)
             || canonicalJson(current.recipient) !== canonicalJson(call.recipient)) throw new ProposalHeld();
+
+          if (ports.beforeProposalWrite && ports.beforeProposalWrite() !== true) throw new ProposalHeld();
 
           const activity = await tx.workroomActivity.create({
             data: {

@@ -8,6 +8,7 @@ const ref = z.string().min(1).max(256).regex(/^\S+$/u);
 const command = z.strictObject({ workroomId: ref, sessionRef: ref, stageAttemptRef: ref, roomRowId: ref, commandId: ref });
 const receiver = z.strictObject({ issuer: ref, audience: ref, hostRef: ref, resource: ref });
 const mint = command.extend({ receiver });
+const REHEARSAL_WINDOW_MS = 120_000;
 const release = command.extend({ reason: z.enum(["attempt-released", "launch-failed", "executor-replaced", "workroom-closed"]) });
 
 type Mint = z.infer<typeof mint>;
@@ -20,6 +21,8 @@ type OwnerAttempt = S5AttemptLocator & {
   permitExpiresAt: Date;
   status: "active" | "released";
   tokenId: string | null;
+  /** Optional owner-persisted profile, never an issuance request field. */
+  executionProfile?: "synthetic-rehearsal";
 };
 
 type TokenStore = {
@@ -39,14 +42,15 @@ export type S5CredentialLifecyclePorts = {
   /** Existing attempt owner's persisted pin and fence, never reconstructed from a launch. */
   readAttempt: (tx: ReceiptDb, locator: S5AttemptLocator) => Promise<OwnerAttempt | null>;
   composeAdmission: (tx: ReceiptDb, locator: S5AttemptLocator) => Promise<S5AdmissionCeiling | null>;
-  /** Compare-and-write to the existing attempt owner under the same transaction. */
-  pinToken: (tx: ReceiptDb, attempt: OwnerAttempt, tokenId: string) => Promise<boolean>;
+  /** Compare-and-write token and original deadline to the existing attempt
+   * owner under the same transaction. Do not derive either on a broker call. */
+  pinToken: (tx: ReceiptDb, attempt: OwnerAttempt, tokenId: string, expiresAt: number) => Promise<boolean>;
   closeAttempt: (tx: ReceiptDb, attempt: OwnerAttempt) => Promise<boolean>;
   now?: () => Date;
 };
 
 type Held = { kind: "held" };
-type IssueResult = Held | { kind: "issued"; tokenId: string; plaintext: string };
+type IssueResult = Held | { kind: "issued"; tokenId: string; plaintext: string; expiresAt: number };
 type ReleaseResult = Held | { kind: "released" };
 const held: Held = { kind: "held" };
 class CredentialHeld extends Error {}
@@ -99,20 +103,26 @@ export function createS5CredentialLifecycle(ports: S5CredentialLifecyclePorts) {
     const value = parsed.data;
     const pending: { delivery?: Extract<IssueResult, { kind: "issued" }> } = {};
     try {
-      const committed = await runReceiptedCommand<{ kind: "issued"; tokenId: string }>({
+      const committed = await runReceiptedCommand<{ kind: "issued"; tokenId: string; expiresAt: number }>({
         ...commandIdentity({ kind: "issue", input: value }),
         run: async (tx) => {
           const attempt = await currentAttempt(tx, value);
           if (attempt.status !== "active" || attempt.tokenId !== null) throw new CredentialHeld();
           const admission = await ports.composeAdmission(tx, locatorOf(value));
           if (!admission || !sameAttempt(admission.locator, value)) throw new CredentialHeld();
+          const issuedAt = now();
+          if (attempt.executionProfile !== undefined && attempt.executionProfile !== "synthetic-rehearsal") throw new CredentialHeld();
+          const expiry = attempt.executionProfile === "synthetic-rehearsal"
+            ? new Date(Math.min(attempt.permitExpiresAt.getTime(), issuedAt.getTime() + REHEARSAL_WINDOW_MS))
+            : attempt.permitExpiresAt;
           const prepared = prepareS5ControlCredential({ admission, receiver: value.receiver,
-            userId: attempt.userId, now: now(), expiresAt: attempt.permitExpiresAt });
+            userId: attempt.userId, now: issuedAt, expiresAt: expiry });
           if (!prepared) throw new CredentialHeld();
+          const expiresAt = prepared.data.expiresAt.getTime();
           const token = await ports.getTokenStore(tx).create({ data: prepared.data, select: { id: true } });
-          if (!ref.safeParse(token?.id).success || await ports.pinToken(tx, attempt, token.id) !== true) throw new CredentialHeld();
-          pending.delivery = { kind: "issued", tokenId: token.id, plaintext: prepared.plaintext };
-          return { kind: "issued", tokenId: token.id };
+          if (!ref.safeParse(token?.id).success || await ports.pinToken(tx, attempt, token.id, expiresAt) !== true) throw new CredentialHeld();
+          pending.delivery = { kind: "issued", tokenId: token.id, plaintext: prepared.plaintext, expiresAt };
+          return { kind: "issued", tokenId: token.id, expiresAt };
         },
       });
       if (committed?.kind !== "issued" || pending.delivery?.tokenId !== committed.tokenId) return held;

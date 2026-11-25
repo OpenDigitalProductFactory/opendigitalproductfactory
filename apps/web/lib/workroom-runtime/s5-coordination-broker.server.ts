@@ -10,6 +10,7 @@ const operation = "post_room_message";
 type BoundActor = { roomRowId: string; userId: string; agentId: string };
 type Actor = BoundActor & { receiver: S5AuthenticatedControl };
 type Issued = NonNullable<Awaited<ReturnType<typeof resolveS5ControlCredential>>>;
+type LockedCredential = Issued & { attemptExpiresAt: number };
 type AuthenticatedContext = { receiver: S5AuthenticatedControl; roomBearer: string };
 type CurrentProposal = {
   admission: S5AdmissionCeiling;
@@ -29,8 +30,9 @@ export type S5CoordinationBrokerPorts = {
   /** S6/T2/JSI owner fences. Missing or unproved locks must hold. No network. */
   lockOwners: (tx: ReceiptDb, actor: Actor, locator: S5AttemptLocator, usage: "propose" | "observe") => Promise<boolean>;
   checkResultAccess: (tx: ReceiptDb, actor: Actor, observation: S5ProposalObservation) => Promise<boolean>;
-  /** Current active attempt's token ID from its owner, not the submitted token. */
-  readPinnedTokenId: (tx: ReceiptDb, actor: Actor, locator: S5AttemptLocator) => Promise<string | null>;
+  /** Read the active attempt's original token/deadline pin under its row lock.
+   * Neither an echoed deadline nor a freshly extended permit can replace it. */
+  readPinnedAttempt: (tx: ReceiptDb, actor: Actor, locator: S5AttemptLocator) => Promise<{ tokenId: string; expiresAt: number } | null>;
   /** Recompose live authorization and check GPP, exact case and expected recipient
    * from their owners. It must use the locked transaction, never caller-supplied facts. */
   readCurrentProposal: (tx: ReceiptDb, actor: Actor, call: S5ProposalCall) => Promise<CurrentProposal | null>;
@@ -65,19 +67,22 @@ export function createS5CoordinationBroker(ports: S5CoordinationBrokerPorts) {
     return bound ? { ...bound, receiver } : null;
   }
 
-  async function lockedCredential(tx: ReceiptDb, actor: Actor, observation: S5ProposalObservation, bearer: string): Promise<Issued | null> {
+  async function lockedCredential(tx: ReceiptDb, actor: Actor, observation: S5ProposalObservation, bearer: string): Promise<LockedCredential | null> {
     if (!tx.$queryRaw || !isGeneratedWorkroomSessionBearer(bearer)) return null;
     // Workroom is already locked. Serialize with synchronous release and with
     // credential-only admin revocation, which need not take the room lock.
     const rows = await tx.$queryRaw`SELECT "id" FROM "McpApiToken"
       WHERE "tokenHash" = ${hashWorkroomSessionBearer(bearer)} AND "kind" = ${S5_WORKROOM_TOKEN_KIND} FOR UPDATE` as Array<{ id: string }>;
     const id = rows.length === 1 ? rows[0]?.id : null;
-    if (!id || await ports.readPinnedTokenId(tx, actor, locatorOf(observation)) !== id) return null;
-    const issued = await resolveS5ControlCredential(ports.tokenStore(tx), bearer, actor.receiver, now());
-    return issued?.tokenId === id && sameAttempt(issued, actor, observation) ? issued : null;
+    if (!id) return null;
+    const pin = await ports.readPinnedAttempt(tx, actor, locatorOf(observation));
+    const instant = now();
+    if (!pin || pin.tokenId !== id || !Number.isSafeInteger(pin.expiresAt) || !(instant.getTime() < pin.expiresAt)) return null;
+    const issued = await resolveS5ControlCredential(ports.tokenStore(tx), bearer, actor.receiver, instant);
+    return issued?.tokenId === id && sameAttempt(issued, actor, observation) ? { ...issued, attemptExpiresAt: pin.expiresAt } : null;
   }
 
-  function boundBroker(actor: Actor, usage: "propose" | "observe", extra: Pick<S5ProposalPorts, "checkResultAccess" | "readCurrentProposalAuthority">) {
+  function boundBroker(actor: Actor, usage: "propose" | "observe", extra: Pick<S5ProposalPorts, "checkResultAccess" | "readCurrentProposalAuthority" | "beforeProposalWrite">) {
     return createS5QuietProposalBroker({ db: ports.db, operationBindingKey: ports.operationBindingKey, ...extra,
       beforeRoomLock: async (tx, _actor, observation) => {
         if (await ports.lockOwners(tx, actor, locatorOf(observation), usage) !== true) throw new Error("Owner fence unavailable.");
@@ -89,7 +94,8 @@ export function createS5CoordinationBroker(ports: S5CoordinationBrokerPorts) {
       if (!isGeneratedWorkroomSessionBearer(context.roomBearer)) return { kind: "held" } as const;
       const actor = await actorFor(context.receiver, input);
       if (!actor) return { kind: "held" } as const;
-      let issued: Issued | null = null;
+      let issued: LockedCredential | null = null;
+      let effectDeadline = Number.NaN;
       return await boundBroker(actor, "propose", {
         checkResultAccess: async (tx, _actor, observation) => {
           if (await ports.checkResultAccess(tx, actor, observation) !== true) return false;
@@ -101,6 +107,8 @@ export function createS5CoordinationBroker(ports: S5CoordinationBrokerPorts) {
           const current = await ports.readCurrentProposal(tx, actor, call);
           if (!current || current.consequenceAllowed !== true || current.syntheticCaseKey !== call.caseKey) return null;
           const { admission } = current;
+          if (admission.jsi.kind !== "eligible" || !Number.isSafeInteger(admission.jsi.validUntil)) return null;
+          effectDeadline = Math.min(issued.attemptExpiresAt, issued.ceiling.expiresAt.getTime(), admission.jsi.validUntil);
           const effective = narrowS5CredentialForCurrentAdmission(issued.ceiling, admission, now());
           const required = ports.getRequiredGrants(operation);
           if (!effective?.operationKeys.includes(operation) || !required?.length
@@ -109,6 +117,7 @@ export function createS5CoordinationBroker(ports: S5CoordinationBrokerPorts) {
             ...admission.locator, stageKey: admission.stageKey, caseKey: admission.caseKey,
             recipient: current.recipient, agentId: admission.agentId, mode: "read-only-coordination", operationKeys: effective.operationKeys };
         },
+        beforeProposalWrite: () => now().getTime() < effectDeadline,
       }).submit(actor, input);
     } catch {
       return { kind: "unknown" } as const;

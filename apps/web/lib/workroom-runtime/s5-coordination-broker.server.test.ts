@@ -28,8 +28,9 @@ const { issuer, audience, hostRef } = receiver;
 const call: S5ProposalCall = { issuer, audience, hostRef, ...locator, stageKey: admission.stageKey, caseKey: admission.caseKey, recipient,
   operationId: "room-operation:00000000-0000-4000-8000-000000000003", body: "Propose another qualified reviewer." };
 
-function fixture() {
+function fixture(launchExpiresAt = end.getTime()) {
   const record = prepareS5ControlCredential({ admission, receiver, userId: "user-a", now, expiresAt: end })!;
+  const clock = vi.fn(() => now);
   const id = "token-a";
   const zero: S5CredentialCarrier & { id: string; userId: string } = { ...record.data, id, revokedAt: null };
   const findUnique = vi.fn(async () => zero as typeof zero | null);
@@ -47,16 +48,49 @@ function fixture() {
   const readBoundActor = vi.fn(async () => ({ roomRowId: "row-a", userId: "user-a", agentId: admission.agentId }));
   const checkResultAccess = vi.fn(async () => true);
   const lockOwners = vi.fn(async () => true);
-  const readPinnedTokenId = vi.fn(async () => id as string | null);
+  const readPinnedAttempt = vi.fn(async () => ({ tokenId: id, expiresAt: launchExpiresAt } as { tokenId: string; expiresAt: number } | null));
   const readCurrentProposal = vi.fn(async () => current as typeof current | null);
   const getRequiredGrants = vi.fn(() => grants as readonly string[] | undefined);
   const ports: S5CoordinationBrokerPorts = { db: { ...tx, $transaction: (run) => run(tx) }, operationBindingKey: new Uint8Array(32).fill(1),
-    tokenStore: () => ({ mcpApiToken: { findUnique } }), lockOwners, readBoundActor, checkResultAccess, readPinnedTokenId, readCurrentProposal, getRequiredGrants, now: () => now };
-  return { broker: createS5CoordinationBroker(ports), record, zero, findUnique, create, query, tx, current, readBoundActor, checkResultAccess,
-    readPinnedTokenId, readCurrentProposal, lockOwners, getRequiredGrants, context: { receiver, roomBearer: record.plaintext } };
+    tokenStore: () => ({ mcpApiToken: { findUnique } }), lockOwners, readBoundActor, checkResultAccess, readPinnedAttempt, readCurrentProposal, getRequiredGrants, now: clock };
+  return { broker: createS5CoordinationBroker(ports), record, zero, findUnique, create, query, tx, clock, current, readBoundActor, checkResultAccess,
+    readPinnedAttempt, readCurrentProposal, lockOwners, getRequiredGrants, context: { receiver, roomBearer: record.plaintext } };
 }
 
 describe("S5 coordination proposal dispatch, without client hooks", () => {
+  it("writes neither activity nor receipt when the original launch expires under lock while token and JSI remain current", async () => {
+    const launchExpiresAt = now.getTime() + 1_000;
+    const expiry = new Date(launchExpiresAt + 1);
+    const f = fixture(launchExpiresAt);
+    f.readCurrentProposal.mockImplementationOnce(async () => {
+      f.clock.mockReturnValue(expiry);
+      return f.current;
+    });
+    expect(f.zero.expiresAt?.getTime()).toBeGreaterThan(launchExpiresAt);
+    expect(admission.jsi.kind === "eligible" && admission.jsi.validUntil > launchExpiresAt).toBe(true);
+    expect(await f.broker.propose(f.context, call)).toEqual({ kind: "held" });
+    expect(f.readCurrentProposal).toHaveBeenCalledOnce();
+    expect(f.create).not.toHaveBeenCalled();
+  });
+
+  it("holds an attempt with no verified original launch deadline", async () => {
+    const f = fixture();
+    f.readPinnedAttempt.mockResolvedValueOnce({ tokenId: f.zero.id, expiresAt: Number.NaN });
+    expect((await f.broker.propose(f.context, call)).kind).not.toBe("proposal-recorded");
+    expect(f.create).not.toHaveBeenCalled();
+  });
+
+  it("refuses exactly at the pinned rehearsal deadline immediately before the write", async () => {
+    const launchExpiresAt = now.getTime() + 1_000;
+    const f = fixture(launchExpiresAt);
+    f.getRequiredGrants.mockImplementationOnce(() => {
+      f.clock.mockReturnValue(new Date(launchExpiresAt));
+      return grants;
+    });
+    expect(await f.broker.propose(f.context, call)).toEqual({ kind: "held" });
+    expect(f.getRequiredGrants).toHaveBeenCalledOnce();
+    expect(f.create).not.toHaveBeenCalled();
+  });
   it("joins the v1 wire to the locked broker without routing through general MCP", async () => {
     const f = fixture();
     const { body, recipient, caseKey, ...binding } = call;
@@ -87,7 +121,7 @@ describe("S5 coordination proposal dispatch, without client hooks", () => {
     expect(f.readBoundActor).not.toHaveBeenCalled();
     f.lockOwners.mockResolvedValueOnce(false);
     expect((await f.broker.propose(f.context, call)).kind).not.toBe("proposal-recorded");
-    f.readPinnedTokenId.mockResolvedValueOnce("foreign-token");
+    f.readPinnedAttempt.mockResolvedValueOnce({ tokenId: "foreign-token", expiresAt: end.getTime() });
     expect((await f.broker.propose(f.context, call)).kind).not.toBe("proposal-recorded");
     f.checkResultAccess.mockResolvedValueOnce(false);
     expect((await f.broker.propose(f.context, call)).kind).not.toBe("proposal-recorded");
