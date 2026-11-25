@@ -95,6 +95,7 @@ describe("buildScheduleWindow", () => {
       view({ jobId: "spent", kind: "one-shot", schedule: "15 6 21 8 *", health: "spent" }),
       view({ jobId: "lock", kind: "slot-lock", schedule: "manual", health: "spent" }),
       view({ jobId: "off", schedule: "0 3 * * *", enabled: false }),
+      view({ jobId: "uploads-daily-backup", schedule: "daily", substrate: "scheduled-step" }),
     ];
     const w = buildScheduleWindow(views, "week", NOW);
     expect(w.buckets.flatMap((b) => b.occurrences)).toHaveLength(0);

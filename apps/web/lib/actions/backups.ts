@@ -12,7 +12,7 @@ import {
   POSTGRES_BACKUP_EVENT,
   POSTGRES_BACKUP_JOB_ID,
 } from "@/lib/operate/backups/constants";
-import { getAllBackupReadiness, getPostgresBackupReadiness } from "@/lib/operate/backups/readiness";
+import { getAllBackupReadiness, getPostgresBackupReadiness, type AllBackupReadiness } from "@/lib/operate/backups/readiness";
 import { nextDailyRunAt } from "@/lib/operate/backups/managed-backup";
 import type { BackupTarget, ReadinessSummary } from "@/lib/operate/backups/types";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
@@ -30,11 +30,8 @@ export async function getBackupReadinessAction(): Promise<ReadinessSummary> {
   return getPostgresBackupReadiness();
 }
 
-/** Returns backup readiness (postgres-only after BET-5). */
-export async function getAllBackupReadinessAction(): Promise<{
-  postgres: ReadinessSummary;
-  capabilityOwned: Array<{ target: string; status: "required" | "optional_inactive" | "optional_degraded" }>;
-}> {
+/** Returns Postgres and uploads backup readiness without granting restore access. */
+export async function getAllBackupReadinessAction(): Promise<AllBackupReadiness> {
   await requireBackupAdmin();
   return getAllBackupReadiness();
 }

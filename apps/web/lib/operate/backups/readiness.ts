@@ -9,6 +9,7 @@ import { prisma } from "@dpf/db";
 import {
   POSTGRES_BACKUP_JOB_ID,
   TRIAL_RESTORE_TRIGGER,
+  UPLOADS_BACKUP_JOB_ID,
 } from "./constants";
 import {
   DEFAULT_BACKUP_RETENTION,
@@ -17,10 +18,28 @@ import {
 } from "./types";
 import type { OperationalCapabilityState } from "@/lib/platform-runtime/operational-state";
 import { loadOperationalCapabilityState } from "@/lib/platform-runtime/operational-state";
+import { listUnfinishedRestoreJournals, type RestoreJournalStage } from "./paired-restore-journal";
+import { readUploadsCustody } from "./uploads-custody";
 
 const BACKUPS_ROOT = "/backups";
 
 type BackupOperationalState = Pick<OperationalCapabilityState, "backupServices" | "serviceStates">;
+type BackupRunIdentity = { id: string; storagePath: string | null; sha256: string | null };
+
+export type UploadsBackupReadiness = ReadinessSummary & {
+  capturePair:
+    | { status: "paired"; uploadsRunId: string; postgresRunId: string }
+    | { status: "not-captured" | "unverified" };
+  pairedRestore:
+    | { status: "unfinished"; operations: { operationId: string; stage: RestoreJournalStage }[] }
+    | { status: "no-unfinished" | "unreadable" };
+};
+
+export interface AllBackupReadiness {
+  postgres: ReadinessSummary;
+  uploads: UploadsBackupReadiness;
+  capabilityOwned: ReturnType<typeof projectCapabilityBackupReadiness>[];
+}
 
 export function projectCapabilityBackupReadiness(target: string, state: BackupOperationalState): {
   target: string;
@@ -33,7 +52,7 @@ export function projectCapabilityBackupReadiness(target: string, state: BackupOp
 async function getReadinessForTarget(
   jobId: string,
   target: BackupTarget,
-): Promise<ReadinessSummary> {
+): Promise<{ summary: ReadinessSummary; lastSuccess: BackupRunIdentity | null }> {
   const [job, lastRun, lastSuccess, retainedRuns, recentFailures, lastTrialRestore, openCorruptionAlert] =
     await Promise.all([
       prisma.scheduledJob.findUnique({ where: { jobId } }),
@@ -93,7 +112,7 @@ async function getReadinessForTarget(
     0,
   );
 
-  return {
+  const summary: ReadinessSummary = {
     target,
     scheduledJob: job
       ? {
@@ -150,23 +169,55 @@ async function getReadinessForTarget(
         }
       : null,
   };
+  return { summary, lastSuccess };
+}
+
+async function readCapturePair(uploads: BackupRunIdentity | null): Promise<UploadsBackupReadiness["capturePair"]> {
+  if (!uploads) return { status: "not-captured" };
+  if (!uploads.storagePath || !uploads.sha256) return { status: "unverified" };
+  const custody = await readUploadsCustody(BACKUPS_ROOT, uploads.id).catch(() => null);
+  if (!custody || custody.runId !== uploads.id || custody.storagePath !== uploads.storagePath
+    || custody.archiveSha256 !== uploads.sha256 || custody.pairedPostgresRunId === uploads.id) {
+    return { status: "unverified" };
+  }
+  const postgres = await prisma.backupRun.findUnique({
+    where: { id: custody.pairedPostgresRunId },
+    select: { id: true, target: true, status: true, prunedAt: true, sha256: true },
+  });
+  if (!postgres || postgres.id !== custody.pairedPostgresRunId || postgres.target !== "postgres"
+    || postgres.status !== "ok" || postgres.prunedAt !== null || postgres.sha256 !== custody.pairedPostgresSha256) {
+    return { status: "unverified" };
+  }
+  // Custody establishes capture membership, not a passing trial or restore authorization.
+  return { status: "paired", uploadsRunId: uploads.id, postgresRunId: postgres.id };
+}
+
+async function readPairedRestoreState(): Promise<UploadsBackupReadiness["pairedRestore"]> {
+  try {
+    const unfinished = await listUnfinishedRestoreJournals(BACKUPS_ROOT);
+    return unfinished.length
+      ? { status: "unfinished", operations: unfinished.map(({ operationId, stage }) => ({ operationId, stage })) }
+      : { status: "no-unfinished" };
+  } catch {
+    // An unreadable receipt must not be shown as proof there is no unfinished restore.
+    return { status: "unreadable" };
+  }
 }
 
 export async function getPostgresBackupReadiness(): Promise<ReadinessSummary> {
-  return getReadinessForTarget(POSTGRES_BACKUP_JOB_ID, "postgres");
+  return (await getReadinessForTarget(POSTGRES_BACKUP_JOB_ID, "postgres")).summary;
 }
 
-// Postgres is the only backup target (BET-5).
-export async function getAllBackupReadiness(): Promise<{
-  postgres: ReadinessSummary;
-  capabilityOwned: Array<{ target: string; status: "required" | "optional_inactive" | "optional_degraded" }>;
-}> {
-  const [postgres, operationalState] = await Promise.all([
-    getReadinessForTarget(POSTGRES_BACKUP_JOB_ID, "postgres"),
+export async function getAllBackupReadiness(): Promise<AllBackupReadiness> {
+  const [postgres, upload, pairedRestore, operationalState] = await Promise.all([
+    getPostgresBackupReadiness(),
+    getReadinessForTarget(UPLOADS_BACKUP_JOB_ID, "uploads"),
+    readPairedRestoreState(),
     loadOperationalCapabilityState({ observedProviders: {} }),
   ]);
   return {
     postgres,
+    uploads: { ...upload.summary, capturePair: await readCapturePair(upload.lastSuccess), pairedRestore },
     capabilityOwned: operationalState.capabilityBackupCandidates.map((target) =>
       projectCapabilityBackupReadiness(target, operationalState)),
   };

@@ -8,7 +8,7 @@ import { prisma } from "@dpf/db";
 
 import { PROACTIVITY_FACT_CATEGORY } from "@/lib/proactivity/proactivity-override-preferences";
 
-import { SCHEDULED_JOB_CATALOG } from "./catalog";
+import { SCHEDULED_JOB_CATALOG, SCHEDULED_JOB_HEARTBEATS } from "./catalog";
 import { coworkerSelfTaskCadenceInfo, isCoworkerSelfTaskId } from "./coworker-self-tasks";
 import {
   buildWorkView,
@@ -48,7 +48,7 @@ export async function listScheduledWork(now: Date = new Date()): Promise<Schedul
   const proactivityByAgent = await readProactivity(taskRows);
 
   const ids = selectRegisterIds(
-    SCHEDULED_JOB_CATALOG.map((e) => e.jobId),
+    [...SCHEDULED_JOB_CATALOG, ...SCHEDULED_JOB_HEARTBEATS].map((e) => e.jobId),
     jobRows,
     taskRows.map((t) => t.taskId),
   );

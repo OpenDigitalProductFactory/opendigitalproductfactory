@@ -14,6 +14,9 @@ export const POSTGRES_BACKUP_JOB_ID = "postgres-daily-backup";
 export const POSTGRES_BACKUP_JOB_NAME =
   "Postgres daily backup (platform-managed)";
 export const POSTGRES_BACKUP_SCHEDULE = "daily";
+const UPLOADS_BACKUP_JOB_ID = "uploads-daily-backup";
+const UPLOADS_BACKUP_JOB_NAME = "Uploads daily backup (platform-managed)";
+const UPLOADS_BACKUP_SCHEDULE = "daily";
 
 // Retired by BET-5 (BI-A1E864A5). Kept ONLY so the seed can deactivate the
 // ScheduledJob rows an install created before the retirement; apps/web no
@@ -111,16 +114,18 @@ export async function ensureAllBackupScheduledJobs(
   now: Date = new Date(),
 ): Promise<{
   postgres: { created: boolean };
+  uploads: { created: boolean };
   postgresTrialRestore: { created: boolean };
   supersededDeactivated: number;
 }> {
-  const [postgres, postgresTrialRestore, superseded] = await Promise.all([
+  const [postgres, uploads, postgresTrialRestore, superseded] = await Promise.all([
     ensureBackupScheduledJob(prisma, POSTGRES_BACKUP_JOB_ID, POSTGRES_BACKUP_JOB_NAME, POSTGRES_BACKUP_SCHEDULE, now),
+    ensureBackupScheduledJob(prisma, UPLOADS_BACKUP_JOB_ID, UPLOADS_BACKUP_JOB_NAME, UPLOADS_BACKUP_SCHEDULE, now),
     ensureBackupScheduledJob(prisma, POSTGRES_TRIAL_RESTORE_JOB_ID, POSTGRES_TRIAL_RESTORE_JOB_NAME, POSTGRES_TRIAL_RESTORE_SCHEDULE, now),
     prisma.scheduledJob.updateMany({
       where: { jobId: { in: [NEO4J_BACKUP_JOB_ID, QDRANT_BACKUP_JOB_ID] } },
       data: { enabled: false, nextRunAt: null },
     }),
   ]);
-  return { postgres, postgresTrialRestore, supersededDeactivated: superseded.count };
+  return { postgres, uploads, postgresTrialRestore, supersededDeactivated: superseded.count };
 }

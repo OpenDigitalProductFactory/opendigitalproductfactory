@@ -4,6 +4,7 @@
 // in each test, so a regression reintroduces a defect an operator actually hit.
 
 import { describe, expect, it } from "vitest";
+import { UPLOADS_BACKUP_JOB_ID } from "@/lib/operate/backups/constants";
 
 import {
   FAILING_LAST_STATUSES,
@@ -250,6 +251,33 @@ describe("buildWorkView", () => {
     locked: false,
     enabled: true,
   };
+
+  it("registers the seeded uploads heartbeat as a read-only step, not as an independent job", () => {
+    const row = {
+      ...staleMirror,
+      jobId: UPLOADS_BACKUP_JOB_ID,
+      enabled: false,
+      nextRunAt: from(HOUR),
+      lastStatus: "failed",
+    };
+    expect(buildWorkView(row.jobId, row, undefined, NOW)).toMatchObject({
+      substrate: "scheduled-step",
+      inCatalog: true,
+      inngestId: null,
+      locked: true,
+      enabled: true,
+      cadence: "After the daily Postgres backup",
+      nextRunAt: null,
+      projectionStale: false,
+      lastRunAt: row.lastRunAt.toISOString(),
+      lastStatus: "failed",
+      health: "error",
+      reportsRunData: true,
+      canRunNow: false,
+      scheduleEditable: false,
+      killSwitchEnforced: false,
+    });
+  });
 
   it("lets the agent task win over a drifted ScheduledJob mirror", () => {
     const view = buildWorkView(task.taskId, staleMirror, task, NOW);
