@@ -24,8 +24,10 @@ test("detects socket, CLI argv and shell-string Docker calls", () => {
     'await exec(`docker exec ${id} ls`);',
     '  "docker",',
     'const spec = { command: "docker" };',
+    'await run("docker images dpf-promoter");',
+    'await run("docker builder prune -f");',
   ].join("\n");
-  assert.deepEqual(findRawDockerLines(source), [1, 2, 3, 4, 5, 6, 7]);
+  assert.deepEqual(findRawDockerLines(source), [1, 2, 3, 4, 5, 6, 7, 8, 9]);
 });
 
 test("ignores comments, substring checks and non-call literals", () => {

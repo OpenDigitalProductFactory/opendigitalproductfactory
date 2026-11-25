@@ -551,7 +551,7 @@ export async function readScopeWriterObserverBinding({ stateDir, secret, now = n
  *   openRuntimeSession: (owner: unknown, resolveSandbox: () => Promise<unknown>) => Promise<unknown> }} owners
  */
 export async function serveScopeWriterObserver(env, { fencePreviews, observeCiCapacity, reconcileSubstrate, sweepPromoters,
-  doctools, openRuntimeSession }) {
+  doctools, openRuntimeSession, pruneDockerDisk }) {
   const { createScopeWriterObserver, observeActuatorProjectServices, observeActuatorProjectContainers, observeActuatorPortalImage,
     observeActuatorSandbox, publishActuatorSocket, restartActuatorProjectService } =
     await import('./lib/scope-writer-observation.mjs');
@@ -616,6 +616,7 @@ export async function serveScopeWriterObserver(env, { fencePreviews, observeCiCa
     fencePreviews,
     reconcileSubstrate,
     sweepPromoters,
+    pruneDockerDisk,
     doctools,
   });
   process.umask(0o117);

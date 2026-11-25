@@ -345,3 +345,17 @@ it('accepts only an exact container ID for a bounded daemon restart', async () =
   assert.equal(paths.length, 1);
 });
 
+
+it('runs the fixed Docker disk prune only as a parameterless actuator operation', unixOnly, async () => {
+  const { createScopeWriterObserver, pruneActuatorDockerDisk } = await load();
+  let runs = 0;
+  await withServer(observe => createScopeWriterObserver({ observe, pruneDockerDisk: async () => ({ prunedDockerDisk: true, run: ++runs }) }),
+    async () => ({}), async socketPath => {
+      for (const path of ['/v1/runtime/prune-docker-disk?image=peer', '/v1/runtime/prune-docker-disk/all']) {
+        assert.equal(await call(socketPath, { method: 'POST', path }), 404);
+      }
+      assert.equal(await call(socketPath, { method: 'GET', path: '/v1/runtime/prune-docker-disk' }), 404);
+      assert.deepEqual(await pruneActuatorDockerDisk({ socketPath }), { prunedDockerDisk: true, run: 1 });
+      assert.equal(runs, 1);
+    });
+});

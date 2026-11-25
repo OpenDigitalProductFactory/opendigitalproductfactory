@@ -20,6 +20,7 @@ const fencePreviewsPath = '/v1/runtime/fence-ended-previews';
 const reconcileSubstratePath = '/v1/runtime/reconcile-substrate';
 const sweepPromotersPath = '/v1/runtime/sweep-promoters';
 const restartServicePath = '/v1/runtime/restart-service';
+const pruneDockerDiskPath = '/v1/runtime/prune-docker-disk';
 const doctoolsPath = '/v1/runtime/doctools/';
 const doctoolsHealthPath = '/v1/runtime/doctools-health';
 const runtimeSessionPath = '/v1/runtime/workroom-session';
@@ -67,7 +68,7 @@ async function readBoundedStream(stream, bytes) {
  * The observer derives scope from host-owned state, never from the request. */
 export function createScopeWriterObserver({ observe, observeServices, observeCiCapacity, readRetirement, fencePreviews,
   reconcileSubstrate, readServiceLogs, observeProjectContainers, observePortalImage, observeSandbox, sweepPromoters,
-  doctools, openRuntimeSession, readReassessmentProof, restartService }) {
+  doctools, openRuntimeSession, readReassessmentProof, restartService, pruneDockerDisk }) {
   const operations = new Map([
     [`GET ${cohortPath}`, observe], [`GET ${projectServicesPath}`, observeServices],
     [`GET ${ciCapacityPath}`, observeCiCapacity],
@@ -78,6 +79,7 @@ export function createScopeWriterObserver({ observe, observeServices, observeCiC
     [`GET ${sandboxPath}`, observeSandbox],
     [`GET ${reassessmentPath}`, readReassessmentProof],
     [`GET ${doctoolsHealthPath}`, doctools?.health],
+    [`POST ${pruneDockerDiskPath}`, pruneDockerDisk],
   ]);
   let doctoolsInFlight = 0;
   const server = createServer({ headersTimeout: 2_000, requestTimeout: 2_000, maxHeaderSize: 1024 }, async (req, res) => {
@@ -370,6 +372,11 @@ export function reconcileActuatorPromoters({ socketPath = SCOPE_WRITER_OBSERVER_
 export function restartActuatorService(service, { socketPath = SCOPE_WRITER_OBSERVER_SOCKET } = {}) {
   if (!ACTUATOR_RESTARTABLE_SERVICES.includes(service)) return Promise.reject(unavailable());
   return requestActuator(`${restartServicePath}?service=${service}`, socketPath, { method: 'POST', timeoutMs: 60_000 });
+}
+
+/** Weekly disk reclamation; the actuator alone selects what is removed. */
+export function pruneActuatorDockerDisk({ socketPath = SCOPE_WRITER_OBSERVER_SOCKET } = {}) {
+  return requestActuator(pruneDockerDiskPath, socketPath, { method: 'POST', timeoutMs: 15 * 60_000 });
 }
 
 export function readActuatorProjectContainers({ socketPath = SCOPE_WRITER_OBSERVER_SOCKET } = {}) {

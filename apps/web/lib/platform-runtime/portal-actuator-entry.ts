@@ -17,10 +17,12 @@ async function main() {
       sweepPromoters: () => Promise<unknown>;
       doctools: ReturnType<typeof createDoctoolsActuator>;
       openRuntimeSession: ReturnType<typeof createSandboxSessionActuator>;
+      pruneDockerDisk: () => Promise<unknown>;
     }): Promise<void>;
   };
   let previewPass: ReturnType<typeof fenceEndedPreviewRuntimesAtDaemon> | undefined;
   let promoterPass: ReturnType<typeof sweepOrphanedPromoterContainersAtDaemon> | undefined;
+  let prunePass: Promise<unknown> | undefined;
   const project = process.env.PROMOTE_COMPOSE_PROJECT;
   if (!project) throw new Error("actuator_project_unavailable");
   await serveScopeWriterObserver(process.env, {
@@ -36,6 +38,16 @@ async function main() {
     sweepPromoters: () => {
       promoterPass ??= sweepOrphanedPromoterContainersAtDaemon({ project }).finally(() => { promoterPass = undefined; });
       return promoterPass;
+    },
+    pruneDockerDisk: () => {
+      prunePass ??= (async () => {
+        const { pruneDockerDiskAtDaemon } = await import("../infra/docker-disk-prune");
+        const { exec } = await import("node:child_process");
+        const { promisify } = await import("node:util");
+        const run = promisify(exec);
+        return pruneDockerDiskAtDaemon(async command => ({ stdout: String((await run(command)).stdout ?? "") }));
+      })().finally(() => { prunePass = undefined; });
+      return prunePass;
     },
     doctools: createDoctoolsActuator(project),
     openRuntimeSession: createSandboxSessionActuator(),

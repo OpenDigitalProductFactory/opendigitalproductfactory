@@ -52,6 +52,7 @@ export const DOCKER_AUTHORITY_REGISTRY = Object.freeze({
   "apps/web/lib/documents/generation/render.ts": { class: "routed", count: 1, reason: "runActuatorDoctools when the actuator mount is present." },
   "apps/web/lib/edge-node/remote-provisioning.ts": { class: "message", count: 2, reason: "Script text executed on a remote edge host, never by the portal." },
   "apps/web/lib/govern/preview-automation-sign-in.ts": { class: "pending", count: 3, reason: "Writer-reachable raw Docker call; migrate to a typed actuator operation before the immutable recipe." },
+  "apps/web/lib/infra/docker-disk-prune.ts": { class: "routed", count: 7, reason: "pruneActuatorDockerDisk when the actuator mount is present; the AtDaemon body runs in the actuator and refusals never fall back." },
   "apps/web/lib/mcp-task-reassessment-contract.ts": { class: "pending", count: 1, reason: "Writer-reachable raw Docker call; migrate to a typed actuator operation before the immutable recipe." },
   "apps/web/lib/mcp/build-lifecycle-handlers.ts": { class: "message", count: 2, reason: "Operator remediation text only." },
   "apps/web/lib/mcp/packs/admin-pack.ts": { class: "pending", count: 2, reason: "Writer-reachable raw Docker call; migrate to a typed actuator operation before the immutable recipe." },
@@ -61,7 +62,6 @@ export const DOCKER_AUTHORITY_REGISTRY = Object.freeze({
   "apps/web/lib/operate/backups/extension-preflight.ts": { class: "pending", count: 2, reason: "Writer-reachable raw Docker call; migrate to a typed actuator operation before the immutable recipe." },
   "apps/web/lib/operate/service-restart.ts": { class: "routed", count: 3, reason: "restartActuatorService when the actuator mount is present; a refusal never falls back to shell Docker." },
   "apps/web/lib/platform-runtime/runtime-capability-executor.ts": { class: "pending", count: 1, reason: "Writer-reachable raw Docker call; migrate to a typed actuator operation before the immutable recipe." },
-  "apps/web/lib/queue/functions/infra-prune.ts": { class: "pending", count: 4, reason: "Writer-reachable raw Docker call; migrate to a typed actuator operation before the immutable recipe." },
   "apps/web/lib/queue/functions/substrate-reconciler.ts": { class: "routed", count: 4, reason: "reconcileActuatorSubstrate when the actuator mount is present; the daemon path is the actuator's own owner." },
   "apps/web/lib/routing/capability-probes/probe-engine-readiness.ts": { class: "pending", count: 1, reason: "Writer-reachable raw Docker call; migrate to a typed actuator operation before the immutable recipe." },
   "apps/web/lib/routing/cli-adapter.ts": { class: "pending", count: 3, reason: "Writer-reachable raw Docker call; migrate to a typed actuator operation before the immutable recipe." },
@@ -89,7 +89,7 @@ const PATTERNS = [
   /["']docker["']\s*,\s*(?:\[|\.{3}|[A-Za-z_$][\w$]*\s*[,)])/,
   /^\s*["']docker["'],\s*$/,
   /\bcommand:\s*["']docker["']/,
-  /[`"']docker\s+(?:exec|run|compose|inspect|ps|rm|image|start|stop|restart|logs|info|cp|create|buildx|network|volume|pull|build|kill|container|system)\b/,
+  /[`"']docker\s+(?:exec|run|compose|inspect|ps|rm|rmi|image|images|start|stop|restart|logs|info|cp|create|buildx|builder|network|volume|pull|push|build|kill|container|system|tag|save|load|commit|wait|update|top|stats|port|attach|events|version|context|manifest|login|history|pause|unpause)\b/,
 ];
 
 function stripComments(source) {
