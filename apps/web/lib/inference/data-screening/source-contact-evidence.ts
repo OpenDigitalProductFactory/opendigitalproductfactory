@@ -28,6 +28,14 @@ const CUSTOMER_CONTEXT = "\\b(?:customer|client|contact|patient|member|subscribe
 const RESERVED_PLACEHOLDER_EMAIL_PATTERN = new RegExp(
   `(?<!${CUSTOMER_CONTEXT})(?<![A-Z0-9._%+-])${PLACEHOLDER_LOCAL_PART}@${RESERVED_DOMAIN}(?![A-Z0-9.@+%_-])`, "i");
 
+// Exact reserved review mailbox in the fixture's input and its expected
+// disclosure row. The caller restricts this pattern to public-source review.
+export const SYNTHETIC_REVIEW_RECIPIENT_PATTERN = new RegExp(
+  '(?<!' + CUSTOMER_CONTEXT + ')' +
+    '(?<=\\brecipient\\s*:\\s*"|\\{\\s*label\\s*:\\s*"Recipient"\\s*,\\s*value\\s*:\\s*")' +
+    'review@example\\.test(?=")', "i",
+);
+
 // Explicit unquoted resource quantities, deterministic test seeds and versioned
 // patch paths supplied by a source diff are not phone/email values. Strip only
 // their spans, never the surrounding message: adjacent actual contact data must
@@ -40,3 +48,16 @@ export const SOURCE_CONTACT_EXEMPTION_PATTERN = new RegExp([
   /(?:^|[\n{,])[\t +\-]*["']?(?:memoryBytes|admissionReserveBytes|observedHighWaterBytes|safetyMarginBytes|seed)["']?[\t ]*:[\t ]*\d+(?=[\t ]*(?:[,}\r\n]|$))/.source,
   /\bpatches\/[A-Z0-9._+\-]+@\d+\.\d+\.\d+(?:-[A-Z0-9.\-]+)?\.patch(?![A-Z0-9._@+%/\-])/.source,
 ].join("|"), "im");
+
+/**
+ * Remove every occurrence of `exemption` from `text` so a rule's own pattern is
+ * evaluated against the remainder only. Returns the text unchanged when the
+ * exemption never matches, so the common path costs one failed regex test.
+ */
+export function stripExemptSpans(text: string, exemption: RegExp): string {
+  const global = exemption.global
+    ? exemption
+    : new RegExp(exemption.source, `${exemption.flags}g`);
+  global.lastIndex = 0;
+  return text.replace(global, " ");
+}

@@ -45,6 +45,7 @@ import { resolveHumanWorkroomAccess } from "@/lib/work-management/workroom-agent
 
 import { attentionAuthorForAgent } from "../attribution";
 import {
+  duplicateBacklogRequest,
   envelopeIdFromExecutionResult,
   summarizeCoworkerEnvelopeDecision,
   originalToolParameters,
@@ -77,6 +78,7 @@ export type CoworkerEnvelopeRow = {
   /** The tool's declared consequence, resolved from the tool registry. */
   consequence?: string | null;
   targetLabel?: string;
+  duplicateLabel?: string;
   taskRun: { a2aMetadata: unknown } | null;
   /** The gate's recorded decision: decides whether "don't ask again" is offered. */
   authorityDecision?: { rationale: unknown } | null;
@@ -191,6 +193,7 @@ export function coworkerEnvelopeToAttentionItem(
     consequence: row.consequence ?? null,
     rationale: row.rationale,
     targetLabel: row.targetLabel,
+    duplicateLabel: row.duplicateLabel,
   });
   const approval: AttentionEnvelopeApproval = {
     envelopeId: row.id,
@@ -384,7 +387,7 @@ export async function loadCoworkerEnvelopeItems(
           ? { proposedParameters: proposedByEnvelopeId.get(row.id) }
           : {}),
         consequence: consequenceByTool.get(row.manifestActionId) ?? null,
-        targetLabel: targetLabels.get(row.id),
+        ...targetLabels.get(row.id),
       },
       nowMs,
     ),
@@ -432,7 +435,7 @@ export async function loadOnBehalfEnvelopeItem(
     ...row,
     ...(proposed.has(row.id) ? { proposedParameters: proposed.get(row.id) } : {}),
     consequence: consequences.get(row.manifestActionId) ?? null,
-    targetLabel: targetLabels.get(row.id),
+    ...targetLabels.get(row.id),
   }, nowMs);
   if (!item.envelope) return [item];
   return [{
@@ -443,13 +446,22 @@ export async function loadOnBehalfEnvelopeItem(
 
 /** Names enrich presentation only, after the actual viewer's room policy passes. */
 async function loadTargetLabels(db: Db, rows: CoworkerEnvelopeRow[], proposed: Map<string, unknown>, userId: string) {
-  const labels = new Map<string, string>();
-  const refs = rows.flatMap(row => {
+  type Labels = Pick<CoworkerEnvelopeRow, "targetLabel" | "duplicateLabel">;
+  type Ref = { envelopeId: string; kind: "room" | "item"; role: keyof Labels; value: string };
+  const labels = new Map<string, Labels>();
+  const refs = rows.flatMap<Ref>(row => {
     const params = originalToolParameters(proposed.get(row.id)) ?? originalToolParameters(row.argsJson);
+    const duplicate = params ? duplicateBacklogRequest(row.manifestActionId, params) : null;
+    if (duplicate) return [
+      { envelopeId: row.id, kind: "item", role: "targetLabel", value: duplicate.canonicalId },
+      { envelopeId: row.id, kind: "item", role: "duplicateLabel", value: duplicate.duplicateId },
+    ];
     const roomTarget = ["record_workroom_evidence", "reassign_workroom_executor"].includes(row.manifestActionId);
     const itemTarget = ["record_execution_evidence", "record_initiative_evidence"].includes(row.manifestActionId);
     const value = roomTarget ? params?.capsuleId : itemTarget ? params?.itemId ?? reviewBindingOf(row)?.itemId : undefined;
-    return typeof value === "string" && value.trim() ? [{ envelopeId: row.id, kind: roomTarget ? "room" : "item", value: value.trim() }] : [];
+    return typeof value === "string" && value.trim()
+      ? [{ envelopeId: row.id, kind: roomTarget ? "room" : "item", role: "targetLabel", value: value.trim() }]
+      : [];
   });
   if (!refs.length) return labels;
   try {
@@ -487,7 +499,9 @@ async function loadTargetLabels(db: Db, rows: CoworkerEnvelopeRow[], proposed: M
       if (!room) continue;
       const item = namedItems.find(item => item.id === room.backlogItemId || item.itemId === room.backlogItemId);
       const name = (item?.title ?? namedRooms.find(named => named.id === room.id)?.title ?? "").trim();
-      if (name && !/\b(?:BI|WC|AGT|TR)-[\w-]+\b/.test(name)) labels.set(ref.envelopeId, name);
+      if (name && !/\b(?:BI|WC|AGT|TR)-[\w-]+\b/.test(name)) {
+        labels.set(ref.envelopeId, { ...labels.get(ref.envelopeId), [ref.role]: name });
+      }
     }
   } catch {
     // Missing enrichment never grants access or prevents the original decision.

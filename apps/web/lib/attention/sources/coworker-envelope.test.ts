@@ -8,6 +8,7 @@ import {
   loadCoworkerEnvelopeItems,
   type CoworkerEnvelopeRow,
 } from "./coworker-envelope";
+import { envelopePrimaryDecision } from "../coworker-envelope-decision";
 import { classifyOwnerAttentionLane } from "../owner-routing";
 import { buildOwnerAttentionProjection } from "../owner-projection";
 import { portfolioOf } from "../outside-in";
@@ -296,6 +297,38 @@ describe("loadCoworkerEnvelopeItems", () => {
     expect(items[0]?.envelope?.decision.targetLabel).toBe(admitted ? "Repair the coworker inbox" : undefined);
     expect(humanRoomAccess).toHaveBeenCalledWith({ userId: OWNER, workroomId: "room-row", requested: "content" }, db);
     expect(JSON.parse(items[0]!.envelope!.decision.completeProposedContent!)).toEqual(row.argsJson);
+  });
+
+  it("names only the affected backlog records the actual reader may see", async () => {
+    humanRoomAccess.mockClear();
+    humanRoomAccess.mockImplementation(async ({ workroomId }) => ({
+      decision: { level: workroomId === "keep-room" ? "content" : "none" },
+    }));
+    const row = envelope({ manifestActionId: "merge_backlog_items", proposedParameters: undefined,
+      argsJson: { duplicateItemId: "BI-DUP", canonicalItemId: "BI-KEEP" } });
+    const stub = stubDb([row]);
+    const records = [
+      { id: "keep-row", itemId: "BI-KEEP", title: "Fix inbox copy" },
+      { id: "dup-row", itemId: "BI-DUP", title: "Restricted duplicate description" },
+    ];
+    const rooms = [
+      { id: "keep-room", capsuleId: "WC-KEEP", backlogItemId: "keep-row", title: "Keep room" },
+      { id: "dup-room", capsuleId: "WC-DUP", backlogItemId: "dup-row", title: "Duplicate room" },
+    ];
+    const db = {
+      ...stub.db as object,
+      workroom: { findMany: vi.fn(async () => rooms) },
+      backlogItem: { findMany: vi.fn(async (args) => args.select.title ? records.slice(0, 1) : records) },
+    };
+    const items = await loadCoworkerEnvelopeItems(db as never, OWNER, NOW);
+    const decision = items[0]!.envelope!.decision;
+    const primary = envelopePrimaryDecision(decision);
+    expect(primary.description).toContain("Fix inbox copy");
+    expect(primary.description).toContain("BI-DUP");
+    expect(JSON.stringify(decision)).not.toContain("Restricted duplicate description");
+    expect(db.backlogItem.findMany.mock.lastCall?.[0].where).toEqual({
+      OR: [{ id: { in: ["keep-row"] } }, { itemId: { in: ["keep-row"] } }],
+    });
   });
 
   it("projects the authenticated delegating user's proposed envelopes", async () => {
