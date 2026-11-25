@@ -23,6 +23,7 @@ async function main() {
       promoterCandidate: (body: unknown) => Promise<unknown>;
       doctoolsImage: (body: unknown) => Promise<unknown>;
       reassessmentCandidate: (body: unknown) => Promise<unknown>;
+      runtimeProtocol: (body: unknown) => Promise<unknown>;
     }): Promise<void>;
   };
   let previewPass: ReturnType<typeof fenceEndedPreviewRuntimesAtDaemon> | undefined;
@@ -180,6 +181,14 @@ async function main() {
             ...(nameIndex >= 0 ? { containerName: args[nameIndex + 1] } : {}) });
         } }),
       })(body);
+    },
+    // The probe has no mounts or launch authority; the snapshot is data bound
+    // into the probe by hash, and a release must name the install's own owner.
+    runtimeProtocol: async body => {
+      const snapshot = body && typeof body === "object" && Object.keys(body).length === 1 ? (body as { observedHostSnapshot?: unknown }).observedHostSnapshot : undefined;
+      if (snapshot === undefined || (snapshot !== null && (typeof snapshot !== "object" || Array.isArray(snapshot)))) throw new Error("runtime_protocol_admission_refused");
+      const { inspectPackagedReconciliationProtocolAtDaemon } = await import("./runtime-capability-executor");
+      return inspectPackagedReconciliationProtocolAtDaemon((snapshot ?? undefined) as never, process.env.GHCR_OWNER?.trim().toLowerCase() ?? "");
     },
     doctools: createDoctoolsActuator(project),
     openRuntimeSession: createSandboxSessionActuator(),

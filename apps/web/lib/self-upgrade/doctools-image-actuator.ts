@@ -1,12 +1,12 @@
-// Release document-converter image operations through the private actuator
-// (BI-224F56F1).
+// Release image operations through the private actuator (BI-224F56F1).
 //
-// The doctools pre-pull and the boot reconciler resolve, inspect and pull the
-// release's dpf-doctools image. In the qualified portal those Docker calls go
-// to the actuator as three fixed operations, and only for the install's own
-// registry repository: ghcr.io/<GHCR_OWNER>/dpf-doctools, by immutable tag or
-// digest. The actuator builds the Docker argv itself; the portal's argv is
-// only mapped to an operation name and never forwarded.
+// The doctools pre-pull and boot reconciler, the runtime-capability service
+// image plan and the promoter availability check resolve, inspect and pull a
+// few known images. In the qualified portal those Docker calls go to the
+// actuator as three fixed operations, each admitted only for the install's own
+// registry repositories (ghcr.io/<GHCR_OWNER>/...) or the local promoter, by
+// immutable tag or digest. The actuator builds the Docker argv itself; the
+// portal's argv is only mapped to an operation name and never forwarded.
 
 import { isRecord } from "@/lib/shared/coerce";
 
@@ -20,15 +20,28 @@ const DIGEST = /^sha256:[a-f0-9]{64}$/;
 const refuse = (): never => { throw new Error("doctools_image_admission_refused"); };
 const tail = (text: string) => text.slice(-8 * 1024);
 
-/** The install's converter repository, by tag or digest. */
+/** Which operations each of the install's registry repositories admits. */
+const REPOSITORIES: Record<string, readonly DoctoolsImageOperation[]> = {
+  "dpf-doctools": ["resolve", "present", "pull"],
+  "dpf-browser-use": ["resolve"],
+  "dpf-promoter": ["present"],
+};
+/** The locally built promoter, by name, target tag or image ID: presence only. */
+const LOCAL_PROMOTER = /^(?:dpf-promoter(?::[a-f0-9]{40})?|sha256:[a-f0-9]{64})$/;
+
+/** An admitted reference for this operation, or a refusal. */
 export function admitDoctoolsReference(reference: unknown, ghcrOwner: string | undefined, operation: DoctoolsImageOperation): string {
-  if (typeof reference !== "string" || !ghcrOwner || !OWNER.test(ghcrOwner)) return refuse();
-  const repository = `ghcr.io/${ghcrOwner}/dpf-doctools`;
-  const tagged = reference.startsWith(`${repository}:`) && TAG.test(reference.slice(repository.length + 1));
-  const pinned = reference.startsWith(`${repository}@`) && DIGEST.test(reference.slice(repository.length + 1));
-  // Resolution reads a published tag's manifest; presence and pull take either form.
-  if (operation === "resolve" ? !tagged : !(tagged || pinned)) return refuse();
-  return reference;
+  if (typeof reference !== "string") return refuse();
+  if (operation === "present" && LOCAL_PROMOTER.test(reference)) return reference;
+  if (!ghcrOwner || !OWNER.test(ghcrOwner)) return refuse();
+  for (const [name, operations] of Object.entries(REPOSITORIES)) {
+    const repository = `ghcr.io/${ghcrOwner}/${name}`;
+    const tagged = reference.startsWith(`${repository}:`) && TAG.test(reference.slice(repository.length + 1));
+    const pinned = reference.startsWith(`${repository}@`) && DIGEST.test(reference.slice(repository.length + 1));
+    // Resolution reads a published tag's manifest; presence and pull take either form.
+    if (operations.includes(operation) && (operation === "resolve" ? tagged : tagged || pinned)) return reference;
+  }
+  return refuse();
 }
 
 const ARGV: Record<DoctoolsImageOperation, (reference: string) => string[]> = {

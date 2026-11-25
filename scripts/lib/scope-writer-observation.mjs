@@ -26,6 +26,7 @@ const sourceWriterPath = '/v1/runtime/source-writer';
 const promoterCandidatePath = '/v1/runtime/promoter-candidate';
 const doctoolsImagePath = '/v1/runtime/doctools-image';
 const reassessmentCandidatePath = '/v1/runtime/reassessment-candidate';
+const runtimeProtocolPath = '/v1/runtime/runtime-protocol';
 const promoterLaunchRequestLimit = 256 * 1024;
 const promoterLaunchResponseLimit = 600 * 1024;
 const doctoolsPath = '/v1/runtime/doctools/';
@@ -75,7 +76,7 @@ async function readBoundedStream(stream, bytes) {
  * The observer derives scope from host-owned state, never from the request. */
 export function createScopeWriterObserver({ observe, observeServices, observeCiCapacity, readRetirement, fencePreviews,
   reconcileSubstrate, readServiceLogs, observeProjectContainers, observePortalImage, observeSandbox, sweepPromoters,
-  doctools, openRuntimeSession, readReassessmentProof, restartService, pruneDockerDisk, launchPromoter, sourceWriter, promoterCandidate, doctoolsImage, reassessmentCandidate }) {
+  doctools, openRuntimeSession, readReassessmentProof, restartService, pruneDockerDisk, launchPromoter, sourceWriter, promoterCandidate, doctoolsImage, reassessmentCandidate, runtimeProtocol }) {
   const operations = new Map([
     [`GET ${cohortPath}`, observe], [`GET ${projectServicesPath}`, observeServices],
     [`GET ${ciCapacityPath}`, observeCiCapacity],
@@ -89,7 +90,7 @@ export function createScopeWriterObserver({ observe, observeServices, observeCiC
     [`POST ${pruneDockerDiskPath}`, pruneDockerDisk],
   ]);
   let doctoolsInFlight = 0;
-  const jsonRoutes = new Map([[promoterLaunchPath, launchPromoter], [sourceWriterPath, sourceWriter], [promoterCandidatePath, promoterCandidate], [doctoolsImagePath, doctoolsImage], [reassessmentCandidatePath, reassessmentCandidate]]
+  const jsonRoutes = new Map([[promoterLaunchPath, launchPromoter], [sourceWriterPath, sourceWriter], [promoterCandidatePath, promoterCandidate], [doctoolsImagePath, doctoolsImage], [reassessmentCandidatePath, reassessmentCandidate], [runtimeProtocolPath, runtimeProtocol]]
     .filter(([, owner]) => owner));
   let jsonActionsInFlight = 0;
   const server = createServer({ headersTimeout: 2_000, requestTimeout: 2_000, maxHeaderSize: 1024 }, async (req, res) => {
@@ -431,6 +432,15 @@ export function runActuatorSourceWriter(body, { socketPath = SCOPE_WRITER_OBSERV
     return Promise.reject(unavailable());
   }
   return requestActuator(sourceWriterPath, socketPath, { method: 'POST', timeoutMs, maxBytes: 64 * 1024, body });
+}
+
+/** The packaged runtime-capability protocol probe (BI-224F56F1). */
+export function probeActuatorRuntimeProtocol(body, { socketPath = SCOPE_WRITER_OBSERVER_SOCKET, timeoutMs }) {
+  const size = Buffer.byteLength(JSON.stringify(body ?? null));
+  if (!body || typeof body !== 'object' || size > 64 * 1024 || !Number.isSafeInteger(timeoutMs) || timeoutMs < 1) {
+    return Promise.reject(unavailable());
+  }
+  return requestActuator(runtimeProtocolPath, socketPath, { method: 'POST', timeoutMs, maxBytes: 64 * 1024, body });
 }
 
 /** The reassessment proof of a running self-upgrade run's candidate (BI-224F56F1). */

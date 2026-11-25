@@ -415,3 +415,27 @@ it('carries one bounded candidate stage request to its owner only', unixOnly, as
     assert.deepEqual(received, [body]);
   });
 });
+
+it('carries image, reassessment and runtime protocol requests only to their own owners', unixOnly, async () => {
+  const { createScopeWriterObserver, runActuatorDoctoolsImage, proveActuatorReassessmentCandidate, probeActuatorRuntimeProtocol } = await load();
+  const received = [];
+  const owner = (name, reply) => async body => { received.push([name, body]); return reply; };
+  await withServer(observe => createScopeWriterObserver({ observe,
+    doctoolsImage: owner('image', { exitCode: 0, stdout: 'sha256:x', stderr: '' }),
+    reassessmentCandidate: owner('reassessment', { proof: true }),
+    runtimeProtocol: owner('protocol', { info: true }),
+  }), async () => ({}), async socketPath => {
+    const image = { operation: 'present', reference: `dpf-promoter:${'a'.repeat(40)}` };
+    const reassessment = { owner: { kind: 'self-upgrade', runId: 'SUR-R1' }, input: { targetSha: 'a'.repeat(40), release: false } };
+    const protocol = { observedHostSnapshot: null };
+    assert.deepEqual(await runActuatorDoctoolsImage(image, { socketPath, timeoutMs: 2_000 }), { exitCode: 0, stdout: 'sha256:x', stderr: '' });
+    assert.deepEqual(await proveActuatorReassessmentCandidate(reassessment, { socketPath, timeoutMs: 2_000 }), { proof: true });
+    assert.deepEqual(await probeActuatorRuntimeProtocol(protocol, { socketPath, timeoutMs: 2_000 }), { info: true });
+    await assert.rejects(proveActuatorReassessmentCandidate({ pad: 'x'.repeat(2048) }, { socketPath, timeoutMs: 2_000 }));
+    await assert.rejects(probeActuatorRuntimeProtocol({ pad: 'x'.repeat(70 * 1024) }, { socketPath, timeoutMs: 2_000 }));
+    for (const path of ['/v1/runtime/doctools-image', '/v1/runtime/reassessment-candidate', '/v1/runtime/runtime-protocol']) {
+      assert.equal(await call(socketPath, { method: 'GET', path }), 404);
+    }
+    assert.deepEqual(received, [['image', image], ['reassessment', reassessment], ['protocol', protocol]]);
+  });
+});

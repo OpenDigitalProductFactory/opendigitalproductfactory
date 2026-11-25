@@ -23,6 +23,22 @@ describe("admitDoctoolsReference", () => {
     }
     expect(() => admitDoctoolsReference(tagged, undefined, "pull")).toThrow();
   });
+
+  it("admits the other release repositories and the local promoter only for their own operations", () => {
+    const browser = `ghcr.io/${owner}/dpf-browser-use:v2026.11.25-release.1`;
+    const promoter = `ghcr.io/${owner}/dpf-promoter:v2026.11.25-release.1`;
+    const local = `dpf-promoter:${"c".repeat(40)}`;
+    expect(admitDoctoolsReference(browser, owner, "resolve")).toBe(browser);
+    expect(admitDoctoolsReference(promoter, owner, "present")).toBe(promoter);
+    expect(admitDoctoolsReference(local, undefined, "present")).toBe(local);
+    expect(admitDoctoolsReference(`sha256:${"d".repeat(64)}`, undefined, "present")).toBe(`sha256:${"d".repeat(64)}`);
+    for (const [reference, operation] of [
+      [browser, "pull"], [browser, "present"], [promoter, "pull"], [promoter, "resolve"],
+      [local, "pull"], [local, "resolve"], ["dpf-promoter:latest", "present"], ["dpf-portal:local", "present"],
+    ] as const) {
+      expect(() => admitDoctoolsReference(reference, owner, operation)).toThrow("doctools_image_admission_refused");
+    }
+  });
 });
 
 describe("createDoctoolsImageOperator", () => {

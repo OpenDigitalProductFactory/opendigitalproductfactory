@@ -460,26 +460,11 @@ export function buildPromoterReadinessCommand(
  * dryRun never swaps, so callers skip this check on the dry-run path.
  */
 export async function isPromoterAvailable(promoterImage?: string): Promise<boolean> {
-  const image =
-    promoterImage && promoterImage.length > 0 ? promoterImage : DEFAULT_PROMOTER_IMAGE;
-  return new Promise((resolve) => {
-    let settled = false;
-    const finish = (ok: boolean): void => {
-      if (settled) return;
-      settled = true;
-      resolve(ok);
-    };
-    try {
-      const child = spawn("docker", ["image", "inspect", image], { env: { ...process.env } });
-      // Drain stdio so the child can exit cleanly; we only care about the code.
-      child.stdout?.on("data", () => {});
-      child.stderr?.on("data", () => {});
-      child.on("close", (code: number | null) => finish(code === 0));
-      child.on("error", () => finish(false));
-    } catch {
-      finish(false);
-    }
-  });
+  const args = ["image", "inspect", "--format", "{{.Id}}", promoterImage && promoterImage.length > 0 ? promoterImage : DEFAULT_PROMOTER_IMAGE];
+  // BI-224F56F1: the qualified portal asks the actuator's fixed presence check.
+  const result = (await (await import("./doctools-image-actuator")).doctoolsDockerThroughActuator(args).catch(() => null))
+    ?? await runProcessWithBudget("docker", args, { timeoutMs: 30_000, maxStdoutBytes: 1024 }).catch(() => null);
+  return result?.exitCode === 0;
 }
 
 /**
