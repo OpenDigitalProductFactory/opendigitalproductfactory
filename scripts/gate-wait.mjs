@@ -108,7 +108,7 @@ export async function waitForGate({
         // durable claim while this wrapper waited without custody.
         if (waited) continue;
       }
-      const { code, launchError } = await runGate();
+      const { code, launchError } = await runGate({ deadlineAt });
       let verdict = classifyGateExit({ code });
       if (verdict.kind === "spawn-failed" && launchError) {
         verdict = { ...verdict, summary: `${verdict.summary}; ${launchError}` };
@@ -223,7 +223,9 @@ export async function main(argv = process.argv.slice(2)) {
     deadlineMinutes: options.deadlineMinutes ?? DEFAULTS.deadlineMinutes,
     // Foreground and UNPIPED — the runbook lists redirecting pregate's output as
     // the most common way to lose a run, so the console goes straight through.
-    runGate: () => runPregate(),
+    runGate: ({ deadlineAt }) => runPregate({
+      env: { ...process.env, DPF_LOCAL_CI_OUTER_DEADLINE_MS: String(deadlineAt) },
+    }),
     readStatus: () => {
       const run = spawnSync(process.execPath, [resolve(REPO_ROOT, "scripts/pregate-status.mjs"), "--json"], { cwd: REPO_ROOT, encoding: "utf8" });
       return parseGateStatus(run.stdout);

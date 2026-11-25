@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, w
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
+import * as reservation from "./local-convergence-lock.mjs";
 
 import {
   acquireLocalConvergenceLock,
@@ -14,6 +15,49 @@ import {
 } from "./local-convergence-lock.mjs";
 
 const NOW = new Date("2026-08-12T17:00:00.000Z");
+
+test("mid-run DPF2 wait has a fresh budget after late admission, bounded by the outer gate", async () => {
+  const admissionDeadline = NOW.getTime();
+  let clock = admissionDeadline + 5_000;
+  const started = clock;
+  const outerDeadline = started + 70_000;
+  const env = {
+    DPF_LOCAL_CI_RESERVATION_DEADLINE_MS: String(admissionDeadline),
+    DPF_LOCAL_CI_OUTER_DEADLINE_MS: String(outerDeadline),
+  };
+  const deadline = reservation.dpf2ReservationDeadline(env, () => clock);
+  assert.equal(deadline, outerDeadline);
+  assert.equal(reservation.dpf2ReservationDeadline({}, () => clock), started + 60 * 60_000);
+  assert.equal(await reservation.waitForDpf2Reservation({
+    inspect: () => ({ status: "free" }), now: () => clock, deadline, notice: () => {},
+  }), "clear");
+  // A later phase sees a new hold after the first phase started unblocked.
+  clock += 5_000;
+  const sleeps = [];
+  assert.equal(await reservation.waitForDpf2Reservation({
+    now: () => clock, deadline,
+    inspect: () => ({ status: clock < started + 55_000 ? "held" : "free" }),
+    sleep: async ms => { sleeps.push(ms); clock += ms; },
+    notice: () => {},
+  }), "clear");
+  assert.deepEqual(sleeps, [30_000, 30_000]);
+});
+
+test("configured DPF2 path is read-only and parseable unknown owner formats wait even when old", (t) => {
+  const directory = mkdtempSync(join(tmpdir(), "dpf2-format-"));
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
+  const path = join(directory, "foreign.lock");
+  const env = { DPF2_CI_SLOT_LOCK: `  ${path}  ` };
+  assert.equal(reservation.dpf2ReservationPath(env, "darwin"), path);
+  assert.equal(reservation.dpf2ReservationPath({}, "darwin"), "/tmp/dpf2-local-ci.lock");
+  assert.equal(reservation.dpf2ReservationPath({}, "linux"), null);
+  const raw = '{"schemaVersion":2,"owner":"new protocol"}';
+  writeFileSync(path, raw);
+  const observed = inspectDpf2CiReservation({ env, now: () => Date.now() + 5000 });
+  assert.equal(observed.status, "unknown-owner");
+  assert.equal(dpf2ReservationBlocks(observed), true);
+  assert.equal(readFileSync(path, "utf8"), raw);
+});
 
 test("DPF observes DPF2's held, initializing, stale and released lock without taking ownership", (t) => {
   const directory = mkdtempSync(join(tmpdir(), "dpf2-reservation-"));

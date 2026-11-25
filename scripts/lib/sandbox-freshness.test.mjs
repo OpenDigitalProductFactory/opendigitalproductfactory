@@ -748,7 +748,7 @@ test("a DPF2 wait timeout never grades an incomplete gate, including before fres
     assert.equal(outcome.productEvidence, false);
     assert.match(outcome.summary, /resume after the reservation clears/i);
   }
-  assert.equal(fallbackStatusForUnknown("blocked_dpf2_reservation").status, "blocked_control_plane_starvation");
+  assert.equal(fallbackStatusForUnknown("blocked_dpf2_reservation").status, "blocked_sandbox_drift");
 });
 
 // BI-FCC1DCB2. A candidate that does not merge onto origin/main was recorded as

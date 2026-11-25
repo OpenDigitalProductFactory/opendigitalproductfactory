@@ -271,8 +271,9 @@ test("gate:wait starts exactly one attempt after the DPF2 holder releases", asyn
   const since = "2026-11-25T18:58:00.000Z";
   const result = await waitForGate({
     readStatus: noStatus,
-    runGate: async () => {
+    runGate: async ({ deadlineAt }) => {
       assert.equal(clock, 30_000);
+      assert.equal(deadlineAt, 60 * 60_000);
       launches++;
       return { code: 0 };
     },

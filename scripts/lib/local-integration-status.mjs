@@ -38,11 +38,29 @@ export function isLocalIntegrationStatus(value) {
  * An older portal cannot know a status a newer gate emits, and the gate must
  * still leave evidence — an unrecorded run is what bricks the tree. `failed` is
  * the honest floor: it is never mistaken for a pass, and the prefixed summary
- * keeps the real class legible to a human reading the record.
+ * keeps the real class legible to a human reading the record. A DPF2 wait
+ * uses a known blocked status instead, without signaling slot failure.
  */
 export function fallbackStatusForUnknown(status) {
   return {
-    status: status === "blocked_dpf2_reservation" ? "blocked_control_plane_starvation" : "failed",
+    status: status === "blocked_dpf2_reservation" ? "blocked_sandbox_drift" : "failed",
     summaryPrefix: `[${String(status).toUpperCase()} — not product evidence]`,
+  };
+}
+
+export function fallbackRecordForUnknownStatus(record) {
+  const fallback = fallbackStatusForUnknown(record.status);
+  let evidence = record.evidence;
+  if (record.status === "blocked_dpf2_reservation" && evidence?.slotManifest) {
+    // Older breakers contract on any non-pass with a slot-1 slotManifest.
+    // Preserve the actual slot as provenance, not a slot-health signal.
+    const { slotManifest, ...rest } = evidence;
+    evidence = { ...rest, reservationBlockedSlotManifest: slotManifest };
+  }
+  return {
+    ...record,
+    status: fallback.status,
+    summary: `${fallback.summaryPrefix} ${record.summary}`,
+    evidence,
   };
 }

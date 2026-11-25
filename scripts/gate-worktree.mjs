@@ -68,7 +68,7 @@ import { classifyGateOutcome, EXIT_CANDIDATE_MERGE_CONFLICT, EXIT_CHILD_SIGNAL_D
 import { SLOT_SUBSTRATE_UNAVAILABLE_STATUS, assessSlotSubstrate, ensureSlotPostgres } from "./lib/local-ci-slot-substrate.mjs";
 import { GATE_CLIENT_REVISION } from "./lib/gate-client-revision.mjs";
 import { buildIsDelegated, defaultBuildStrategy, metadataMergeConflictForRun } from "./lib/local-integration-ci.mjs";
-import { fallbackStatusForUnknown } from "./lib/local-integration-status.mjs";
+import { fallbackRecordForUnknownStatus } from "./lib/local-integration-status.mjs";
 import {
   createRetryableRelease,
   admittedLeaseTtlMs,
@@ -112,7 +112,8 @@ import {
 } from "./lib/local-ci-host-pressure.mjs";
 import {
   describeDpf2Reservation,
-  DPF2_CI_RESERVATION_PATH,
+  dpf2ReservationDeadline,
+  dpf2ReservationPath,
   DPF2_RESERVATION_POLL_MS,
   dpf2ReservationBlocks,
   inspectDpf2CiReservation,
@@ -297,7 +298,7 @@ async function observeLocalCiHostPressure(input) {
     createLocalCiSlotManifest({ ...input, slotKey }));
   return sampleLocalCiHostPressure({
     rootPath: input.rootClone,
-    dpf2LockPath: process.platform === "darwin" ? DPF2_CI_RESERVATION_PATH : null,
+    dpf2LockPath: dpf2ReservationPath(),
     convergenceLockPaths: manifests.map(
       (manifest) => manifest.dependencies.convergenceLock,
     ),
@@ -2487,6 +2488,7 @@ async function main() {
   // Durable remote admission is authoritative. The host-process fence is a
   // second, local safety belt acquired only after this waiter owns and has
   // bound the server-assigned slot.
+  let reservationWaitDeadline = null;
   for (;;) {
     if (receivedSignal) {
       await releaseLeaseOnce();
@@ -2500,6 +2502,10 @@ async function main() {
     // lease in the same loop without starting any slot mutation or child.
     const reservation = inspectDpf2CiReservation();
     const blockedByDpf2 = dpf2ReservationBlocks(reservation);
+    reservationWaitDeadline = blockedByDpf2
+      ? reservationWaitDeadline ?? dpf2ReservationDeadline()
+      : null;
+    const fenceDeadline = reservationWaitDeadline ?? deadline;
     const localFence = blockedByDpf2 ? { status: "conflict" } : acquireLocalSandboxFence({
       path: localFencePath,
       ownerSessionId,
@@ -2532,7 +2538,7 @@ async function main() {
       });
       localFence.liveMutatorPids = liveMutatorPids;
     }
-    if (Date.now() >= deadline) {
+    if (Date.now() >= fenceDeadline) {
       await releaseLeaseOnce();
       if (blockedByDpf2) {
         process.stderr.write(`gate-worktree: timed out waiting for ${describeDpf2Reservation(reservation)}; execution unrun.\n`);
@@ -2553,7 +2559,7 @@ async function main() {
       process.stderr.write(
         `gate-worktree: lease heartbeat uncertain while waiting for the host fence (${error.message}); retrying within known authority\n`,
       );
-      await sleep(Math.min(options.pollSeconds * 1000, Math.max(10, deadline - Date.now())));
+      await sleep(Math.min(options.pollSeconds * 1000, Math.max(10, fenceDeadline - Date.now())));
       continue;
     }
     if (renewal?.success !== true) {
@@ -2576,7 +2582,7 @@ async function main() {
     }
     await sleep(Math.min(
       blockedByDpf2 ? DPF2_RESERVATION_POLL_MS : options.pollSeconds * 1000,
-      Math.max(10, deadline - Date.now()),
+      Math.max(10, fenceDeadline - Date.now()),
     ));
   }
   try {
@@ -2630,7 +2636,8 @@ async function main() {
       DPF_LOCAL_CI_METADATA_FILE: metadataFile,
       DPF_LOCAL_CI_FRESHNESS_REPORT_FILE: freshnessReportFile,
       DPF_LOCAL_CI_GATE_STATE_FILE: stateFile,
-      DPF_LOCAL_CI_RESERVATION_DEADLINE_MS: String(deadline),
+      // Resolve relative overrides once, before children change cwd to scratch.
+      DPF2_CI_SLOT_LOCK: dpf2ReservationPath() ?? "",
       DPF_NONPROD_LEASE_ID: leaseId,
       DPF_NONPROD_OWNER_SESSION_ID: ownerSessionId,
     },
@@ -2869,15 +2876,10 @@ async function main() {
   // then permanently unable to be gated. Record SOMETHING, always — `failed` is
   // the honest floor and the prefix keeps the real class readable.
   if (evidenceResponse?.error === "invalid_status" && evidenceResponse?.success !== true) {
-    const fallback = fallbackStatusForUnknown(outcome.status);
+    evidenceArgs = fallbackRecordForUnknownStatus(evidenceArgs);
     process.stdout.write(
-      `gate-worktree: portal does not know ${outcome.status} yet; recording as ${fallback.status} with the original class in the summary\n`,
+      `gate-worktree: portal does not know ${outcome.status} yet; recording as ${evidenceArgs.status} with the original class in the summary\n`,
     );
-    evidenceArgs = {
-      ...evidenceArgs,
-      status: fallback.status,
-      summary: `${fallback.summaryPrefix} ${evidenceArgs.summary}`,
-    };
     writePendingEvidence(pendingEvidenceFile, {
       branch, sha, expiresAt, reason: "publication_pending", recordArgs: evidenceArgs,
     });

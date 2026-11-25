@@ -15,6 +15,15 @@ export declare function isLocalIntegrationStatus(
 ): value is LocalIntegrationStatus;
 
 export declare function fallbackStatusForUnknown(status: string): {
-  status: "failed" | "blocked_control_plane_starvation";
+  status: "failed" | "blocked_sandbox_drift";
   summaryPrefix: string;
+};
+
+export declare function fallbackRecordForUnknownStatus<T extends {
+  status: string;
+  summary: string;
+  evidence: unknown;
+}>(record: T): Omit<T, "status" | "evidence"> & {
+  status: "failed" | "blocked_sandbox_drift";
+  evidence: unknown;
 };

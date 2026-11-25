@@ -181,8 +181,9 @@ TypeScript errors only surface in `next build`, not in `vitest` or IDE checks. R
 ### DPF2 quiet windows on the shared Mac
 
 Before host preflight, local-CI execution, dependency convergence and each
-subsequent gate command, the host runner rechecks DPF2's `/tmp/dpf2-local-ci.lock`
-(BI-577A2F9F). Every client uses the same runner. A queued claim can also report
+subsequent gate command, the host runner rechecks DPF2's `DPF2_CI_SLOT_LOCK`
+path, defaulting to `/tmp/dpf2-local-ci.lock` on macOS (BI-577A2F9F).
+Every client uses the same runner. A queued claim can also report
 `dpf2-ci-reservation` as the broker's zero-capacity reason. The portal uses
 the client's observation because it does not share the Mac's PID or temp-file
 namespace. The reservation can only reduce capacity.
@@ -190,17 +191,21 @@ namespace. The reservation can only reduce capacity.
 The observer uses DPF2's `scripts/ci-slot.mjs` ownership rules. A positive PID
 with a nonempty token is live when the PID exists, including when a signal-zero
 probe returns permission denied. An incomplete file stays blocking during the
-owner's two-second write grace. A dead PID or an expired corrupt file is stale.
-A missing file means no reservation; an unreadable file or indeterminate PID
-probe waits conservatively. DPF never rewrites, unlinks, or reclaims the file
+owner's two-second write grace. A dead PID or unparseable contents past that
+grace are stale. A missing file means no reservation. A parsed but unknown
+owner, unreadable file, or indeterminate PID probe waits conservatively.
+DPF never rewrites, unlinks, or reclaims the file
 or publishes its token.
 
 Local phase waits report the reason, PID and acquisition time if readable,
 recheck every 30 seconds or at the deadline and resume on release within the wait
-budget. A deadline is an infrastructure result without a product verdict.
+budget. After admission, a phase gets up to 60 minutes from the start of its
+wait, capped by the outer gate deadline rather than the admission deadline.
+A deadline is an infrastructure result without a product verdict.
 If it expires after execution started, the run records
-`blocked_dpf2_reservation`. It does not cancel a phase already running just
-because a reservation appears.
+`blocked_dpf2_reservation`. A reservation timeout does not shrink configured
+capacity, even on slot-1. A reservation appearing mid-phase does not cancel
+that phase.
 
 **This is a one-sided start check, not mutual exclusion.** DPF can observe
 DPF2's file absent and DPF2 can observe DPF idle before either takes its own

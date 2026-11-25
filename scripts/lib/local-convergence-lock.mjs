@@ -12,7 +12,7 @@ import {
   statSync,
   writeFileSync,
 } from "node:fs";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 
 import { isProcessAlive, readProcessIdentity } from "./local-sandbox-fence.mjs";
 
@@ -22,14 +22,21 @@ const OWNER_FILE = "owner.json";
 // DPF2 owns this host-wide O_EXCL file. Its ci-slot.mjs recognizes a positive
 // PID plus a token, uses kill(pid, 0) with EPERM meaning alive, and ages
 // incomplete JSON against a 2-second write grace. DPF only observes it.
-export const DPF2_CI_RESERVATION_PATH = "/tmp/dpf2-local-ci.lock";
+const DPF2_CI_RESERVATION_PATH = "/tmp/dpf2-local-ci.lock";
 const DPF2_RESERVATION_WAIT_MS = 60 * 60_000;
 const DPF2_CORRUPT_GRACE_MS = 2_000;
 export const DPF2_RESERVATION_POLL_MS = 30_000;
 
 export function dpf2ReservationDeadline(env = process.env, now = Date.now) {
-  const inherited = Number(env.DPF_LOCAL_CI_RESERVATION_DEADLINE_MS);
-  return Number.isFinite(inherited) && inherited > 0 ? inherited : now() + DPF2_RESERVATION_WAIT_MS;
+  const outerDeadline = Number(env.DPF_LOCAL_CI_OUTER_DEADLINE_MS);
+  const phaseDeadline = now() + DPF2_RESERVATION_WAIT_MS;
+  return Number.isFinite(outerDeadline) && outerDeadline > 0
+    ? Math.min(phaseDeadline, outerDeadline) : phaseDeadline;
+}
+
+export function dpf2ReservationPath(env = process.env, platform = process.platform) {
+  const override = env.DPF2_CI_SLOT_LOCK?.trim();
+  return override ? resolve(override) : platform === "darwin" ? DPF2_CI_RESERVATION_PATH : null;
 }
 
 function readDpf2Reservation(path) {
@@ -64,7 +71,8 @@ function reservationSince(ms) {
 }
 
 export function inspectDpf2CiReservation({
-  path = process.platform === "darwin" ? DPF2_CI_RESERVATION_PATH : null,
+  env = process.env,
+  path = dpf2ReservationPath(env),
   now = Date.now,
   processAlive = dpf2PidAlive,
   read = readDpf2Reservation,
@@ -88,13 +96,14 @@ export function inspectDpf2CiReservation({
     owner = JSON.parse(file.raw);
   } catch {
     // An exclusive create may have won but not written its metadata yet.
-  }
-  if (!Number.isInteger(owner?.pid) || owner.pid <= 0
-      || typeof owner.token !== "string" || owner.token.length === 0) {
     return {
       status: now() - file.mtimeMs >= DPF2_CORRUPT_GRACE_MS ? "stale-corrupt" : "initializing",
       ...modified,
     };
+  }
+  if (!Number.isInteger(owner?.pid) || owner.pid <= 0
+      || typeof owner.token !== "string" || owner.token.length === 0) {
+    return { status: "unknown-owner", ...modified };
   }
   const acquiredMs = typeof owner.acquiredAt === "string" ? Date.parse(owner.acquiredAt) : NaN;
   const holder = { pid: owner.pid, ...modified, ...reservationSince(acquiredMs) };
