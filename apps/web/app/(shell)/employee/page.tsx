@@ -2,6 +2,9 @@
 import { cookies } from "next/headers";
 import { orgCurrencyFromSettings } from "@/lib/org-locale/org-locale";
 import { prisma } from "@dpf/db";
+import { namespaceMessages } from "@dpf/i18n";
+import { MessagesProvider } from "@/components/i18n/MessagesProvider";
+import { getLocaleContext } from "@/lib/i18n/locale-context.server";
 import { OwnerFirstSummaryBand } from "@/components/owner-first/OwnerFirstSummary";
 import { OwnerFirstDisclosure } from "@/components/owner-first/OwnerFirstDisclosure";
 import { loadOwnerFirstContext } from "@/lib/owner-first/context";
@@ -49,6 +52,7 @@ type Props = {
 export default async function EmployeePage({ searchParams }: Props) {
   const params = await searchParams;
   const view = typeof params.view === "string" ? params.view : "directory";
+  const { language, formatLocale } = await getLocaleContext();
   // grid/board are view modes OF the directory, not sibling tabs — the platform's
   // in-place-view-toggle pattern (2026-06-06-workbooks-per-surface-integration §4).
   const surfaceView = parseSurfaceView(typeof params.view === "string" ? params.view : null);
@@ -90,6 +94,14 @@ export default async function EmployeePage({ searchParams }: Props) {
 
   const session = await auth();
   const currentUserId = session?.user?.id ?? null;
+  const currentUser = users.find((user) => user.id === currentUserId);
+  const canAddPlatformRole = currentUser?.isActive
+    ? can({
+        platformRole: null,
+        platformRoles: currentUser.groups.map((group) => group.platformRole.roleId),
+        isSuperuser: currentUser.isSuperuser,
+      }, "manage_users")
+    : false;
 
   // Org-chart edits are governed; render read-only for anyone who cannot write (BI-HCM-004).
   const canManageWorkforce = session?.user
@@ -385,16 +397,19 @@ export default async function EmployeePage({ searchParams }: Props) {
             hint="Who holds each role"
           >
             {users.length > 0 && (
-              <HrUserLifecyclePanel
-                roles={roles.map((role) => ({ roleId: role.roleId, name: role.name }))}
-                users={users.map((user) => ({
-                  id: user.id,
-                  email: user.email,
-                  isActive: user.isActive,
-                  isSuperuser: user.isSuperuser,
-                  roleId: user.groups[0]?.platformRole.roleId ?? null,
-                }))}
-              />
+              <MessagesProvider locale={language} formatLocale={formatLocale} messages={{ admin: namespaceMessages(language, "admin") }}>
+                <HrUserLifecyclePanel
+                  canAddRole={canAddPlatformRole}
+                  roles={roles.map((role) => ({ roleId: role.roleId, name: role.name }))}
+                  users={users.map((user) => ({
+                    id: user.id,
+                    email: user.email,
+                    isActive: user.isActive,
+                    isSuperuser: user.isSuperuser,
+                    roleIds: user.groups.map((group) => group.platformRole.roleId).sort(),
+                  }))}
+                />
+              </MessagesProvider>
             )}
 
             <div className="mt-8">

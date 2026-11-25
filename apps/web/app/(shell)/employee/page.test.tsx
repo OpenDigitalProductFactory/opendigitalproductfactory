@@ -18,6 +18,10 @@ vi.mock("next/headers", () => ({
   cookies: vi.fn().mockResolvedValue({ get: () => undefined }),
 }));
 
+vi.mock("@/lib/i18n/locale-context.server", () => ({
+  getLocaleContext: async () => ({ language: "en-US", formatLocale: "en-US" }),
+}));
+
 vi.mock("@/lib/auth", () => ({
   auth: vi.fn().mockResolvedValue({ user: { id: "user-1", platformRole: "HR-000", isSuperuser: false } }),
 }));
