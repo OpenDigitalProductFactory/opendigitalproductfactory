@@ -39,7 +39,7 @@ Source schema: `packages/db/prisma/schema/core-identity.prisma`.
 
 > **Credential hygiene rule:** Authentication secrets and OAuth/MCP bearer tokens are **never** migrated across platforms. DPF2 mints fresh credentials bound to imported `Principal` identities after identity parity is confirmed.
 
-### 2.2 Slice 2 — Active WWWD & WSID Policies
+### 2.2 Slice 2 — Active Policies and Decision Ledger
 
 Source schemas: `packages/db/prisma/schema/decision-governance.prisma`, `packages/db/prisma/schema/knowledge-docs.prisma`.
 
@@ -51,6 +51,16 @@ Source schemas: `packages/db/prisma/schema/decision-governance.prisma`, `package
 | 12 | `WikiPage` (`"WikiPage"`) | (`organizationId = :org_id` AND `status = 'published'` [WWWD overlays]) OR (`id IN (:material_referenced_page_ids)` [WSID profession pages carrying `metadata.professionJurisdiction` / `professionCompetencyLevel`]) | `(organizationId, slug)` / `id` | Base `isKernel = true` pages come from DPF2's kernel seed; org overrides retain `kernelPageId` + `derivedFromKernelVersion` |
 | 13 | `WikiPageRevision` + `WikiPageLink` | Latest revision per exported `WikiPage`; links where both endpoints are in exported `WikiPage` set | `pageId` | Maintains citation graph for PPR / wiki backlinks |
 | 14 | `RegulatoryAutonomyPolicy` + `JurisdictionCriteriaProfile` | Active policies matching `BusinessContext.operatesIn` / `sellsTo` / `employsIn` | `id` | Preserves org regulatory autonomy boundaries |
+| 14a | `DecisionInteraction` (`"DecisionInteraction"`) | Rehearsal set defined in §2.2.1. Final transfer covers all in-scope retained history, not just active profiles or the latest version | `id`, `interactionId`, `profileId`, `profileVersionId` | Same schema in the successor relational plane. Include the WWMD ledger and the business/craft history admitted by scope. Never store the canonical ledger in OS state. |
+
+#### 2.2.1 Decision ledger closure and parity
+
+WWMD evaluation moves closer to the OS, while the [decision ledger stays relational](2026-11-24-wwmd-os-binding-design.md#2-migrate-the-ledger-in-the-same-relational-schema). This adds a requirement to Slice 2. The example export below does not yet include the decision ledger and cannot certify its parity.
+
+- **Prove scope before export.** Organization-owned rows are candidates only for the selected organization. Shared platform/profession profiles and their versions are not tenant ownership evidence. Include their interactions only with proven source-install/tenant provenance. If attribution or a shared chain's scope cannot be established, hold the affected ledger export rather than guessing or exporting another tenant's history. Use a bounded selection of complete, closed chains and representative unsealed rows in rehearsal. Use cursor batches in the final snapshot, with no silent row cap.
+- **Load parents and exact versions first.** Include referenced profile and version rows, including inactive/historical versions and fallback profiles, not only the active-policy slice above. Close populated FKs over `Agent`, `TaskRun`, `FeatureBuild`, `DeliberationRun` and `User` using authorized successor rows and verified identity mappings. Do not ship credential state or manufacture a user/agent to satisfy a FK. If a dependent record cannot be resolved, hold transfer for that set. Resolve child-record dependencies (outcomes, escalation/deferral captures, resolution proposals, voice outputs and evidence reverifications) in the restore inventory before calling the ledger complete.
+- **Preserve records and verify continuity.** Copy stable interaction IDs, timestamps, options, sources, outcome payloads and seal fields (`chainId`, `prevHash`, `chainEntryHash`, `sealedAt`). Never silently drop history, reseal or synthesize missing links. Keep null seals null. Report source counts and heads per chain, unsealed counts, unresolved mappings and anomalies, then compare restored counts, FKs, IDs, preserved hashes and chain topology. A pre-existing anomaly is not a pass. Keep the manifest and payloads out of version control and apply the credential hygiene rule to nested payloads. If safe handling would require changing sealed data, hold rather than rewriting it.
+- **Promote one writer.** Validate on a synthetic isolated restore first. At cutover quiesce legacy ledger writes, verify the final snapshot and chain heads, then enable the successor writer. A synthetic successor append must extend the restored head. After live successor writes, the predecessor remains read-only until those entries are reconciled for any rollback.
 
 ### 2.3 Slice 3 — One Recurring Customer Commitment & Document Workflow
 
@@ -283,7 +293,7 @@ The output folder holds `backup/` (exactly `manifest.json`, `dpf.dump`, `dpf.dum
 
 Before ANY live tenant cutover is considered, DPF2 must pass all five rehearsal gates against an ephemeral staging database (`dpf2_rehearsal_<ts>`):
 
-1. **FK & Schema Integrity Gate:** Every table in Slices 1–3 imports cleanly in topological order with zero dangling FKs, zero constraint violations, and exact row-count parity against `manifest.json`.
+1. **FK & Schema Integrity Gate:** Every table in Slices 1–3 imports cleanly in topological order with zero dangling FKs, zero constraint violations, and exact row-count parity against `manifest.json`. Apply the ledger scope, chain and single-writer checks in §2.2.1. A held or omitted ledger is not cutover-ready.
 2. **Blob Custody Gate:** Every `DocumentBlob` file restores to DPF2's content-addressed store and passes SHA-256 verification against `DocumentVersion.contentSha256` and `DocumentBlob.sha256`.
 3. **Policy Evaluation Parity Gate:** Active WWWD (`kind = 'organization'`) and WSID (`kind = 'profession'`) profiles resolve identical `currentVersion.materialFingerprint`, `autonomyPolicy`, and `PerspectiveMaterial` sets, and sample `evaluate_org_business_decision` / `principle_decide` decisions produce equivalent outcomes against DPF.
 4. **Recurring Workflow Dry-Run Parity Gate:** Running DPF2's equivalent of `generateDueInvoices()` (`apps/web/lib/actions/recurring.ts`) in dry-run / outbound-disabled mode on the restored `RecurringSchedule` computes the exact next invoice date, line-item totals, tax calculation, and immutable `InvoiceDocument` linkage without sending any external email or payment notice.
