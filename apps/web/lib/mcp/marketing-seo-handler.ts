@@ -1,4 +1,4 @@
-import { prisma } from "@dpf/db";
+import { findInstallOrganization, prisma } from "@dpf/db";
 import type { ToolResult } from "@/lib/mcp-tool-types";
 
 export async function analyzeSeoOpportunityHandler(): Promise<ToolResult> {
@@ -23,11 +23,9 @@ export async function analyzeSeoOpportunityHandler(): Promise<ToolResult> {
   };
   const playbook = context.playbook;
 
-  // Get organization location if available
-  const org = await prisma.organization.findFirst({
-    select: { address: true, name: true },
-  });
-  const address = org?.address as Record<string, string> | null;
+  // Never take a location from a different organization than the storefront.
+  const org = await findInstallOrganization(prisma, { id: true, address: true });
+  const address = (org?.id === context.organizationId ? org.address : null) as Record<string, string> | null;
   const location = address?.city
     ? `${address.city}${address.region ? `, ${address.region}` : ""}${address.country ? `, ${address.country}` : ""}`
     : null;

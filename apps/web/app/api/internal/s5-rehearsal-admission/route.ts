@@ -1,3 +1,4 @@
+// @exposure private-mesh — governed loopback preview and pinned Control proof only.
 import { prisma } from "@dpf/db";
 import { createS5RehearsalOwnerHandler, createS5RehearsalOwnerReads } from "@/lib/workroom-runtime/s5-rehearsal-owner.server";
 

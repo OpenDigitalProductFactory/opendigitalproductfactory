@@ -1178,7 +1178,8 @@
         "s5-rehearsal-admission"
       ],
       "dynamicParams": [],
-      "file": "apps/web/app/api/internal/s5-rehearsal-admission/route.ts"
+      "file": "apps/web/app/api/internal/s5-rehearsal-admission/route.ts",
+      "exposure": "private-mesh"
     },
     {
       "routePath": "/api/internal/tasks/[taskId]",
