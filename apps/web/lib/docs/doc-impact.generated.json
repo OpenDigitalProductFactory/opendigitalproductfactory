@@ -2251,7 +2251,8 @@
       "docs/architecture/enforced-ci-gates.md"
     ],
     "packages/dpf-skill-pack/hooks/hooks.json": [
-      "docs/architecture/agent-client-capability-parity.md"
+      "docs/architecture/agent-client-capability-parity.md",
+      "docs/architecture/workroom-bound-launch-contract-v1.md"
     ],
     "packages/dpf-skill-pack/hooks/lib/grok-hook-plane.mjs": [
       "docs/architecture/agent-client-capability-parity.md"
@@ -2408,6 +2409,15 @@
     ],
     "packages/validators/src/workroom/marking.ts": [
       "docs/architecture/gated-permissions-process.md"
+    ],
+    "packages/validators/src/workroom/s5-launch.ts": [
+      "docs/architecture/workroom-bound-launch-contract-v1.md"
+    ],
+    "packages/validators/src/workroom/s5-launch.v1.coordination.fixture.json": [
+      "docs/architecture/workroom-bound-launch-contract-v1.md"
+    ],
+    "packages/validators/src/workroom/s5-launch.v1.schema.json": [
+      "docs/architecture/workroom-bound-launch-contract-v1.md"
     ],
     "packages/validators/vendor/JUDGMENT-ADOPTION.json": [
       "docs/architecture/scoped-judgment-adoption.md"
@@ -4103,6 +4113,12 @@
       "packages/validators/src/gpp/work-shape-contracts.ts",
       "packages/validators/src/gpp/work-vocabulary.ts",
       "scripts/measure-capability-completeness.mjs"
+    ],
+    "docs/architecture/workroom-bound-launch-contract-v1.md": [
+      "packages/dpf-skill-pack/hooks/hooks.json",
+      "packages/validators/src/workroom/s5-launch.ts",
+      "packages/validators/src/workroom/s5-launch.v1.coordination.fixture.json",
+      "packages/validators/src/workroom/s5-launch.v1.schema.json"
     ],
     "docs/architecture/workroom-vocabulary-boundary.md": [
       "apps/web/components/ops/workrooms/atlas/AtlasGlyph.tsx",
