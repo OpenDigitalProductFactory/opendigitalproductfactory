@@ -164,6 +164,41 @@ describe("recordKernelConsultInteraction", () => {
     await recordKernelConsultInteraction({ db: db as never, result: makeResult({ recommendation: null }), callerContext: wwmdContext, question: "Which storage approach?", optionIds: ["a", "b"], optionDescriptions: { a: "First option", b: "Second option" }, appliedPrincipleCount: 0, seal: false });
     expect(db.created[0]).toMatchObject({ outcomeType: "defer", escalationRoute: "independent_review", escalationReason: "independent-review-required", escalationFollowOn: "corpus-gap" });
   });
+  it("records an evidence hold with a stable reference and no authorizing verdict", async () => {
+    const db = makeDb();
+    const outcome = await recordKernelConsultInteraction({
+      db: db as never,
+      result: makeResult(),
+      callerContext: wwmdContext,
+      question: "Which storage approach?",
+      optionIds: ["option-a", "option-b"],
+      optionDescriptions: { "option-a": "Reuse table", "option-b": "New table" },
+      appliedPrincipleCount: 1,
+      signalQuality: {
+        usable: true,
+        autonomyEligible: true,
+        optionsWithFeatures: 2,
+        optionCount: 2,
+        retrievalEvidence: {
+          scope: "complete", commandments: "complete", core: "complete", contextual: "complete",
+          hydration: "stale", inference: "complete",
+        },
+      },
+    });
+    expect(outcome).toMatchObject({ recorded: true, interactionId: expect.stringMatching(/^DI-/) });
+    expect(db.created[0]).toMatchObject({
+      outcomeType: "defer",
+      recommendedOptionId: null,
+      outcomePayload: {
+        verdict: null,
+        verdictCause: "retrieval-incomplete",
+        signalUsable: false,
+        autonomyEligible: false,
+        retrievalEvidence: { hydration: "stale" },
+      },
+    });
+  });
+
   it("persists a ledger row attributed to the governing profile", async () => {
     const db = makeDb();
     const outcome = await recordKernelConsultInteraction({

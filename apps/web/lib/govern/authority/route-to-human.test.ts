@@ -151,12 +151,21 @@ describe("decideOwnerAttentionRoute", () => {
 });
 
 describe("readScopeConsultResult", () => {
+  it("does not use raw scorer autonomy when the evidence envelope withholds it", () => {
+    expect(readScopeConsultResult({
+      recommendation: { optionId: "resume", confidence: "high" },
+      flags: { autonomyEligible: true },
+      signalQuality: { usable: false, autonomyEligible: false },
+      ledger: { recorded: true, interactionId: "DI-recorded" },
+    })).toMatchObject({ recommendation: null, autonomyEligible: false, interactionId: "DI-recorded" });
+  });
+
   it("reads the principle_decide response shape", () => {
     expect(readScopeConsultResult({
       recommendation: { optionId: "route-to-agent", confidence: "high", margin: 6.18 },
-      signalQuality: { autonomyEligible: true },
+      signalQuality: { usable: true, autonomyEligible: true },
       flags: { commandmentConflict: false },
-      ledger: { interactionId: "DI-007A5617C3EE" },
+      ledger: { recorded: true, interactionId: "DI-007A5617C3EE" },
     })).toEqual({
       recommendation: { optionId: "route-to-agent", confidence: "high" },
       autonomyEligible: true,

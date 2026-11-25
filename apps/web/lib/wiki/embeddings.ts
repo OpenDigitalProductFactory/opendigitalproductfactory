@@ -85,10 +85,14 @@ export type WikiSearchResult = {
   principleRingScope?: string[];
   principleDimensions?: string[];
   principlePublic?: boolean;
+  /** Current-vector provenance, projected only for evidence-sensitive lookups. */
+  embeddingSourceDigest?: string | null;
 };
 
 export type SearchWikiPagesInput = {
   query: string;
+  /** Evidence-sensitive callers distinguish degraded lexical recall from a real no-match. */
+  onRetrievalDisposition?: (disposition: "lexical-only") => void;
   /** Set for tenant context. Pass `null` to search kernel only. */
   organizationId: string | null;
   /** Optional filter to one page kind. */
@@ -391,6 +395,7 @@ export async function searchWikiPages(input: SearchWikiPagesInput): Promise<Wiki
         "embedded; using Postgres lexical fallback. " +
         "Review provider routing and model availability.",
     );
+    input.onRetrievalDisposition?.("lexical-only");
     return searchWikiPagesLexically(input);
   }
 
@@ -484,7 +489,7 @@ export async function searchWikiPages(input: SearchWikiPagesInput): Promise<Wiki
       limit,
       scoreThreshold,
     );
-    orgResults = orgRaw.map((r) => projectResult(r, "org"));
+    orgResults = orgRaw.map((r) => projectResult(r, "org", Boolean(input.onRetrievalDisposition)));
   }
 
   // With the profession pass opted in, a full pass-A page cannot short-circuit —
@@ -578,7 +583,7 @@ export async function searchWikiPages(input: SearchWikiPagesInput): Promise<Wiki
           scoreThreshold,
         )
       : [];
-  const kernelResults = kernelRaw.map((r) => projectResult(r, "kernel"));
+  const kernelResults = kernelRaw.map((r) => projectResult(r, "kernel", Boolean(input.onRetrievalDisposition)));
 
   // Org-over-kernel overlay precedence is deliberate and unchanged: an org page
   // leads its kernel counterpart even at a lower cosine score. A global score
@@ -604,6 +609,7 @@ export async function searchWikiPages(input: SearchWikiPagesInput): Promise<Wiki
 function projectResult(
   r: { score: number; payload: Record<string, unknown> },
   source: "org" | "kernel" | "profession",
+  includeDigest = false,
 ): WikiSearchResult {
   const result: WikiSearchResult = {
     pageId: String(r.payload["entityId"] ?? ""),
@@ -617,6 +623,8 @@ function projectResult(
     score: r.score,
     source,
   };
+  const digest = r.payload[WIKI_EMBEDDING_DIGEST_KEY];
+  if (includeDigest) result.embeddingSourceDigest = typeof digest === "string" ? digest : null;
   // Pass through principle payload keys when present so MCP responses can
   // surface principle metadata without an extra Postgres round-trip. Only
   // principle pages carry these keys (per storeWikiPage's write path).

@@ -39,6 +39,12 @@ Slice 2 owns the scope and dependency closure. Prove exact sealed payload/chain 
 
 The [dispatch regression](../../../apps/web/lib/mcp/packs/principle-decide-pack.dispatch.test.ts) runs the real scorer with one structured commandment, both search calls failing and inference unavailable. It pins the difference between a raw winner and an unusable, non-autonomous verdict. It does not claim to cover lexical, partial timeout, mandatory-doctrine failure or action enforcement. Before cutover, add those cases, plus healthy zero matches, scoped hydration misses, provider pauses and ledger failures, to the OS/DPF contract parity suite.
 
+### DPF prerequisite — BI-E91D988C
+
+The incumbent WWMD path takes one deadline across the scope, doctrine, relevance, hydration and scoring-inference reads. Taking one extra commandment detects overflow before scoring. Only completed evidence can produce a recommendation. Optional evidence failures can still return structured diagnostics. A healthy zero-match is complete; lexical fallback after an embedding failure is not. Missing vector provenance, stale indexed content, and lookup failures are distinguishable in the response and the DPF ledger.
+
+The ledger records a hold without a recommended option. Its existing `interactionId` is the stable reference for both recorded verdicts and recorded holds. An internal caller must have a usable result and a recorded interaction before acting. These are DPF-side prerequisites only. No permit encoding, OS evaluator, authority transfer, ledger schema change or workload cutover is included.
+
 ## 4. Converge on scoped-judgment candidate.3
 
 DPF pins candidate.3 in the [root manifest](../../../package.json), [web manifest](../../../apps/web/package.json) and [validator manifest](../../../packages/validators/package.json). MCP calls `decide` through the validator forwarding subpath. `option-recommendation.ts` directly imports the package scorer for a separate commandments-only profession path. The kernel ledger uses the retry contract; the DPF GPP and Commons callers use decision-scope/bounded-JSON leaves. The [adoption inventory](../../../packages/validators/vendor/JUDGMENT-ADOPTION.json) lists the emitted guard and bridge consumers.

@@ -335,13 +335,17 @@ export function readScopeConsultResult(data: Record<string, unknown> | undefined
   const flags = (data?.flags ?? {}) as Record<string, unknown>;
   const signal = (data?.signalQuality ?? {}) as Record<string, unknown>;
   const ledger = (data?.ledger ?? {}) as Record<string, unknown>;
+  const interactionId = ledger.recorded === true && typeof ledger.interactionId === "string"
+    ? ledger.interactionId
+    : null;
+  const usable = signal.usable === true && interactionId !== null;
   return {
-    recommendation: rec && typeof rec.optionId === "string" && typeof rec.confidence === "string"
+    recommendation: usable && rec && typeof rec.optionId === "string" && typeof rec.confidence === "string"
       ? { optionId: rec.optionId, confidence: rec.confidence }
       : null,
-    autonomyEligible: signal.autonomyEligible === true || flags.autonomyEligible === true,
+    autonomyEligible: usable && signal.autonomyEligible === true,
     commandmentConflict: flags.commandmentConflict === true,
-    interactionId: typeof ledger.interactionId === "string" ? ledger.interactionId : null,
+    interactionId,
   };
 }
 
