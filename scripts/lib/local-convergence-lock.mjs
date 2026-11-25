@@ -21,7 +21,8 @@ const OWNER_FILE = "owner.json";
 
 // DPF2 owns this host-wide O_EXCL file. Its ci-slot.mjs recognizes a positive
 // PID plus a token, uses kill(pid, 0) with EPERM meaning alive, and ages
-// incomplete JSON against a 2-second write grace. DPF only observes it.
+// incomplete JSON against a 2-second write grace. Its fixed path is a
+// coordination endpoint, not a temporary file DPF creates or owns.
 const DPF2_CI_RESERVATION_PATH = "/tmp/dpf2-local-ci.lock";
 const DPF2_RESERVATION_WAIT_MS = 60 * 60_000;
 const DPF2_CORRUPT_GRACE_MS = 2_000;
@@ -40,10 +41,13 @@ export function dpf2ReservationPath(env = process.env, platform = process.platfo
 }
 
 function readDpf2Reservation(path) {
-  const fd = openSync(path, constants.O_RDONLY | constants.O_NONBLOCK);
+  // DPF opens the foreign reservation read-only. Never follow a symlink or
+  // substitute path-based checks for verification of the opened descriptor.
+  if (!Number.isInteger(constants.O_NOFOLLOW)) return {};
+  const fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
   try {
     const stat = fstatSync(fd);
-    if (!stat.isFile()) return { mtimeMs: stat.mtimeMs };
+    if (!stat.isFile() || (stat.mode & 0o022) !== 0) return { mtimeMs: stat.mtimeMs };
     try {
       return { raw: readFileSync(fd, "utf8"), mtimeMs: stat.mtimeMs };
     } catch (error) {
@@ -83,11 +87,7 @@ export function inspectDpf2CiReservation({
     file = read(path);
   } catch (error) {
     if (error?.code === "ENOENT") return { status: "free" };
-    let mtimeMs = error?.mtimeMs;
-    if (mtimeMs === undefined) {
-      try { mtimeMs = statSync(path).mtimeMs; } catch { /* time unknown */ }
-    }
-    return { status: "unreadable", ...reservationSince(mtimeMs) };
+    return { status: "unreadable", ...reservationSince(error?.mtimeMs) };
   }
   const modified = reservationSince(file.mtimeMs);
   if (file.raw === undefined) return { status: "unreadable", ...modified };

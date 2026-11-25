@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
+import {
+  chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync,
+  symlinkSync, utimesSync, writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -15,6 +18,49 @@ import {
 } from "./local-convergence-lock.mjs";
 
 const NOW = new Date("2026-08-12T17:00:00.000Z");
+
+function writeReservationFixture(path, raw, { modifiedAt, mode } = {}) {
+  // The parent is a private mkdtemp directory owned by this test.
+  const staged = `${path}.next`;
+  writeFileSync(staged, raw, { flag: "wx", mode: 0o600 });
+  if (mode !== undefined) chmodSync(staged, mode);
+  if (modifiedAt !== undefined) utimesSync(staged, modifiedAt, modifiedAt);
+  renameSync(staged, path);
+}
+
+const posixTest = (name, fn) => test(name, { skip: process.platform === "win32" }, fn);
+
+posixTest("DPF2 symlink reservations fail closed without inspecting the target owner", (t) => {
+  const directory = mkdtempSync(join(tmpdir(), "dpf2-symlink-"));
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
+  const target = join(directory, "owner.json");
+  const path = join(directory, "dpf2-local-ci.lock");
+  writeReservationFixture(target, JSON.stringify({ pid: process.pid, token: "fixture" }));
+  symlinkSync(target, path);
+  let probes = 0;
+  const observed = inspectDpf2CiReservation({
+    path, processAlive: () => { probes++; return true; },
+  });
+  assert.equal(observed.status, "unreadable");
+  assert.equal(dpf2ReservationBlocks(observed), true);
+  assert.equal(probes, 0, "symlink target must not be inspected");
+});
+
+for (const mode of [0o620, 0o602]) {
+  posixTest(`DPF2 reservation with unsafe mode ${mode.toString(8)} fails closed`, (t) => {
+    const directory = mkdtempSync(join(tmpdir(), "dpf2-unsafe-mode-"));
+    t.after(() => rmSync(directory, { recursive: true, force: true }));
+    const path = join(directory, "dpf2-local-ci.lock");
+    writeReservationFixture(path, JSON.stringify({ pid: process.pid, token: "fixture" }), { mode });
+    let probes = 0;
+    const observed = inspectDpf2CiReservation({
+      path, processAlive: () => { probes++; return true; },
+    });
+    assert.equal(observed.status, "unreadable");
+    assert.equal(dpf2ReservationBlocks(observed), true);
+    assert.equal(probes, 0, "unsafe owner metadata must not be inspected");
+  });
+}
 
 test("mid-run DPF2 wait has a fresh budget after late admission, bounded by the outer gate", async () => {
   const admissionDeadline = NOW.getTime();
@@ -52,7 +98,7 @@ test("configured DPF2 path is read-only and parseable unknown owner formats wait
   assert.equal(reservation.dpf2ReservationPath({}, "darwin"), "/tmp/dpf2-local-ci.lock");
   assert.equal(reservation.dpf2ReservationPath({}, "linux"), null);
   const raw = '{"schemaVersion":2,"owner":"new protocol"}';
-  writeFileSync(path, raw);
+  writeReservationFixture(path, raw);
   const observed = inspectDpf2CiReservation({ env, now: () => Date.now() + 5000 });
   assert.equal(observed.status, "unknown-owner");
   assert.equal(dpf2ReservationBlocks(observed), true);
@@ -67,17 +113,16 @@ test("DPF observes DPF2's held, initializing, stale and released lock without ta
     path, now: () => NOW.getTime(), processAlive,
   });
   assert.equal(inspect().status, "free");
-  writeFileSync(path, "");
-  utimesSync(path, NOW, NOW);
+  writeReservationFixture(path, "", { modifiedAt: NOW });
   assert.equal(inspect().status, "initializing");
   assert.equal(dpf2ReservationBlocks(inspect()), true);
   const corruptAt = new Date(NOW.getTime() - 2000);
-  utimesSync(path, corruptAt, corruptAt);
+  writeReservationFixture(path, "", { modifiedAt: corruptAt });
   assert.equal(inspect().status, "stale-corrupt");
   assert.equal(dpf2ReservationBlocks(inspect()), false);
-  assert.equal(existsSync(path), true, "only DPF2 may reclaim corrupt locks");
+  assert.equal(readFileSync(path, "utf8"), "", "only DPF2 may reclaim corrupt locks");
   const raw = JSON.stringify({ pid: 21, token: "not published", acquiredAt: "2026-08-12T16:35:00.000Z" });
-  writeFileSync(path, raw);
+  writeReservationFixture(path, raw);
   assert.deepEqual(inspect(), { status: "held", pid: 21, since: "2026-08-12T16:35:00.000Z" });
   assert.equal(inspect(() => false).status, "stale-dead");
   assert.equal(dpf2ReservationBlocks(inspect(() => false)), false);
@@ -86,9 +131,11 @@ test("DPF observes DPF2's held, initializing, stale and released lock without ta
   assert.equal(dpf2ReservationBlocks(inspect()), false);
 });
 
-test("DPF2 permission denial waits, while an ENOENT during the read means released", () => {
+test("DPF2 permission denial waits, while an ENOENT during the read means released", (t) => {
   const since = NOW.toISOString();
-  const path = "/unused-dpf2-fixture.lock";
+  const directory = mkdtempSync(join(tmpdir(), "dpf2-read-error-"));
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
+  const path = join(directory, "dpf2-local-ci.lock");
   const inspect = code => inspectDpf2CiReservation({
     path,
     read: () => { throw Object.assign(new Error(code), { code, mtimeMs: NOW.getTime() }); },
@@ -107,7 +154,7 @@ test("concurrent-start counterexample: free observations on both sides grant no 
   assert.equal(dpf2ReservationBlocks(inspectDpf2CiReservation({ path })), false);
   assert.equal(inspectLocalConvergenceLock({ path: local }).status, "absent");
   assert.equal(acquireLocalConvergenceLock({ path: local, processIdentity: () => "fixture" }).status, "acquired");
-  writeFileSync(path, JSON.stringify({ pid: process.pid, token: "fixture" }), { flag: "wx" });
+  writeReservationFixture(path, JSON.stringify({ pid: process.pid, token: "fixture" }));
   assert.equal(existsSync(local), true);
   assert.equal(inspectDpf2CiReservation({ path }).status, "held");
 });

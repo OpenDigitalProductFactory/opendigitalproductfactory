@@ -194,7 +194,10 @@ probe returns permission denied. An incomplete file stays blocking during the
 owner's two-second write grace. A dead PID or unparseable contents past that
 grace are stale. A missing file means no reservation. A parsed but unknown
 owner, unreadable file, or indeterminate PID probe waits conservatively.
-DPF never rewrites, unlinks, or reclaims the file
+DPF2 defines the fixed default path so both projects can coordinate. DPF
+opens it read-only without following symlinks and checks the open descriptor
+before reading. A non-regular file or one writable by the group or others
+is treated as unreadable. DPF never rewrites, unlinks, or reclaims the file
 or publishes its token.
 
 Local phase waits report the reason, PID and acquisition time if readable,
