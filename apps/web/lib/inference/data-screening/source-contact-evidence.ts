@@ -28,10 +28,13 @@ const CUSTOMER_CONTEXT = "\\b(?:customer|client|contact|patient|member|subscribe
 const RESERVED_PLACEHOLDER_EMAIL_PATTERN = new RegExp(
   `(?<!${CUSTOMER_CONTEXT})(?<![A-Z0-9._%+-])${PLACEHOLDER_LOCAL_PART}@${RESERVED_DOMAIN}(?![A-Z0-9.@+%_-])`, "i");
 
-// Exact reserved review mailbox in the source fixture's quoted recipient
-// property. A bare address, customer-context field, or lookalike is not covered.
+// Exact reserved review mailbox in the fixture's input and its expected
+// disclosure row. The caller restricts this pattern to public-source review.
 export const SYNTHETIC_REVIEW_RECIPIENT_PATTERN = new RegExp(
-  `(?<!${CUSTOMER_CONTEXT})(?<=\\brecipient\\s*:\\s*")review@example\\.test(?=")`, "i");
+  '(?<!' + CUSTOMER_CONTEXT + ')' +
+    '(?<=\\brecipient\\s*:\\s*"|\\{\\s*label\\s*:\\s*"Recipient"\\s*,\\s*value\\s*:\\s*")' +
+    'review@example\\.test(?=")', "i",
+);
 
 // Explicit unquoted resource quantities, deterministic test seeds and versioned
 // patch paths supplied by a source diff are not phone/email values. Strip only

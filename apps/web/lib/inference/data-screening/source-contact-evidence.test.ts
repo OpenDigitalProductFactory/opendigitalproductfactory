@@ -195,9 +195,12 @@ describe("review fixture mailbox contact screening", () => {
 
   it("keeps the exception exact and preserves adjacent contact evidence", () => {
     expect(reviewContacts(`recipient: "${reviewRecipient}"`)).toHaveLength(0);
+    expect(reviewContacts(`{ label: "Recipient", value: "${reviewRecipient}" }`)).toHaveLength(0);
     for (const text of [
       reviewRecipient,
       `Customer recipient: "${reviewRecipient}"`,
+      `{ label: "Customer Recipient", value: "${reviewRecipient}" }`,
+      `{ label: "Recipient", value: "${realRecipient}" }`,
       `Customer contact: ${reviewRecipient}`,
       `recipient: "${reviewRecipient}.evil.test"`,
       `recipient: "${address("review1")}"`,
@@ -210,7 +213,9 @@ describe("review fixture mailbox contact screening", () => {
   it("never overrides an explicit local-only route", () => {
     const result = screenInferencePayload({
       systemPrompt: "",
-      messages: [{ role: "user", content: `const recipient = "${reviewRecipient}";` }],
+      messages: [{ role: "user", content: `const fixture = { recipient: "${reviewRecipient}" };` }],
+      taskType: "build-review",
+      sourceCodeProvenance,
       routeContext: { sensitivity: "internal", residencyPolicy: "local_only" },
     });
     expect(result.routeContext.residencyPolicy).toBe("local_only");

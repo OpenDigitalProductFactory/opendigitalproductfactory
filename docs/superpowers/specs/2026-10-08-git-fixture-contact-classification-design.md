@@ -15,8 +15,8 @@ review had no eligible endpoint and dispatched no provider. An in-memory
 screening replay reproduced the restriction, then allowed external eligibility
 for a recognized fixture while a person-shaped contact still held the route.
 
-Recognize the exact value as non-contact only in its quoted source
-`recipient` field in direct message text from a build review carrying the
+Recognize only the exact quoted fixture input and its expected disclosure
+row in direct message text from a build review carrying the
 existing verified public-repository classification. This does not attest
 that an unpublished diff has been served by the public forge. The same
 text in an ordinary turn or a review without that repository classification
