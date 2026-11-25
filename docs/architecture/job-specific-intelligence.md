@@ -742,6 +742,34 @@ A qualification record `MUST` support at least:
 
 An implementation `MUST NOT` advertise a non-active record as a current qualification.
 
+**Local S5 conformance (BI-FE3857C8).** The server-side
+[`resolveS5JsiEligibility` seam](../../apps/web/lib/work-management/coordinator-eligibility.ts)
+is the shared S5 read contract. Its [exact-profile fixture suite](../../apps/web/lib/work-management/jsi-qualification.test.ts)
+tests the [canonical carrier read projection](../../apps/web/lib/work-management/jsi-qualification.ts),
+not persisted qualification, issuance, or live enforcement. The issuer in BI-6DB95601
+owns the additive carrier and must repeat conformance against its authoritative
+policy, carrier and protected-evidence readers before qualified use. The broader
+five-profile readiness in BI-3E99ACFA follows that issuer.
+
+No-scheme requires an explicit result from authoritative activity policy. It is
+not a ceiling. An eligible projection is an input to the live intersection with
+binding and grants, not authorization. The [S5 contract and fleet-safety design](../superpowers/specs/2026-11-25-tak-jsi-qualification-issuance-design.md#s5-consumer-contract)
+separates unknown source failures from required-but-unavailable inputs. Operators
+route the closed unavailable reasons as follows.
+
+| Reason | Accountable next action |
+| --- | --- |
+| `required-scheme-absent` | The job/activity policy owner resolves the exact approved scheme. |
+| `compatible-record-missing` | The scheme owner routes an exact-profile assessment and governed issuance. |
+| `subject-unresolved` | The identity owner restores the admitted Principal-to-GAID link. |
+| `profile-unresolved` | The operating-profile owner resolves current versioned inputs. |
+| `serving-support-missing` | The platform owner completes serving rollout before enabling qualification-required use. |
+
+For `unknown`, the owner of the reported source restores the read or resolves its
+malformed, conflicting or missing evidence. Do not route it as an exemption or
+infer that the subject failed. BI-CA11E017 owns staged convergence of the legacy
+Workroom-drive probe once the issuer and authoritative activity policy are ready.
+
 ## 13. Material Change and Revalidation
 
 Qualification continuity is distinct from identity continuity.
