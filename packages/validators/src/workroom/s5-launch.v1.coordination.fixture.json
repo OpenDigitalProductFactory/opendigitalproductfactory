@@ -1,0 +1,186 @@
+{
+  "fixture": "synthetic-coordination-v1",
+  "launch": {
+    "schemaVersion": "s5-launch.v1",
+    "kind": "launch",
+    "issuer": "t2-fixture-dpf-install",
+    "audience": "t2-fixture-dpf2-control",
+    "hostRef": "host:t2-fixture-host",
+    "workroomId": "WC-000000A1",
+    "sessionRef": "t2-fixture-session-1",
+    "stageKey": "coordinate",
+    "stageAttemptRef": "t2-fixture-attempt-2",
+    "caseKey": "backlog-item:BI-000000A1",
+    "subject": {
+      "principalId": "PRN-00000000-0000-4000-8000-000000000001",
+      "gaid": "gaid:priv:dpf.internal:t2-fixture-coordinator"
+    },
+    "issuedAt": 1795600770000,
+    "expiresAt": 1795600860000,
+    "authority": {
+      "bindingRef": "authority:t2-fixture-coordinator",
+      "permitRef": "permit:t2-fixture-attempt-2",
+      "grantKeys": [
+        "work_room_read",
+        "work_room_write"
+      ]
+    },
+    "mode": "read-only-coordination",
+    "permittedOperations": [
+      "get_workroom",
+      "read_room_messages",
+      "post_room_message"
+    ],
+    "jsi": {
+      "kind": "eligible",
+      "qualification": {
+        "id": "t2-fixture-qualification",
+        "version": 2,
+        "statusRevision": 4
+      },
+      "validUntil": 1795600860000,
+      "selector": {
+        "organizationId": "t2-fixture-org",
+        "installationId": "t2-fixture-dpf-install",
+        "job": {
+          "id": "coordinator",
+          "version": "1"
+        },
+        "activityKey": "s5-route-handoff",
+        "scope": {
+          "workflow": "workroom-coordination",
+          "archetype": "software-platform",
+          "jurisdiction": "US",
+          "dataClass": "synthetic",
+          "riskClass": "low"
+        },
+        "profileFingerprint": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "scheme": {
+          "id": "t2-fixture-scheme",
+          "version": "1"
+        }
+      }
+    },
+    "budget": {
+      "maxInputBytes": 65536,
+      "maxInputTokens": 10000,
+      "maxOutputTokens": 1200,
+      "maxReasoningTokens": 256
+    },
+    "coordination": {
+      "recipient": {
+        "authorityRef": "authority:t2-fixture-recipient",
+        "destinationRef": "destination:t2-fixture-recipient",
+        "reservationRef": "reservation:t2-fixture-recipient"
+      },
+      "postEffects": "proposal-only-no-wake"
+    }
+  },
+  "brokerCall": {
+    "schemaVersion": "s5-launch.v1",
+    "kind": "coordination-broker-call",
+    "issuer": "t2-fixture-dpf-install",
+    "audience": "t2-fixture-dpf2-control",
+    "hostRef": "host:t2-fixture-host",
+    "workroomId": "WC-000000A1",
+    "sessionRef": "t2-fixture-session-1",
+    "stageKey": "coordinate",
+    "stageAttemptRef": "t2-fixture-attempt-2",
+    "operationId": "room-operation:00000000-0000-4000-8000-000000000003",
+    "operation": "post_room_message",
+    "args": {
+      "caseKey": "backlog-item:BI-000000A1",
+      "body": "Propose independent review of the synthetic route.",
+      "recipient": {
+        "authorityRef": "authority:t2-fixture-recipient",
+        "destinationRef": "destination:t2-fixture-recipient",
+        "reservationRef": "reservation:t2-fixture-recipient"
+      }
+    }
+  },
+  "brokerReceipt": {
+    "schemaVersion": "s5-launch.v1",
+    "kind": "coordination-broker-receipt",
+    "issuer": "t2-fixture-dpf-install",
+    "audience": "t2-fixture-dpf2-control",
+    "hostRef": "host:t2-fixture-host",
+    "workroomId": "WC-000000A1",
+    "sessionRef": "t2-fixture-session-1",
+    "stageKey": "coordinate",
+    "stageAttemptRef": "t2-fixture-attempt-2",
+    "operationId": "room-operation:00000000-0000-4000-8000-000000000003",
+    "operation": "post_room_message",
+    "result": {
+      "kind": "proposal-recorded",
+      "proposalRef": "proposal:t2-fixture-route"
+    }
+  },
+  "providerPreflight": {
+    "schemaVersion": "s5-launch.v1",
+    "kind": "provider-preflight",
+    "issuer": "t2-fixture-dpf-install",
+    "audience": "t2-fixture-dpf2-control",
+    "hostRef": "host:t2-fixture-host",
+    "workroomId": "WC-000000A1",
+    "sessionRef": "t2-fixture-session-1",
+    "stageKey": "coordinate",
+    "stageAttemptRef": "t2-fixture-attempt-2",
+    "providerCallRef": "provider-call:t2-fixture-call-01",
+    "providerModelRef": "model:t2-fixture",
+    "appliedLimits": {
+      "maxInputBytes": 65536,
+      "maxInputTokens": 10000,
+      "maxOutputTokens": 1200,
+      "maxReasoningTokens": 256
+    },
+    "input": {
+      "tokenizerRef": "tokenizer:synthetic-code-points-v1",
+      "totalBytes": 521,
+      "totalTokens": 519,
+      "bytesByPart": {
+        "prompt": 60,
+        "projection": 113,
+        "roomContext": 38,
+        "toolSchemas": 180,
+        "framing": 130
+      }
+    }
+  },
+  "providerPayload": {
+    "model": "model:t2-fixture",
+    "maxOutputTokens": 1200,
+    "maxReasoningTokens": 256,
+    "prompt": "Read the synthetic Workroom and propose a route if needed.",
+    "projection": {
+      "mode": "read-only-coordination",
+      "permittedOperations": [
+        "get_workroom",
+        "read_room_messages",
+        "post_room_message"
+      ]
+    },
+    "roomContext": [
+      "Synthetic note: résumé accepted."
+    ],
+    "toolSchemas": [
+      {
+        "name": "get_workroom",
+        "inputSchema": {
+          "type": "object"
+        }
+      },
+      {
+        "name": "read_room_messages",
+        "inputSchema": {
+          "type": "object"
+        }
+      },
+      {
+        "name": "post_room_message",
+        "inputSchema": {
+          "type": "object"
+        }
+      }
+    ]
+  }
+}
