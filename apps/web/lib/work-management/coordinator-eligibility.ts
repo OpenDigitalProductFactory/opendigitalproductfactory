@@ -18,7 +18,17 @@
 //   DI-FF4A015CF917 — an ABSENT qualification scheme is not a failed one (margin
 //   5.420, high confidence). Removing the JSI check outright scored 0.713.
 //
-// Pure resolution over supplied state; the caller owns the queries.
+// The legacy Workroom projection below stays in place until BI-CA11E017.
+// S5 must use this exact-profile resolver, never the legacy boolean helpers.
+export {
+  resolveS5JsiEligibility,
+  type JsiAdmissionContext,
+  type JsiEligibilityDecision,
+  type JsiQualificationRecord,
+  type JsiQualificationSelector,
+  type JsiQualificationSources,
+  type JsiRequiredUnavailableReason,
+} from "./jsi-qualification";
 
 /** Mirrors WORKROOM_COORDINATOR_ELIGIBILITY_STATES, plus `not-applicable`. */
 export type CoordinatorEligibilityState =
@@ -79,7 +89,7 @@ export function resolveAuthorityBindingEligibility(
 }
 
 /**
- * JSI qualification eligibility.
+ * Legacy JSI projection for Workroom drive only. Not the S5 lookup.
  *
  * There is no TAK-JSI qualification substrate in the schema — no qualification
  * model exists, so no coworker on any install can be qualified. A precondition
@@ -114,7 +124,7 @@ export const JSI_QUALIFICATION_MODELS = [
   "agentQualification",
 ] as const;
 
-/** True when the platform has a qualification substrate to evaluate against. */
+/** Legacy Workroom-drive compatibility probe. Not authoritative scheme applicability. */
 export function jsiSchemePresent(client: Record<string, unknown>): boolean {
   return JSI_QUALIFICATION_MODELS.some((model) => model in client);
 }
