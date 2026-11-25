@@ -24,7 +24,9 @@ export declare const ACTUATOR_RESTARTABLE_SERVICES: readonly string[];
 
 // ─── Mount detection: the one switch, fail closed ────────────────────────────
 
-/** True when the mount table shows the private actuator socket directory. */
+/** Mount points of a well-formed /proc/self/mountinfo table; null if empty or any record is malformed. */
+export declare function parseMountPoints(mountinfo: unknown): string[] | null;
+/** True when the table shows the actuator socket directory, or does not parse (fail closed). */
 export declare function hasPrivateActuatorMount(mountinfo: string | Buffer): boolean;
 /**
  * Whether this process uses the private actuator. Fail closed: an unreadable
@@ -44,7 +46,7 @@ export declare function usesPrivateActuatorSync(options?: {
  * The client's send targets: the canonical actuator socket, or a .sock this
  * process created under the OS temporary directory (tests). Nothing else.
  */
-export declare function isAllowedActuatorSocketPath(socketPath: unknown, temporaryRoot?: string): boolean;
+export declare function isAllowedActuatorSocketPath(socketPath: unknown, temporaryRoot?: string, testing?: boolean): boolean;
 
 // ─── Wire replies ─────────────────────────────────────────────────────────────
 

@@ -2,7 +2,7 @@ import { createServer, request } from 'node:http';
 import { randomBytes } from 'node:crypto';
 import { EventEmitter, once } from 'node:events';
 import { readFileSync } from 'node:fs';
-import { chmod, chown, lstat, readFile, rename } from 'node:fs/promises';
+import { chmod, chown, lstat, readFile, realpath, rename } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, isAbsolute, join, normalize, sep } from 'node:path';
 import { StringDecoder } from 'node:string_decoder';
@@ -45,16 +45,42 @@ export const ACTUATOR_SERVICE_LOG_NAMES = Object.freeze(['portal', 'sandbox', 'p
 export const ACTUATOR_RESTARTABLE_SERVICES = Object.freeze(['portal', 'sandbox', 'postgres']);
 const unavailable = () => new Error('scope_writer_observation_unavailable');
 
+/**
+ * The mount points in a /proc/self/mountinfo table, or null when the table is
+ * not a well-formed one: no records at all, or any line that is not
+ * "id parent major:minor root mountpoint options [optional...] - type source superoptions".
+ */
+export function parseMountPoints(mountinfo) {
+  let text;
+  try { text = mountinfo.toString(); } catch { return null; }
+  if (typeof text !== 'string') return null;
+  const lines = text.split('\n').filter(line => line.length > 0);
+  if (lines.length === 0) return null;
+  const points = [];
+  for (const line of lines) {
+    const fields = line.split(' ');
+    const separator = fields.indexOf('-', 6);
+    if (fields.length < 10 || separator < 6 || fields.length - separator - 1 < 3
+      || !/^\d+$/.test(fields[0]) || !/^\d+$/.test(fields[1]) || !/^\d+:\d+$/.test(fields[2])
+      || !fields[3].startsWith('/') || !fields[4].startsWith('/')) return null;
+    points.push(fields[4]);
+  }
+  return points;
+}
+
+/** Fail closed: a table that does not parse as mountinfo counts as mounted. */
 export function hasPrivateActuatorMount(mountinfo) {
-  return mountinfo.toString().split('\n').some(line => line.split(' ')[4] === dirname(SCOPE_WRITER_OBSERVER_SOCKET));
+  const points = parseMountPoints(mountinfo);
+  return points === null || points.includes(dirname(SCOPE_WRITER_OBSERVER_SOCKET));
 }
 
 // The one switch between the qualified (actuator) path and the legacy local
-// Docker path. Fail closed: a mount table that cannot be read or parsed counts
-// as mounted, so an unknown never reaches raw Docker. Only a successful read
-// that shows no private actuator mount selects the legacy path. A host with no
-// /proc at all (macOS, Windows: ENOENT off Linux) has no container mounts, so
-// it is a definite "not mounted", not an unknown.
+// Docker path. Fail closed: a mount table that cannot be read, is empty, or has
+// any malformed record counts as mounted, so an unknown never reaches raw
+// Docker. Only a successful read of well-formed records with no private
+// actuator mount selects the legacy path. A host with no /proc at all (macOS,
+// Windows: ENOENT off Linux) has no container mounts, so that is a definite
+// "not mounted", not an unknown, and the only other route to the legacy path.
 const MOUNTINFO = '/proc/self/mountinfo';
 const mountUnreadable = (error, platform) => !(platform !== 'linux' && error?.code === 'ENOENT');
 
@@ -352,34 +378,49 @@ export async function publishActuatorSocket(server, { socketPath = SCOPE_WRITER_
 /**
  * The only destinations the actuator client will send to. Request bodies can
  * carry file data (document bytes, owner requests), so the target is an
- * allowlist, never a caller's free choice: the canonical actuator socket,
- * owned by root as the installer creates it, or a test socket that this
- * process created itself in the OS temporary directory. Anything else,
- * including another daemon's socket, is refused before a connection opens.
+ * allowlist, never a caller's free choice. In production that is the canonical
+ * actuator socket and nothing else. Under a test runner (NODE_ENV=test, or the
+ * node:test runner's NODE_TEST_CONTEXT) a test may also use a .sock it created
+ * in the OS temporary directory; that exception does not exist otherwise.
  */
-export function isAllowedActuatorSocketPath(socketPath, temporaryRoot = tmpdir()) {
+const underTestRunner = () => process.env.NODE_ENV === 'test' || typeof process.env.NODE_TEST_CONTEXT === 'string';
+export function isAllowedActuatorSocketPath(socketPath, temporaryRoot = tmpdir(), testing = underTestRunner()) {
   if (socketPath === SCOPE_WRITER_OBSERVER_SOCKET) return true;
-  if (typeof socketPath !== 'string' || !isAbsolute(socketPath) || normalize(socketPath) !== socketPath) return false;
+  if (!testing || typeof socketPath !== 'string' || !isAbsolute(socketPath) || normalize(socketPath) !== socketPath) return false;
   const root = normalize(temporaryRoot).replace(/[\\/]+$/, '');
   return socketPath.startsWith(`${root}${sep}`) && socketPath.endsWith('.sock');
 }
 
+/**
+ * Check the target before connecting. Node exposes no peer-credential call
+ * (SO_PEERCRED / getpeereid need a native addon) and fstat on a connected Unix
+ * socket describes the anonymous socket, not the bound path, so the client
+ * cannot verify the peer after connect. It closes the check-to-connect gap by
+ * permissions instead: the canonical path must resolve to itself, and every
+ * directory from its parent up to / must be root-owned and not group- or
+ * world-writable, so only root can replace or redirect the socket between this
+ * check and the connection. The socket itself must be root's, group 1000, 0660.
+ */
 async function verifyActuatorSocket(socketPath) {
   if (!isAllowedActuatorSocketPath(socketPath)) throw unavailable();
   try {
     if (socketPath === SCOPE_WRITER_OBSERVER_SOCKET) {
-      const [directory, socket] = await Promise.all([lstat(dirname(socketPath)), lstat(socketPath)]);
-      if (!directory.isDirectory() || directory.uid !== 0 || (directory.mode & 0o022) !== 0
-        || !socket.isSocket() || socket.uid !== 0 || socket.gid !== 1000 || (socket.mode & 0o777) !== 0o660) {
-        throw unavailable();
+      if (await realpath(socketPath) !== socketPath) throw unavailable();
+      for (let directory = dirname(socketPath); ; directory = dirname(directory)) {
+        const info = await lstat(directory);
+        if (!info.isDirectory() || info.uid !== 0 || (info.mode & 0o022) !== 0) throw unavailable();
+        if (dirname(directory) === directory) break;
       }
+      const socket = await lstat(socketPath);
+      if (!socket.isSocket() || socket.uid !== 0 || socket.gid !== 1000 || (socket.mode & 0o777) !== 0o660) throw unavailable();
       return;
     }
     // A test socket: one this process's user created, never world-writable
-    // (group access mirrors the published actuator socket's 0660).
+    // (group access mirrors the published actuator socket's 0660). Without a
+    // uid to compare there is no ownership proof, so it is refused.
+    if (typeof process.getuid !== 'function') throw unavailable();
     const socket = await lstat(socketPath);
-    const uid = typeof process.getuid === 'function' ? process.getuid() : undefined;
-    if (!socket.isSocket() || (uid !== undefined && socket.uid !== uid) || (socket.mode & 0o002) !== 0) throw unavailable();
+    if (!socket.isSocket() || socket.uid !== process.getuid() || (socket.mode & 0o002) !== 0) throw unavailable();
   } catch { throw unavailable(); }
 }
 

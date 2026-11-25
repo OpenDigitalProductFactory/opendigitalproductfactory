@@ -10,7 +10,7 @@ import { attachMaintenanceEpochEvidence } from "@/lib/self-upgrade/maintenance-e
 import { lockCanonicalRuntimeAdmission } from "@/lib/platform-runtime/work-admission";
 import { readSuccessfulMaintenanceRecoveryPoint } from "@/lib/self-upgrade/recovery-eligibility";
 import { verifyMaintenanceEpoch, readAttestedMaintenanceRetirement, observeMaintenanceEnvironments, assertNoCanonicalActuators, hasContinuousMaintenanceStarts } from "../../../../scripts/lib/maintenance-epoch-receipt.mjs";
-import { hasPrivateActuatorMount, readScopeWriterObservation, readScopeWriterRetirement } from "@/lib/platform-runtime/actuator-client";
+import { usesPrivateActuator, readScopeWriterObservation, readScopeWriterRetirement } from "@/lib/platform-runtime/actuator-client";
 import type { ToolResult } from "@/lib/mcp-tool-types";
 import { SCOPE_EPOCH_WRITER_PATHS, validateScopeEpochWriterContract, type ScopeEpochWriterContract } from "./scope-epoch-contract";
 import type { CapsuleDb } from "./work-capsule-store-types";
@@ -227,9 +227,9 @@ export async function assertScopeEpochEnrollmentReady(ports: ScopeEpochEnrollmen
       read("read-process-cgroup", "/proc/self/cgroup"), read("read-process-mounts", "/proc/self/mountinfo"),
     ]);
     const containerId = await probe("identify-container", () => currentScopeWriterContainerId(cgroup.toString(), mounts.toString()));
-    // The mount table was read above (a failed read refuses enrollment), so this
-    // parses observed bytes: an actuator mount selects the hardened proof.
-    if (hasPrivateActuatorMount(mounts)) {
+    // The one mount rule (actuator-client), applied to the table read above; a
+    // failed read already refused, and a malformed table selects the hardened proof.
+    if (await usesPrivateActuator({ read: async () => mounts })) {
       return await prepareHardenedEnrollment(ports, containerId);
     }
     const inspect = async () => {

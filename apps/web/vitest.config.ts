@@ -41,6 +41,19 @@ loadEnv({ path: resolve(webDir, ".env.local"), override: true });
 // shell, so this is the one place every route passes. A no-op everywhere else.
 enforceSandboxTestScope({ runner: "vitest", argv: process.argv, env: process.env, cwd: process.cwd() });
 
+/**
+ * Suites that run a docker process on purpose, so they never load the
+ * host-Docker guard: the ones that exercise a real daemon (each skips itself
+ * without one), and the promote.sh harness, which installs its own fake docker
+ * and must reach it through shell strings that name `docker`.
+ */
+const DOCKER_INTEGRATION_SUITES = [
+  "**/*.docker.test.{ts,tsx}",
+  "**/*.network.test.{ts,tsx}",
+  "lib/inference/local-provider-compose.test.ts",
+  "lib/self-upgrade/promote-script-fake-docker.test.ts",
+];
+
 export default defineConfig({
   plugins: [react()],
   test: {
@@ -57,10 +70,28 @@ export default defineConfig({
     // Time-bomb detection (BI-6A4F47B9). A strict no-op unless
     // DPF_CLOCK_SHIFT_DAYS is set, so normal runs pay only the import. See the
     // file header for why a static grep does not work here.
-    // No unit test may reach the host's Docker daemon (BI-224F56F1); see the file header.
-    setupFiles: ["./vitest.clock-shift-setup.ts", "./vitest.no-host-docker-setup.ts"],
-    include: ["**/*.test.{ts,tsx}"],
+    setupFiles: ["./vitest.clock-shift-setup.ts"],
     exclude: ["node_modules", ".next"],
+    // Two projects, decided by configuration rather than runtime state
+    // (BI-224F56F1). "unit" loads the host-Docker guard, so no unit test can
+    // reach the host's daemon. "docker-integration" holds only the suites that
+    // exist to exercise a real daemon, each self-gated on its availability, and
+    // never loads the guard. Both inherit this root config.
+    projects: [
+      {
+        extends: true,
+        test: {
+          name: "unit",
+          include: ["**/*.test.{ts,tsx}"],
+          exclude: DOCKER_INTEGRATION_SUITES,
+          setupFiles: ["./vitest.no-host-docker-setup.ts"],
+        },
+      },
+      {
+        extends: true,
+        test: { name: "docker-integration", include: DOCKER_INTEGRATION_SUITES },
+      },
+    ],
     // Each test file gets its own worker process. Without forks, React 18's
     // scheduler can queue a setImmediate (Immediate.performWorkUntilDeadline)
     // that fires after jsdom teardown, throwing "window is not defined" and

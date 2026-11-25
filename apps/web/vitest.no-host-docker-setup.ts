@@ -8,69 +8,64 @@
 // unmocked launch of the Docker executable at the process boundary instead.
 //
 // It wraps the real child_process launchers before any test imports them. A
-// suite that mocks node:child_process gets its own mock, untouched. The
-// deliberate Docker integration suites keep their self-gated probes: they are
-// named for it (*.docker.test.*, *.network.test.*) or listed below, and each
-// skips itself on a host without the daemon or image. Anything else needs
-// DPF_TEST_ALLOW_HOST_DOCKER=1, which no unit suite sets.
+// suite that mocks node:child_process gets its own mock, untouched. Only the
+// "unit" vitest project loads this file; the suites that exist to exercise a
+// real daemon run in the "docker-integration" project, chosen by file name in
+// vitest.config.ts. There is no runtime opt-out.
 
 import { createRequire, syncBuiltinESMExports } from "node:module";
-import { expect } from "vitest";
 
 const require = createRequire(import.meta.url);
 const childProcess = require("node:child_process") as typeof import("node:child_process");
 
+/** The Docker executable as a program path. */
 const DOCKER_EXECUTABLE = /(?:^|[\\/])docker(?:\.exe)?$/i;
-const DOCKER_COMMAND_LINE = /^\s*(?:\S*[\\/])?docker(?:\.exe)?(?:\s|$)/i;
+/** `docker` as a word anywhere in a shell string: `cd x && docker ps`, `sh -c "… docker …"`. */
+const DOCKER_IN_SHELL = /(?:^|[\s;&|()'"`=])(?:[^\s;&|()'"`=]*[\\/])?docker(?:\.exe)?(?=$|[\s;&|()'"`])/i;
+const SHELL = /(?:^|[\\/])(?:sh|bash|zsh|dash|ash|ksh|cmd|cmd\.exe|powershell|pwsh)(?:\.exe)?$/i;
 
 export class HostDockerInTestError extends Error {
   constructor(what: string) {
     super(`A unit test tried to run the host's Docker (${what}). Inject a fake runner or mock node:child_process; `
-      + "set DPF_TEST_ALLOW_HOST_DOCKER=1 only in an integration suite that needs a daemon.");
+      + "a suite that must reach a daemon belongs in the docker-integration project (*.docker.test.*).");
     this.name = "HostDockerInTestError";
   }
 }
 
-/** Suites that exist to exercise a real daemon, each self-gated on its availability. */
-const INTEGRATION_SUITE = /\.(?:docker|network)\.test\.[cm]?[jt]sx?$|[\\/]lib[\\/]inference[\\/]local-provider-compose\.test\.ts$/;
-export const isDockerIntegrationSuite = (testPath: unknown): boolean =>
-  typeof testPath === "string" && INTEGRATION_SUITE.test(testPath);
-const currentSuiteMayUseDocker = () => {
-  try { return isDockerIntegrationSuite(expect.getState().testPath); } catch { return false; }
-};
-
 export const reachesHostDocker = (file: unknown, commandLine = false): boolean =>
-  typeof file === "string" && (commandLine ? DOCKER_COMMAND_LINE : DOCKER_EXECUTABLE).test(file);
+  typeof file === "string" && (commandLine ? DOCKER_IN_SHELL : DOCKER_EXECUTABLE).test(file);
 
-if (process.env.DPF_TEST_ALLOW_HOST_DOCKER !== "1") {
-  type Launcher = (...args: unknown[]) => unknown;
-  const guard = (name: "spawn" | "spawnSync" | "execFile" | "execFileSync" | "exec" | "execSync", commandLine: boolean) => {
-    const original = childProcess[name] as unknown as Launcher;
-    const wrapped = function (this: unknown, ...args: unknown[]) {
-      if (reachesHostDocker(args[0], commandLine) && !currentSuiteMayUseDocker()) {
-        throw new HostDockerInTestError(`${name} ${String(args[0]).slice(0, 80)}`);
-      }
-      return original.apply(this, args);
-    };
-    // Keep util.promisify(exec/execFile) resolving to { stdout, stderr }.
-    const custom = (original as unknown as { [key: symbol]: unknown })[Symbol.for("nodejs.util.promisify.custom")];
-    if (typeof custom === "function") {
-      Object.defineProperty(wrapped, Symbol.for("nodejs.util.promisify.custom"), {
-        value: (...args: unknown[]) => {
-          if (reachesHostDocker(args[0], commandLine) && !currentSuiteMayUseDocker()) {
-            return Promise.reject(new HostDockerInTestError(`${name} ${String(args[0]).slice(0, 80)}`));
-          }
-          return (custom as Launcher)(...args);
-        },
-      });
-    }
-    (childProcess as unknown as Record<string, unknown>)[name] = wrapped;
-  };
-  guard("spawn", false);
-  guard("spawnSync", false);
-  guard("execFile", false);
-  guard("execFileSync", false);
-  guard("exec", true);
-  guard("execSync", true);
-  syncBuiltinESMExports();
+/** Whether a launch would run Docker: the program itself, a shell string, or a
+ * shell invoked with a command (`sh -c "…"`) or with `shell: true`. */
+export function launchReachesHostDocker(name: string, args: unknown[]): boolean {
+  const [file, second, third] = args;
+  if (name === "exec" || name === "execSync") return reachesHostDocker(file, true);
+  if (reachesHostDocker(file)) return true;
+  const argv = Array.isArray(second) ? second.filter((arg): arg is string => typeof arg === "string") : [];
+  const options = (Array.isArray(second) ? third : second) as { shell?: unknown } | undefined;
+  // A string shell option names the program that runs the command.
+  if (options && typeof options === "object" && typeof options.shell === "string" && reachesHostDocker(options.shell)) return true;
+  if (options && typeof options === "object" && options.shell) return reachesHostDocker([file, ...argv].join(" "), true);
+  return typeof file === "string" && SHELL.test(file) && argv.some(arg => reachesHostDocker(arg, true));
 }
+
+type Launcher = (...args: unknown[]) => unknown;
+const guard = (name: "spawn" | "spawnSync" | "execFile" | "execFileSync" | "exec" | "execSync") => {
+  const original = childProcess[name] as unknown as Launcher;
+  const refuse = (args: unknown[]) => new HostDockerInTestError(`${name} ${String(args[0]).slice(0, 80)}`);
+  const wrapped = function (this: unknown, ...args: unknown[]) {
+    if (launchReachesHostDocker(name, args)) throw refuse(args);
+    return original.apply(this, args);
+  };
+  // Keep util.promisify(exec/execFile) resolving to { stdout, stderr }.
+  const custom = (original as unknown as { [key: symbol]: unknown })[Symbol.for("nodejs.util.promisify.custom")];
+  if (typeof custom === "function") {
+    Object.defineProperty(wrapped, Symbol.for("nodejs.util.promisify.custom"), {
+      value: (...args: unknown[]) => launchReachesHostDocker(name, args)
+        ? Promise.reject(refuse(args)) : (custom as Launcher)(...args),
+    });
+  }
+  (childProcess as unknown as Record<string, unknown>)[name] = wrapped;
+};
+for (const name of ["spawn", "spawnSync", "execFile", "execFileSync", "exec", "execSync"] as const) guard(name);
+syncBuiltinESMExports();

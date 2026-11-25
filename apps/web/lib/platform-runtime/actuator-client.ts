@@ -8,8 +8,8 @@
 // absorbed by a cast at each call site.
 //
 // Mount detection is usesPrivateActuator / usesPrivateActuatorSync, and only
-// those. Rule: fail closed. A mount table that cannot be read or parsed counts
-// as mounted, so the caller takes the actuator path (or refuses) and never
+// those. Rule: fail closed. A mount table that cannot be read, is empty, or has
+// any malformed record counts as mounted, so the caller takes the actuator path (or refuses) and never
 // runs raw Docker on an unknown. Only a successful read that shows no actuator
 // mount selects the legacy local path. ENOENT on a host without /proc
 // (macOS, Windows) is a definite "not mounted", not an unknown.
@@ -22,7 +22,7 @@ import * as wire from "../../../../scripts/lib/scope-writer-observation.mjs";
 export {
   ACTUATOR_RESTARTABLE_SERVICES, ACTUATOR_SERVICE_LOG_NAMES, SCOPE_WRITER_OBSERVER_SOCKET,
   buildActuatorPromoterCandidate, createScopeWriterObserver, hasPrivateActuatorMount, isAllowedActuatorSocketPath, launchActuatorPromoter,
-  observeActuatorPortalImage, observeActuatorProjectContainers, observeActuatorProjectServices, observeActuatorSandbox,
+  observeActuatorPortalImage, observeActuatorProjectContainers, parseMountPoints, observeActuatorProjectServices, observeActuatorSandbox,
   openActuatorRuntimeSession, probeActuatorRuntimeProtocol, proveActuatorReassessmentCandidate, publishActuatorSocket,
   pruneActuatorDockerDisk, readActuatorPortalImage, readActuatorProjectContainers, readActuatorProjectServices,
   readActuatorReassessmentProof, readActuatorSandbox, readActuatorServiceLogs, readScopeWriterObservation,
