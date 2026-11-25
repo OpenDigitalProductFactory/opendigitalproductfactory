@@ -160,6 +160,10 @@ describe("deriveStandingRooms", () => {
     ]) {
       expect(shapes).toContain(shape);
     }
+    const prFlow = deriveStandingRooms(platform!).find((room) => room.key === "pull-request-flow");
+    expect(prFlow?.shapeKey).toBe("pull-request-flow-watch");
+    expect(prFlow?.purpose).toMatch(/accountable owner/i);
+    expect(prFlow?.purpose).toMatch(/merge queue/i);
   });
 
   it("is deterministic — the same archetype derives the same rooms", () => {

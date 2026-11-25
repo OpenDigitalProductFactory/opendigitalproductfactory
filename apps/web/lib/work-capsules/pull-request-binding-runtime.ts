@@ -44,7 +44,7 @@ export type PullRequestCustodySummary = {
 };
 
 export function buildPullRequestCustodyKey(repositoryFullName: string, prNumber: number): string {
-  return `pr-custody:${repositoryFullName.toLowerCase()}#${prNumber}`;
+  return `pull-request-custody:${repositoryFullName.toLowerCase()}#${prNumber}`;
 }
 
 function emptyCustodySummary(skippedReason: string | null): PullRequestCustodySummary {

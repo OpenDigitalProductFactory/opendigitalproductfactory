@@ -268,7 +268,7 @@ describe("FLOW-PR-1 open PR custody adoption and lapsed-lease reconciliation", (
       headSha: observation.headSha,
       pullRequestNumber: 42,
       pullRequestUrl: observation.url,
-      idempotencyKey: `pr-custody:${repository}#42`,
+      idempotencyKey: `pull-request-custody:${repository}#42`,
       createdByPrincipalId: "principal-owner",
       requestedByPrincipalId: "principal-owner",
       leaseHolderPrincipalId: "principal-owner",
@@ -375,7 +375,7 @@ describe("FLOW-PR-1 open PR custody adoption and lapsed-lease reconciliation", (
       headBranch: null,
       executorKind: "human",
       pullRequestNumber: 42,
-      idempotencyKey: `pr-custody:${repository}#42`,
+      idempotencyKey: `pull-request-custody:${repository}#42`,
     });
     expect(createdData.scopeClaims).toEqual(
       expect.arrayContaining([
