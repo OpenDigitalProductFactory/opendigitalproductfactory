@@ -69,6 +69,7 @@ const gates = [
   ["architecture-review", "REVIEW_REQUIRED", "architecture-reviewer"],
   ["plan-review", "PLAN_REVIEW_REQUIRED", "plan-reviewer"],
 ] as const;
+const dependencyDisposition = ["dependency-disposition", "DEPENDENCY_UNRESOLVED", "portfolio-management"] as const;
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -92,30 +93,50 @@ beforeEach(() => {
     deferOwnerPrincipal: null, epic: null, digitalProduct: null, organization: null, productLine: null, businessProduct: null, activeBuild: null });
 });
 
-function prepare(gate: readonly [typeof gates[number][0], typeof gates[number][1], typeof gates[number][2]]) {
+function prepare(gate: readonly [typeof gates[number][0], typeof gates[number][1], typeof gates[number][2]] | typeof dependencyDisposition,
+  claimant = () => "AGT-CLAIMANT") {
   const decision: InitiativeReadinessDecision = {
     decisionId: "IRD-ROUNDTRIP", policyVersion: "initiative-readiness.v3", subject: { kind: "backlog-item", id: "BI-ROUNDTRIP" },
     transitionObject: { kind: "work-capsule", id: "WC-ROUNDTRIP", expectedVersion: "claim.v1", targetState: "implementation" },
     profile: "feature", target: "implementation", verdict: "input-required", satisfied: [], blockers: [],
     unmet: [readinessRequirement({ code: gate[1], state: "missing", accountableRole: gate[2] })], evaluatedAt: "2026-10-16T00:00:00Z",
   };
-  mocks.readiness.mockReturnValue({ decisions: { plan: decision, implementation: decision, completion: decision } });
+  const disposesDependency = gate[0] === "dependency-disposition";
+  mocks.readiness.mockReturnValue({ decisions: { plan: decision, implementation: decision,
+    completion: disposesDependency ? { ...decision, verdict: "allowed", unmet: [] } : decision } });
   const input = { decision, currentAgentId: "AGT-AUTHOR", expectedCurrentBaselineId: null,
     dispatchContext: { workroomId: "WC-ROUNDTRIP", repositoryFullName: "org/repo", branchName: "feat/roundtrip", headSha: "a".repeat(40) },
     canonicalArtifact: { resolved: true as const, path: "docs/superpowers/specs/roundtrip.md", providerBlobId: "b".repeat(40) },
     planArtifact: { resolved: true as const, path: "docs/superpowers/plans/roundtrip.md", commitSha: "a".repeat(40), providerBlobId: "c".repeat(40) },
-    db: { agentToolGrant: { findMany: async () => ["initiative_design_review", "initiative_architecture_review", "file_read"].map(grantKey => ({
-      grantKey, agent: { agentId: "AGT-REVIEWER", displayName: "Reviewer", status: "active", archived: false, lifecycleStage: "production" },
-    })) } },
+    db: { backlogItem: { findUnique: async () => ({ claimedByAgentId: claimant() }) },
+      agentToolGrant: { findMany: async () => (disposesDependency ? ["AGT-CLAIMANT", "AGT-REVIEWER"] : ["AGT-REVIEWER"])
+        .flatMap(agentId => ["initiative_design_review", "initiative_architecture_review", "initiative_evidence_write", "file_read"].map(grantKey => ({
+          grantKey, agent: { agentId, displayName: "Reviewer", status: "active", archived: false, lifecycleStage: "production" },
+        }))) } },
   };
-  const issue = (taskAuthority: typeof authority | null) => resolveInitiativeReviewerRecovery({ ...input,
+  const issue = (taskAuthority: typeof authority | null, owed = decision) => resolveInitiativeReviewerRecovery({ ...input, decision: owed,
     ...(taskAuthority ? { isPlanReviewExhausted: createExhaustedPlanReviewPredicate(taskAuthority, { taskRun: { findFirst: mocks.history } }) } : {}),
   });
-  mocks.recovery.mockImplementation(({ taskAuthority }) => issue(taskAuthority ?? null));
+  mocks.recovery.mockImplementation(({ taskAuthority, decision: owed }) => issue(taskAuthority ?? null, disposesDependency ? owed : decision));
   return { issue };
 }
 
 describe("bounded recovery packet round trip", () => {
+  it("admits the exact pre-delivery dependency disposition packet and never targets the claimant", async () => {
+    let claimedBy = "AGT-CLAIMANT";
+    const { issue } = prepare(dependencyDisposition, () => claimedBy);
+    const issued = await issue(null);
+    expect(issued.reviewerRoutes).toMatchObject([{ gate: "dependency-disposition", independent: true, targetAgentId: "AGT-REVIEWER" }]);
+    const read = await getBacklogItem({ itemId: "BI-ROUNDTRIP", recoveryGate: "dependency-disposition" }, "AGT-AUTHOR", "human", context);
+    expect(read.success, JSON.stringify(read)).toBe(true);
+    const packet = packetFrom(read);
+    expect(packet).toMatchObject({ targetAgent: "AGT-REVIEWER", initiativeReviewBinding: { gate: "dependency-disposition" } });
+    expect(packet).toEqual(issued.reviewerRoutes[0]?.requestCoworker);
+    expect(await authorizeCoworkerRequest(packet, "human", context)).toEqual({ bounded: true });
+    expect((await authorizeCoworkerRequest({ ...packet, targetAgent: "AGT-CLAIMANT" }, "human", context)).refusal).toBeDefined();
+    claimedBy = "AGT-REVIEWER";
+    expect((await authorizeCoworkerRequest(packet, "human", context)).refusal).toBeDefined();
+  });
 
   it("BI-5B0CD1BC admits the exact packet from typed completion after author archival", async () => {
     const evaluation = await vi.importActual<typeof import("@/lib/backlog/initiative-readiness/backlog-completion-evaluation")>(

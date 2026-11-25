@@ -23,7 +23,7 @@ export async function recoveryReadDecision(gate: string, decisions: Partial<Reco
   const { decisionForIndependentReview } = await import("@/lib/backlog/initiative-readiness/design-phase-recovery");
   const writer = Object.entries(INITIATIVE_READINESS_LANES).find(([, lane]) =>
     (lane.gates as readonly string[]).includes(gate))?.[0];
-  return (writer ? decisionForIndependentReview(writer, decisions, planBaselinePrerequisite) : null)
+  return (writer ? decisionForIndependentReview(writer, decisions, planBaselinePrerequisite, gate) : null)
     ?? decisions.completion ?? decisions.implementation ?? decisions.plan ?? null;
 }
 
