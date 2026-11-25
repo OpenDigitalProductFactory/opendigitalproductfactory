@@ -1,6 +1,7 @@
 import { EventEmitter } from "node:events";
 import { afterEach, describe, expect, it, vi } from "vitest";
 const m = vi.hoisted(() => ({ spawn: vi.fn() }));
+vi.mock("@/lib/workroom-runtime/sandbox-exec", () => import("@/lib/workroom-runtime/sandbox-exec.test-support").then(m => m.legacySandboxExec()));
 vi.mock("@/lib/shared/lazy-node", () => ({ lazyChildProcess: () => ({ spawn: m.spawn }) }));
 import { readCodexCliCapacity } from "./codex-cli-capacity";
 const login = { type: "chatgptAuthTokens" as const, accessToken: "synthetic-token", chatgptAccountId: "selected" };

@@ -26,13 +26,13 @@ import type { ToolCallEntry } from "./chat-message-types";
 import type { AdapterRequest, AdapterResult, ExecutionAdapterHandler } from "./adapter-types";
 import { InferenceError } from "./inference-error";
 import { registerExecutionAdapter } from "./execution-adapter-registry";
-import { lazyChildProcess, lazyUtil } from "@/lib/shared/lazy-node";
 import { extractToolCalls as sharedExtractToolCalls } from "./extract-tool-calls";
 import { recordCliRateLimit, clearCliRateLimit } from "./cli-pool-status";
 import { withCliSlot } from "./cli-concurrency";
 import { extractMentionedPlatformToolNames } from "@/lib/executor-drivers/tool-trace";
 import { codexAuthJson, resolveCodexAuth, type CodexAuth } from "@/lib/executor-drivers/codex/auth";
 import { codexExecArgs } from "@/lib/executor-drivers/codex/exec";
+import { execSandboxCommandLine, spawnSandboxExec } from "@/lib/workroom-runtime/sandbox-exec";
 
 const SANDBOX_CONTAINER = process.env.SANDBOX_CONTAINER_ID ?? "dpf-sandbox-1";
 const CLI_TIMEOUT_MS = 600_000; // 10 minutes — accumulated Build Studio context (>100K chars) takes longer than 3 min to process
@@ -157,10 +157,8 @@ export async function writeContainerFileViaStdin(
   destPath: string,
   mode = "644",
 ): Promise<void> {
-  const spawn = lazyChildProcess().spawn;
   await new Promise<void>((resolve, reject) => {
-    const proc = spawn(
-      "docker",
+    const proc = spawnSandboxExec(
       ["exec", "-i", SANDBOX_CONTAINER, "sh", "-c", `base64 -d > ${destPath} && chmod ${mode} ${destPath}`],
       { stdio: ["pipe", "pipe", "pipe"] },
     );
@@ -287,13 +285,10 @@ export const codexCliAdapter: ExecutionAdapterHandler = {
     const promptFile = `${authHome}/${slug}-prompt.txt`;
     const runnerScript = `${authHome}/${slug}-run.js`;
 
-    const cp = lazyChildProcess();
-    const execAsync = lazyUtil().promisify(cp.exec);
-    const spawnCb = cp.spawn;
     let containerDispatchStarted = false;
 
     try {
-      await execAsync(`docker exec ${SANDBOX_CONTAINER} sh -c 'mkdir -p ${authHome} && chmod 700 ${authHome}'`, { timeout: 5_000 });
+      await execSandboxCommandLine(`docker exec ${SANDBOX_CONTAINER} sh -c 'mkdir -p ${authHome} && chmod 700 ${authHome}'`, { timeout: 5_000 });
       await stageCodexAuth(providerId, authHome, request.plan.providerConnectionId, request.plan.providerConnectionVersion);
       // Write prompt via stdin to avoid the POSIX ARG_MAX limit (BI-2685C1E5).
       // See writeContainerFileViaStdin for full rationale.
@@ -324,7 +319,7 @@ export const codexCliAdapter: ExecutionAdapterHandler = {
       // can inspect what hung if the process times out and the finally
       // block cleans up the regular temp file. Keep the last 20 to bound
       // disk use.
-      await execAsync(
+      await execSandboxCommandLine(
         `docker exec ${SANDBOX_CONTAINER} sh -c 'mkdir -p /tmp/codex-dispatch-archive && cp ${promptFile} /tmp/codex-dispatch-archive/${slug}.txt && ls -1t /tmp/codex-dispatch-archive/*.txt 2>/dev/null | tail -n +21 | xargs -r rm -f'`,
         { timeout: 5_000 },
       ).catch(() => {});
@@ -335,7 +330,7 @@ export const codexCliAdapter: ExecutionAdapterHandler = {
       // shared sandbox / portal. Auth + file writes above are cheap and stay
       // outside the slot so slots turn over on real inference, not prep.
       const { stdout, diagnostics } = await withCliSlot(() => new Promise<{ stdout: string; diagnostics: NativeCliDiagnostics }>((resolve, reject) => {
-        const proc = spawnCb("docker", [
+        const proc = spawnSandboxExec([
           "exec", SANDBOX_CONTAINER, "node", runnerScript,
         ]);
         containerDispatchStarted = true;
@@ -467,7 +462,7 @@ export const codexCliAdapter: ExecutionAdapterHandler = {
       };
     } finally {
       // Clean up temp files (fire-and-forget)
-      if (!containerDispatchStarted) await execAsync(
+      if (!containerDispatchStarted) await execSandboxCommandLine(
         `docker exec ${SANDBOX_CONTAINER} sh -c 'rm -rf ${authHome}'`, { timeout: 5_000 },
       ).catch(() => {});
     }

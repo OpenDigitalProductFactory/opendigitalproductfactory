@@ -35,6 +35,7 @@ vi.mock("./execution-adapter-registry", () => ({
 // Mock child_process
 const mockSpawn = vi.fn();
 const mockExecAsync = vi.fn();
+vi.mock("@/lib/workroom-runtime/sandbox-exec", () => import("@/lib/workroom-runtime/sandbox-exec.test-support").then(m => m.legacySandboxExec()));
 vi.mock("@/lib/shared/lazy-node", () => ({
   lazyChildProcess: () => ({
     exec: (

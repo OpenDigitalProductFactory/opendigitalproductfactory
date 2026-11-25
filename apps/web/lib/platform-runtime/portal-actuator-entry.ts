@@ -4,6 +4,7 @@ import { fenceEndedPreviewRuntimesAtDaemon } from "../nonprod/preview-runtime-fe
 import { sweepOrphanedPromoterContainersAtDaemon } from "../self-upgrade/promoter-sweep";
 import { createDoctoolsActuator } from "../documents/conversion/doctools-actuator";
 import { createSandboxSessionActuator } from "../workroom-runtime/sandbox-session-actuator";
+import { createSandboxExecActuator } from "../workroom-runtime/sandbox-exec-actuator";
 
 async function main() {
   // Use the same immutable promoter closure shipped for this image's
@@ -191,7 +192,13 @@ async function main() {
       return inspectPackagedReconciliationProtocolAtDaemon((snapshot ?? undefined) as never, process.env.GHCR_OWNER?.trim().toLowerCase() ?? "");
     },
     doctools: createDoctoolsActuator(project),
-    openRuntimeSession: createSandboxSessionActuator(),
+    // One stream transport, two owners: a Workroom session or a bounded
+    // command in the observed sandbox (BI-224F56F1).
+    openRuntimeSession: (() => {
+      const session = createSandboxSessionActuator(), exec = createSandboxExecActuator();
+      return (owner: unknown, observeSandbox: Parameters<typeof session>[1]) =>
+        (owner && typeof owner === "object" && (owner as { kind?: unknown }).kind === "sandbox-exec" ? exec : session)(owner, observeSandbox);
+    })(),
   });
 }
 

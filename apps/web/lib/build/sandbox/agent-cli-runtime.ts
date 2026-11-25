@@ -24,7 +24,7 @@
 // (F-B) — completes AGENTS.md §17 "thin adapters behind a stable contract".
 
 import type { SpecialistRole, AssignedTask } from "../task-dependency-graph";
-import { lazyChildProcess, lazyUtil } from "@/lib/shared/lazy-node";
+import { execSandboxCommandLine, spawnSandboxExec } from "@/lib/workroom-runtime/sandbox-exec";
 
 export const SANDBOX_CONTAINER = process.env.SANDBOX_CONTAINER_ID ?? "dpf-sandbox-1";
 
@@ -153,9 +153,8 @@ export function buildSpecialistTaskPrompt(params: {
 /** Promisified `exec` over the sandbox container, used by the small write/probe
  *  helpers (auth injection, temp-file writes) in each surface. */
 export function sandboxExec(): (cmd: string, opts?: { timeout?: number }) => Promise<{ stdout: string; stderr: string }> {
-  const { exec } = lazyChildProcess();
-  const { promisify } = lazyUtil();
-  return promisify(exec) as (cmd: string, opts?: { timeout?: number }) => Promise<{ stdout: string; stderr: string }>;
+  // BI-224F56F1: unchanged without the actuator; routed through it otherwise.
+  return (cmd, opts) => execSandboxCommandLine(cmd, opts);
 }
 
 /**
@@ -181,7 +180,6 @@ export function dockerExecWriteStdin(params: {
 }): Promise<{ stdout: string; stderr: string }> {
   const { containerId, innerCommand, input, asNodeUser } = params;
   const timeoutMs = params.timeoutMs ?? 5_000;
-  const spawn = lazyChildProcess().spawn;
   const args = [
     "exec",
     "-i",
@@ -192,7 +190,7 @@ export function dockerExecWriteStdin(params: {
     innerCommand,
   ];
   return new Promise<{ stdout: string; stderr: string }>((resolve, reject) => {
-    const proc = spawn("docker", args, { stdio: ["pipe", "pipe", "pipe"] });
+    const proc = spawnSandboxExec(args, { stdio: ["pipe", "pipe", "pipe"] });
 
     let stdout = "";
     let stderr = "";
@@ -398,7 +396,6 @@ export function runSandboxAgentCli(params: {
     onStderrLine,
     onStdoutChunk,
   } = params;
-  const spawnCb = lazyChildProcess().spawn;
   const startMs = Date.now();
 
   const execArgs = params.execArgs
@@ -407,7 +404,7 @@ export function runSandboxAgentCli(params: {
       : ["exec", containerId, runnerScript!]);
 
   return new Promise<SandboxCliRunResult>((resolve, reject) => {
-    const proc = spawnCb("docker", execArgs);
+    const proc = spawnSandboxExec(execArgs);
 
     const maxStdoutChars = params.maxStdoutChars ?? MAX_AGENT_CLI_STDOUT_CHARS;
     let stdout = "";

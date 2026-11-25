@@ -164,7 +164,7 @@ export function createScopeWriterObserver({ observe, observeServices, observeCiC
     } catch { res.writeHead(503).end(); }
   });
   bindRuntimeSessionStreams(server, openRuntimeSession);
-  server.maxConnections = 8;
+  server.maxConnections = 16;
   return server;
 }
 
@@ -213,7 +213,7 @@ function bindRuntimeSessionStreams(server, open) {
   server.on('upgrade', (req, socket, head) => {
     if (!open || req.url !== runtimeSessionPath || req.method !== 'POST' || req.headers.upgrade !== runtimeStreamProtocol
       || (req.headers['content-length'] !== undefined && req.headers['content-length'] !== '0')
-      || req.headers['transfer-encoding'] || sessions >= 4) {
+      || req.headers['transfer-encoding'] || sessions >= 8) {
       socket.end('HTTP/1.1 404 Not Found\r\nConnection: close\r\nContent-Length: 0\r\n\r\n');
       return;
     }

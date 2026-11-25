@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 const spawnMock = vi.hoisted(() => vi.fn());
 const login = { type: "chatgptAuthTokens" as const, accessToken: "selected-token", chatgptAccountId: "account-b" };
+vi.mock("@/lib/workroom-runtime/sandbox-exec", () => import("@/lib/workroom-runtime/sandbox-exec.test-support").then(m => m.legacySandboxExec()));
 vi.mock("@/lib/shared/lazy-node", () => ({
   lazyChildProcess: () => ({ spawn: spawnMock }),
 }));
