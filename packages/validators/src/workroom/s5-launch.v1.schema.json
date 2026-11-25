@@ -1,0 +1,827 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "anyOf": [
+    {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/__schema0"
+        },
+        {
+          "$ref": "#/$defs/__schema17"
+        }
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "schemaVersion": {
+          "$ref": "#/$defs/__schema1"
+        },
+        "issuer": {
+          "$ref": "#/$defs/__schema3"
+        },
+        "audience": {
+          "$ref": "#/$defs/__schema3"
+        },
+        "hostRef": {
+          "$ref": "#/$defs/__schema4"
+        },
+        "workroomId": {
+          "$ref": "#/$defs/__schema4"
+        },
+        "sessionRef": {
+          "$ref": "#/$defs/__schema4"
+        },
+        "stageKey": {
+          "$ref": "#/$defs/__schema3"
+        },
+        "stageAttemptRef": {
+          "$ref": "#/$defs/__schema4"
+        },
+        "operationId": {
+          "$ref": "#/$defs/__schema20"
+        },
+        "operation": {
+          "$ref": "#/$defs/__schema21"
+        },
+        "kind": {
+          "type": "string",
+          "const": "coordination-broker-call"
+        },
+        "args": {
+          "type": "object",
+          "properties": {
+            "caseKey": {
+              "$ref": "#/$defs/__schema5"
+            },
+            "body": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2000,
+              "pattern": "^[^@]+$"
+            },
+            "recipient": {
+              "$ref": "#/$defs/__schema16"
+            }
+          },
+          "required": [
+            "caseKey",
+            "body",
+            "recipient"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "issuer",
+        "audience",
+        "hostRef",
+        "workroomId",
+        "sessionRef",
+        "stageKey",
+        "stageAttemptRef",
+        "operationId",
+        "operation",
+        "kind",
+        "args"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "schemaVersion": {
+          "$ref": "#/$defs/__schema1"
+        },
+        "issuer": {
+          "$ref": "#/$defs/__schema3"
+        },
+        "audience": {
+          "$ref": "#/$defs/__schema3"
+        },
+        "hostRef": {
+          "$ref": "#/$defs/__schema4"
+        },
+        "workroomId": {
+          "$ref": "#/$defs/__schema4"
+        },
+        "sessionRef": {
+          "$ref": "#/$defs/__schema4"
+        },
+        "stageKey": {
+          "$ref": "#/$defs/__schema3"
+        },
+        "stageAttemptRef": {
+          "$ref": "#/$defs/__schema4"
+        },
+        "operationId": {
+          "$ref": "#/$defs/__schema20"
+        },
+        "operation": {
+          "$ref": "#/$defs/__schema21"
+        },
+        "kind": {
+          "type": "string",
+          "const": "coordination-broker-receipt"
+        },
+        "result": {
+          "oneOf": [
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "const": "proposal-recorded"
+                },
+                "proposalRef": {
+                  "$ref": "#/$defs/__schema4"
+                }
+              },
+              "required": [
+                "kind",
+                "proposalRef"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "const": "refused"
+                }
+              },
+              "required": [
+                "kind"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "issuer",
+        "audience",
+        "hostRef",
+        "workroomId",
+        "sessionRef",
+        "stageKey",
+        "stageAttemptRef",
+        "operationId",
+        "operation",
+        "kind",
+        "result"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "schemaVersion": {
+          "$ref": "#/$defs/__schema1"
+        },
+        "kind": {
+          "$ref": "#/$defs/__schema22"
+        },
+        "issuer": {
+          "$ref": "#/$defs/__schema3"
+        },
+        "audience": {
+          "$ref": "#/$defs/__schema3"
+        },
+        "hostRef": {
+          "$ref": "#/$defs/__schema4"
+        },
+        "workroomId": {
+          "$ref": "#/$defs/__schema4"
+        },
+        "sessionRef": {
+          "$ref": "#/$defs/__schema4"
+        },
+        "stageKey": {
+          "$ref": "#/$defs/__schema3"
+        },
+        "stageAttemptRef": {
+          "$ref": "#/$defs/__schema4"
+        },
+        "providerCallRef": {
+          "$ref": "#/$defs/__schema4"
+        },
+        "providerModelRef": {
+          "$ref": "#/$defs/__schema4"
+        },
+        "appliedLimits": {
+          "$ref": "#/$defs/__schema19"
+        },
+        "input": {
+          "$ref": "#/$defs/__schema23"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "kind",
+        "issuer",
+        "audience",
+        "hostRef",
+        "workroomId",
+        "sessionRef",
+        "stageKey",
+        "stageAttemptRef",
+        "providerCallRef",
+        "providerModelRef",
+        "appliedLimits",
+        "input"
+      ],
+      "additionalProperties": false
+    }
+  ],
+  "$defs": {
+    "__schema0": {
+      "type": "object",
+      "properties": {
+        "schemaVersion": {
+          "$ref": "#/$defs/__schema1"
+        },
+        "kind": {
+          "$ref": "#/$defs/__schema2"
+        },
+        "issuer": {
+          "$ref": "#/$defs/__schema3"
+        },
+        "audience": {
+          "$ref": "#/$defs/__schema3"
+        },
+        "hostRef": {
+          "$ref": "#/$defs/__schema4"
+        },
+        "workroomId": {
+          "$ref": "#/$defs/__schema4"
+        },
+        "sessionRef": {
+          "$ref": "#/$defs/__schema4"
+        },
+        "stageKey": {
+          "$ref": "#/$defs/__schema3"
+        },
+        "stageAttemptRef": {
+          "$ref": "#/$defs/__schema4"
+        },
+        "caseKey": {
+          "$ref": "#/$defs/__schema5"
+        },
+        "subject": {
+          "$ref": "#/$defs/__schema6"
+        },
+        "issuedAt": {
+          "$ref": "#/$defs/__schema7"
+        },
+        "expiresAt": {
+          "$ref": "#/$defs/__schema7"
+        },
+        "authority": {
+          "$ref": "#/$defs/__schema8"
+        },
+        "mode": {
+          "type": "string",
+          "const": "read-only-coordination"
+        },
+        "permittedOperations": {
+          "minItems": 1,
+          "maxItems": 3,
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/__schema9"
+          }
+        },
+        "jsi": {
+          "$ref": "#/$defs/__schema10"
+        },
+        "budget": {
+          "type": "object",
+          "properties": {
+            "maxInputBytes": {
+              "$ref": "#/$defs/__schema12"
+            },
+            "maxInputTokens": {
+              "maximum": 10000,
+              "$ref": "#/$defs/__schema13"
+            },
+            "maxOutputTokens": {
+              "maximum": 1200,
+              "$ref": "#/$defs/__schema14"
+            },
+            "maxReasoningTokens": {
+              "$ref": "#/$defs/__schema15"
+            }
+          },
+          "required": [
+            "maxInputBytes",
+            "maxInputTokens",
+            "maxOutputTokens",
+            "maxReasoningTokens"
+          ],
+          "additionalProperties": false
+        },
+        "coordination": {
+          "type": "object",
+          "properties": {
+            "recipient": {
+              "$ref": "#/$defs/__schema16"
+            },
+            "postEffects": {
+              "type": "string",
+              "const": "proposal-only-no-wake"
+            }
+          },
+          "required": [
+            "recipient",
+            "postEffects"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "kind",
+        "issuer",
+        "audience",
+        "hostRef",
+        "workroomId",
+        "sessionRef",
+        "stageKey",
+        "stageAttemptRef",
+        "caseKey",
+        "subject",
+        "issuedAt",
+        "expiresAt",
+        "authority",
+        "mode",
+        "permittedOperations",
+        "jsi",
+        "budget",
+        "coordination"
+      ],
+      "additionalProperties": false
+    },
+    "__schema1": {
+      "type": "string",
+      "const": "s5-launch.v1"
+    },
+    "__schema2": {
+      "type": "string",
+      "const": "launch"
+    },
+    "__schema3": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256,
+      "pattern": "^\\S+$"
+    },
+    "__schema4": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256,
+      "pattern": "^[a-zA-Z0-9][a-zA-Z0-9:._/-]*$"
+    },
+    "__schema5": {
+      "type": "string",
+      "maxLength": 256,
+      "pattern": "^[a-z][a-z0-9-]*:[a-zA-Z0-9][a-zA-Z0-9_-]*$"
+    },
+    "__schema6": {
+      "type": "object",
+      "properties": {
+        "principalId": {
+          "$ref": "#/$defs/__schema3"
+        },
+        "gaid": {
+          "type": "string",
+          "maxLength": 256,
+          "pattern": "^gaid:[^\\s]+$"
+        }
+      },
+      "required": [
+        "principalId",
+        "gaid"
+      ],
+      "additionalProperties": false
+    },
+    "__schema7": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "__schema8": {
+      "type": "object",
+      "properties": {
+        "bindingRef": {
+          "$ref": "#/$defs/__schema4"
+        },
+        "permitRef": {
+          "$ref": "#/$defs/__schema4"
+        },
+        "grantKeys": {
+          "maxItems": 128,
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/__schema3"
+          }
+        }
+      },
+      "required": [
+        "bindingRef",
+        "permitRef",
+        "grantKeys"
+      ],
+      "additionalProperties": false
+    },
+    "__schema9": {
+      "type": "string",
+      "enum": [
+        "get_workroom",
+        "read_room_messages",
+        "post_room_message"
+      ]
+    },
+    "__schema10": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "const": "eligible"
+        },
+        "qualification": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "$ref": "#/$defs/__schema3"
+            },
+            "version": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            },
+            "statusRevision": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            }
+          },
+          "required": [
+            "id",
+            "version",
+            "statusRevision"
+          ],
+          "additionalProperties": false
+        },
+        "validUntil": {
+          "$ref": "#/$defs/__schema7"
+        },
+        "selector": {
+          "type": "object",
+          "properties": {
+            "organizationId": {
+              "$ref": "#/$defs/__schema3"
+            },
+            "installationId": {
+              "$ref": "#/$defs/__schema3"
+            },
+            "job": {
+              "$ref": "#/$defs/__schema11"
+            },
+            "activityKey": {
+              "$ref": "#/$defs/__schema3"
+            },
+            "scope": {
+              "type": "object",
+              "properties": {
+                "workflow": {
+                  "$ref": "#/$defs/__schema3"
+                },
+                "archetype": {
+                  "$ref": "#/$defs/__schema3"
+                },
+                "jurisdiction": {
+                  "$ref": "#/$defs/__schema3"
+                },
+                "dataClass": {
+                  "$ref": "#/$defs/__schema3"
+                },
+                "riskClass": {
+                  "$ref": "#/$defs/__schema3"
+                }
+              },
+              "required": [
+                "workflow",
+                "archetype",
+                "jurisdiction",
+                "dataClass",
+                "riskClass"
+              ],
+              "additionalProperties": false
+            },
+            "profileFingerprint": {
+              "type": "string",
+              "pattern": "^sha256:[a-f0-9]{64}$"
+            },
+            "scheme": {
+              "$ref": "#/$defs/__schema11"
+            }
+          },
+          "required": [
+            "organizationId",
+            "installationId",
+            "job",
+            "activityKey",
+            "scope",
+            "profileFingerprint",
+            "scheme"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "kind",
+        "qualification",
+        "validUntil",
+        "selector"
+      ],
+      "additionalProperties": false
+    },
+    "__schema11": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/__schema3"
+        },
+        "version": {
+          "$ref": "#/$defs/__schema3"
+        }
+      },
+      "required": [
+        "id",
+        "version"
+      ],
+      "additionalProperties": false
+    },
+    "__schema12": {
+      "type": "integer",
+      "exclusiveMinimum": 0,
+      "maximum": 9007199254740991
+    },
+    "__schema13": {
+      "type": "integer",
+      "exclusiveMinimum": 0,
+      "maximum": 9007199254740991
+    },
+    "__schema14": {
+      "type": "integer",
+      "exclusiveMinimum": 0,
+      "maximum": 9007199254740991
+    },
+    "__schema15": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "__schema16": {
+      "type": "object",
+      "properties": {
+        "authorityRef": {
+          "$ref": "#/$defs/__schema4"
+        },
+        "destinationRef": {
+          "$ref": "#/$defs/__schema4"
+        },
+        "reservationRef": {
+          "$ref": "#/$defs/__schema4"
+        }
+      },
+      "required": [
+        "authorityRef",
+        "destinationRef",
+        "reservationRef"
+      ],
+      "additionalProperties": false
+    },
+    "__schema17": {
+      "type": "object",
+      "properties": {
+        "schemaVersion": {
+          "$ref": "#/$defs/__schema1"
+        },
+        "kind": {
+          "$ref": "#/$defs/__schema2"
+        },
+        "issuer": {
+          "$ref": "#/$defs/__schema3"
+        },
+        "audience": {
+          "$ref": "#/$defs/__schema3"
+        },
+        "hostRef": {
+          "$ref": "#/$defs/__schema4"
+        },
+        "workroomId": {
+          "$ref": "#/$defs/__schema4"
+        },
+        "sessionRef": {
+          "$ref": "#/$defs/__schema4"
+        },
+        "stageKey": {
+          "$ref": "#/$defs/__schema3"
+        },
+        "stageAttemptRef": {
+          "$ref": "#/$defs/__schema4"
+        },
+        "caseKey": {
+          "$ref": "#/$defs/__schema5"
+        },
+        "subject": {
+          "$ref": "#/$defs/__schema6"
+        },
+        "issuedAt": {
+          "$ref": "#/$defs/__schema7"
+        },
+        "expiresAt": {
+          "$ref": "#/$defs/__schema7"
+        },
+        "authority": {
+          "$ref": "#/$defs/__schema8"
+        },
+        "mode": {
+          "type": "string",
+          "const": "bounded-coding"
+        },
+        "worktreeRef": {
+          "$ref": "#/$defs/__schema4"
+        },
+        "permittedOperations": {
+          "minItems": 1,
+          "maxItems": 128,
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/__schema18"
+          }
+        },
+        "jsi": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/__schema10"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "const": "not-applicable"
+                },
+                "activityKey": {
+                  "$ref": "#/$defs/__schema3"
+                }
+              },
+              "required": [
+                "kind",
+                "activityKey"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        },
+        "budget": {
+          "$ref": "#/$defs/__schema19"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "kind",
+        "issuer",
+        "audience",
+        "hostRef",
+        "workroomId",
+        "sessionRef",
+        "stageKey",
+        "stageAttemptRef",
+        "caseKey",
+        "subject",
+        "issuedAt",
+        "expiresAt",
+        "authority",
+        "mode",
+        "worktreeRef",
+        "permittedOperations",
+        "jsi",
+        "budget"
+      ],
+      "additionalProperties": false
+    },
+    "__schema18": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[a-z][a-z0-9_.-]*$"
+    },
+    "__schema19": {
+      "type": "object",
+      "properties": {
+        "maxInputBytes": {
+          "$ref": "#/$defs/__schema12"
+        },
+        "maxInputTokens": {
+          "$ref": "#/$defs/__schema13"
+        },
+        "maxOutputTokens": {
+          "$ref": "#/$defs/__schema14"
+        },
+        "maxReasoningTokens": {
+          "$ref": "#/$defs/__schema15"
+        }
+      },
+      "required": [
+        "maxInputBytes",
+        "maxInputTokens",
+        "maxOutputTokens",
+        "maxReasoningTokens"
+      ],
+      "additionalProperties": false
+    },
+    "__schema20": {
+      "type": "string",
+      "pattern": "^room-operation:[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$"
+    },
+    "__schema21": {
+      "type": "string",
+      "const": "post_room_message"
+    },
+    "__schema22": {
+      "type": "string",
+      "const": "provider-preflight"
+    },
+    "__schema23": {
+      "type": "object",
+      "properties": {
+        "tokenizerRef": {
+          "$ref": "#/$defs/__schema4"
+        },
+        "totalBytes": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        },
+        "totalTokens": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        },
+        "bytesByPart": {
+          "type": "object",
+          "properties": {
+            "prompt": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "projection": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "roomContext": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "toolSchemas": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "framing": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            }
+          },
+          "required": [
+            "prompt",
+            "projection",
+            "roomContext",
+            "toolSchemas",
+            "framing"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "tokenizerRef",
+        "totalBytes",
+        "totalTokens",
+        "bytesByPart"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "$id": "urn:dpf:workroom:s5-launch:v1"
+}

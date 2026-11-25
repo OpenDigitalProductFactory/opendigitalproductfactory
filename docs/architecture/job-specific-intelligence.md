@@ -751,6 +751,11 @@ owns the additive carrier and must repeat conformance against its authoritative
 policy, carrier and protected-evidence readers before qualified use. The broader
 five-profile readiness in BI-3E99ACFA follows that issuer.
 
+The [S5 launch v1 compatibility contract](workroom-bound-launch-contract-v1.md#jsi-decision)
+shows how an eligible verdict and its exact selector travel in an authenticated
+Workroom launch. The synthetic coordination fixture also exercises the shared
+resolver. It proves the wire shape, not current qualification or enforcement.
+
 No-scheme requires an explicit result from authoritative activity policy. It is
 not a ceiling. An eligible projection is an input to the live intersection with
 binding and grants, not authorization. The [S5 contract and fleet-safety design](../superpowers/specs/2026-11-25-tak-jsi-qualification-issuance-design.md#s5-consumer-contract)
