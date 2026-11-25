@@ -3,6 +3,7 @@
 // Guard paths short-circuit before DB/Inngest I/O, so no mocks are needed.
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { UPLOADS_BACKUP_JOB_ID } from "@/lib/operate/backups/constants";
 
 const db = vi.hoisted(() => ({
   scheduledAgentTask: { findUnique: vi.fn(), update: vi.fn() },
@@ -17,7 +18,7 @@ import {
   projectNextRun,
   retuneCron,
 } from "./cadence";
-import { setWorkEnabled, updateWorkSchedule } from "./control";
+import { retireWork, runWorkNow, setWorkEnabled, updateWorkSchedule } from "./control";
 import {
   INTAKE_CONTROLLER_COMMISSION_KEY,
   INTAKE_CONTROLLER_JOB_ID,
@@ -112,6 +113,19 @@ describe("core-locked enforcement", () => {
     const res = await updateWorkSchedule("code-graph-reconcile", "hourly", "test");
     expect(res.ok).toBe(false);
     if (!res.ok) expect(res.error).toMatch(/core-locked/);
+  });
+
+  it("refuses writes to the uploads heartbeat before resolving any fake job controls", async () => {
+    vi.clearAllMocks();
+    const outcomes = await Promise.all([
+      setWorkEnabled(UPLOADS_BACKUP_JOB_ID, false, "test"),
+      updateWorkSchedule(UPLOADS_BACKUP_JOB_ID, "hourly", "test"),
+      runWorkNow(UPLOADS_BACKUP_JOB_ID, "test"),
+      retireWork(UPLOADS_BACKUP_JOB_ID, "test"),
+    ]);
+    for (const outcome of outcomes) expect(outcome).toMatchObject({ ok: false, error: expect.stringContaining("read-only heartbeat") });
+    expect(db.scheduledAgentTask.findUnique).not.toHaveBeenCalled();
+    expect(db.scheduledJob.findUnique).not.toHaveBeenCalled();
   });
 });
 

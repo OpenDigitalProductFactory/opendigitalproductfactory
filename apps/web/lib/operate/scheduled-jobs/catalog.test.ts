@@ -7,8 +7,9 @@
 // row, either "gated" or exactly why not.
 
 import { describe, expect, it } from "vitest";
+import { UPLOADS_BACKUP_JOB_ID } from "@/lib/operate/backups/constants";
 
-import { SCHEDULED_JOB_CATALOG, getCatalogEntryByInngestId } from "./catalog";
+import { SCHEDULED_JOB_CATALOG, SCHEDULED_JOB_HEARTBEATS, getCatalogEntry, getCatalogEntryByInngestId } from "./catalog";
 
 describe("scheduled-job catalog kill-switch posture (BI-7E49FA15)", () => {
   it("every entry declares exactly one of honorsEnabledGate: true or a non-empty ungatedReason", () => {
@@ -34,5 +35,15 @@ describe("scheduled-job catalog kill-switch posture (BI-7E49FA15)", () => {
       "code-graph-reconcile",
     );
     expect(getCatalogEntryByInngestId("ops/no-such-function")).toBeUndefined();
+  });
+
+  it("has a real parent in cron parity, but no independent cron for the uploads step", () => {
+    const entry = SCHEDULED_JOB_HEARTBEATS.find(({ jobId }) => jobId === UPLOADS_BACKUP_JOB_ID);
+    expect(entry).toMatchObject({ parentJobId: "all-backups-daily" });
+    expect(getCatalogEntry(entry!.parentJobId)).toMatchObject({
+      inngestId: "ops/all-backups-daily-scheduled",
+      cron: entry!.schedule,
+    });
+    expect(SCHEDULED_JOB_CATALOG.some(({ jobId }) => jobId === UPLOADS_BACKUP_JOB_ID)).toBe(false);
   });
 });

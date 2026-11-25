@@ -51,7 +51,7 @@ import { PLAN_GATE_STALL_JOB_CATALOG_ENTRY } from "./catalog-build-invariants";
 // Re-exported so existing importers of the catalog keep working; the types are
 // owned by ./catalog-types (BI-ED117C82).
 export type { JobCategory, ScheduledJobCatalogEntry };
-
+export { SCHEDULED_JOB_HEARTBEATS, getScheduledJobHeartbeat } from "./catalog-heartbeats";
 // Ordered roughly by operational prominence. core-locked jobs first.
 export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
   PROVIDER_PAUSE_JOB_CATALOG_ENTRY,
@@ -149,7 +149,7 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
     ungatedReason:
       "Quiescence caller: the daily backup fan-out is the disaster-recovery floor the upgrade path depends on; gating it would deadlock self-upgrade.",
     name: "All backups (fan-out)",
-    purpose: "Runs the daily Postgres backup, then the trial-restore verification (postgres-only after BET-5).",
+    purpose: "Runs the daily Postgres backup, captures its paired uploads, and trials both.",
     cron: "daily",
     cadence: "Daily",
     category: "core",

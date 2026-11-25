@@ -26,6 +26,7 @@
   },
   "scheduledWork": {
     "lastResult": "Last result",
+    "withParentJob": "With its parent job",
     "intakeController": {
       "title": "Issue intake controller",
       "intro": "This installation reads and triages issues on the platform repository only after an owner commissions it. Every check below must pass first.",
