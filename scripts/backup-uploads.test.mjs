@@ -1,17 +1,21 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { linkSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { linkSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, describe, it } from "node:test";
+import { fileURLToPath } from "node:url";
 
 import {
   ARCHIVE_FORMAT,
   RefusalError,
+  UPLOAD_BACKUP_LIMITS,
   buildManifest,
   listRoot,
   parseBlobRowsFromCopy,
   reconcileBlobRows,
+  serializeManifest,
   sortEntries,
   splitUstarName,
   ustarHeader,
@@ -32,6 +36,26 @@ const put = (root, rel, content) => {
   writeFileSync(join(root, rel), content);
 };
 const sha = (b) => createHash("sha256").update(b).digest("hex");
+const writerPath = fileURLToPath(new URL("./backup-uploads.mjs", import.meta.url));
+
+function runWriter(root, parent) {
+  const dump = join(parent, "synthetic.dump");
+  const target = join(parent, "run");
+  writeFileSync(dump, "synthetic dump bytes");
+  const result = spawnSync(process.execPath, [writerPath], {
+    encoding: "utf8",
+    env: {
+      TARGET_DIR: target,
+      DPF_UPLOAD_ROOTS: JSON.stringify([{ name: "upload-store", path: root, resolvedFrom: "env" }]),
+      PAIRED_POSTGRES_RUN_ID: "synthetic-run",
+      PAIRED_POSTGRES_DUMP: dump,
+      PAIRED_POSTGRES_SHA256: sha("synthetic dump bytes"),
+      // Refusals under test happen before pg_restore. Never call a real database.
+      PATH: parent,
+    },
+  });
+  return { ...result, target };
+}
 
 /** A strict ustar reader, the way the receiving side reads the archive. */
 function readUstar(buf) {
@@ -47,6 +71,10 @@ function readUstar(buf) {
     assert.equal(h.toString("ascii", 257, 263), "ustar\0", "ustar magic");
     assert.equal(h.toString("ascii", 263, 265), "00", "ustar version");
     assert.equal(h.toString("ascii", 156, 157), "0", "regular file typeflag");
+    assert.equal(h.toString("ascii", 100, 124), "0000644\x000000000\x000000000\x00", "mode, uid, and gid");
+    assert.equal(h.toString("ascii", 136, 148), "00000000000\0", "mtime");
+    assert.ok(h.subarray(265, 345).every((b) => b === 0), "empty owner names and device fields");
+    assert.ok(h.subarray(500, 512).every((b) => b === 0), "reserved bytes");
     const stored = parseInt(h.toString("ascii", 148, 154), 8);
     const copy = Buffer.from(h);
     copy.fill(0x20, 148, 156);
@@ -123,6 +151,21 @@ describe("listRoot", () => {
   it("treats a missing root as empty", () => {
     assert.deepEqual(listRoot({ name: "r", path: join(scratch, "does-not-exist") }), []);
   });
+  it("keeps a valid UTF-8 replacement character in a filename", () => {
+    const root = freshDir();
+    put(root, "valid-\uFFFD.txt", "bytes");
+    assert.equal(listRoot({ name: "r", path: root })[0].path, "valid-\uFFFD.txt");
+  });
+  it("refuses a raw non-UTF-8 Linux name before path lookup and exits 3", { skip: process.platform !== "linux" }, () => {
+    const root = freshDir();
+    const name = Buffer.from([0x62, 0x61, 0x64, 0xff]);
+    mkdirSync(join(root, "nested"));
+    writeFileSync(Buffer.concat([Buffer.from(join(root, "nested") + "/"), name]), "no");
+    const result = runWriter(root, freshDir());
+    assert.equal(result.status, 3, result.stderr);
+    assert.match(result.stderr, /non-UTF-8.*upload-store\/nested.*626164ff/);
+    assert.deepEqual(readdirSync(result.target), ["log.txt"]);
+  });
 });
 
 describe("writeArchive", () => {
@@ -130,7 +173,7 @@ describe("writeArchive", () => {
     const root = freshDir();
     const voice = freshDir();
     put(root, "documents/sha256/aa/bb/aabb", "document bytes");
-    put(root, "thread-9/0b5c2f7a-1111-4222-8333-944455556666.png", Buffer.alloc(1300, 7));
+    put(root, "thread-9/0b5c2f7a-1111-4222-8333-944455556666.png", Buffer.alloc(1024 ** 2 + 1300, 7));
     put(voice, "voice/2026/a.mp3", "audio");
     const entries = sortEntries([
       ...listRoot({ name: "voice", path: voice }),
@@ -159,10 +202,65 @@ describe("writeArchive", () => {
     assert.deepEqual(readUstar(readFileSync(join(out, "uploads.tar"))), []);
   });
   it("refuses a file that changed size between listing and reading", () => {
+    const root = freshDir();
+    put(root, "a", "three");
+    const entries = listRoot({ name: "r", path: root });
+    put(root, "a", "four");
     const out = freshDir();
-    const entries = [{ root: "r", path: "a", abs: "/ignored", size: 3 }];
-    assert.throws(() => writeArchive({ entries, tarPath: join(out, "uploads.tar"), ndjsonPath: join(out, "files.ndjson"), readFile: () => Buffer.from("four") }), /changed size/);
+    assert.throws(() => writeArchive({ entries, tarPath: join(out, "uploads.tar"), ndjsonPath: join(out, "files.ndjson") }), /changed size/);
   });
+  it("refuses when headers, padding, and the trailer push the archive over 1 TiB, without reading the payloads", () => {
+    const out = freshDir();
+    // Each payload fits the 11-octal-digit ustar size field. Exactly 1 TiB of
+    // rounded payload would fit alone, but the headers and trailer would not.
+    const entries = Array.from({ length: 128 }, (_, i) => ({
+      root: "r", path: String(i), abs: "/not-a-real-upload", size: 0o77777777777,
+    }));
+    assert.throws(() => writeArchive({ entries, tarPath: join(out, "uploads.tar"), ndjsonPath: join(out, "files.ndjson") }),
+      { name: "RefusalError", message: /uploads\.tar.*1 TiB/ });
+    assert.deepEqual(readdirSync(out), []);
+  });
+  it("refuses a files.ndjson line over 64 KiB", () => {
+    const out = freshDir();
+    const entries = [{ root: "r", path: "é".repeat(32 * 1024), abs: "/not-a-real-upload", size: 0 }];
+    assert.throws(() => writeArchive({ entries, tarPath: join(out, "uploads.tar"), ndjsonPath: join(out, "files.ndjson") }),
+      { name: "RefusalError", message: /files\.ndjson.*line.*64 KiB/ });
+    assert.deepEqual(readdirSync(out), []);
+  });
+  it("counts encoded bytes and each LF toward the files.ndjson total and admits exact limits", () => {
+    const root = freshDir();
+    put(root, "é", "a");
+    const entries = listRoot({ name: "r", path: root });
+    const bytes = Buffer.byteLength(JSON.stringify({ root: "r", path: "é", sha256: sha("a"), sizeBytes: 1 }) + "\n");
+    const out = freshDir();
+    const args = { entries, tarPath: join(out, "uploads.tar"), ndjsonPath: join(out, "files.ndjson") };
+    assert.throws(() => writeArchive({ ...args, limits: { ndjsonBytes: bytes - 1 } }),
+      { name: "RefusalError", message: /files\.ndjson.*1 GiB/ });
+    assert.throws(() => writeArchive({ ...args, limits: { archiveBytes: 2047 } }),
+      { name: "RefusalError", message: /uploads\.tar.*1 TiB/ });
+    assert.deepEqual(readdirSync(out), []);
+    writeArchive({ ...args, limits: { ndjsonBytes: bytes, ndjsonLineBytes: bytes - 1, archiveBytes: 2048 } });
+    assert.equal(readFileSync(args.ndjsonPath).length, bytes);
+    assert.equal(readFileSync(args.tarPath).length, 2048);
+  });
+});
+
+it("uses the agreed DPF2 limits, including the 1 GiB NDJSON cap", () => {
+  assert.deepEqual(UPLOAD_BACKUP_LIMITS, {
+    manifestBytes: 16 * 1024 ** 2,
+    ndjsonLineBytes: 64 * 1024,
+    ndjsonBytes: 1024 ** 3,
+    archiveBytes: 1024 ** 4,
+  });
+});
+
+it("refuses manifest.json over 16 MiB and admits exactly 16 MiB, including the LF", () => {
+  const limit = 16 * 1024 * 1024;
+  const overhead = Buffer.byteLength(JSON.stringify({ payload: "" }, null, 2) + "\n");
+  const payload = "é".repeat(Math.floor((limit - overhead) / 2)) + "x".repeat((limit - overhead) % 2);
+  assert.equal(Buffer.byteLength(serializeManifest({ payload })), limit);
+  assert.throws(() => serializeManifest({ payload: payload + "x" }),
+    { name: "RefusalError", message: /manifest\.json.*16 MiB/ });
 });
 
 describe("reconcile with the paired dump", () => {
