@@ -12,10 +12,10 @@
 // ToolExecutionContext). Definitions moved verbatim out of the inline
 // PLATFORM_TOOLS array; grants mirror TOOL_TO_GRANTS.
 
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
+import type { RegisteredToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack } from "../tool-pack";
 
-const definitions: ToolDefinition[] = [
+const definitions: RegisteredToolDefinition[] = [
   {
     name: "report_quality_issue",
     description: "Report a bug, suggestion, or question about the platform. Available to ALL employees regardless of role — anyone can report a problem.",
@@ -29,6 +29,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["type", "title"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: null,
     sideEffect: true,
   },
@@ -43,6 +44,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["reportId"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: null,
     sideEffect: true,
     consequence: "outward",
@@ -69,6 +71,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["title", "description"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: true,

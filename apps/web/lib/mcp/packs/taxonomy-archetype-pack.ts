@@ -16,7 +16,7 @@
 
 import { prisma } from "@dpf/db";
 import { slugify } from "@/lib/shared/slugify";
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
+import type { RegisteredToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
 import {
   resolveActiveBuildId,
@@ -24,7 +24,7 @@ import {
   updateBuildHappyPathState,
 } from "@/lib/mcp/build-tool-helpers";
 
-const definitions: ToolDefinition[] = [
+const definitions: RegisteredToolDefinition[] = [
   {
     name: "generate_custom_archetype",
     description: "Generate a custom business archetype from a description of the business, its offerings, and customer interaction patterns. Creates a new StorefrontArchetype record.",
@@ -41,6 +41,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["businessName", "businessDescription", "offerings", "primaryCtaType"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_storefront",
     sideEffect: true,
   },
@@ -52,6 +53,7 @@ const definitions: ToolDefinition[] = [
       properties: {},
       required: [],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_storefront",
     sideEffect: false,
   },
@@ -62,6 +64,7 @@ const definitions: ToolDefinition[] = [
       type: "object",
       properties: {},
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_platform",
     executionMode: "immediate",
     buildPhases: ["ideate"],
@@ -86,6 +89,7 @@ const definitions: ToolDefinition[] = [
         },
       },
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: true,
@@ -135,6 +139,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["name", "shortName", "sourceType"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_compliance",
     sideEffect: true,
   },

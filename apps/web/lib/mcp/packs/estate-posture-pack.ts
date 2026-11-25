@@ -13,7 +13,7 @@
 // Definitions moved verbatim out of the inline PLATFORM_TOOLS array; grants
 // mirror agent-grants.ts TOOL_TO_GRANTS, which stays the gating source.
 
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
+import type { RegisteredToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
 
 const entityProps = {
@@ -22,7 +22,7 @@ const entityProps = {
   entityName: { type: "string", description: "Specific estate item name (optional)" },
 } as const;
 
-const definitions: ToolDefinition[] = [
+const definitions: RegisteredToolDefinition[] = [
   {
     name: "summarize_estate_posture",
     description: "Summarize support lifecycle, evidence freshness, version confidence, and open posture issues for an estate item or the current product estate view.",
@@ -31,6 +31,7 @@ const definitions: ToolDefinition[] = [
       properties: { ...entityProps },
       required: [],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_inventory",
     sideEffect: false,
   },
@@ -42,6 +43,7 @@ const definitions: ToolDefinition[] = [
       properties: { ...entityProps },
       required: [],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_inventory",
     sideEffect: false,
   },
@@ -53,6 +55,7 @@ const definitions: ToolDefinition[] = [
       properties: { ...entityProps },
       required: [],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_inventory",
     sideEffect: false,
   },
@@ -64,6 +67,7 @@ const definitions: ToolDefinition[] = [
       properties: { ...entityProps },
       required: [],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_inventory",
     sideEffect: false,
   },

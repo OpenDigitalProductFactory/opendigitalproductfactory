@@ -20,7 +20,7 @@ import {
   statutoryQualifierKey,
   type StatutoryRuleKind,
 } from "@/lib/finance/statutory-rules";
-import type { ToolDefinition, ToolExecutionContext, ToolResult } from "@/lib/mcp-tool-types";
+import type { RegisteredToolDefinition, ToolExecutionContext, ToolResult } from "@/lib/mcp-tool-types";
 
 const RULE_KINDS: readonly StatutoryRuleKind[] = ["rate", "wage_base", "threshold", "amount"];
 
@@ -37,7 +37,7 @@ const PAYROLL_TAX_KINDS = [
 ] as const;
 type PayrollTaxKindValue = (typeof PAYROLL_TAX_KINDS)[number];
 
-export const STATUTORY_RATE_TOOLS: ToolDefinition[] = [
+export const STATUTORY_RATE_TOOLS: RegisteredToolDefinition[] = [
   {
     name: "list_statutory_rate_gaps",
     description:
@@ -52,6 +52,7 @@ export const STATUTORY_RATE_TOOLS: ToolDefinition[] = [
       },
       required: [],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: null,
     sideEffect: false,
     coworkerArtifact: false,
@@ -114,6 +115,7 @@ export const STATUTORY_RATE_TOOLS: ToolDefinition[] = [
         "retrievedAt",
       ],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: null,
     sideEffect: true,
     coworkerArtifact: true,

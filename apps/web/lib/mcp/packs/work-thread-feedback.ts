@@ -1,15 +1,17 @@
-import type { ToolDefinition, ToolExecutionContext, ToolResult } from "@/lib/mcp-tool-types";
+import type { RegisteredToolDefinition, ToolExecutionContext, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPackHandler } from "../tool-pack";
 
-export const responseFeedbackDefinitions: ToolDefinition[] = [
+export const responseFeedbackDefinitions: RegisteredToolDefinition[] = [
   {
     name: "get_response_feedback", description: "Read the explicit disposition for an exact saved coworker response, including availability and human or coworker attribution. Answer text requires includeAnswer true and the exact expectedAttemptId selected for investigation.",
     inputSchema: { type: "object", properties: { messageId: { type: "string", description: "The saved assistant message id." }, includeAnswer: { type: "boolean", description: "Explicitly request the authorized exact saved answer; default false." }, expectedAttemptId: { type: "string", minLength: 1, description: "Required when includeAnswer is true: the exact attempt selected for investigation." } }, required: ["messageId"], additionalProperties: false },
+    workroomAccess: "outside-workroom",
     requiredCapability: null, sideEffect: false,
   },
   {
     name: "record_response_feedback", description: "Record your own coworker disposition for an exact saved response: true means kept, false needs revision, null clears your judgment. Human feedback is protected.",
     inputSchema: { type: "object", properties: { messageId: { type: "string" }, value: { type: ["boolean", "null"] }, expectedRevision: { type: "integer", minimum: 0 } }, required: ["messageId", "value", "expectedRevision"], additionalProperties: false },
+    workroomAccess: "outside-workroom",
     requiredCapability: null, sideEffect: true,
   },
 ];

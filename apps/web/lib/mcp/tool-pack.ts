@@ -12,7 +12,7 @@
 // still resolves through agent-grants.ts `TOOL_TO_GRANTS`; the pack mirrors it so
 // a test can assert the two never drift (the R3 authority-control safeguard).
 
-import type { ToolDefinition, ToolExecutionContext, ToolResult } from "@/lib/mcp-tool-types";
+import type { RegisteredToolDefinition, ToolExecutionContext, ToolResult } from "@/lib/mcp-tool-types";
 
 /**
  * A tool handler, with the context fields the dispatch site (executeTool) passes
@@ -30,7 +30,7 @@ export type ToolPack = {
   /** Domain identifier, e.g. "deliberation-siem", "backlog", "work-capsules". */
   packId: string;
   /** Tool definitions this pack owns (name, schema, requiredCapability, …). */
-  definitions: ToolDefinition[];
+  definitions: RegisteredToolDefinition[];
   /** Tool name -> handler. The registry composes these for dispatch. */
   handlers: Record<string, ToolPackHandler>;
   /**

@@ -14,10 +14,10 @@
 // used.
 
 import { getCwd } from "@/lib/shared/lazy-node";
-import type { ToolDefinition, ToolExecutionContext, ToolResult } from "@/lib/mcp-tool-types";
+import type { RegisteredToolDefinition, ToolExecutionContext, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
 
-const definitions: ToolDefinition[] = [
+const definitions: RegisteredToolDefinition[] = [
   {
     name: "wiki_query",
     description:
@@ -68,6 +68,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["query"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: null,
     executionMode: "immediate",
     sideEffect: false,
@@ -85,6 +86,7 @@ const definitions: ToolDefinition[] = [
         },
       },
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: null,
     executionMode: "immediate",
     sideEffect: false,
@@ -136,6 +138,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["filePath"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: null,
     executionMode: "proposal",
     sideEffect: true,

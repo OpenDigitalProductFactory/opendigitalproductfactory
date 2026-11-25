@@ -12,11 +12,11 @@
 
 import { prisma } from "@dpf/db";
 
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
+import type { RegisteredToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import { extractBuildIdHint, resolveActiveBuildId } from "@/lib/mcp/build-tool-helpers";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
 
-const definitions: ToolDefinition[] = [
+const definitions: RegisteredToolDefinition[] = [
   {
     name: "get_build_dispatch_history",
     description: "Read bounded codex-dispatch attempts for a Build Studio build, including model, duration, exit code, sanitized stdout/stderr excerpts, and classified failure axis.",
@@ -26,6 +26,7 @@ const definitions: ToolDefinition[] = [
         buildId: { type: "string", description: "Optional FB-* build ID. Omit to target the current active build." },
       },
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: false,
@@ -41,6 +42,7 @@ const definitions: ToolDefinition[] = [
         buildId: { type: "string", description: "Optional FB-* build ID. Omit to target the current active build." },
       },
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: false,
@@ -56,6 +58,7 @@ const definitions: ToolDefinition[] = [
         buildId: { type: "string", description: "Optional FB-* build ID. Omit to target the current active build." },
       },
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: false,
@@ -72,6 +75,7 @@ const definitions: ToolDefinition[] = [
         cursor: { type: "string", description: "Optional ISO timestamp cursor; only rows after this timestamp are returned." },
       },
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: false,
@@ -86,6 +90,7 @@ const definitions: ToolDefinition[] = [
       properties: {},
       required: [],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: false,

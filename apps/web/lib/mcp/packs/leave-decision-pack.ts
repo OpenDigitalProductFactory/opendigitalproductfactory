@@ -3,13 +3,13 @@
 // then records the recommendation for the manager (BI-7BCC87BB: no proposal).
 // It never approves or rejects leave.
 
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
+import type { RegisteredToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import { proposeLeaveDecision } from "@/lib/workforce/leave/decide-proposal";
 import { decideLeaveRequestFromData } from "@/lib/workforce/leave/leave-decision-runtime";
 
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
 
-const definitions: ToolDefinition[] = [
+const definitions: RegisteredToolDefinition[] = [
   {
     name: "propose_leave_decision",
     description:
@@ -26,6 +26,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["requestId", "organizationId"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_employee",
     executionMode: "immediate",
     sideEffect: true,

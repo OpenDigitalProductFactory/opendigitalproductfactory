@@ -11,11 +11,11 @@
 // note for itself cannot exceed its authority or affect anyone else. A non-agent
 // caller (no context.agentId, e.g. a REST/operator call) is rejected.
 
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
+import type { RegisteredToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack } from "../tool-pack";
 import { COWORKER_NOTE_KINDS } from "@/lib/tak/coworker-memory";
 
-const definitions: ToolDefinition[] = [
+const definitions: RegisteredToolDefinition[] = [
   {
     name: "record_working_note",
     description:
@@ -40,6 +40,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["kind", "key", "content"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: null,
     sideEffect: true,
   },
@@ -48,6 +49,7 @@ const definitions: ToolDefinition[] = [
     description:
       "List YOUR OWN active working notes (the calling coworker's durable role-local memory), newest first.",
     inputSchema: { type: "object", properties: {} },
+    workroomAccess: "outside-workroom",
     requiredCapability: null,
     sideEffect: false,
   },
