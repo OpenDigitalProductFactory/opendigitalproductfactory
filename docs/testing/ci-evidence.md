@@ -264,9 +264,13 @@ assets to the standalone layout, then starts the same `apps/web/server.js`
 entry point used by the production container. Development-only server output
 and source maps are not transported.
 
-This follows GitHub's same-run artifact contract: the producer uploads a named
-workflow artifact and the consumer downloads it from that same run. Fixture
-setup remains parallel because a job-level `needs: build` was measured to add
+The producer uploads a named workflow artifact and the consumer downloads it
+using the same repository and run ID as the REST rendezvous. The download uses
+the existing read-only Actions token rather than the runner's internal artifact
+lookup, which intermittently found the name but could not download its ID
+(BI-A9D01317). The job API reports a soft download failure as `success`, but
+materialization checks the raw outcome and runs only after a real transfer.
+Fixture setup remains parallel because a job-level `needs: build` was measured to add
 about one minute to PR feedback by serializing setup behind the build. The
 workflow retains only `actions: read` plus `contents: read`. See
 [Store and share data with workflow artifacts](https://docs.github.com/en/actions/tutorials/store-and-share-data).
@@ -278,13 +282,14 @@ Sweep` aggregate accepts that skip only for the exact planner signal.
 `merge_group`, push, workflow dispatch, missing/malformed scope, and all portal
 changes remain exhaustive. Their full-suite `heavy=true` output also ensures
 the same-run Production Build artifact exists for UX, avoiding a serial
-fallback build after fixture setup. When packaging/upload does not produce a usable
-artifact, the reusable runtime starts the normal local production build
-immediately. Missing, expired, incomplete, corrupt, or identity-mismatched
-evidence removes any partial `.next` output and runs the normal local production
-build. Packaging or upload failure is also non-authoritative: `Production Build`
-retains its successful result and UX rebuilds locally. Manual baseline
-calibration invokes the reusable workflow directly and always builds locally.
+fallback build after fixture setup. If transfer fails or the receipt or payload
+is unusable, the reusable runtime builds locally with the canonical cache-off
+profile. A rejected payload removes any partial `.next` output. The fallback
+logs the run, attempt, event, SHA, and artifact step outcomes before building.
+Its 15-minute step deadline fails the runtime if the build hangs and leaves
+time for GitHub to finalize the job log. Packaging or upload failure does not
+change a successful `Production Build` result. Manual baseline calibration
+invokes the reusable workflow directly and always builds locally.
 The retained cross-run locator is not used by the blocking PR, merge-group, or
 push path; cross-lifecycle merge-group-to-push reuse remains owned by
 `BI-9585E580`.

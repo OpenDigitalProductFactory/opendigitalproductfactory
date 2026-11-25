@@ -43,18 +43,26 @@ describe("production-build artifact workflow wiring", () => {
       ux,
       /name: web-production-build-\$\{\{ github\.run_id \}\}-\$\{\{ github\.run_attempt \}\}/,
     );
-    assert.doesNotMatch(ux, /github-token:/);
-    assert.doesNotMatch(ux, /run-id:/);
+    assert.match(ux, /id: download-build[\s\S]*?github-token: \$\{\{ github\.token \}\}\n\s+repository: \$\{\{ github\.repository \}\}\n\s+run-id: \$\{\{ github\.run_id \}\}/);
+    assert.match(ux, /id: download-build\n\s+if: steps\.await-build\.outputs\.found == 'true'\n\s+continue-on-error: true/);
+    assert.match(ux, /id: materialize-build\n(?:\s+#[^\n]*\n)*\s+if: steps\.await-build\.outputs\.found == 'true' && steps\.download-build\.outcome == 'success'/);
     assert.match(ux, /node scripts\/ci-build-artifact\.mjs consume/);
     assert.match(ux, /--source-run-id "\$\{\{ github\.run_id \}\}"/);
     assert.match(ux, /if: steps\.materialize-build\.outputs\.reused != 'true'/);
-    assert.match(ux, /run: pnpm --filter web build/);
     assert.match(ux, /DPF_REUSED_BUILD: \$\{\{ steps\.materialize-build\.outputs\.reused \}\}/);
     assert.match(ux, /cd apps\/web\/\.next\/standalone[\s\S]*?node apps\/web\/server\.js/);
     assert.ok(
       ux.indexOf("Install Playwright Chromium") < ux.indexOf("Await current-run production build"),
       "browser setup should overlap the producer build",
     );
+  });
+
+  it("bounds and diagnoses the local fallback using the canonical build profile", () => {
+    const fallback = ux.split("- name: Build the portal\n")[1]?.split("\n      - name: ")[0] ?? "";
+    assert.match(fallback, /timeout-minutes: 15/);
+    assert.match(fallback, /DPF_TURBOPACK_BUILD_CACHE: '0'/);
+    assert.match(fallback, /DOWNLOAD_OUTCOME: \$\{\{ steps\.download-build\.outcome \}\}/);
+    assert.match(fallback, /timeout=15m[^\n]*\n\s+pnpm --filter web build/);
   });
 
   it("preserves the stable required check and manual calibration path", () => {
