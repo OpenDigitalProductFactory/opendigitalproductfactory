@@ -592,6 +592,9 @@ export async function ensurePromoterImage(
   promoterImage?: string,
 ): Promise<EnsurePromoterResult> {
   const present = await isPromoterAvailable(promoterImage);
+  // BI-224F56F1: the qualified portal builds no image; the actuator's candidate stage builds the run's promoter (DI-B3171A8F09DC).
+  if (await (await import("../../../../scripts/lib/scope-writer-observation.mjs")).usesPrivateActuator()) return present
+    ? { ok: true, alreadyPresent: true, built: false } : { ok: false, alreadyPresent: false, built: false, skipReason: "build-failed", detail: "The installed promoter image is missing." };
   const action = decidePromoterEnsureAction(
     present,
     isJitBuildablePromoterImage(promoterImage),
