@@ -48,3 +48,16 @@ export const SOURCE_CONTACT_EXEMPTION_PATTERN = new RegExp([
   /(?:^|[\n{,])[\t +\-]*["']?(?:memoryBytes|admissionReserveBytes|observedHighWaterBytes|safetyMarginBytes|seed)["']?[\t ]*:[\t ]*\d+(?=[\t ]*(?:[,}\r\n]|$))/.source,
   /\bpatches\/[A-Z0-9._+\-]+@\d+\.\d+\.\d+(?:-[A-Z0-9.\-]+)?\.patch(?![A-Z0-9._@+%/\-])/.source,
 ].join("|"), "im");
+
+/**
+ * Remove every occurrence of `exemption` from `text` so a rule's own pattern is
+ * evaluated against the remainder only. Returns the text unchanged when the
+ * exemption never matches, so the common path costs one failed regex test.
+ */
+export function stripExemptSpans(text: string, exemption: RegExp): string {
+  const global = exemption.global
+    ? exemption
+    : new RegExp(exemption.source, `${exemption.flags}g`);
+  global.lastIndex = 0;
+  return text.replace(global, " ");
+}

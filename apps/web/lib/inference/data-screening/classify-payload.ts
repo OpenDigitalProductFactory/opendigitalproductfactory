@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { localNativeContinuationFingerprint } from "@/lib/routing/local-native-continuation";
-import { SOURCE_CONTACT_EXEMPTION_PATTERN, SYNTHETIC_REVIEW_RECIPIENT_PATTERN } from "./source-contact-evidence";
+import { SOURCE_CONTACT_EXEMPTION_PATTERN, stripExemptSpans, SYNTHETIC_REVIEW_RECIPIENT_PATTERN } from "./source-contact-evidence";
 
 import type { ContentBlock } from "@/lib/routing/chat-message-types";
 import type {
@@ -329,19 +329,6 @@ const CONFIDENTIAL_CLASSES = new Set<InferenceDataClass>([
   "customer-records",
   "source-code",
 ]);
-
-/**
- * Remove every occurrence of `exemption` from `text` so a rule's own pattern is
- * evaluated against the remainder only. Returns the text unchanged when the
- * exemption never matches, so the common path costs one failed regex test.
- */
-function stripExemptSpans(text: string, exemption: RegExp): string {
-  const global = exemption.global
-    ? exemption
-    : new RegExp(exemption.source, `${exemption.flags}g`);
-  global.lastIndex = 0;
-  return text.replace(global, " ");
-}
 
 export function classifyInferencePayload(
   input: InferencePayloadClassificationInput,
