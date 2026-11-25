@@ -1,0 +1,24 @@
+{
+  "version": "1",
+  "decidedOption": "purpose-first-compact-list",
+  "decisionInteractionId": "DI-09A133C4952C",
+  "scope": {
+    "files": [
+      "apps/web/lib/attention/coworker-envelope-decision.ts",
+      "packages/i18n/src/messages/en-US/approvals.json"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "decisionInteractionId": "DI-09A133C4952C",
+    "consideredOptions": ["purpose-first-compact-list", "shorten-grid-only", "collapse-whole-card"]
+  },
+  "verification": {
+    "designDecision": "Apply the recorded purpose-first decision to two exact backlog operations rather than changing the existing card or adding a review route.",
+    "owningArea": "Workspace /workspace/inbox. The operator decides what happens to two named backlog records.",
+    "sourceTruth": "Captured approval parameters and the existing viewer-authorized label enrichment. Raw input, controls, and authorization binding do not change.",
+    "fit": "The initial card distinguishes combining recorded demand from retiring and linking. Both affected records and a meaningful conditional recommendation are visible without disclosing technical evidence. Unrecognized or incomplete proposals remain unresolved.",
+    "servedChecks": "The protected approval-disclosure sweep now distinguishes both operations at mobile and desktop sizes in light and dark themes. A missing served run is not a pass.",
+    "baseline": "No route-budget baseline change and no new runtime or deployment measurement asserted in this manifest."
+  }
+}
