@@ -1,12 +1,12 @@
 import { canonicalJson } from "@dpf/integration-shared/canonical-json";
 import { z } from "zod";
+import { s5RehearsalQualificationRef, s5SyntheticTarget } from "./s5-rehearsal-qualification.server";
 
 const ref = z.string().min(1).max(256).regex(/^\S+$/u);
 const instant = z.int().nonnegative();
 const exactAttempt = z.strictObject({ workroomId: ref, sessionRef: ref, stageKey: ref, stageAttemptRef: ref });
 const controlIdentity = z.strictObject({ issuer: ref, receiverRef: ref, hostRef: ref, resource: ref });
-const qualification = z.strictObject({ kind: z.literal("eligible"), id: ref, version: z.int().positive(),
-  statusRevision: z.int().positive(), validUntil: instant });
+const qualification = s5RehearsalQualificationRef.extend({ validUntil: instant });
 const snapshotShape = z.strictObject({
   ...exactAttempt.shape,
   ...controlIdentity.shape,
@@ -18,10 +18,7 @@ const snapshotShape = z.strictObject({
     grantKeys: z.array(ref).min(1).max(128).refine(keys => new Set(keys).size === keys.length) }),
   qualification,
   expiresAt: instant,
-  syntheticTarget: z.strictObject({
-    environment: z.literal("non-production"), fixtureRef: ref, databaseRef: ref, caseKey: ref, destinationRef: ref,
-    recipient: z.strictObject({ authorityRef: ref, destinationRef: ref, reservationRef: ref }),
-  }),
+  syntheticTarget: s5SyntheticTarget,
 });
 const exactEvidence = z.strictObject({ active: z.literal(true), pinned: snapshotShape, current: snapshotShape });
 
@@ -36,7 +33,8 @@ export type S5RehearsalAdmissionReadPorts = {
   /** Read-only canonical admission owner boundary, not registered yet. In one
    * consistent read return the original persisted pin plus independently read
    * current facts. `active` must come from the owning attempt, and qualification
-   * from current S5 eligibility, never from the pin or request. A missing owner,
+   * from current S5 rehearsal eligibility and its owner approval, never from
+   * the pin or request. A missing owner,
    * unverifiable/mixed snapshot or unbound qualification must return null. */
   readEvidence: (receiver: RehearsalControlIdentity, attempt: ExactRehearsalAttempt) => Promise<unknown>;
   now?: () => Date;

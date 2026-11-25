@@ -52,6 +52,16 @@ describe("S5 launch projection adapter", () => {
     expect(projectS5Launch({ ...input, coordinationTarget: { ...coordinationTarget, caseKey: "backlog-item:BI-OTHER" } })).toBeNull();
   });
 
+  it("does not serialize the rehearsal waiver into a v1 launch even with a verified route", () => {
+    const rehearsal: S5AdmissionCeiling = { ...admission, jsi: { kind: "rehearsal-qualification", approvalRef: "approval-a",
+      ownerPrincipalId: "PRN-OWNER", approvalRevision: 1, statusRevision: 1, validUntil: expiresAt,
+      syntheticTarget: { environment: "non-production", fixtureRef: "fixture-a", databaseRef: "fixture-db",
+        destinationRef: "fixture-relay", ...coordinationTarget } } };
+    expect(projectS5Launch({ ...input, admission: rehearsal })).toBeNull();
+    expect(projectS5Launch({ ...input, admission: { ...rehearsal, host: { ...rehearsal.host,
+      mode: "bounded-coding", worktreeRef: "other" } } })).toBeNull();
+  });
+
   it("preserves an explicit no-scheme verdict only on a bounded coding launch with an admitted worktree", () => {
     const activityKey = "coding-fixture";
     const coding: S5AdmissionCeiling = { ...admission, activityKey, operationKeys: ["read_project_file"],

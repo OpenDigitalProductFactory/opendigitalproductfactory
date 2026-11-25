@@ -8,6 +8,7 @@ import {
   type JsiEligibilityDecision,
   type JsiQualificationSources,
 } from "@/lib/work-management/coordinator-eligibility";
+import { verifyS5RehearsalQualification, type S5RehearsalQualification, type S5SyntheticTarget } from "./s5-rehearsal-qualification.server";
 
 export type S5AttemptLocator = Readonly<{ workroomId: string; sessionRef: string; stageAttemptRef: string }>;
 type S5Subject = NonNullable<JsiAdmissionContext["subject"]>;
@@ -45,6 +46,9 @@ export type S5AssignmentSnapshot = S5AttemptLocator & {
   stageOperationKeys: readonly string[];
   /** Current independent coworker, human, tenant and token authorization intersection. */
   liveOperationKeys: readonly string[];
+  /** Owning admission facts only. Ordinary/v1 attempts may not opt in. */
+  executionProfile?: "v1" | "production" | "synthetic-rehearsal";
+  syntheticTarget?: S5SyntheticTarget;
 };
 
 export type S5AdmissionPorts = {
@@ -53,11 +57,18 @@ export type S5AdmissionPorts = {
   readCurrentAssignment: (locator: S5AttemptLocator) => Promise<S5AssignmentSnapshot | null>;
   readAdmittedSubject?: (assignment: S5AssignmentSnapshot) => Promise<S5Subject | null>;
   qualificationSources?: JsiQualificationSources;
+  /** Read the exact persisted qualification and independently verified approval
+   * from the owning records. Never infer them from a fixture, echo or decision
+   * text. The adapter must verify that this approval names the actual owner. */
+  readRehearsalQualification?: (assignment: S5AssignmentSnapshot) => Promise<unknown>;
   getRegistryAccess: (canonicalName: string) => McpToolAccess | undefined;
   /** Verify the exact assignment, active binding/permit, subject and host/floor
    * from their owners, including the qualification revision if applicable. An
    * unavailable owner means hold. This does not reserve an effect. */
-  confirmCurrent: (proof: { locator: S5AttemptLocator; snapshot: S5AssignmentSnapshot; subject: S5Subject; qualification: S5Qualification | null }) => Promise<boolean>;
+  confirmCurrent: (proof: {
+    locator: S5AttemptLocator; snapshot: S5AssignmentSnapshot; subject: S5Subject; qualification: S5Qualification | null;
+    rehearsalQualification?: S5RehearsalQualification;
+  }) => Promise<boolean>;
   now?: () => Date;
 };
 
@@ -79,7 +90,7 @@ export type S5AdmissionCeiling = Readonly<{
   permitRef: string;
   grantKeys: readonly string[];
   host: Omit<S5Host, "operationKeys">;
-  jsi: S5Jsi;
+  jsi: S5Jsi | S5RehearsalQualification;
   operationKeys: readonly string[];
 }>;
 
@@ -121,9 +132,23 @@ export function createS5AdmissionComposer(ports: S5AdmissionPorts) {
       if (!subject || subject.principalId !== snapshot.admittedPrincipalId || typeof subject.gaid !== "string" || !/^gaid:[^\s]+$/u.test(subject.gaid)) {
         return held("subject-unavailable");
       }
-      if (!ports.qualificationSources) return held("qualification-unavailable");
-      const jsi = await resolveS5JsiEligibility({ ...snapshot.activity, subject }, ports.qualificationSources, ports.now?.());
-      if (jsi.kind !== "eligible" && (jsi.kind !== "not-applicable" || coordination)) return held("qualification-unavailable");
+      const profile = snapshot.executionProfile;
+      let jsi: S5AdmissionCeiling["jsi"];
+      if (profile === "synthetic-rehearsal") {
+        if (!coordination || snapshot.activity.scope.dataClass !== "synthetic" || !snapshot.syntheticTarget
+          || snapshot.syntheticTarget.caseKey !== snapshot.caseKey || !ports.readRehearsalQualification) return held("qualification-unavailable");
+        const evidence = await ports.readRehearsalQualification(snapshot);
+        const approved = verifyS5RehearsalQualification(evidence, {
+          ...locator, stageKey: snapshot.stageKey, issuer: snapshot.activity.installationId, subject, syntheticTarget: snapshot.syntheticTarget,
+        }, (ports.now?.() ?? new Date()).getTime());
+        if (!approved) return held("qualification-unavailable");
+        jsi = approved;
+      } else {
+        if ((profile !== undefined && profile !== "v1" && profile !== "production") || !ports.qualificationSources) return held("qualification-unavailable");
+        const canonical = await resolveS5JsiEligibility({ ...snapshot.activity, subject }, ports.qualificationSources, ports.now?.());
+        if (canonical.kind !== "eligible" && (canonical.kind !== "not-applicable" || coordination || profile === "production")) return held("qualification-unavailable");
+        jsi = canonical;
+      }
 
       const restrictions = [snapshot.stageOperationKeys, authority.operationKeys, snapshot.liveOperationKeys, host.operationKeys];
       if (jsi.kind === "eligible") restrictions.push(jsi.ceiling.operationKeys);
@@ -140,9 +165,11 @@ export function createS5AdmissionComposer(ports: S5AdmissionPorts) {
       if (!operationKeys.length) return held("empty-surface");
 
       const qualification = jsi.kind === "eligible" ? jsi.qualification : null;
-      if (await ports.confirmCurrent({ locator, snapshot, subject, qualification }) !== true) return held("admission-changed");
+      const rehearsalQualification = jsi.kind === "rehearsal-qualification" ? jsi : undefined;
+      if (await ports.confirmCurrent({ locator, snapshot, subject, qualification,
+        ...(rehearsalQualification && { rehearsalQualification }) }) !== true) return held("admission-changed");
       const checkedAt = (ports.now?.() ?? new Date()).getTime();
-      if (!Number.isFinite(checkedAt) || (jsi.kind === "eligible" && checkedAt >= jsi.validUntil)) return held("admission-changed");
+      if (!Number.isFinite(checkedAt) || (jsi.kind !== "not-applicable" && checkedAt >= jsi.validUntil)) return held("admission-changed");
       return {
         kind: "composed", locator, stageKey: snapshot.stageKey, caseKey: snapshot.caseKey, subject,
         issuer: snapshot.activity.installationId, agentId: snapshot.agentId, activityKey: snapshot.activity.activityKey, job: snapshot.activity.job,

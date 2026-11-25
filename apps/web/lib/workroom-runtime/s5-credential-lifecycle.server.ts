@@ -116,7 +116,7 @@ export function createS5CredentialLifecycle(ports: S5CredentialLifecyclePorts) {
             ? new Date(Math.min(attempt.permitExpiresAt.getTime(), issuedAt.getTime() + REHEARSAL_WINDOW_MS))
             : attempt.permitExpiresAt;
           const prepared = prepareS5ControlCredential({ admission, receiver: value.receiver,
-            userId: attempt.userId, now: issuedAt, expiresAt: expiry });
+            userId: attempt.userId, now: issuedAt, expiresAt: expiry, executionProfile: attempt.executionProfile });
           if (!prepared) throw new CredentialHeld();
           const expiresAt = prepared.data.expiresAt.getTime();
           const token = await ports.getTokenStore(tx).create({ data: prepared.data, select: { id: true } });

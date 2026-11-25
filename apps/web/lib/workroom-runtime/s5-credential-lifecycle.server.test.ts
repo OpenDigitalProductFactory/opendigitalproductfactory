@@ -14,6 +14,14 @@ const admission: S5AdmissionCeiling = { kind: "composed", locator: attempt, agen
   bindingRef: "binding-a", permitRef: "permit-a", grantKeys: ["file_read"],
   host: { mode: "bounded-coding", hostRef: receiver.hostRef, receiverRef: receiver.audience, worktreeRef: "tree-a" },
   jsi: { kind: "not-applicable" }, operationKeys: ["read_project_file"] };
+const rehearsalActivity = "s5-route-handoff";
+const rehearsalAdmission: S5AdmissionCeiling = { ...admission, activityKey: rehearsalActivity, operationKeys: ["get_workroom"],
+  host: { ...admission.host, mode: "read-only-coordination", worktreeRef: null },
+  jsi: { kind: "rehearsal-qualification", approvalRef: "approval-a", ownerPrincipalId: "PRN-OWNER", statusRevision: 1,
+    approvalRevision: 1, validUntil: now.getTime() + 300_000, syntheticTarget: {
+      environment: "non-production", caseKey: admission.caseKey, databaseRef: "fixture-db", fixtureRef: "fixture-a",
+      destinationRef: "relay-a", recipient: { authorityRef: "recipient-a", destinationRef: "destination-a", reservationRef: "reservation-a" },
+    } } };
 
 describe("S5 Control credential lifecycle, with no client hooks", () => {
   const trace: string[] = [];
@@ -73,6 +81,7 @@ describe("S5 Control credential lifecycle, with no client hooks", () => {
     const rehearsal = { ...active, permitExpiresAt: new Date(now.getTime() + 600_000), executionProfile: "synthetic-rehearsal" as const };
     const deadline = now.getTime() + 120_000;
     readAttempt.mockResolvedValue(rehearsal);
+    composeAdmission.mockResolvedValue(rehearsalAdmission);
     const withEcho = { ...mint, expiresAt: now.getTime() + 600_000 };
     expect(await lifecycle.issue(withEcho)).toEqual({ kind: "held" });
     expect(create).not.toHaveBeenCalled();
@@ -80,6 +89,15 @@ describe("S5 Control credential lifecycle, with no client hooks", () => {
     expect(create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ expiresAt: new Date(deadline) }) }));
     expect(pinToken).toHaveBeenCalledWith(tx, rehearsal, "token-a", deadline);
     expect(receipts.get(mint.commandId)?.payload).toMatchObject({ result: { kind: "issued", tokenId: "token-a", expiresAt: deadline } });
+  });
+
+  it("cannot use the waiver to mint for an ordinary attempt or canonical evidence to enter the waiver path", async () => {
+    composeAdmission.mockResolvedValueOnce(rehearsalAdmission);
+    expect(await lifecycle.issue(mint)).toEqual({ kind: "held" });
+    readAttempt.mockResolvedValue({ ...active, executionProfile: "synthetic-rehearsal" });
+    expect(await lifecycle.issue(mint)).toEqual({ kind: "held" });
+    expect(create).not.toHaveBeenCalled();
+    expect(pinToken).not.toHaveBeenCalled();
   });
 
   it("holds without current access, the dependency locks, an exact active attempt or current admission", async () => {

@@ -3,6 +3,7 @@ import { canonicalJson } from "@dpf/integration-shared/canonical-json";
 import { z } from "zod";
 import { canonicalWorkroomToolName } from "@/lib/shared/workroom-tool-aliases";
 import { isS5CoordinationActivity, isS5CoordinationOperation, type S5AdmissionCeiling, type S5AttemptLocator } from "@/lib/workroom-runtime/s5-admission.server";
+import { s5RehearsalQualificationRef, s5SyntheticTarget } from "@/lib/workroom-runtime/s5-rehearsal-qualification.server";
 import { createWorkroomSessionBearer, hashWorkroomSessionBearer, isGeneratedWorkroomSessionBearer, S5_WORKROOM_TOKEN_KIND } from "./workroom-session-token";
 
 /** Defining the carrier does not admit it at the legacy bearer entrypoint. */
@@ -31,11 +32,14 @@ const projection = z.strictObject({
   jsi: z.discriminatedUnion("kind", [
     z.strictObject({ kind: z.literal("not-applicable") }),
     z.strictObject({ kind: z.literal("eligible"), qualification: z.strictObject({ id: key, version: z.int().positive(), statusRevision: z.int().positive() }) }),
+    s5RehearsalQualificationRef.extend({ syntheticTarget: s5SyntheticTarget }),
   ]),
   operationKeys: uniqueKeys.refine((names) => names.every((name) => canonicalWorkroomToolName(name) === name && /^[a-z][a-z0-9_.-]*$/u.test(name))),
 }).refine((value) => value.mode === "read-only-coordination"
-  ? isS5CoordinationActivity(value.activityKey) && value.worktreeRef === null && value.jsi.kind === "eligible" && value.operationKeys.every(isS5CoordinationOperation)
-  : !isS5CoordinationActivity(value.activityKey) && value.worktreeRef !== null);
+  ? isS5CoordinationActivity(value.activityKey) && value.worktreeRef === null && value.jsi.kind !== "not-applicable"
+    && (value.jsi.kind !== "rehearsal-qualification" || value.jsi.syntheticTarget.caseKey === value.caseKey)
+    && value.operationKeys.every(isS5CoordinationOperation)
+  : !isS5CoordinationActivity(value.activityKey) && value.worktreeRef !== null && value.jsi.kind !== "rehearsal-qualification");
 
 type S5CredentialProjection = z.infer<typeof projection>;
 
@@ -66,6 +70,11 @@ export type IssuedS5Ceiling = Readonly<{
 
 /** Store exact references and the maximum operation set, not job or qualification records. */
 export function captureS5CredentialCeiling(admission: S5AdmissionCeiling): S5CredentialProjection {
+  const { jsi } = admission;
+  const qualification = jsi.kind === "rehearsal-qualification"
+    ? { kind: jsi.kind, approvalRef: jsi.approvalRef, ownerPrincipalId: jsi.ownerPrincipalId, statusRevision: jsi.statusRevision,
+        approvalRevision: jsi.approvalRevision, syntheticTarget: jsi.syntheticTarget }
+    : jsi.kind === "eligible" ? { kind: jsi.kind, qualification: jsi.qualification } : { kind: jsi.kind };
   return projection.parse({
     schemaVersion: S5_CREDENTIAL_VERSION,
     ...admission.locator,
@@ -74,7 +83,7 @@ export function captureS5CredentialCeiling(admission: S5AdmissionCeiling): S5Cre
     worktreeRef: admission.host.worktreeRef, mode: admission.host.mode,
     subject: admission.subject, agentId: admission.agentId,
     bindingRef: admission.bindingRef, permitRef: admission.permitRef, activityKey: admission.activityKey, job: admission.job,
-    jsi: admission.jsi.kind === "eligible" ? { kind: "eligible", qualification: admission.jsi.qualification } : { kind: "not-applicable" },
+    jsi: qualification,
     operationKeys: admission.operationKeys,
   });
 }
@@ -104,11 +113,14 @@ export function prepareS5ControlCredential(input: {
   now: Date;
   /** Absolute expiry independently bounded by the owning stage permit. */
   expiresAt: Date;
+  executionProfile?: "synthetic-rehearsal";
 }) {
   try {
     const { admission, receiver, userId, now } = input;
+    if (input.executionProfile !== undefined && input.executionProfile !== "synthetic-rehearsal") return null;
+    if ((input.executionProfile === "synthetic-rehearsal") !== (admission.jsi.kind === "rehearsal-qualification")) return null;
     const ceiling = captureS5CredentialCeiling(admission);
-    const jsiEnd = admission.jsi.kind === "eligible" ? admission.jsi.validUntil : input.expiresAt.getTime();
+    const jsiEnd = admission.jsi.kind !== "not-applicable" ? admission.jsi.validUntil : input.expiresAt.getTime();
     const expiresAt = new Date(Math.min(input.expiresAt.getTime(), jsiEnd));
     const plaintext = createWorkroomSessionBearer();
     const carrier = {
@@ -181,7 +193,7 @@ export function narrowS5CredentialForCurrentAdmission(issued: IssuedS5Ceiling, c
   try {
     const instant = now.getTime();
     if (!(instant < issued.expiresAt.getTime()) || current.authorityBindingId !== issued.authorityBindingId
-      || (current.jsi.kind === "eligible" && !(instant < current.jsi.validUntil))) return null;
+      || (current.jsi.kind !== "not-applicable" && !(instant < current.jsi.validUntil))) return null;
     const { operationKeys: oldOperations, ...oldIdentity } = issued.projection;
     const { operationKeys: newOperations, ...newIdentity } = captureS5CredentialCeiling(current);
     if (canonicalJson(oldIdentity) !== canonicalJson(newIdentity)) return null;

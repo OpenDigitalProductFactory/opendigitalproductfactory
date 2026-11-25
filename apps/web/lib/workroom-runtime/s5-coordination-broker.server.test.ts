@@ -28,8 +28,16 @@ const { issuer, audience, hostRef } = receiver;
 const call: S5ProposalCall = { issuer, audience, hostRef, ...locator, stageKey: admission.stageKey, caseKey: admission.caseKey, recipient,
   operationId: "room-operation:00000000-0000-4000-8000-000000000003", body: "Propose another qualified reviewer." };
 
-function fixture(launchExpiresAt = end.getTime()) {
-  const record = prepareS5ControlCredential({ admission, receiver, userId: "user-a", now, expiresAt: end })!;
+const waiver = {
+  kind: "rehearsal-qualification" as const, approvalRef: "approval-a", ownerPrincipalId: "PRN-OWNER",
+  statusRevision: 1, approvalRevision: 1, validUntil: end.getTime(),
+  syntheticTarget: { environment: "non-production" as const, caseKey: call.caseKey, fixtureRef: "fixture-a",
+    databaseRef: "fixture-db", destinationRef: "fixture-relay", recipient },
+};
+
+function fixture(launchExpiresAt = end.getTime(), composed = admission) {
+  const executionProfile = composed.jsi.kind === "rehearsal-qualification" ? "synthetic-rehearsal" : undefined;
+  const record = prepareS5ControlCredential({ admission: composed, receiver, userId: "user-a", now, expiresAt: end, executionProfile })!;
   const clock = vi.fn(() => now);
   const id = "token-a";
   const zero: S5CredentialCarrier & { id: string; userId: string } = { ...record.data, id, revokedAt: null };
@@ -44,7 +52,7 @@ function fixture(launchExpiresAt = end.getTime()) {
   const tx: ReceiptDb = { $queryRaw: query, $executeRaw: vi.fn(async () => 0), workroomActivity: {
     create, findFirst: async (input: unknown) => receipts.get((input as { where: { commandKey: string } }).where.commandKey) ?? null,
   } };
-  const current = { admission, syntheticCaseKey: call.caseKey, recipient, consequenceAllowed: true };
+  const current = { admission: composed, syntheticCaseKey: call.caseKey, recipient, consequenceAllowed: true };
   const readBoundActor = vi.fn(async () => ({ roomRowId: "row-a", userId: "user-a", agentId: admission.agentId }));
   const checkResultAccess = vi.fn(async () => true);
   const lockOwners = vi.fn(async () => true);
@@ -58,17 +66,17 @@ function fixture(launchExpiresAt = end.getTime()) {
 }
 
 describe("S5 coordination proposal dispatch, without client hooks", () => {
-  it("writes neither activity nor receipt when the original launch expires under lock while token and JSI remain current", async () => {
+  it("writes neither activity nor receipt when the original launch expires under lock while token and rehearsal qualification remain current", async () => {
     const launchExpiresAt = now.getTime() + 1_000;
     const expiry = new Date(launchExpiresAt + 1);
-    const f = fixture(launchExpiresAt);
+    const f = fixture(launchExpiresAt, { ...admission, jsi: waiver });
     f.readCurrentProposal.mockImplementationOnce(async () => {
       f.clock.mockReturnValue(expiry);
       return f.current;
     });
     expect(f.zero.expiresAt?.getTime()).toBeGreaterThan(launchExpiresAt);
-    expect(admission.jsi.kind === "eligible" && admission.jsi.validUntil > launchExpiresAt).toBe(true);
-    expect(await f.broker.propose(f.context, call)).toEqual({ kind: "held" });
+    expect(waiver.validUntil).toBeGreaterThan(launchExpiresAt);
+    expect(await f.broker.proposeRehearsal(f.context, call)).toEqual({ kind: "held" });
     expect(f.readCurrentProposal).toHaveBeenCalledOnce();
     expect(f.create).not.toHaveBeenCalled();
   });
@@ -82,14 +90,46 @@ describe("S5 coordination proposal dispatch, without client hooks", () => {
 
   it("refuses exactly at the pinned rehearsal deadline immediately before the write", async () => {
     const launchExpiresAt = now.getTime() + 1_000;
-    const f = fixture(launchExpiresAt);
+    const f = fixture(launchExpiresAt, { ...admission, jsi: waiver });
     f.getRequiredGrants.mockImplementationOnce(() => {
       f.clock.mockReturnValue(new Date(launchExpiresAt));
       return grants;
     });
-    expect(await f.broker.propose(f.context, call)).toEqual({ kind: "held" });
+    expect(await f.broker.proposeRehearsal(f.context, call)).toEqual({ kind: "held" });
     expect(f.getRequiredGrants).toHaveBeenCalledOnce();
     expect(f.create).not.toHaveBeenCalled();
+  });
+
+  it("refuses a rehearsal credential on the actual v1 wire and only records one quiet rehearsal proposal", async () => {
+    const f = fixture(end.getTime(), { ...admission, jsi: waiver });
+    const { body, recipient, caseKey, ...binding } = call;
+    const wire = createS5CoordinationWireHandler({ broker: f.broker, authenticate: async () => ({ ...f.context, payload: {
+      ...binding, schemaVersion: "s5-launch.v1", kind: "coordination-broker-call", operation: post, args: { body, recipient, caseKey },
+    } }) });
+    const request = new Request(receiver.resource, { method: "POST" });
+    expect((await wire(request)).kind).not.toBe("settled");
+    expect(f.readCurrentProposal).not.toHaveBeenCalled();
+    expect(f.create).not.toHaveBeenCalled();
+    const result = await f.broker.proposeRehearsal(f.context, call);
+    expect(result).toMatchObject({ kind: "proposal-recorded", operationId: call.operationId });
+    expect(await f.broker.proposeRehearsal(f.context, call)).toEqual(result);
+    expect((await wire(request)).kind).not.toBe("settled");
+    expect(f.create).toHaveBeenCalledTimes(2); // quiet activity and command receipt only
+  });
+
+  it("holds a revoked, changed or cross-profile qualification before any rehearsal write", async () => {
+    const f = fixture(end.getTime(), { ...admission, jsi: waiver });
+    for (const jsi of [admission.jsi, { ...waiver, approvalRevision: 2 },
+      { ...waiver, syntheticTarget: { ...waiver.syntheticTarget, destinationRef: "other-relay" } }]) {
+      f.readCurrentProposal.mockResolvedValueOnce({ ...f.current, admission: { ...admission, jsi } });
+      expect(await f.broker.proposeRehearsal(f.context, call)).toEqual({ kind: "held" });
+    }
+    f.readCurrentProposal.mockResolvedValueOnce(null); // owner read no longer confirms approval
+    expect(await f.broker.proposeRehearsal(f.context, call)).toEqual({ kind: "held" });
+    expect(f.create).not.toHaveBeenCalled();
+    const v1 = fixture();
+    expect((await v1.broker.proposeRehearsal(v1.context, call)).kind).not.toBe("proposal-recorded");
+    expect(v1.create).not.toHaveBeenCalled();
   });
   it("joins the v1 wire to the locked broker without routing through general MCP", async () => {
     const f = fixture();

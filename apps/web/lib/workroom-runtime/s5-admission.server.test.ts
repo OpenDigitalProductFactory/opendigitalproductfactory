@@ -130,6 +130,98 @@ describe("S5 admission composition", () => {
     await expect(createS5AdmissionComposer(ports(s, { qualificationSources: noScheme }))(locator)).resolves.toMatchObject({ kind: "held", reason: "qualification-unavailable" });
   });
 
+  describe("owner-approved synthetic rehearsal", () => {
+    const syntheticTarget = {
+      environment: "non-production" as const, fixtureRef: "fixture-a", databaseRef: "fixture-db",
+      caseKey: fixture().caseKey, destinationRef: "nonprod-relay",
+      recipient: { authorityRef: "recipient-a", destinationRef: "recipient-destination-a", reservationRef: "reservation-a" },
+    };
+    const binding = { ...locator, issuer: fixture().activity.installationId, stageKey: fixture().stageKey,
+      subject, syntheticTarget };
+    const record = { schemaVersion: "s5-rehearsal-qualification.v1", status: "active",
+      approvalRef: "approval-a", ownerPrincipalId: "PRN-OWNER", statusRevision: 2,
+      binding, issuedAt: t - 1, validUntil: t + 30_000 };
+    const approval = { purpose: "s5-single-synthetic-rehearsal", status: "approved",
+      ref: record.approvalRef, ownerPrincipalId: record.ownerPrincipalId, revision: 3, binding, validUntil: t + 20_000 };
+
+    function rehearsal(): S5AssignmentSnapshot {
+      const s = fixture();
+      return { ...s, executionProfile: "synthetic-rehearsal", syntheticTarget,
+        activity: { ...s.activity, activityKey: coordinationActivity },
+        host: { ...s.host!, mode: "read-only-coordination", worktreeRef: null } };
+    }
+
+    it("accepts only the exact owner record, not as JSI, and still intersects live authority", async () => {
+      const p = ports({ ...rehearsal(), liveOperationKeys: ["get_workroom", "propose_file_change"] }, {
+        qualificationSources: undefined, readRehearsalQualification: vi.fn().mockResolvedValue({ record, approval }),
+      });
+      await expect(createS5AdmissionComposer(p)(locator)).resolves.toMatchObject({
+        kind: "composed", jsi: { kind: "rehearsal-qualification", approvalRef: "approval-a", ownerPrincipalId: "PRN-OWNER",
+          statusRevision: 2, approvalRevision: 3, validUntil: t + 20_000, syntheticTarget },
+        operationKeys: ["get_workroom"],
+      });
+      expect(p.confirmCurrent).toHaveBeenCalledWith(expect.objectContaining({
+        qualification: null, rehearsalQualification: expect.objectContaining({ approvalRef: "approval-a" }),
+      }));
+    });
+
+    it.each([undefined, "v1", "production", "unrecognized"])("never substitutes the record under profile %s", async (profile) => {
+      // Also exercise an untyped/unknown owner profile at the runtime boundary.
+      const s = { ...rehearsal(), executionProfile: profile as S5AssignmentSnapshot["executionProfile"] };
+      const p = ports(s, { qualificationSources: undefined, readRehearsalQualification: vi.fn().mockResolvedValue({ record, approval }) });
+      await expect(createS5AdmissionComposer(p)(locator)).resolves.toMatchObject({ kind: "held" });
+      expect(p.readRehearsalQualification).not.toHaveBeenCalled();
+    });
+
+    it("requires canonical eligible JSI for a production assignment", async () => {
+      const s = { ...fixture(), executionProfile: "production" as const };
+      const noScheme = sources(s, { readActivityPolicy: vi.fn().mockResolvedValue({ kind: "not-applicable" }) });
+      const readRehearsalQualification = vi.fn().mockResolvedValue({ record, approval });
+      const p = ports(s, { qualificationSources: noScheme, readRehearsalQualification });
+      await expect(createS5AdmissionComposer(p)(locator)).resolves.toMatchObject({ kind: "held", reason: "qualification-unavailable" });
+      await expect(createS5AdmissionComposer(ports(s))(locator)).resolves.toMatchObject({ kind: "composed", jsi: { kind: "eligible" } });
+      expect(readRehearsalQualification).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ["no record", null, approval], ["no approval", record, null],
+      ["fixture only", { ...record, approvalRef: "" }, { ...approval, ref: "" }],
+      ["revoked record", { ...record, status: "revoked" }, approval],
+      ["pending approval", record, { ...approval, status: "pending" }],
+      ["revoked approval", record, { ...approval, status: "revoked" }],
+      ["wrong approval", record, { ...approval, ref: "different" }],
+      ["wrong owner", record, { ...approval, ownerPrincipalId: "PRN-NOT-OWNER" }],
+      ["different approval purpose", record, { ...approval, purpose: "s5-other-action" }],
+      ["expired approval", record, { ...approval, validUntil: t }],
+      ["expired record", { ...record, validUntil: t }, approval],
+      ["other attempt", { ...record, binding: { ...binding, stageAttemptRef: "another" } }, approval],
+      ["other GAID", { ...record, binding: { ...binding, subject: { ...subject, gaid: "gaid:priv:fixture:wrong" } } }, approval],
+      ["other database", record, { ...approval, binding: { ...binding, syntheticTarget: { ...syntheticTarget, databaseRef: "live-db" } } }],
+      ["other destination", record, { ...approval, binding: { ...binding, syntheticTarget: { ...syntheticTarget, destinationRef: "other" } } }],
+    ])("holds %s even when canonical sources exist", async (_reason, record, approval) => {
+      const p = ports(rehearsal(), { readRehearsalQualification: vi.fn().mockResolvedValue({ record, approval }) });
+      await expect(createS5AdmissionComposer(p)(locator)).resolves.toMatchObject({ kind: "held", reason: "qualification-unavailable" });
+      expect(p.qualificationSources!.readActivityPolicy).not.toHaveBeenCalled();
+    });
+
+    it("holds non-synthetic data, non-coordination assignments and a failed current-owner check", async () => {
+      const s = rehearsal();
+      const readRehearsalQualification = vi.fn().mockResolvedValue({ record, approval });
+      const actualData = { ...s, activity: { ...s.activity, scope: { ...scope, dataClass: "customer" } } };
+      await expect(createS5AdmissionComposer(ports(actualData, { readRehearsalQualification }))(locator)).resolves.toMatchObject({ kind: "held" });
+      await expect(createS5AdmissionComposer(ports({ ...fixture(), executionProfile: "synthetic-rehearsal", syntheticTarget }, { readRehearsalQualification }))(locator)).resolves.toMatchObject({ kind: "held" });
+      expect(readRehearsalQualification).not.toHaveBeenCalled();
+      const p = ports(s, { readRehearsalQualification, confirmCurrent: vi.fn().mockResolvedValue(false) });
+      await expect(createS5AdmissionComposer(p)(locator)).resolves.toMatchObject({ kind: "held", reason: "admission-changed" });
+    });
+
+    it("rechecks the original approval expiry at equality after current-owner confirmation", async () => {
+      const clock = vi.fn().mockReturnValueOnce(now).mockReturnValueOnce(new Date(approval.validUntil));
+      const p = ports(rehearsal(), { readRehearsalQualification: vi.fn().mockResolvedValue({ record, approval }), now: clock });
+      await expect(createS5AdmissionComposer(p)(locator)).resolves.toMatchObject({ kind: "held", reason: "admission-changed" });
+    });
+  });
+
   it("holds if the stage attempt or pinned host is missing and never confirms an old attempt", async () => {
     const p = ports({ ...fixture(), stageAttemptRef: "attempt-1" });
     await expect(createS5AdmissionComposer(p)(locator)).resolves.toMatchObject({ kind: "held", reason: "assignment-unavailable" });

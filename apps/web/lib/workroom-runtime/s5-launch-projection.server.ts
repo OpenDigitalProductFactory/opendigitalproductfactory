@@ -31,6 +31,7 @@ export function projectS5Launch(input: {
   coordinationTarget?: CoordinationTarget;
 }): S5LaunchProjection | null {
   const { admission, route, issuedAt, permitExpiresAt, coordinationTarget } = input;
+  if (admission.jsi.kind === "rehearsal-qualification") return null;
   if (route.issuer !== admission.issuer || route.audience !== admission.host.receiverRef || route.hostRef !== admission.host.hostRef
     || route.metering.kind !== "verified" || !route.metering.proofRef || route.metering.proofRef.trim() !== route.metering.proofRef) return null;
   const dates = [issuedAt, permitExpiresAt, route.expiresAt, route.metering.expiresAt];

@@ -8,7 +8,8 @@ const pin = {
   ...locator, ...control, originRef: "origin:fixture", mode: "read-only-coordination", profile: "synthetic-rehearsal",
   subject: { principalId: "PRN-FIXTURE", gaid: "gaid:priv:fixture:agent" },
   authority: { bindingRef: "binding-a", permitRef: "permit-a", grantKeys: ["work_room_read", "work_room_write"] },
-  qualification: { kind: "eligible", id: "qualification-a", version: 1, statusRevision: 3, validUntil: start + 150_000 },
+  qualification: { kind: "rehearsal-qualification", approvalRef: "approval-a", ownerPrincipalId: "PRN-OWNER",
+    statusRevision: 3, approvalRevision: 2, validUntil: start + 150_000 },
   expiresAt: start + 120_000,
   syntheticTarget: { environment: "non-production", fixtureRef: "fixture-a", databaseRef: "db-fixture-a", caseKey: "backlog-item:BI-FIXTURE",
     destinationRef: "guest-fixture-a", recipient: { authorityRef: "recipient-auth-a", destinationRef: "recipient-destination-a", reservationRef: "recipient-reservation-a" } },
@@ -58,6 +59,8 @@ describe("exact S5 rehearsal admission evidence, no writes or send", () => {
 
   it.each([
     { qualification: null }, { qualification: { ...pin.qualification, statusRevision: 4 } },
+    { qualification: { ...pin.qualification, approvalRevision: 3 } },
+    { qualification: { kind: "eligible", id: "canonical-jsi", version: 1, statusRevision: 3, validUntil: start + 150_000 } },
     { qualification: { ...pin.qualification, validUntil: start } },
     { subject: { ...pin.subject, gaid: "gaid:priv:fixture:other" } },
     { syntheticTarget: { ...pin.syntheticTarget, databaseRef: "other-db" } },
