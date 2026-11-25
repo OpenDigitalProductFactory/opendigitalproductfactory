@@ -169,6 +169,32 @@ connect to a daemon over the network. At deployment, attest that the actual
 sockets, mounts and networks match the fixed profile. There is no enabling
 fallback to raw Docker in the qualified runtime.
 
+**Authorized source writer.** The qualified portal mounts the install
+checkout (`/host-dpf`) and worktree base (`/host-worktrees`) read-only. Today
+the portal also writes there. Source-mode self-upgrade clones, fetches,
+merges, resets and cleans `.upgrade-workspace`, then pushes a ref into the
+install repository. Status reads and the release-batch tally run `git fetch`.
+Merge-delivery detection refreshes trunk. Skill-seed write-back writes a seed
+file. Under the qualified recipe each of these fails, and source-mode installs
+could no longer upgrade.
+
+The owner chose a dedicated source writer (decision `DI-250233FBDD9B`,
+resolved 2026-11-25). The platform is meant to code itself, upgrade itself
+and contribute source, so source mutation is a first-class governed
+capability, not a side effect of the web server. The actuator launches a
+short-lived source-writer container from the canonical promoter image. It
+uses a fixed entrypoint, a fixed operation set, and the install checkout as
+its only writable source mount. Each launch is keyed on an existing owner and
+rereads that owner before writing: the admitted self-upgrade run for
+workspace preparation and ref publication, and a bounded freshness refresh
+for remote fetches. The container is named and labeled per owner, like an
+admitted promoter, and settles a lost reply by exact readback. Neither the
+portal nor the actuator holds a writable source mount. Later owners, such as
+Build Studio commits, contribution branches and Hive Mind contributions, are
+added as new fixed operations with their own owners, not as general Git
+access. The cutover guard must also refuse portal code that writes under a
+read-only mount, so `portal-immutable-v1` stays held until these writers move.
+
 ### Close the observation window in the claim transaction
 
 At `36187bfbd0a6`, the runtime transition coordinator already shares
