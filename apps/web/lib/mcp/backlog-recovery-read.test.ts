@@ -71,6 +71,25 @@ describe("bounded existing backlog recovery projection", () => {
     expect(result.data).not.toHaveProperty("recovery");
   });
 
+  it("names the acceptance-evidence route without reopening a completed doc item", () => {
+    const result = boundedBacklogRecoveryRead({
+      ...args, status: "done", gate: "data-review", profile: "doc-only", recovery: undefined,
+    });
+    expect(result).toMatchObject({
+      success: false, error: "recovery_gate_not_applicable",
+      data: { availableGates: [], nextAction: expect.stringContaining("supplemental evidence") },
+    });
+  });
+
+  it("preserves a real data-review packet and does not classify other profiles as doc-only", () => {
+    const request = { ...packet, gate: "data-review" };
+    const withData = { ...args, gate: "data-review", recovery: { ...recovery, reviewerRoutes: [request] } };
+    const result = boundedBacklogRecoveryRead({ ...withData, profile: "doc-only" });
+    expect((result.data?.recovery as typeof recovery).reviewerRoutes[0]).toBe(request);
+    expect(boundedBacklogRecoveryRead({ ...args, gate: "data-review", profile: "cross-domain" }))
+      .toMatchObject({ success: false, error: "recovery_gate_unavailable" });
+  });
+
   it("retains the canonical author research escalation and never creates a research reviewer", () => {
     const research = { reviewerRoutes: [], unroutable: [], escalations: [{
       toolName: "record_initiative_evidence", reason: "research-evidence-required", accountableRole: "design-author",

@@ -39,6 +39,7 @@ import {
 } from "./managed-backup";
 import { POSTGRES_BACKUP_SPEC, type BackupEngineSpec } from "./engine-specs";
 import { runManagedScript } from "./managed-script-path";
+import { prepareRestoreJournal } from "./paired-restore-journal";
 
 type Mock = ReturnType<typeof vi.fn>;
 const runScriptMock = runManagedScript as unknown as Mock;
@@ -114,6 +115,31 @@ describe("shared helpers", () => {
 });
 
 describe.each(ENGINES)("runManagedBackup — $spec.target", ({ spec, failLine, expectedSummary }) => {
+  it("won't publish a successful row when the engine's capture evidence cannot be durably recorded", async () => {
+    const backupsRoot = await makeBackupsRoot();
+    const targetDir = path.posix.join(backupsRoot, spec.subdir, EXPECTED_TS_KEY);
+    const prisma = makePrisma();
+    try {
+      runScriptMock.mockImplementation(async () => {
+        await fs.mkdir(targetDir, { recursive: true });
+        await fs.writeFile(path.join(targetDir, "manifest.json"), JSON.stringify({ sizeBytes: 2048, sha256: "deadbeef" }));
+        return { ok: true, stdout: "", stderr: "", exitCode: 0 };
+      });
+      const recordCaptureEvidence = vi.fn(async () => {
+        expect(prisma.backupRun.update).not.toHaveBeenCalled();
+        throw new Error("custody IO failure");
+      });
+      const result = await runManagedBackup({ ...spec, recordCaptureEvidence }, {
+        trigger: "scheduled", backupsRoot, prismaClient: prisma as never, preflight: NOOP_PREFLIGHT, now: () => FIXED_NOW,
+      });
+      expect(result).toMatchObject({ status: "failed", error: expect.stringMatching(/capture evidence/i) });
+      expect(recordCaptureEvidence).toHaveBeenCalledOnce();
+      expect(prisma.backupRun.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: "failed" }) }));
+    } finally {
+      await fs.rm(backupsRoot, { recursive: true, force: true });
+    }
+  });
+
   it("success path writes the BackupRun row, both heartbeats, metrics and manifest fields", async () => {
     const backupsRoot = await makeBackupsRoot();
     const targetDir = path.posix.join(backupsRoot, spec.subdir, EXPECTED_TS_KEY);
@@ -357,12 +383,30 @@ describe("runManagedBackup — preflight short-circuit", () => {
 });
 
 describe("runManagedBackup — retention pruning", () => {
-  it("deletes only the runs the GFS policy drops and flips their prunedAt", async () => {
+  it.each([false, true])("prunes a run only if GFS drops it and the host journal does not pin it (pinned=%s)", async (pinned) => {
     const backupsRoot = await makeBackupsRoot();
     const targetDir = path.posix.join(backupsRoot, "postgres", EXPECTED_TS_KEY);
     const oldDir = path.posix.join(backupsRoot, "postgres", "old-run");
     await fs.mkdir(oldDir, { recursive: true });
     await fs.writeFile(path.posix.join(oldDir, "dpf.dump"), "old-bytes");
+
+    if (pinned) {
+      const sha = "b".repeat(64);
+      await prepareRestoreJournal(await fs.realpath(backupsRoot), {
+        operationId: "pending-restore",
+        installationId: "fixture-install",
+        selected: {
+          postgres: { runId: "a-different-row-id", storagePath: "postgres/old-run", sha256: sha },
+          uploads: { runId: "selected-up", storagePath: "uploads/selected", sha256: sha, manifestSha256: sha },
+        },
+        safety: {
+          postgres: { runId: "safety-pg", storagePath: "postgres/safety", sha256: sha },
+          uploads: { runId: "safety-up", storagePath: "uploads/safety", sha256: sha, manifestSha256: sha },
+        },
+        receiver: [{ name: "upload-store", path: "/fixture/uploads", dev: "1", ino: "2" }],
+        collisionSetSha256: sha,
+      });
+    }
 
     const twoDaysAgo = new Date("2026-07-07T05:00:00.000Z");
     const prisma = makePrisma({
@@ -407,16 +451,18 @@ describe("runManagedBackup — retention pruning", () => {
       now: () => FIXED_NOW,
     });
 
-    // Old run's directory is gone from disk...
-    await expect(fs.access(oldDir)).rejects.toThrow();
-    // ...the kept run's directory is not.
     await expect(fs.access(targetDir)).resolves.toBeUndefined();
-    // ...and only the pruned run got its prunedAt flipped.
-    expect(prisma.backupRun.updateMany).toHaveBeenCalledTimes(1);
-    expect(prisma.backupRun.updateMany).toHaveBeenCalledWith({
-      where: { id: { in: ["prune-me"] } },
-      data: { prunedAt: expect.any(Date) },
-    });
+    if (pinned) {
+      await expect(fs.access(oldDir)).resolves.toBeUndefined();
+      expect(prisma.backupRun.updateMany).not.toHaveBeenCalled();
+    } else {
+      await expect(fs.access(oldDir)).rejects.toThrow();
+      expect(prisma.backupRun.updateMany).toHaveBeenCalledTimes(1);
+      expect(prisma.backupRun.updateMany).toHaveBeenCalledWith({
+        where: { id: { in: ["prune-me"] } },
+        data: { prunedAt: expect.any(Date) },
+      });
+    }
 
     await fs.rm(backupsRoot, { recursive: true, force: true });
   });
