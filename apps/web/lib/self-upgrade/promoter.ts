@@ -503,6 +503,10 @@ export const PROMOTER_JIT_BUILD_SCRIPT =
   "mkdir -p \"$BDIR/scripts\" && mkdir -p \"$BDIR/scripts/installer\" && mkdir -p \"$BDIR/scripts/lib\" && " +
   "cp /promoter/scripts/promote.sh \"$BDIR/scripts/promote.sh\" && " +
   "cp /promoter/scripts/governed-teardown.mjs \"$BDIR/scripts/governed-teardown.mjs\" && " +
+  "cp /promoter/scripts/governed-teardown-recovery.mjs \"$BDIR/scripts/governed-teardown-recovery.mjs\" && " +
+  "cp /promoter/scripts/restore-uploads.mjs \"$BDIR/scripts/restore-uploads.mjs\" && " +
+  "cp /promoter/scripts/backup-uploads.mjs \"$BDIR/scripts/backup-uploads.mjs\" && " +
+  "cp /promoter/scripts/lib/paired-recovery-contract.generated.cjs \"$BDIR/scripts/lib/paired-recovery-contract.generated.cjs\" && " +
   "cp /promoter/scripts/salvage-sweep.mjs \"$BDIR/scripts/salvage-sweep.mjs\" && " +
   "cp /promoter/scripts/apply-runtime-capability-transition.mjs \"$BDIR/scripts/apply-runtime-capability-transition.mjs\" && " +
   "cp /promoter/scripts/runtime-transition-authority.mjs \"$BDIR/scripts/runtime-transition-authority.mjs\" && " +
