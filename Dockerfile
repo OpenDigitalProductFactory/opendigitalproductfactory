@@ -606,6 +606,12 @@ COPY scripts/lib/govern-capability-compose-args.mjs /promoter/scripts/lib/govern
 COPY scripts/lib/script-argv.mjs /promoter/scripts/lib/script-argv.mjs
 COPY scripts/lib/git.mjs /promoter/scripts/lib/git.mjs
 COPY scripts/lib/capability-state-hash.mjs /promoter/scripts/lib/capability-state-hash.mjs
+COPY scripts/source-writer.mjs /promoter/scripts/source-writer.mjs
+COPY scripts/lib/upgrade-source/prepare-source.mjs /promoter/scripts/lib/upgrade-source/prepare-source.mjs
+COPY scripts/lib/upgrade-source/transient-network.mjs /promoter/scripts/lib/upgrade-source/transient-network.mjs
+COPY scripts/lib/upgrade-source/lfs-materialization.mjs /promoter/scripts/lib/upgrade-source/lfs-materialization.mjs
+COPY scripts/lib/upgrade-source/version-stamp.mjs /promoter/scripts/lib/upgrade-source/version-stamp.mjs
+COPY scripts/lib/error-message.mjs /promoter/scripts/lib/error-message.mjs
 COPY scripts/capability-service-catalog.generated.json /promoter/scripts/capability-service-catalog.generated.json
 
 EXPOSE 3000

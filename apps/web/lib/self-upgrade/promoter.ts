@@ -534,6 +534,7 @@ export const PROMOTER_JIT_BUILD_SCRIPT =
   "cp /promoter/scripts/lib/git.mjs \"$BDIR/scripts/lib/git.mjs\" && " +
   "cp /promoter/scripts/lib/capability-state-hash.mjs \"$BDIR/scripts/lib/capability-state-hash.mjs\" && " +
   "cp /promoter/scripts/capability-service-catalog.generated.json \"$BDIR/scripts/capability-service-catalog.generated.json\" && " +
+  "mkdir -p \"$BDIR/scripts/lib/upgrade-source\" && cp /promoter/scripts/source-writer.mjs \"$BDIR/scripts/source-writer.mjs\" && cp /promoter/scripts/lib/upgrade-source/prepare-source.mjs \"$BDIR/scripts/lib/upgrade-source/prepare-source.mjs\" && cp /promoter/scripts/lib/upgrade-source/transient-network.mjs \"$BDIR/scripts/lib/upgrade-source/transient-network.mjs\" && cp /promoter/scripts/lib/upgrade-source/lfs-materialization.mjs \"$BDIR/scripts/lib/upgrade-source/lfs-materialization.mjs\" && cp /promoter/scripts/lib/upgrade-source/version-stamp.mjs \"$BDIR/scripts/lib/upgrade-source/version-stamp.mjs\" && cp /promoter/scripts/lib/error-message.mjs \"$BDIR/scripts/lib/error-message.mjs\" && " +
   "tar -C \"$BDIR\" -c . | docker buildx build --load -t dpf-promoter -f Dockerfile.promoter -";
 
 /**

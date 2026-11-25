@@ -56,3 +56,10 @@
 !scripts/lib/canonical-json.mjs
 !scripts/lib/local-sandbox-fence.mjs
 !scripts/lib/entry-module.mjs
+# BI-224F56F1: authorized source writer and its shared upgrade-source modules.
+!scripts/source-writer.mjs
+!scripts/lib/upgrade-source/prepare-source.mjs
+!scripts/lib/upgrade-source/transient-network.mjs
+!scripts/lib/upgrade-source/lfs-materialization.mjs
+!scripts/lib/upgrade-source/version-stamp.mjs
+!scripts/lib/error-message.mjs

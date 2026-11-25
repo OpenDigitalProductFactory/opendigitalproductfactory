@@ -61,6 +61,13 @@ export const PROMOTER_BUILD_CONTEXT_SOURCES: readonly string[] = [
   "scripts/lib/git.mjs",
   "scripts/lib/capability-state-hash.mjs",
   "scripts/capability-service-catalog.generated.json",
+  // BI-224F56F1: the authorized source writer and its shared upgrade-source modules.
+  "scripts/source-writer.mjs",
+  "scripts/lib/upgrade-source/prepare-source.mjs",
+  "scripts/lib/upgrade-source/transient-network.mjs",
+  "scripts/lib/upgrade-source/lfs-materialization.mjs",
+  "scripts/lib/upgrade-source/version-stamp.mjs",
+  "scripts/lib/error-message.mjs",
 ] as const;
 
 /**
