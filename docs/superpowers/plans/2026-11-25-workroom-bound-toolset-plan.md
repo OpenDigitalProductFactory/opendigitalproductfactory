@@ -1,3 +1,7 @@
+---
+status: draft
+---
+
 # Workroom-bound toolset implementation plan
 
 BI-687E7D81 · WC-EA8680B0 · Approved scope baseline `baseline-0ade529a-9401-47ad-b22b-48b0c082e6b9`
