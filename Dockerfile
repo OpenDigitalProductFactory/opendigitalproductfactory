@@ -194,6 +194,7 @@ COPY scripts/backup-postgres.sh ./scripts/
 COPY scripts/restore-postgres.sh ./scripts/
 COPY scripts/postgres-trial-restore.sh ./scripts/
 COPY scripts/backup-uploads.sh scripts/backup-uploads.mjs scripts/restore-uploads.mjs ./scripts/
+COPY scripts/verify-uploads-trial.mjs ./scripts/
 # BI-3F16A430: web-src workspace linker — run at build below and re-run from the
 # host bootstrap against older images (see the script header).
 COPY scripts/link-web-src-workspace.sh ./scripts/

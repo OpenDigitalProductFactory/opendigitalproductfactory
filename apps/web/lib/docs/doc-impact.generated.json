@@ -1725,6 +1725,9 @@
       "docs/architecture/work-shapes-and-the-decision-gate.md",
       "docs/user-guide/ai-workforce/how-governed-work-runs.md"
     ],
+    "apps/web/lib/work-management/coordinator-eligibility.ts": [
+      "docs/architecture/job-specific-intelligence.md"
+    ],
     "apps/web/lib/work-management/coworker-engagement-case-projection.ts": [
       "docs/user-guide/workspace/work-rooms.md"
     ],
@@ -1739,6 +1742,12 @@
     ],
     "apps/web/lib/work-management/human-accountability.ts": [
       "docs/architecture/workroom-vocabulary-boundary.md"
+    ],
+    "apps/web/lib/work-management/jsi-qualification.test.ts": [
+      "docs/architecture/job-specific-intelligence.md"
+    ],
+    "apps/web/lib/work-management/jsi-qualification.ts": [
+      "docs/architecture/job-specific-intelligence.md"
     ],
     "apps/web/lib/work-management/room-ai-spend.ts": [
       "docs/user-guide/workspace/work-rooms.md"
@@ -3905,6 +3914,11 @@
       "apps/web/lib/work-capsules/governed-work-claim.ts",
       "apps/web/lib/work-management/room-shapes.ts",
       "packages/db/data/agent_registry.json"
+    ],
+    "docs/architecture/job-specific-intelligence.md": [
+      "apps/web/lib/work-management/coordinator-eligibility.ts",
+      "apps/web/lib/work-management/jsi-qualification.test.ts",
+      "apps/web/lib/work-management/jsi-qualification.ts"
     ],
     "docs/architecture/local-llm-build-engine.md": [
       "packages/db/data/build-engines.json"

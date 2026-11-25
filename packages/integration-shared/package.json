@@ -14,6 +14,10 @@
     "./delivery-readiness-contract": {
       "types": "./src/delivery-readiness-contract.d.cts",
       "default": "./src/delivery-readiness-contract.cjs"
+    },
+    "./paired-recovery-contract": {
+      "types": "./src/paired-recovery-contract.d.cts",
+      "default": "./src/paired-recovery-contract.cjs"
     }
   },
   "scripts": {

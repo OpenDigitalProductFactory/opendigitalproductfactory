@@ -94,6 +94,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       node("--test", "scripts/backup-uploads.test.mjs"),
       // BI-C49F5FA2: the paired verifier checks archive integrity and trial references without writes.
       node("--test", "scripts/restore-uploads.test.mjs"),
+      node("--test", "scripts/verify-uploads-trial.test.mjs"),
       node("--test", "scripts/host-resource-runner.test.mjs", "scripts/lib/host-reservation-observation.test.mjs"),
       node("--test", "scripts/lib/semantic-review-artifact.test.mjs", "scripts/semantic-review-gate.test.mjs", "scripts/semantic-review-cli-role.test.mjs"),
       // BI-2B8D67A9: run-tsc selects TS7 by default and TS6 under DPF_TSC=6,
