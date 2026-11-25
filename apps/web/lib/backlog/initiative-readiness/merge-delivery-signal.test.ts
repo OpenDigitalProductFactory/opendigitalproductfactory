@@ -12,7 +12,7 @@
  * what hid it.
  */
 import { execFile, execFileSync } from "node:child_process";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -20,7 +20,7 @@ import { createRealGitFixture, REAL_GIT_SETUP_HOOK_MS, type RealGitFixture } fro
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { refreshMergeSignalTrunk, resolveMergeSignalFromRefs } from "./backlog-terminal-transition";
+import { refreshMergeSignalTrunk, resolveMergeSignalFromRefs } from "./merge-delivery-signal";
 import { refreshTrunkRef } from "@/lib/work-capsules/git-scanner";
 
 const execFileAsync = promisify(execFile);
@@ -106,6 +106,34 @@ describe("merge-delivery signal against real repositories (BI-043946C5)", () => 
       pullRequests: [4242],
       roots: [repo.root],
     })).resolves.toBe("merged");
+  });
+
+  it("does not treat a reachable design-only Workroom head or linked PR as implementation delivery", async () => {
+    const docs = await createRealGitFixture("dpf-doc-delivery-", async ({ root, git }) => {
+      await git("init", "--initial-branch=main");
+      await git("config", "user.email", "test@example.invalid");
+      await git("config", "user.name", "Test");
+      await git("config", "commit.gpgsign", "false");
+      await git("commit", "--allow-empty", "-m", "base");
+      await mkdir(path.join(root, "docs/architecture"), { recursive: true });
+      await writeFile(path.join(root, "docs/architecture/design.md"), "Design only\n");
+      await git("add", ".");
+      await git("commit", "-m", "feat: design BI-AAAA1111 (#4243)");
+      const sha = (await git("rev-parse", "HEAD")).stdout.trim();
+      await git("update-ref", "refs/remotes/origin/main", sha);
+      return sha;
+    });
+    try {
+      const item = { itemId: "BI-AAAA1111", workType: "feature" };
+      for (const refs of [{ heads: [docs.value], pullRequests: [] }, { heads: [], pullRequests: [4243] },
+        { heads: [], pullRequests: [], attestedPullRequests: [4243] }, { heads: [], pullRequests: [] }]) {
+        await expect(resolveMergeSignalFromRefs({ ...refs, roots: [docs.root], item })).resolves.toBe("not-merged");
+      }
+      await expect(resolveMergeSignalFromRefs({ heads: [], pullRequests: [4243], roots: [docs.root],
+        item: { ...item, workType: "doc" } })).resolves.toBe("merged");
+    } finally {
+      await docs.dispose();
+    }
   });
 
   it("skips an unreadable root and still answers from a later readable one", async () => {
@@ -298,7 +326,7 @@ describe("a negative is only trusted against a current trunk (BI-043946C5)", () 
 
 describe("mergeSignalRoots (BI-043946C5)", () => {
   it("puts the configured roots ahead of the built-in fallbacks", async () => {
-    const { mergeSignalRoots } = await import("./backlog-terminal-transition");
+    const { mergeSignalRoots } = await import("./merge-delivery-signal");
     const saved = {
       repo: process.env.DPF_REPO_ROOT,
       source: process.env.DPF_HOST_SOURCE_ROOT,
