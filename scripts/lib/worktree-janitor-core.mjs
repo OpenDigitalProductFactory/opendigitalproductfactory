@@ -33,6 +33,9 @@
  * @property {boolean} merged        ancestor of origin/main OR has merged PR
  * @property {boolean} dirty         porcelain non-empty
  * @property {number} ageDays        days since last commit (0 if unknown)
+ * @property {boolean} [t3SettlementUnknown] default T3 path with no verified settled thread
+ * @property {boolean} [heartbeatUnavailable] heartbeat exists but cannot establish liveness
+ * @property {boolean} [processCwdUnavailable] host process CWD snapshot unavailable
  * @property {boolean} [hasLiveSession]  a fresh session heartbeat is present
  * @property {boolean} [hasActiveProcessCwd]  a running host process currently has its CWD inside this worktree
  * @property {boolean} [isFreshCheckout]  freshly created worktree still at origin/main within the startup grace window
@@ -70,6 +73,12 @@ export function classifyWorktree(facts, opts = {}) {
   if (facts.isRoot) {
     return { verdict: "SKIP", reason: "root clone", tier: null };
   }
+  const unavailable = facts.t3SettlementUnknown ? "T3 thread settlement unverified"
+    : facts.heartbeatUnavailable ? "worktree heartbeat unreadable"
+    : facts.processCwdUnavailable ? "process CWD snapshot unavailable"
+    : null;
+  if (unavailable) return { verdict: "KEEP", reason: unavailable, tier: null };
+
   if (!facts.branch) {
     if (!pruneDetached) {
       return { verdict: "SKIP", reason: "detached HEAD", tier: null };

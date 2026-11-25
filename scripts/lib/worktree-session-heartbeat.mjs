@@ -17,7 +17,7 @@
 // Pure helpers + injectable fs so the janitor and the session hook share one
 // contract and it stays exhaustively unit-testable.
 
-import { existsSync, readFileSync, writeFileSync, rmSync } from "node:fs";
+import { lstatSync, readFileSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 
 /** Gitignored marker filename written into each live worktree. */
@@ -58,9 +58,10 @@ export function heartbeatTtlMs(env = process.env) {
 export function parseHeartbeat(raw) {
   try {
     const obj = JSON.parse(raw);
-    if (obj && typeof obj === "object" && typeof obj.beatAt === "number") {
-      return obj;
-    }
+    if (!obj || Array.isArray(obj) || !Number.isFinite(obj.beatAt)) return null;
+    if ("sessions" in obj && (!obj.sessions || typeof obj.sessions !== "object" || Array.isArray(obj.sessions) ||
+      !Object.keys(obj.sessions).length || Object.values(obj.sessions).some((entry) => !Number.isFinite(entry?.beatAt)))) return null;
+    return obj;
   } catch {
     // fall through
   }
@@ -79,35 +80,46 @@ export function isHeartbeatLive(hb, now, ttlMs = DEFAULT_TTL_MS) {
   return now - hb.beatAt <= ttlMs;
 }
 
-/**
- * Read a worktree's heartbeat record, or null. Injectable fs for tests.
- * @param {string} worktreePath
- * @param {{ fs?: { existsSync: typeof existsSync, readFileSync: typeof readFileSync } }} [deps]
- */
-export function readHeartbeat(worktreePath, deps = {}) {
-  const fs = deps.fs ?? { existsSync, readFileSync };
-  const p = heartbeatPath(worktreePath);
-  if (!fs.existsSync(p)) return null;
+const heartbeatFs = { lstatSync, readFileSync, writeFileSync, rmSync };
+
+function observeHeartbeat(worktreePath, { fs = heartbeatFs } = {}) {
+  const marker = heartbeatPath(worktreePath);
+  if (fs.lstatSync) {
+    try {
+      if (!fs.lstatSync(marker).isFile()) return { state: "unknown" };
+    } catch (error) {
+      return { state: error?.code === "ENOENT" ? "absent" : "unknown" };
+    }
+  }
   try {
-    return parseHeartbeat(fs.readFileSync(p, "utf8"));
-  } catch {
-    return null;
+    const heartbeat = parseHeartbeat(fs.readFileSync(marker, "utf8"));
+    return heartbeat ? { state: "read", heartbeat } : { state: "unknown" };
+  } catch (error) {
+    return { state: !fs.lstatSync && error?.code === "ENOENT" ? "absent" : "unknown" };
   }
 }
 
-/**
- * True when a worktree currently holds a fresh session heartbeat.
- * @param {string} worktreePath
- * @param {{ now?: number, ttlMs?: number, fs?: object }} [deps]
- */
-export function isWorktreeSessionLive(worktreePath, deps = {}) {
+/** Return a readable record or null. Destructive callers use worktreeHeartbeatStatus. */
+export function readHeartbeat(worktreePath, deps = {}) {
+  return observeHeartbeat(worktreePath, deps).heartbeat ?? null;
+}
+
+/** Distinguish missing markers from corrupt, raced, or unreadable markers. */
+export function worktreeHeartbeatStatus(worktreePath, deps = {}) {
+  const { state, heartbeat } = observeHeartbeat(worktreePath, deps);
+  if (state !== "read") return state;
   const now = deps.now ?? Date.now();
   const ttlMs = deps.ttlMs ?? DEFAULT_TTL_MS;
-  const heartbeat = readHeartbeat(worktreePath, deps);
-  // The bridge runs independently of the provider. Long gaps between turns
-  // aren't proof that T3 settled. Only the host settle callback clears this slot.
-  return Object.hasOwn(sessionEntries(heartbeat), T3_BRIDGE_SESSION_ID) ||
-    isHeartbeatLive(heartbeat, now, ttlMs);
+  const entries = sessionEntries(heartbeat);
+  if (Object.hasOwn(entries, T3_BRIDGE_SESSION_ID) ||
+    Object.values(entries).some((entry) => isHeartbeatLive(entry, now, ttlMs))) return "live";
+  if (heartbeat.beatAt > now + FUTURE_SKEW_MS ||
+    Object.values(entries).some((entry) => entry.beatAt > now + FUTURE_SKEW_MS)) return "unknown";
+  return "stale";
+}
+
+export function isWorktreeSessionLive(worktreePath, deps = {}) {
+  return worktreeHeartbeatStatus(worktreePath, deps) === "live";
 }
 
 // ── several sessions in one worktree (BI-296C9E24) ──────────────────────────
@@ -177,9 +189,11 @@ export function liveOtherSessionIds(worktreePath, selfSessionId, deps = {}) {
  * @returns {boolean}
  */
 export function writeHeartbeat(worktreePath, deps = {}) {
-  const fs = deps.fs ?? { existsSync, readFileSync, writeFileSync };
+  const fs = deps.fs ?? heartbeatFs;
+  const observation = observeHeartbeat(worktreePath, { fs });
+  if (observation.state === "unknown") return false;
   const now = deps.now ?? Date.now();
-  const entries = sessionEntries(readHeartbeat(worktreePath, { fs }));
+  const entries = sessionEntries(observation.heartbeat);
   const id = deps.sessionId || ANONYMOUS_SESSION;
   entries[id] = {
     beatAt: now,
@@ -204,10 +218,13 @@ export function writeHeartbeat(worktreePath, deps = {}) {
  * @returns {boolean}
  */
 export function removeHeartbeat(worktreePath, deps = {}) {
-  const fs = deps.fs ?? { existsSync, readFileSync, writeFileSync, rmSync };
+  const fs = deps.fs ?? heartbeatFs;
+  const observation = observeHeartbeat(worktreePath, { fs });
+  if (observation.state === "unknown") return false;
+  if (observation.state === "absent") return true;
   try {
     if (deps.sessionId) {
-      const entries = sessionEntries(readHeartbeat(worktreePath, { fs }));
+      const entries = sessionEntries(observation.heartbeat);
       delete entries[deps.sessionId];
       const marker = markerFor(entries);
       if (marker) {

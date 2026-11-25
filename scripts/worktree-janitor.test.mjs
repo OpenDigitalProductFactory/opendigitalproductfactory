@@ -5,6 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { describe, it } from "node:test";
 import * as janitor from "./worktree-janitor.mjs";
+import { classifyWorktree } from "./lib/worktree-janitor-core.mjs";
 
 import {
   backupUnpushedBranch,
@@ -188,11 +189,20 @@ describe("worktree janitor orphan directory scanner", () => {
 });
 
 describe("fresh branches and atomic retirement (BI-F52EF21B)", () => {
-  function fixture(t) {
+  // Most tests isolate removal behavior rather than relying on the test host's
+  // lsof or deliberately scanning its real worktrees.
+  const retire = (root, wt, options = {}) =>
+    janitor.retireWorktree(root, wt, { loadCwds: () => new Set(), ...options });
+
+
+  function fixture(t, { t3 = false } = {}) {
     const dir = realpathSync(mkdtempSync(path.join(os.tmpdir(), "dpf-reap-")));
     t.after(() => rmSync(dir, { recursive: true, force: true }));
     const root = path.join(dir, "root");
-    const wt = path.join(dir, "topic-checkout");
+    const wt = t3
+      ? path.join(dir, "home", ".t3", "worktrees", "dpf", "topic-checkout")
+      : path.join(dir, "topic-checkout");
+    mkdirSync(path.dirname(wt), { recursive: true });
     mkdirSync(root);
     const env = { ...process.env };
     for (const name of ["GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR", "GIT_INDEX_FILE"]) delete env[name];
@@ -200,7 +210,7 @@ describe("fresh branches and atomic retirement (BI-F52EF21B)", () => {
       try {
         return { ok: true, stdout: execFileSync("git", args, { cwd, encoding: "utf8", env, stdio: ["ignore", "pipe", "pipe"] }).trim() };
       } catch (err) {
-        return { ok: false, stdout: "", stderr: String(err.stderr ?? err) };
+        return { ok: false, status: err.status, stdout: "", stderr: String(err.stderr ?? err) };
       }
     };
     const mustGit = (args, cwd = root) => {
@@ -214,7 +224,7 @@ describe("fresh branches and atomic retirement (BI-F52EF21B)", () => {
     mustGit(["config", "user.name", "Test"]);
     mustGit(["config", "commit.gpgSign", "false"]);
     writeFileSync(path.join(root, "tracked.txt"), "base");
-    writeFileSync(path.join(root, ".gitignore"), "node_modules\n");
+    writeFileSync(path.join(root, ".gitignore"), "node_modules\n.dpf-session-heartbeat.json\n");
     mustGit(["add", "."]);
     mustGit(["commit", "-qm", "base"]);
     mustGit(["worktree", "add", "-qb", "topic", wt]);
@@ -236,15 +246,87 @@ describe("fresh branches and atomic retirement (BI-F52EF21B)", () => {
     assert.equal(janitor.branchWorkAtTip(root, "topic", git), "unknown");
   });
 
+  it("does not count inherited main commits as work after fast-forward or reset", (t) => {
+    const { root, wt, git, mustGit } = fixture(t);
+    mustGit(["commit", "--allow-empty", "-qm", "advance main"]);
+    mustGit(["update-ref", "refs/remotes/origin/main", "HEAD"]);
+    mustGit(["merge", "--ff-only", "origin/main"], wt);
+    assert.equal(janitor.branchWorkAtTip(root, "topic", git), "no-commits");
+    mustGit(["commit", "--allow-empty", "-qm", "discarded own work"], wt);
+    mustGit(["reset", "--hard", "origin/main"], wt);
+    assert.equal(janitor.branchWorkAtTip(root, "topic", git), "no-commits");
+  });
+
+  for (const merged of [false, true]) {
+    it("keeps an idle T3 checkout without a heartbeat (merged=" + merged + ")", (t) => {
+      const { root, wt, git, mustGit } = fixture(t, { t3: true });
+      if (merged) {
+        mustGit(["commit", "--allow-empty", "-qm", "own work"], wt);
+        mustGit(["merge", "--ff-only", "topic"]);
+      }
+      mustGit(["update-ref", "refs/remotes/origin/main", "HEAD"]);
+      assert.equal(existsSync(path.join(wt, ".dpf-session-heartbeat.json")), false);
+      const facts = janitor.gatherFacts(root, { path: wt, branch: "topic" },
+        { open: new Set(), merged: new Set() }, "", undefined, { available: true, activePaths: new Set() },
+        { activeCwds: new Set(), allowFresh: true });
+      assert.equal(facts.t3SettlementUnknown, true);
+      assert.equal(facts.merged, merged);
+      const verdict = classifyWorktree(facts);
+      assert.equal(verdict.verdict, "KEEP");
+      assert.match(verdict.reason, /T3.*settlement/);
+      assert.equal(retire(root, wt, { git }).ok, false);
+      assert.equal(readFileSync(path.join(wt, "tracked.txt"), "utf8"), "base");
+    });
+  }
+
+  it("distinguishes an unavailable CWD snapshot from an observed empty result", () => {
+    const spawn = () => ({ status: 1, stdout: "", stderr: "" });
+    assert.equal(janitor.loadActiveProcessCwds("darwin", spawn), null);
+    assert.equal(janitor.loadActiveProcessCwds("win32", spawn), null);
+    const healthy = () => ({ status: 0, stdout: "p11\nn/working/cwd\n", stderr: "" });
+    assert.deepEqual(janitor.loadActiveProcessCwds("darwin", healthy), new Set(["/working/cwd"]));
+    assert.equal(janitor.loadActiveProcessCwds("darwin", () => ({...healthy(), stderr: "incomplete"})), null);
+  });
+
+  it("rechecks CWDs immediately before a rename and refuses a new process or unknown snapshot", (t) => {
+    const { dir, root, wt, git } = fixture(t);
+    for (const sample of [null, new Set([path.join(wt, "subdir").replaceAll("\\", "/").toLowerCase()])]) {
+      let intentLogged = false;
+      const result = retire(root, wt, {
+        git,
+        onIntent() { intentLogged = true; },
+        loadCwds() { assert.equal(intentLogged, true); return sample; },
+      });
+      assert.equal(result.ok, false);
+      assert.match(result.detail, /process CWD/);
+      assert.equal(readFileSync(path.join(wt, "tracked.txt"), "utf8"), "base");
+      assert.ok(!readdirSync(dir).some((name) => name.startsWith(".dpf-reap-")));
+    }
+  });
+
+  it("keeps corrupt and unreadable heartbeat markers", (t) => {
+    const { root, wt, git } = fixture(t);
+    const marker = path.join(wt, ".dpf-session-heartbeat.json");
+    for (const content of ["{not-json", null]) {
+      if (content === null) mkdirSync(marker);
+      else writeFileSync(marker, content);
+      const result = retire(root, wt, { git });
+      assert.equal(result.ok, false);
+      assert.match(result.detail, /heartbeat.*unreadable/);
+      assert.equal(readFileSync(path.join(wt, "tracked.txt"), "utf8"), "base");
+      rmSync(marker, { recursive: true, force: true });
+    }
+  });
+
   it("refuses dirty, untracked, or unreadable status before touching the tree", (t) => {
     const { dir, root, wt, git, mustGit } = fixture(t);
     mustGit(["config", "status.showUntrackedFiles", "no"], wt);
     writeFileSync(path.join(wt, "secret-local.txt"), "new work");
-    let result = janitor.retireWorktree(root, wt, { git });
+    let result = retire(root, wt, { git });
     assert.equal(result.ok, false);
     assert.match(result.detail, /dirty/);
     assert.equal(readFileSync(path.join(wt, "secret-local.txt"), "utf8"), "new work");
-    result = janitor.retireWorktree(root, wt, { git: () => ({ ok: false }) });
+    result = retire(root, wt, { git: () => ({ ok: false }) });
     assert.equal(result.ok, false);
     assert.match(result.detail, /status/);
     assert.ok(!readdirSync(dir).some((p) => p.startsWith(".dpf-reap-")));
@@ -265,7 +347,7 @@ describe("fresh branches and atomic retirement (BI-F52EF21B)", () => {
   it("does not purge files written after the initial clean check", (t) => {
     const { root, wt, git, mustGit } = fixture(t);
     const added = path.join(wt, "late.txt");
-    const result = janitor.retireWorktree(root, wt, {
+    const result = retire(root, wt, {
       git,
       onIntent() { writeFileSync(added, "late work"); },
     });
@@ -277,7 +359,7 @@ describe("fresh branches and atomic retirement (BI-F52EF21B)", () => {
   it("rolls back an intact checkout when Git refuses to unregister it", (t) => {
     const { root, wt, git, mustGit } = fixture(t);
     mustGit(["worktree", "lock", wt]);
-    const result = janitor.retireWorktree(root, wt, { git });
+    const result = retire(root, wt, { git });
     assert.equal(result.ok, false);
     assert.equal(readFileSync(path.join(wt, "tracked.txt"), "utf8"), "base");
     assert.equal(mustGit(["status", "--porcelain"], wt), "");
@@ -290,7 +372,7 @@ describe("fresh branches and atomic retirement (BI-F52EF21B)", () => {
     mkdirSync(shared);
     writeFileSync(path.join(shared, "valuable.txt"), "keep");
     symlinkSync(shared, path.join(wt, "node_modules"), "junction");
-    const result = janitor.retireWorktree(root, wt, {
+    const result = retire(root, wt, {
       git,
       purge(quarantine) {
         assert.equal(existsSync(wt), false);
@@ -312,6 +394,7 @@ describe("fresh branches and atomic retirement (BI-F52EF21B)", () => {
       import { join } from "node:path";
       import { retireWorktree } from ${JSON.stringify(new URL("./worktree-janitor.mjs", import.meta.url).href)};
       retireWorktree(process.argv[1], process.argv[2], {
+        loadCwds: () => new Set(),
         purge(quarantine) {
           rmSync(join(quarantine, "checkout", "tracked.txt"));
           process.kill(process.pid, "SIGKILL");
@@ -333,7 +416,7 @@ describe("fresh branches and atomic retirement (BI-F52EF21B)", () => {
     mkdirSync(shared);
     writeFileSync(path.join(shared, "valuable.txt"), "keep");
     symlinkSync(shared, path.join(wt, "node_modules"), "junction");
-    const result = janitor.retireWorktree(root, wt, { git });
+    const result = retire(root, wt, { git });
     assert.equal(result.ok, true, result.detail);
     assert.equal(existsSync(wt), false);
     assert.equal(mustGit(["worktree", "list", "--porcelain"]).includes(wt), false);

@@ -10,6 +10,7 @@ import {
   isHeartbeatLive,
   readHeartbeat,
   isWorktreeSessionLive,
+  worktreeHeartbeatStatus,
   writeHeartbeat,
   removeHeartbeat,
   liveOtherSessionIds,
@@ -22,7 +23,7 @@ function memFs(initial = {}) {
     files,
     existsSync: (p) => files.has(p),
     readFileSync: (p) => {
-      if (!files.has(p)) throw new Error(`ENOENT ${p}`);
+      if (!files.has(p)) throw Object.assign(new Error(`ENOENT ${p}`), { code: "ENOENT" });
       return files.get(p);
     },
     writeFileSync: (p, data) => files.set(p, data),
@@ -109,6 +110,18 @@ describe("write / read / remove / isWorktreeSessionLive", () => {
     assert.equal(isWorktreeSessionLive("/wt", { now: later, fs }), true);
     removeHeartbeat("/wt", { sessionId: bridgeId, fs });
     assert.equal(isWorktreeSessionLive("/wt", { now: later, fs }), false);
+  });
+
+  it("treats corrupt or unreadable markers as unknown and preserves them", () => {
+    const marker = heartbeatPath("/wt");
+    const fs = memFs({ [marker]: '{"beatAt":123,"sessions":{"active":{"beatAt":"invalid"}}}' });
+    assert.equal(worktreeHeartbeatStatus("/wt", { fs }), "unknown");
+    assert.equal(writeHeartbeat("/wt", { fs, sessionId: "new" }), false);
+    assert.equal(removeHeartbeat("/wt", { fs, sessionId: "old" }), false);
+    assert.match(fs.files.get(marker), /invalid/);
+    const unreadable = { readFileSync() { throw Object.assign(new Error("denied"), { code: "EACCES" }); } };
+    assert.equal(worktreeHeartbeatStatus("/wt", { fs: unreadable }), "unknown");
+    assert.equal(worktreeHeartbeatStatus("/missing", { fs }), "absent");
   });
 
   it("missing marker is not live and read returns null", () => {

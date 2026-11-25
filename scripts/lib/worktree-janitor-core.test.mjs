@@ -57,6 +57,17 @@ describe("classifyWorktree", () => {
     assert.match(r.reason, /base could not be verified/);
   });
 
+  it("keeps any checkout when a required liveness input is unknown", () => {
+    for (const input of ["t3SettlementUnknown", "heartbeatUnavailable", "processCwdUnavailable"]) {
+      for (const branch of [base.branch, null]) {
+        const verdict = classifyWorktree({ ...base, [input]: true, branch, merged: true, ageDays: 40 },
+          { pruneDetached: true });
+        assert.equal(verdict.verdict, "KEEP", input);
+        assert.equal(verdict.tier, null);
+      }
+    }
+  });
+
   it("live session KEEPS a merged+clean worktree that would otherwise be Tier-A", () => {
     // The safety fix: a live session heartbeat outranks Tier-A eligibility, so
     // the janitor never reaps a worktree out from under an active session.

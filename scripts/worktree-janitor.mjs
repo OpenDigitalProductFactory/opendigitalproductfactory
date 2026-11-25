@@ -37,7 +37,7 @@
 
 import {
   appendFileSync, closeSync, constants as fsConstants, existsSync, fstatSync, lstatSync,
-  mkdtempSync, openSync, readdirSync, readFileSync, renameSync, rmdirSync, rmSync, writeFileSync,
+  mkdtempSync, openSync, readdirSync, readFileSync, realpathSync, renameSync, rmdirSync, rmSync, writeFileSync,
 } from "node:fs";
 import { spawnSync } from "node:child_process";
 import os from "node:os";
@@ -51,7 +51,7 @@ import {
   summarizeDecisions,
 } from "./lib/worktree-janitor-core.mjs";
 import {
-  isWorktreeSessionLive,
+  worktreeHeartbeatStatus,
   heartbeatTtlMs,
 } from "./lib/worktree-session-heartbeat.mjs";
 import { sanitizeForLog } from "./lib/safe-log.mjs";
@@ -204,21 +204,31 @@ function loadPrBranchIndex() {
 }
 
 /**
- * Ancestry alone also matches a branch freshly cut from main (even an old main
- * tip). Require an identifiable creation/copy event and at least one commit
- * reachable from the branch that was not reachable from that starting point.
+ * Require reachable work produced on this branch after its latest creation or
+ * copy. Fast-forward, reset and rebase-finish entries alone prove no authorship.
+ * If a rebase discarded the only authored commit IDs, err toward keeping it.
  */
 export function branchWorkAtTip(root, branch, git = runGit) {
   const ref = `refs/heads/${branch}`;
   const reflog = git(["reflog", "show", "--format=%H%x09%gs", ref], root);
   if (!reflog.ok) return "unknown";
-  const base = reflog.stdout.split(/\r?\n/).find(
-    (line) => /^[0-9a-f]{40,64}\tbranch: (?:created from|copied )/i.test(line),
-  )?.split("\t")[0];
-  if (!base) return "unknown";
-  const commits = git(["rev-list", "-1", ref, `^${base}`, "--"], root);
-  if (!commits.ok) return "unknown";
-  return commits.stdout ? "has-commits" : "no-commits";
+  const entries = reflog.stdout.split(/\r?\n/);
+  const creation = entries.findIndex((line) => /^[0-9a-f]{40,64}\tbranch: (?:created from|copied )/i.test(line));
+  if (creation < 0) return "unknown";
+  const base = entries[creation].split("\t")[0];
+  for (const entry of entries.slice(0, creation)) {
+    const owned = /^([0-9a-f]{40,64})\t(?:commit(?: \([^)]+\))?: |(?:cherry-pick|revert): )/.exec(entry);
+    if (!owned || owned[1] === base) continue;
+    const reachable = git(["merge-base", "--is-ancestor", owned[1], ref], root);
+    if (!reachable.ok) {
+      if (reachable.status !== 1) return "unknown";
+      continue;
+    }
+    const inherited = git(["merge-base", "--is-ancestor", owned[1], base], root);
+    if (inherited.status === 1) return "has-commits";
+    if (!inherited.ok) return "unknown";
+  }
+  return "no-commits";
 }
 
 function isMerged(root, branch, prIndex) {
@@ -301,22 +311,27 @@ function pathHasLease(leasePayload, wtPath) {
 
 const DEFAULT_FRESH_GRACE_MS = 60 * 60_000;
 
-/** One-shot active OS process CWDs so the reaper never deletes a tree with a live shell/agent inside it. */
-export function loadActiveProcessCwds(platform = process.platform) {
-  const cwds = new Set();
-  if (platform === "win32") return cwds;
-  const r = spawnSync("lsof", ["-d", "cwd", "-Fn"], {
+/** Snapshot of visible OS process CWDs, or null when evidence is unavailable. */
+export function loadActiveProcessCwds(platform = process.platform, spawn = spawnSync) {
+  if (platform === "win32") return null;
+  const r = spawn("lsof", ["-d", "cwd", "-Fn"], {
     encoding: "utf8",
     windowsHide: true,
     timeout: 10_000,
     maxBuffer: 16 * 1024 * 1024,
   });
-  if (r.status === 0 && r.stdout) {
-    for (const line of r.stdout.split(/\r?\n/)) {
-      if (line.startsWith("n/")) cwds.add(normalizePath(line.slice(1)));
-    }
-  }
-  return cwds;
+  if (r.status !== 0 || r.error || r.stderr?.trim()) return null;
+  const cwds = new Set((r.stdout ?? "").split(/\r?\n/)
+    .filter((line) => line.startsWith("n/")).map((line) => normalizePath(line.slice(1))));
+  // Even the janitor and lsof have a CWD. Empty/unparseable output isn't proof.
+  return cwds.size ? cwds : null;
+}
+
+/** A default T3-managed path is not evidence its owning thread has settled. */
+export function isT3ManagedWorktree(wtPath) {
+  const isManaged = (p) => /(?:^|\/)\.t3\/worktrees(?:\/|$)/.test(normalizePath(p));
+  if (isManaged(path.resolve(wtPath))) return true;
+  try { return isManaged(realpathSync(wtPath)); } catch { return false; }
 }
 
 /** True when any running process CWD equals or is nested inside `wtPath`. */
@@ -357,7 +372,7 @@ export function isFreshCheckoutAtOriginMain(root, wtPath, { nowMs = Date.now(), 
   return head.ok && originMain.ok && Boolean(head.stdout) && head.stdout === originMain.stdout;
 }
 
-function gatherFacts(root, entry, prIndex, leasePayload, ttlMs, claims, runtimeOpts = {}) {
+export function gatherFacts(root, entry, prIndex, leasePayload, ttlMs, claims, runtimeOpts = {}) {
   const wtPath = entry.path;
   const branch = entry.detached ? null : entry.branch;
   const isRoot = path.resolve(wtPath) === path.resolve(root);
@@ -365,6 +380,7 @@ function gatherFacts(root, entry, prIndex, leasePayload, ttlMs, claims, runtimeO
   const detachedUnpushed = !branch && !isRoot
     ? detachedHeadUnpushedStatus(wtPath)
     : { hasUnpushedCommits: false, unpushedCommitsUnknown: false };
+  const heartbeat = isRoot ? "absent" : worktreeHeartbeatStatus(wtPath, { ttlMs });
   return {
     path: wtPath,
     branch,
@@ -378,7 +394,10 @@ function gatherFacts(root, entry, prIndex, leasePayload, ttlMs, claims, runtimeO
     ageDays: !isRoot ? ageDays(wtPath) : 0,
     // Liveness + abandoned-merge signals — checked for every linked worktree
     // (named branch OR detached HEAD), never on the root clone.
-    hasLiveSession: !isRoot ? isWorktreeSessionLive(wtPath, { ttlMs }) : false,
+    hasLiveSession: heartbeat === "live",
+    heartbeatUnavailable: heartbeat === "unknown",
+    t3SettlementUnknown: !isRoot && isT3ManagedWorktree(wtPath),
+    processCwdUnavailable: !isRoot && !(runtimeOpts.activeCwds instanceof Set),
     hasActiveProcessCwd: !isRoot ? pathHasActiveProcessCwd(runtimeOpts.activeCwds, wtPath) : false,
     isFreshCheckout: !isRoot && !runtimeOpts.allowFresh
       ? isFreshCheckoutAtOriginMain(root, wtPath, { freshGraceMs: runtimeOpts.freshGraceMs })
@@ -567,12 +586,19 @@ export function backupUnpushedBranch(root, branch, date = new Date().toISOString
  * path is intact or absent, never partly deleted. A quarantine left behind
  * identifies its original path and is not a registered Git checkout.
  */
-export function retireWorktree(root, wtPath, { git = runGit, purge = purgeQuarantine, onIntent = () => {} } = {}) {
+export function retireWorktree(root, wtPath, {
+  git = runGit, purge = purgeQuarantine, onIntent = () => {}, loadCwds = loadActiveProcessCwds, ttlMs,
+} = {}) {
+  if (isT3ManagedWorktree(wtPath)) {
+    return { ok: false, refused: true, detail: "refusing removal: T3 thread settlement unverified" };
+  }
   if (pathHasActiveProcessCwd(new Set([normalizePath(process.cwd())]), wtPath)) {
     return { ok: false, refused: true, detail: "refusing removal: checkout contains the current working directory" };
   }
-  if (isWorktreeSessionLive(wtPath)) {
-    return { ok: false, refused: true, detail: "refusing removal: checkout has a live heartbeat" };
+  const heartbeat = worktreeHeartbeatStatus(wtPath, { ttlMs });
+  if (heartbeat === "live" || heartbeat === "unknown") {
+    const reason = heartbeat === "live" ? "checkout has a live heartbeat" : "checkout heartbeat is unreadable";
+    return { ok: false, refused: true, detail: `refusing removal: ${reason}` };
   }
   const status = checkoutStatus(wtPath, git);
   if (!status.ok) return { ok: false, refused: true, detail: "refusing removal: checkout status unreadable" };
@@ -594,6 +620,12 @@ export function retireWorktree(root, wtPath, { git = runGit, purge = purgeQuaran
     staged = path.join(quarantine, "checkout");
     writeFileSync(path.join(quarantine, note), wtPath + "\n");
     onIntent(quarantine);
+    const cwds = loadCwds();
+    if (!(cwds instanceof Set) || pathHasActiveProcessCwd(cwds, wtPath)) {
+      purgeQuarantine(quarantine);
+      const reason = cwds instanceof Set ? "active process CWD" : "process CWD snapshot unavailable";
+      return { ok: false, refused: true, detail: `refusing removal: ${reason}` };
+    }
     renameSync(wtPath, staged);
   } catch (err) {
     if (quarantine) {
@@ -616,7 +648,8 @@ export function retireWorktree(root, wtPath, { git = runGit, purge = purgeQuaran
   }
 
   const stagedStatus = checkoutStatus(staged, git);
-  if (!stagedStatus.ok || stagedStatus.stdout || isWorktreeSessionLive(staged)) {
+  const stagedHeartbeat = worktreeHeartbeatStatus(staged, { ttlMs });
+  if (!stagedStatus.ok || stagedStatus.stdout || stagedHeartbeat === "live" || stagedHeartbeat === "unknown") {
     return rollback("refusing removal: quarantined checkout is dirty, live, or unreadable", true);
   }
 
@@ -640,8 +673,8 @@ function purgeQuarantine(quarantine) {
   rmdirSync(quarantine);
 }
 
-function removeWorktree(root, wtPath, branch, onIntent) {
-  const rem = retireWorktree(root, wtPath, { onIntent });
+function removeWorktree(root, wtPath, branch, onIntent, ttlMs) {
+  const rem = retireWorktree(root, wtPath, { onIntent, ttlMs });
   const branchDel = branch && rem.ok ? runGit(["branch", "-D", branch], root) : null;
   return {
     worktreeRemoved: rem.ok,
@@ -773,7 +806,7 @@ async function main(argv = process.argv.slice(2)) {
       }
       const result = removeWorktree(root, facts.path, facts.branch, (quarantine) => {
         auditReap(commonDir, row, "started", { quarantine });
-      });
+      }, ttlMs);
       const outcome = result.worktreeRemoved ? "removed" : result.refused ? "refused" : "not-removed";
       auditReap(commonDir, result.refused ? { ...row, reason: result.worktreeOut } : row, outcome, result);
       removals.push({ path: facts.path, branch: facts.branch, ...result, ...(backup ? { backup } : {}) });
