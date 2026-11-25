@@ -228,6 +228,8 @@ export async function recordInitiativeGateReceipt(args: {
       where: { id: item.id },
       select: {
         organizationId: true,
+        claimedById: true,
+        claimedByAgentId: true,
         type: true,
         source: true,
         workType: true,
@@ -241,6 +243,15 @@ export async function recordInitiativeGateReceipt(args: {
     if (!lockedItem) return { ok: false, code: "CANONICAL_DESIGN_REQUIRED", error: "The governed initiative no longer exists." };
     if ((lockedItem.organizationId ?? null) !== (item.organizationId ?? null)) {
       return { ok: false, code: "AUTHORIZATION_DENIED", error: "The initiative authority scope changed before publication." };
+    }
+    if (args.gate === "dependency-disposition" && (lockedItem.claimedByAgentId || lockedItem.claimedById)) {
+      const claimant = await resolveReviewerIdentity(tx, {
+        reviewerUserId: lockedItem.claimedById ?? "", reviewerAgentId: lockedItem.claimedByAgentId,
+      });
+      if (!claimant || claimant.principalId === reviewerPrincipalId || lockedItem.claimedByAgentId === args.reviewerAgentId) {
+        return { ok: false, code: "reviewer-not-independent",
+          error: "A dependency disposition requires a reviewer who is independent of the current claimant." };
+      }
     }
     if ((selectedSource && !await selectedSource.admissionGuard(tx)) || (inquirySource && !await inquirySource.admissionGuard(tx))) {
       return { ok: false, code: "AUTHORIZATION_DENIED", error: "The research source or actor admission changed before receipt publication." };
@@ -387,7 +398,7 @@ export async function recordInitiativeGateReceipt(args: {
         severity: finding.severity,
         issue: finding.issue.trim(),
       })),
-      requiresIndependentReviewer: args.requiresIndependentReviewer,
+      requiresIndependentReviewer: args.gate === "dependency-disposition" || args.requiresIndependentReviewer,
       authoritativeProfile,
     });
     if (!validated.ok) return { ok: false, code: validated.code, error: validated.error };

@@ -4,7 +4,7 @@ import type { InitiativeReadinessDecision, ReadinessRequirementResult } from "@/
 import { currentUserContext } from "@/lib/govern/current-user-context";
 import { can } from "@/lib/permissions";
 import { expandGrants } from "@/lib/tak/agent-grants";
-import { INITIATIVE_READINESS_LANES, readinessLaneForRole } from "@/lib/tak/initiative-readiness-tool-grants";
+import { readinessLaneForGate, readinessLaneForRole } from "@/lib/tak/initiative-readiness-tool-grants";
 import { OAUTH_EXECUTION_AUTHORITY_SELECT, isCurrentOAuthExecutionAuthority } from "@/lib/auth/oauth-tokens";
 import { resolveAgentWorkroomAccess, resolveHumanWorkroomAccess } from "@/lib/work-management/workroom-agent-access.server";
 import { parseInitiativeReviewBinding } from "@/lib/mcp-task-review-contract";
@@ -102,7 +102,7 @@ export async function authorizeCoworkerRequest(
   }
   const lane = binding?.gate === "objective-mapping" && binding.writerToolName === "record_initiative_evidence"
     ? readinessLaneForRole("acceptance-reviewer")?.lane
-    : binding && INITIATIVE_READINESS_LANES[binding.writerToolName];
+    : binding && readinessLaneForGate(binding.writerToolName, binding.gate);
   if (options?.sourceOnly && (!binding || binding.presentReassessment || binding.eligibleEvidenceActivityIds?.length
     || !["record_initiative_design_review", "record_initiative_architecture_review"].includes(binding.writerToolName))) {
     return deny("This review does not have a source-only activity contract.");
@@ -218,7 +218,7 @@ export async function authorizeCoworkerRequest(
     ? { bounded: true } : deny("This item has no pending review for the requested lane.");
   const { decisionForIndependentReview } = await import("@/lib/backlog/initiative-readiness/design-phase-recovery");
   const decision = buildStudioIssued ? null
-    : decisionForIndependentReview(binding.writerToolName, readiness.decisions, readiness.planBaselinePrerequisite);
+    : decisionForIndependentReview(binding.writerToolName, readiness.decisions, readiness.planBaselinePrerequisite, binding.gate);
   if (!buildStudioIssued && !decision) return !options?.sourceOnly && await hasCompletedReview(params, userId, context)
     ? { bounded: true } : deny("This item has no pending review for the requested lane.");
   if (decision?.verdict === "allowed") return !options?.sourceOnly && await hasCompletedReview(params, userId, context)
