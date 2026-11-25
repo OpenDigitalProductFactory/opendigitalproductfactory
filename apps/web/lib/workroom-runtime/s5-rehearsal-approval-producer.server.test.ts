@@ -11,7 +11,8 @@ import { s5ApprovalFixture, s5ApprovalFixtureAgent as principal, s5ApprovalFixtu
 const t = 1_795_560_000_000;
 const actor = "reviewing-owner";
 const taskUserId = "workroom-requester";
-const fixture = s5ApprovalFixture(t + 100_000);
+const fixture = s5ApprovalFixture();
+const approvalDeadline = t + 15 * 60_000;
 const permitRef = "GPM-5243395b-a0a4-4449-87e8-7a8107e91579";
 const signingOptions = { secret: "x".repeat(32), keyId: "test" };
 
@@ -27,7 +28,7 @@ function setup() {
   const db = { ...tx, $transaction: async <T>(run: (tx: ReceiptDb) => Promise<T>) => run(tx) };
   const current = { draft, approverUserId: actor, approverPrincipalId, taskUserId, agentId: "AGT-FIXTURE", bindingRowId: "binding-row" };
   const loadCurrent = vi.fn<S5RehearsalProducerPorts["loadCurrent"]>().mockResolvedValue(current);
-  const raisePending = vi.fn<S5RehearsalProducerPorts["raisePending"]>().mockResolvedValue({ envelopeId: "env-a", status: "proposed", expiresAt: new Date(draft.expiresAt), authorityDecisionId: "AUTH-A" });
+  const raisePending = vi.fn<S5RehearsalProducerPorts["raisePending"]>().mockResolvedValue({ envelopeId: "env-a", status: "proposed", expiresAt: new Date(approvalDeadline), authorityDecisionId: "AUTH-A" });
   const persistPermit = vi.fn<S5RehearsalProducerPorts["persistPermit"]>().mockImplementation(async (_tx, claims, signature) => ({
     ...claims, keyId: signature.keyId, mac: signature.mac, useCount: 0, revokedAt: null, id: "permit-row",
   }));
@@ -53,18 +54,30 @@ function setup() {
 }
 
 describe("S5 preview-only approval producer", () => {
+  it("allows an owner decision after two minutes without spending the later execution budget", async () => {
+    const f = setup();
+    const proposal = await f.producer(actor, f.request);
+    expect(proposal).toMatchObject({ kind: "proposed", expiresAt: t + 15 * 60_000 });
+    const decisionTime = t + 14 * 60_000;
+    f.now.mockReturnValue(new Date(decisionTime));
+    expect(await f.commit(f.envelope(), actor, f.approve)).toEqual({ ok: true });
+    expect(f.persistPermit.mock.calls[0]?.[1]).toMatchObject({
+      notBefore: new Date(decisionTime), expiresAt: new Date(decisionTime + 15 * 60_000),
+    });
+  });
+
   it("binds the shape, operations and absolute deadline but never issues a permit for a pending envelope", async () => {
     const f = setup();
     expect((await f.producer(actor, f.request)).kind).toBe("proposed");
     expect(f.raisePending.mock.calls[0]?.[1].params).toMatchObject({
-      shapeRef: f.draft.shapeRef, operations: f.draft.operations, expiresAt: f.draft.expiresAt,
+      shapeRef: f.draft.shapeRef, operations: f.draft.operations, approvalExpiresAt: approvalDeadline,
     });
     expect(f.persistPermit).not.toHaveBeenCalled();
   });
 
   it("issues the reserved enforced permit only in the approved decision transaction", async () => {
     const f = setup();
-    expect(await f.producer(actor, f.request)).toEqual({ kind: "proposed", envelopeId: "env-a", permitRef, expiresAt: f.draft.expiresAt });
+    expect(await f.producer(actor, f.request)).toEqual({ kind: "proposed", envelopeId: "env-a", permitRef, expiresAt: approvalDeadline });
     expect(f.raisePending.mock.calls[0]?.[0]).toBe(f.tx);
     const intent = f.raisePending.mock.calls[0]![1];
     expect(intent.params).toMatchObject({ ...exact, sourceSha: preview.sourceSha, leaseId: preview.leaseId, subject: principal,
@@ -77,7 +90,7 @@ describe("S5 preview-only approval producer", () => {
     const [, permit, signature] = f.persistPermit.mock.calls[0]!;
     expect(permit).toMatchObject({ permitId: permitRef, envelopeId: "env-a", authorityDecisionId: "AUTH-A", enforcement: "enforced",
       stageKey: exact.stageKey, shapeRef: fixture.shapeRef, subjectScope: exact.stageAttemptRef, actorGaid: principal.gaid, actorUserId: taskUserId,
-      maxUses: 1, expiresAt: new Date(f.draft.expiresAt) });
+      maxUses: 1, expiresAt: new Date(approvalDeadline) });
     expect(signature).toEqual(signPermit(permit, signingOptions));
     expect(f.rows.size).toBe(2);
     expect(await f.commit(f.envelope(), actor, f.approve)).toBeNull();
@@ -104,17 +117,15 @@ describe("S5 preview-only approval producer", () => {
     expect(f.persistPermit).not.toHaveBeenCalled();
   });
 
-  it("holds for any changed pin, foreign user, unknown request fields or original deadline equality", async () => {
+  it("holds for any changed pin, foreign user, unknown request fields", async () => {
     const f = setup();
     expect(await f.producer("another-user", f.request)).toEqual({ kind: "held" });
-    for (const change of [{ stageAttemptRef: "foreign" }, { reviewedPinDigest: "b".repeat(64) }, { permitRef }, { approvalStatus: "approved" }]) {
+    for (const change of [{ stageAttemptRef: "foreign" }, { reviewedPinDigest: "b".repeat(64) }, { permitRef }, { approvalStatus: "approved" }, { approvalExpiresAt: t + 120_000 }]) {
       expect(await f.producer(actor, { ...f.request, ...change })).toEqual({ kind: "held" });
     }
     const altered = reviewedS5RehearsalPins.parse({ ...f.draft,
       snapshot: { ...f.draft.snapshot, syntheticTarget: { ...f.draft.snapshot.syntheticTarget, destinationRef: "other-target" } } });
     f.loadCurrent.mockResolvedValueOnce({ ...f.current, draft: altered });
-    expect(await f.producer(actor, f.request)).toEqual({ kind: "held" });
-    f.now.mockReturnValue(new Date(f.draft.expiresAt));
     expect(await f.producer(actor, f.request)).toEqual({ kind: "held" });
     expect(f.raisePending).not.toHaveBeenCalled();
     expect(f.persistPermit).not.toHaveBeenCalled();
@@ -134,7 +145,8 @@ describe("S5 preview-only approval producer", () => {
     const f = setup();
     expect((await f.producer(actor, f.request)).kind).toBe("proposed");
     expect(await f.commit({ ...f.envelope(), id: "copied-envelope" }, actor, f.approve)).toBeNull();
-    for (const variant of [{ shapeRef: "other" }, { operations: ["get_workroom"] as const }, { expiresAt: t + 110_000 }]) {
+    expect(await f.commit({ ...f.envelope(), expiresAt: new Date(approvalDeadline + 1) }, actor, f.approve)).toBeNull();
+    for (const variant of [{ shapeRef: "other" }, { operations: ["get_workroom"] as const }]) {
       const draft = reviewedS5RehearsalPins.parse({ ...f.draft, ...variant });
       f.loadCurrent.mockResolvedValueOnce({ ...f.current, draft });
       f.readDecision.mockResolvedValue({ ...f.approvalIntent, reviewedPinDigest: s5RehearsalDraftDigest(draft) });
@@ -144,10 +156,10 @@ describe("S5 preview-only approval producer", () => {
     expect(f.persistPermit).not.toHaveBeenCalled();
   });
 
-  it("burns the attempt at original deadline equality even if the request was never approved", async () => {
+  it("burns the attempt at approval deadline equality even if the request was never approved", async () => {
     const f = setup();
     expect((await f.producer(actor, f.request)).kind).toBe("proposed");
-    f.now.mockReturnValue(new Date(f.draft.expiresAt));
+    f.now.mockReturnValue(new Date(approvalDeadline));
     expect(await f.commit(f.envelope(), actor, f.approve)).toBeNull();
     expect(await f.producer(actor, f.request)).toEqual({ kind: "held" });
     expect(f.approve).not.toHaveBeenCalled();
@@ -156,7 +168,7 @@ describe("S5 preview-only approval producer", () => {
 
   it("refuses an approved envelope from a helper and refuses a shadow or unsigned permit before any approval receipt", async () => {
     const f = setup();
-    f.raisePending.mockResolvedValueOnce({ envelopeId: "env-a", status: "approved", expiresAt: new Date(f.draft.expiresAt), authorityDecisionId: "AUTH-A" });
+    f.raisePending.mockResolvedValueOnce({ envelopeId: "env-a", status: "approved", expiresAt: new Date(approvalDeadline), authorityDecisionId: "AUTH-A" });
     expect(await f.producer(actor, f.request)).toEqual({ kind: "held" });
     expect(f.persistPermit).not.toHaveBeenCalled();
     expect((await f.producer(actor, f.request)).kind).toBe("proposed");
@@ -197,7 +209,8 @@ describe("S5 preview-only approval producer", () => {
     expect(written.argsJson.humanApproval).toBeUndefined();
     expect(written.rationale).toContain(`Work shape: ${f.draft.shapeRef}`);
     expect(written.rationale).toContain("post_room_message (write: record a quiet route proposal only)");
-    expect(written.rationale).toContain(new Date(f.draft.expiresAt).toISOString());
+    expect(written.rationale).toContain(new Date(approvalDeadline).toISOString());
+    expect(written.rationale).toContain("120 seconds from DPF admission after approval");
     expect(written.rationale).toContain("cannot be reopened");
     expect(db.coworkerActionEnvelope.updateMany).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ data: { status: "expired", resolvedAt: intent.now } }));
     expect(db.taskRun.updateMany).not.toHaveBeenCalled();

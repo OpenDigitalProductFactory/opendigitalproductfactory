@@ -12,6 +12,7 @@ import { markTaskRunWorking } from "@/lib/observability/heartbeat";
 import { S5_REHEARSAL_APPROVAL_ACTION } from "@/lib/workroom-runtime/s5-rehearsal-approval-action";
 
 import {
+  APPROVAL_DECISION_WINDOW_MS,
   APPROVAL_REPLAY_WINDOW_MS,
   approvalLifetimeMs,
   type ApprovalClassification,
@@ -217,16 +218,16 @@ export async function ensureAuthorityApprovalEnvelope(
     /** BI-C8EC05C9: the chat message this request belongs to, for the inline card. */
     chatMessageId?: string | null;
     now?: Date;
-    /** Exact preview deadline. Only the one-shot rehearsal may shorten the policy lifetime. */
-    rehearsalDeadline?: Date;
+    /** Fixed proposal-to-decision cutoff, not an execution deadline. */
+    rehearsalApprovalDeadline?: Date;
   },
   db: AuthorityApprovalDb = prisma as unknown as AuthorityApprovalDb,
 ): Promise<EnvelopeSummary> {
   const now = input.now ?? new Date();
   const rehearsal = input.binding.toolName === S5_REHEARSAL_APPROVAL_ACTION;
-  const deadline = input.rehearsalDeadline?.getTime();
-  if (rehearsal ? deadline === undefined || !Number.isFinite(deadline) || !(now.getTime() < deadline && deadline <= now.getTime() + 120_000)
-    : input.rehearsalDeadline !== undefined) throw new Error("Invalid rehearsal approval deadline.");
+  const deadline = input.rehearsalApprovalDeadline?.getTime();
+  if (rehearsal ? !Number.isFinite(deadline) || deadline !== now.getTime() + APPROVAL_DECISION_WINDOW_MS
+    : input.rehearsalApprovalDeadline !== undefined) throw new Error("Invalid rehearsal approval deadline.");
   const approvalBindingFingerprint =
     fingerprintCoworkerApprovalBinding(input.binding);
 
@@ -236,7 +237,7 @@ export async function ensureAuthorityApprovalEnvelope(
   await db.coworkerActionEnvelope.updateMany({
     where: {
       approvalBindingFingerprint,
-      status: { in: ["proposed", "approved"] },
+      status: { in: rehearsal ? ["proposed"] : ["proposed", "approved"] },
       expiresAt: { lte: now },
     },
     data: { status: "expired", resolvedAt: now },

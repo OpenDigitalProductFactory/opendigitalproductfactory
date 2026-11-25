@@ -99,7 +99,9 @@ describe("registered rehearsal admission owner", () => {
 
 function database() {
   const date = (ms: number) => new Date(ms);
-  const approvalTime = now - 1;
+  const approvalTime = now - 3_000;
+  const approvalDeadline = now - 1_000;
+  const permitDeadline = approvalTime + 15 * 60_000;
   const waiver = { ...qualification, kind: "rehearsal-qualification" as const, approvalRevision: approvalTime };
   const snapshot = { ...pinned, qualification: waiver, expiresAt: waiver.validUntil - 10 };
   const binding = { issuer: receiver.issuer, ...attempt, subject: pinned.subject, syntheticTarget: pinned.syntheticTarget };
@@ -115,7 +117,7 @@ function database() {
     automationVerificationId: null, automationProfile: null, automationSlot: null, automationExpiresAt: null };
   const platformApprover = { ...human, groups: [{ platformRole: { roleId: "HR-000" } }] };
   const params = s5RehearsalApprovalParams({ ...ownerPin, approverPrincipalId: waiver.ownerPrincipalId,
-    operations: ["get_workroom"], expiresAt: waiver.validUntil });
+    operations: ["get_workroom"], approvalExpiresAt: approvalDeadline });
   const paramsFingerprint = fingerprintCoworkerInput(params);
   const original = prepareS5ControlCredential({
     executionProfile: "synthetic-rehearsal", receiver: { ...receiver, audience: receiver.receiverRef }, userId,
@@ -130,10 +132,10 @@ function database() {
   const approval = { id: waiver.approvalRef, status: "approved", resolvedAt: null, manifestActionId: "s5-single-synthetic-rehearsal",
     delegatingUserId: approverId, coworkerAgentId: agentId, approvalBindingFingerprint: "bound", inputFingerprint: paramsFingerprint,
     authorityDecisionId: "AUTH-FIXTURE",
-    expiresAt: date(waiver.validUntil), argsJson: { humanApproval: { userId: approverId, approvedAt: date(approvalTime).toISOString() } } };
+    expiresAt: date(approvalDeadline), argsJson: { humanApproval: { userId: approverId, approvedAt: date(approvalTime).toISOString() } } };
   const permit = { enforcement: "enforced", revokedAt: null, envelopeId: approval.id, workroomId: attempt.workroomId, stageKey: attempt.stageKey,
     shapeRef: pin.shapeRef, actorAgentId: agentId, actorUserId: userId, actorGaid: pinned.subject.gaid, maxUses: 1, useCount: 0,
-    notBefore: date(now), expiresAt: date(waiver.validUntil), capabilities: [{ tool: "get_workroom" }],
+    notBefore: date(approvalTime), expiresAt: date(permitDeadline), capabilities: [{ tool: "get_workroom" }],
     bindingId: "s5-single-synthetic-rehearsal", authorityDecisionId: approval.authorityDecisionId,
     subjectScope: attempt.stageAttemptRef, paramHash: computeParamHash("s5-single-synthetic-rehearsal", params) };
   const tx = {
@@ -154,9 +156,10 @@ function database() {
   sources.aliases.mockReset().mockResolvedValue(new Map([[agentId, pinned.subject.gaid]]));
   sources.permit.mockReset().mockResolvedValue(permit);
   sources.mac.mockReset().mockReturnValue({ result: "ok" });
-  const handler = createS5RehearsalOwnerHandler({ env, now: () => date(now),
+  const clock = vi.fn(() => date(now));
+  const handler = createS5RehearsalOwnerHandler({ env, now: clock,
     withOwnerRead: read => read(createS5RehearsalOwnerReads(tx as unknown as Prisma.TransactionClient)) });
-  return { handler, tx, approval, permit, snapshot, human, platformApprover, approverAlias };
+  return { handler, tx, approval, permit, snapshot, human, platformApprover, approverAlias, clock };
 }
 
 describe("database owner join with client hooks absent", () => {
@@ -170,13 +173,23 @@ describe("database owner join with client hooks absent", () => {
     expect((await f.handler(request())).status).toBe(404);
   });
 
-  it("requires current independent approval, permit, subject, Workroom, token and grants", async () => {
+  it("observes a current admission even after the answered Inbox approval window closed", async () => {
     const f = database();
     const response = await f.handler(request());
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ kind: "observed", snapshot: f.snapshot });
     expect(sources.access).toHaveBeenCalledWith(expect.objectContaining({ workroomId: "room-row", requested: "content" }), f.tx);
     expect(f.tx.coworkerActionEnvelope.findUnique).toHaveBeenCalledExactlyOnceWith({ where: { id: f.approval.id } });
+  });
+
+  it("refuses at execution deadline equality while approval and permit are still current", async () => {
+    const f = database();
+    const deadline = f.snapshot.expiresAt;
+    const proof = request(attempt, deadline + 5_000);
+    f.clock.mockReturnValue(new Date(deadline - 1));
+    expect((await f.handler(proof)).status).toBe(200);
+    f.clock.mockReturnValue(new Date(deadline));
+    expect((await f.handler(proof)).status).toBe(404);
   });
 
   it("holds on revoked platform capability, a new Principal behind the approver, or requester alias reuse", async () => {

@@ -1,12 +1,13 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import { prisma, type Prisma } from "@dpf/db";
 import { z } from "zod";
+import { APPROVAL_DECISION_WINDOW_MS } from "@/lib/coworker/approval-lifetime";
 import { ensureAuthorityApprovalEnvelope } from "@/lib/coworker/authority-approval-envelope";
 import { fingerprintCoworkerApprovalBinding, fingerprintCoworkerInput, type CoworkerApprovalBinding } from "@/lib/govern/authority/coworker-authority-decision";
 import { computeParamHash } from "@/lib/gpp/param-hash";
 import { canonicalPermitClaims, type PermitClaims } from "@/lib/gpp/permit-claims";
 import { signPermit, verifyPermitMac, type PermitSignature } from "@/lib/gpp/permit-handle";
-import { newPermitId } from "@/lib/gpp/permit-mint";
+import { GPP_PERMIT_TTL_MS, newPermitId } from "@/lib/gpp/permit-mint";
 import { persistGppPermit, type PermitRow } from "@/lib/gpp/permit-store";
 import { getAgentGaidMap } from "@/lib/identity/principal-linking";
 import { isRecord } from "@/lib/shared/coerce";
@@ -24,9 +25,8 @@ const authority = s5RehearsalAdmissionSnapshot.shape.authority.omit({ permitRef:
 const snapshot = s5RehearsalAdmissionSnapshot.omit({ qualification: true, expiresAt: true }).extend({ authority });
 const reservationRef = z.string().regex(/^GPM-[0-9a-f-]{36}$/u);
 export const reviewedS5RehearsalPins = s5RehearsalOwnerPin.pick({ leaseId: true, sourceSha: true, signingPublicKey: true, shapeRef: true }).extend({
-  schemaVersion: z.literal("s5-rehearsal-approval-draft.v1"),
+  schemaVersion: z.literal("s5-rehearsal-approval-draft.v2"),
   approverPrincipalId: s5RehearsalAdmissionSnapshot.shape.qualification.shape.ownerPrincipalId,
-  expiresAt: z.int().nonnegative(),
   snapshot,
   operations: s5RehearsalOperations,
 });
@@ -63,7 +63,7 @@ export type S5RehearsalProducerPorts = {
 export const s5RehearsalDraftDigest = (draft: ReviewedPins): string => commandPayloadBinding(draft).digest;
 
 async function readReviewedIntent(ports: S5RehearsalProducerPorts, tx: ReceiptDb, roomId: string, userId: string,
-  attempt: Locator, reviewedPinDigest: string, now: Date) {
+  attempt: Locator, reviewedPinDigest: string) {
   const current = await ports.loadCurrent(tx, roomId, attempt, userId);
   const value = reviewedS5RehearsalPins.safeParse(current?.draft);
   if (!value.success || !current || current.approverUserId !== userId || current.taskUserId === userId
@@ -74,19 +74,21 @@ async function readReviewedIntent(ports: S5RehearsalProducerPorts, tx: ReceiptDb
     || pin.snapshot.syntheticTarget.databaseRef !== `preview-db:${ports.preview.leaseId}`
     || !origins.some(origin => pin.snapshot.resource === origin + S5_REHEARSAL_READ_PATH)
     || s5RehearsalDraftDigest(pin) !== reviewedPinDigest
-    || !Object.entries(attempt).every(([key, val]) => pin.snapshot[key as keyof Locator] === val)
-    || !(now.getTime() < pin.expiresAt && pin.expiresAt <= now.getTime() + 120_000)) return null;
+    || !Object.entries(attempt).every(([key, val]) => pin.snapshot[key as keyof Locator] === val)) return null;
   return { pin, current };
 }
 
-function bindApproval({ pin, current }: NonNullable<Awaited<ReturnType<typeof readReviewedIntent>>>, userId: string, permitRef: string) {
-  const params = s5RehearsalApprovalParams({ ...pin, snapshot: { ...pin.snapshot, authority: { ...pin.snapshot.authority, permitRef } } });
+function bindApproval({ pin, current }: NonNullable<Awaited<ReturnType<typeof readReviewedIntent>>>,
+  userId: string, permitRef: string, approvalExpiresAt: number) {
+  const params = s5RehearsalApprovalParams({
+    ...pin, approvalExpiresAt, snapshot: { ...pin.snapshot, authority: { ...pin.snapshot.authority, permitRef } },
+  });
   const binding: CoworkerApprovalBinding = {
     // The exact attempt is in the fingerprint, but no TaskRun is eligible to resume on decision.
     actingHumanUserId: userId, actingAgentId: current.agentId, taskRunId: null,
     chainId: null, toolName: S5_REHEARSAL_APPROVAL_ACTION, subject: null, routeContext: "/build",
     inputFingerprint: fingerprintCoworkerInput(params), sensitivity: "internal",
-    decisionVersionFingerprint: fingerprintCoworkerInput({ policy: "s5-rehearsal-approval.v1" }),
+    decisionVersionFingerprint: fingerprintCoworkerInput({ policy: "s5-rehearsal-approval.v2" }),
   };
   return { params, binding };
 }
@@ -103,30 +105,31 @@ export function createS5RehearsalApprovalProducer(ports: S5RehearsalProducerPort
       const roomRowId = await ports.locateRoom(attempt.workroomId);
       if (!roomRowId) return held;
       let prepared: Awaited<ReturnType<typeof readReviewedIntent>> = null;
-      return await runReceiptedCommand<Result>({
+      const result = await runReceiptedCommand<Result>({
         db: ports.db, authorityScopeKey: proposalScope,
         commandId: commandPayloadBinding(attempt).digest, commandType: proposalType,
         target: { kind: "workroom", id: attempt.workroomId }, expectedRoomRowId: roomRowId,
         actor: { userId, agentId: null }, payloadBinding: commandPayloadBinding({ attempt, userId, reviewedPinDigest }),
         beforeReceiptRead: async (tx, lockedRowId) => {
-          prepared = await readReviewedIntent(ports, tx, lockedRowId, userId, attempt, reviewedPinDigest, now());
+          prepared = await readReviewedIntent(ports, tx, lockedRowId, userId, attempt, reviewedPinDigest);
           return !!prepared;
         },
         run: async (tx) => {
           if (!prepared) throw new Error("Current rehearsal pins are unavailable.");
           const { pin, current } = prepared;
           const proposedAt = now();
-          const deadline = new Date(pin.expiresAt);
-          if (!(proposedAt < deadline)) throw new Error("Rehearsal expired.");
+          const deadline = new Date(proposedAt.getTime() + APPROVAL_DECISION_WINDOW_MS);
+          if (!(proposedAt < deadline)) throw new Error("Invalid approval clock.");
           const permitRef = reservationRef.parse(ports.reservePermitRef());
-          const approval = bindApproval(prepared, userId, permitRef);
+          const approval = bindApproval(prepared, userId, permitRef, deadline.getTime());
           const pending = await ports.raisePending(tx, { ...approval, bindingRowId: current.bindingRowId,
             now: proposedAt, deadline, reviewedPinDigest });
           if (pending.status !== "proposed" || !pending.envelopeId || !pending.authorityDecisionId
-            || pending.expiresAt?.getTime() !== pin.expiresAt || !(now() < deadline)) throw new Error("No exact pending approval.");
-          return { kind: "proposed", envelopeId: pending.envelopeId, permitRef, expiresAt: pin.expiresAt };
+            || pending.expiresAt?.getTime() !== deadline.getTime() || !(now() < deadline)) throw new Error("No exact pending approval.");
+          return { kind: "proposed", envelopeId: pending.envelopeId, permitRef, expiresAt: deadline.getTime() };
         },
       });
+      return result.kind === "proposed" && now().getTime() < result.expiresAt ? result : held;
     } catch {
       return held;
     }
@@ -155,7 +158,8 @@ export function createS5RehearsalApprovalCommit(ports: S5RehearsalProducerPorts)
       const located = await ports.readDecision(ports.db, envelope, userId);
       const attempt = s5ExactRehearsalAttempt.safeParse(located?.attempt);
       const permitRef = reservationRef.safeParse(located?.permitRef);
-      if (!located || !attempt.success || !permitRef.success) return null;
+      const deadline = envelope.expiresAt;
+      if (!located || !attempt.success || !permitRef.success || !deadline || !(now() < deadline)) return null;
       const roomId = await ports.locateRoom(attempt.data.workroomId);
       if (!roomId) return null;
       const decisionDigest = commandPayloadBinding(located).digest;
@@ -168,10 +172,10 @@ export function createS5RehearsalApprovalCommit(ports: S5RehearsalProducerPorts)
         beforeReceiptRead: async (tx, lockedRoomId) => {
           const current = await ports.readDecision(tx, envelope, userId);
           if (!current || commandPayloadBinding(current).digest !== decisionDigest) return false;
-          reviewed = await readReviewedIntent(ports, tx, lockedRoomId, userId, attempt.data, current.reviewedPinDigest, now());
+          reviewed = await readReviewedIntent(ports, tx, lockedRoomId, userId, attempt.data, current.reviewedPinDigest);
           if (!reviewed || current.approverPrincipalId !== reviewed.current.approverPrincipalId
-            || current.bindingRowId !== reviewed.current.bindingRowId || envelope.expiresAt?.getTime() !== reviewed.pin.expiresAt) return false;
-          const { binding } = bindApproval(reviewed, userId, permitRef.data);
+            || current.bindingRowId !== reviewed.current.bindingRowId || !(now() < deadline)) return false;
+          const { binding } = bindApproval(reviewed, userId, permitRef.data, deadline.getTime());
           const stored = envelope.argsJson;
           return binding.actingAgentId === envelope.coworkerAgentId && binding.inputFingerprint === envelope.inputFingerprint
             && fingerprintCoworkerApprovalBinding(binding) === envelope.approvalBindingFingerprint
@@ -179,24 +183,24 @@ export function createS5RehearsalApprovalCommit(ports: S5RehearsalProducerPorts)
             && isRecord(stored.approvalBinding)
             && commandPayloadBinding(stored.approvalBinding).digest === commandPayloadBinding(binding).digest
             && await hasOriginalProposal(tx, lockedRoomId, attempt.data, userId, current.reviewedPinDigest,
-              envelope.id, permitRef.data, reviewed.pin.expiresAt);
+              envelope.id, permitRef.data, deadline.getTime());
         },
         run: async (tx) => {
           if (!reviewed || !envelope.authorityDecisionId) throw new Error("Missing rehearsal decision binding.");
-          const { current, pin } = reviewed;
+          const { current } = reviewed;
           const issuedAt = now();
-          const deadline = new Date(pin.expiresAt);
-          if (!(issuedAt < deadline)) throw new Error("Rehearsal expired.");
+          if (!(issuedAt < deadline)) throw new Error("Rehearsal approval window closed.");
           const decided = await writeDecision(tx);
           if (!decided.ok) throw new Error("Rehearsal decision did not win its compare-and-set.");
-          const { params } = bindApproval(reviewed, userId, permitRef.data);
+          const { params } = bindApproval(reviewed, userId, permitRef.data, deadline.getTime());
           const claims: PermitClaims = {
             permitId: permitRef.data, bindingId: S5_REHEARSAL_APPROVAL_ACTION, bindingVersion: 1, gateKey: S5_REHEARSAL_APPROVAL_ACTION,
             authority: "wwmd", shapeRef: params.shapeRef, stageKey: params.stageKey, gateDecisionId: null,
             authorityDecisionId: envelope.authorityDecisionId, envelopeId: envelope.id, actorGaid: params.subject.gaid,
             actorUserId: current.taskUserId, actorAgentId: current.agentId, workroomId: params.workroomId, subjectScope: params.stageAttemptRef,
             capabilities: params.operations.map(tool => ({ tool })), paramHash: computeParamHash(S5_REHEARSAL_APPROVAL_ACTION, params),
-            enforcement: "enforced", notBefore: issuedAt, expiresAt: deadline, maxUses: 1, nonce: ports.nonce(), parentPermitId: null,
+            enforcement: "enforced", notBefore: issuedAt, expiresAt: new Date(issuedAt.getTime() + GPP_PERMIT_TTL_MS),
+            maxUses: 1, nonce: ports.nonce(), parentPermitId: null,
           };
           const signature = ports.sign(claims);
           if (!signature) throw new Error("Permit signing is unavailable.");
@@ -236,7 +240,8 @@ function approvalRationale({ params: p, deadline }: PendingIntent): string {
     `Data-only recipient (${recipient.authorityRef}, ${recipient.destinationRef}, ${recipient.reservationRef}). Control ${p.receiverRef} on ${p.hostRef} at ${p.resource}, key ${p.signingPublicKey}.`,
     `Issuer ${p.issuer}, origin ${p.originRef}, authority binding ${p.authority.bindingRef}, permit ${p.authority.permitRef}, grants ${p.authority.grantKeys.join(", ")}.`,
     `Work shape: ${p.shapeRef}. Operations: ${p.operations.map(op => op === "post_room_message" ? `${op} (write: record a quiet route proposal only)` : `${op} (read)`).join(", ")}.`,
-    `Original DPF-clock deadline: ${deadline.toISOString()} (at most 120 seconds). If it is missed, this attempt is spent and cannot be reopened.`,
+    `Approve before ${deadline.toISOString()} on DPF's clock. If missed, this attempt is spent and cannot be reopened.`,
+    "Execution is limited to 120 seconds from DPF admission after approval, and ends sooner if current authority expires.",
     "Only approval issues the linked permit. No send until the joined no-send proof passes. Approving here does not start or send.",
     "No production, v1, real data, API fallback, or paid overage. No standing approval, normal room messages, notifications, wake, or duplicate effects.",
   ].join("\n");
@@ -313,7 +318,7 @@ export function s5RehearsalPreviewOwnerPorts(db: Pick<Prisma.TransactionClient, 
         select: { decisionId: true },
       });
       const envelope = await ensureAuthorityApprovalEnvelope({ binding, authorityDecisionId: decision.decisionId, threadId: null,
-        explanation: approvalRationale(intent), proposeBoundary: true, now: intent.now, rehearsalDeadline: intent.deadline }, owner);
+        explanation: approvalRationale(intent), proposeBoundary: true, now: intent.now, rehearsalApprovalDeadline: intent.deadline }, owner);
       const stored = await owner.coworkerActionEnvelope.findUnique({ where: { id: envelope.id }, select: {
         status: true, expiresAt: true, resolvedAt: true, authorityDecisionId: true, inputFingerprint: true,
         manifestActionId: true, delegatingUserId: true, coworkerAgentId: true,

@@ -1,5 +1,11 @@
 # S5 synthetic rehearsal admission read
 
+The Inbox approval cutoff is fixed at proposal time and can end before the
+approved attempt is admitted. It is evidence that the decision was timely,
+not an execution expiry. At admission, DPF pins the 120-second execution
+deadline, shortened by any earlier permit or qualification expiry. The read
+and effect paths refuse at equality. The caller cannot supply either cutoff.
+
 The read is for the governed Contributor preview only. It is not a launch,
 approval, provider egress, or operation gate. It does not change the [v1 wire](workroom-bound-launch-contract-v1.md).
 

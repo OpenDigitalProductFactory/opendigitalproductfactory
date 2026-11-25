@@ -13,11 +13,11 @@ provisioner writes that intent from its reviewed fixture and verified
 non-production lease, source and DB, under the exact Workroom attempt lock.
 The provisioner must resolve the current subject, separate platform
 approver, authority, candidate Control receiver and destination from their
-owners. It must bind the fixture, case, data-only recipient, original
-DPF-clock deadline, work shape and operations, and leave an exact provisioning
+owners. It must bind the fixture, case, data-only recipient, work shape and
+operations, and leave an exact provisioning
 receipt. A generic state update, direct DB row or test fixture is not a
-substitute. The deadline may not be later than 120 seconds after the
-producer's clock. The preview requires its own configured GPP signing key.
+substitute. The draft carries no clock value. The preview requires its own
+configured GPP signing key.
 An unsigned or shadow permit is refused.
 
 The private-mesh POST at `/api/internal/s5-rehearsal-admission/request-approval`
@@ -32,8 +32,10 @@ signed permit handle or a room credential.
 
 Under the exact Workroom command lock, reserve a permit reference and raise
 the canonical pending Inbox envelope. No permit row exists yet. The
-approval fingerprint binds the reference, work shape, exact operation list
-and original absolute deadline. The Inbox rationale shows those values and
+approval fingerprint binds the reference, work shape, exact operation list,
+the 120-second execution cap and the absolute approval cutoff. DPF sets that
+cutoff at proposal time using the standard 15-minute decision window. The
+Inbox rationale shows both clocks and
 marks `post_room_message` as a write that records only a quiet route proposal.
 An exact proposal replay reads the stored result without raising another card.
 
@@ -41,13 +43,19 @@ The decision-only action re-reads the current approver, reviewed pins and
 original proposal receipt under the Workroom lock. The canonical owner
 approval and the exact signed permit commit in one transaction. A failed
 permit write rolls back the approval. Declining or missing the window leaves
-no permit, and a permit issued before the deadline expires at that same
-absolute instant. The approval cannot become standing. The click and both
+no permit. The permit has the standard GPP lifetime from the decision. A
+decided envelope keeps its original approval cutoff as evidence, and passing
+that cutoff does not invalidate an in-time decision. At admission after
+approval, DPF pins the execution deadline on the exact attempt and room
+credential, at most 120 seconds from the DPF admission clock and no later
+than the current permit and qualification expiry. The approval cannot
+become standing. The click and both
 approval-completion paths never replay a tool or start or resume a task.
 
 **A missed approval window permanently spends this attempt.** The original
 deadline cannot be extended, and **Ask again** cannot reopen this request.
-Any further rehearsal would need a separately governed attempt and approval.
+After approval or spending, provisioning must refuse any further attempt
+under this one-shot ruling. A new rehearsal needs a new owner ruling.
 The one-shot limit applies to provider requests, including every retry and
 reconnect. Control and the relay must enforce it at egress. The stage permit
 and broker's operation ID deduplication do not meter provider requests.

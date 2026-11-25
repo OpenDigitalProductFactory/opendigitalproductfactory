@@ -67,7 +67,7 @@ afterEach(() => {
 });
 
 function fixture() {
-  const draft = reviewedS5RehearsalPins.parse(s5ApprovalFixture(clock.getTime() + 60_000));
+  const draft = reviewedS5RehearsalPins.parse(s5ApprovalFixture());
   const room = { id: "room-row", capsuleId: attempt.workroomId, status: "ready", requestedByPrincipalId: "requester-row",
     archivedAt: null, workspaceState: { s5RehearsalApprovalDraft: draft, workroomDrive: { stageKey: attempt.stageKey } },
     taskRun: { taskRunId: attempt.sessionRef, userId: actor, currentAgentId: agent, status: "working", archivedAt: null } };
@@ -143,7 +143,7 @@ describe("the rehearsal Inbox decision", () => {
     expect(pending.kind).toBe("proposed");
     expect(m.issue).not.toHaveBeenCalled();
     expect(f.envelope()).toMatchObject({ status: "proposed" });
-    vi.setSystemTime(clock.getTime() + 1_000);
+    vi.setSystemTime(clock.getTime() + 14 * 60_000);
     const response = await f.approve();
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({ ok: true, execution: { status: "not-run", reason: "decision-only" } });
@@ -153,10 +153,13 @@ describe("the rehearsal Inbox decision", () => {
     expect((f.envelope()?.argsJson as { humanApproval: unknown }).humanApproval).toEqual({ userId: approver, approvedAt: new Date().toISOString() });
     expect(m.issue).toHaveBeenCalledExactlyOnceWith(prisma, expect.objectContaining({
       permitId: pending.kind === "proposed" ? pending.permitRef : null, envelopeId, actorUserId: actor,
-      expiresAt: new Date(f.draft.expiresAt), notBefore: new Date(), shapeRef: f.draft.shapeRef,
+      expiresAt: new Date(Date.now() + 15 * 60_000), notBefore: new Date(), shapeRef: f.draft.shapeRef,
       capabilities: f.draft.operations.map(tool => ({ tool })), enforcement: "enforced",
     }), expect.objectContaining({ keyId: "fixture" }));
     expect((await f.approve()).status).toBe(409);
+    vi.setSystemTime(clock.getTime() + 15 * 60_000);
+    expect((await f.approve()).status).toBe(409);
+    expect(f.envelope()).toMatchObject({ status: "approved", resolvedAt: null });
     expect(m.issue).toHaveBeenCalledOnce();
     expect(m.findPark).not.toHaveBeenCalled();
     expect(m.execute).not.toHaveBeenCalled();
@@ -208,7 +211,7 @@ describe("the rehearsal Inbox decision", () => {
     if (outcome === "declined") {
       expect(await denyEnvelope(envelopeId, approver)).toMatchObject({ ok: true });
     } else {
-      vi.setSystemTime(f.draft.expiresAt);
+      vi.setSystemTime(clock.getTime() + 15 * 60_000);
     }
     const response = await f.approve();
     expect(response.status).toBe(409);

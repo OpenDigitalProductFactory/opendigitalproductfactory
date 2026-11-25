@@ -5,6 +5,7 @@ import { readS5CredentialCeiling, S5_WORKROOM_TOKEN_KIND } from "@/lib/auth/s5-r
 import { verifyIdentityStatement } from "@/lib/federation/instance-identity";
 import { fingerprintCoworkerInput } from "@/lib/govern/authority/coworker-authority-decision";
 import { verifyPermitMac } from "@/lib/gpp/permit-handle";
+import { GPP_PERMIT_TTL_MS } from "@/lib/gpp/permit-mint";
 import { computeParamHash } from "@/lib/gpp/param-hash";
 import { readGppPermitForEvidence } from "@/lib/gpp/permit-store";
 import { getAgentGaidMap } from "@/lib/identity/principal-linking";
@@ -46,7 +47,7 @@ type OwnerReads = {
  * approve, execute or reserve the envelope. */
 export function s5RehearsalApprovalParams(pin: Pick<S5RehearsalOwnerPin, "leaseId" | "sourceSha" | "signingPublicKey" | "shapeRef"> & {
   snapshot: Omit<S5RehearsalOwnerPin["snapshot"], "qualification" | "expiresAt">; approverPrincipalId: string;
-  operations: z.infer<typeof s5RehearsalOperations>; expiresAt: number;
+  operations: z.infer<typeof s5RehearsalOperations>; approvalExpiresAt: number;
 }) {
   const { snapshot: s } = pin;
   return { purpose: S5_REHEARSAL_APPROVAL_ACTION, requestLimit: 1, attemptLimit: 1, deadlineMs: 120_000, profile: s.profile,
@@ -54,7 +55,7 @@ export function s5RehearsalApprovalParams(pin: Pick<S5RehearsalOwnerPin, "leaseI
     signingPublicKey: pin.signingPublicKey, originRef: s.originRef, authority: s.authority,
     issuer: s.issuer, workroomId: s.workroomId, sessionRef: s.sessionRef, stageKey: s.stageKey, stageAttemptRef: s.stageAttemptRef,
     subject: s.subject, approverPrincipalId: pin.approverPrincipalId, syntheticTarget: s.syntheticTarget,
-    shapeRef: pin.shapeRef, operations: pin.operations, expiresAt: pin.expiresAt };
+    shapeRef: pin.shapeRef, operations: pin.operations, approvalExpiresAt: pin.approvalExpiresAt };
 }
 
 /** The private Workroom attempt pin locates records; it does not establish
@@ -113,19 +114,22 @@ export function createS5RehearsalOwnerReads(tx: Prisma.TransactionClient): Owner
       if (!envelope || envelope.status !== "approved" || envelope.resolvedAt !== null || envelope.manifestActionId !== S5_REHEARSAL_APPROVAL_ACTION
         || envelope.delegatingUserId === task.userId || envelope.coworkerAgentId !== task.currentAgentId || !envelope.approvalBindingFingerprint
         || !envelope.expiresAt || !envelope.authorityDecisionId || !isRecord(marker) || Object.keys(marker).length !== 2
-        || marker.userId !== envelope.delegatingUserId || !(approvalTime > 0 && approvalTime <= t)) return null;
+        || marker.userId !== envelope.delegatingUserId
+        || !(approvalTime > 0 && approvalTime < envelope.expiresAt.getTime() && approvalTime <= row.createdAt.getTime())) return null;
       if (!permit || verifyPermitMac(permit, null).result !== "ok" || permit.enforcement !== "enforced" || permit.revokedAt !== null
         || permit.envelopeId !== envelope.id || permit.authorityDecisionId !== envelope.authorityDecisionId
         || permit.bindingId !== S5_REHEARSAL_APPROVAL_ACTION || permit.subjectScope !== s.stageAttemptRef
         || permit.workroomId !== s.workroomId || permit.stageKey !== s.stageKey || permit.shapeRef !== pin.shapeRef
         || permit.actorAgentId !== task.currentAgentId || permit.actorUserId !== task.userId || permit.actorGaid !== s.subject.gaid
         || permit.maxUses !== 1 || permit.useCount !== 0 || !(permit.notBefore.getTime() <= t && t < permit.expiresAt.getTime())
-        || permit.expiresAt.getTime() !== envelope.expiresAt.getTime() || s.expiresAt > permit.expiresAt.getTime()
+        || !(permit.notBefore.getTime() <= approvalTime)
+        || permit.expiresAt.getTime() !== permit.notBefore.getTime() + GPP_PERMIT_TTL_MS
+        || s.expiresAt > permit.expiresAt.getTime()
         || !projected.operationKeys.every(key => permit.capabilities.some(c => c.tool === key))) return null;
       const operations = s5RehearsalOperations.safeParse(permit.capabilities.map(c => c.tool));
       if (!operations.success) return null;
       const params = s5RehearsalApprovalParams({ ...pin, approverPrincipalId: s.qualification.ownerPrincipalId,
-        operations: operations.data, expiresAt: permit.expiresAt.getTime() });
+        operations: operations.data, approvalExpiresAt: envelope.expiresAt.getTime() });
       if (envelope.inputFingerprint !== fingerprintCoworkerInput(params)
         || permit.paramHash !== computeParamHash(S5_REHEARSAL_APPROVAL_ACTION, params)) return null;
       const [binding, access, aliases, taskUser, approver] = await Promise.all([
@@ -157,7 +161,7 @@ export function createS5RehearsalOwnerReads(tx: Prisma.TransactionClient): Owner
         stageAttemptRef: s.stageAttemptRef, subject: s.subject, syntheticTarget: s.syntheticTarget };
       const qualification = verifyS5RehearsalQualification({ record: pin.qualificationRecord, approval: {
         purpose: S5_REHEARSAL_APPROVAL_ACTION, status: "approved", ref: envelope.id, ownerPrincipalId: approver.principalId,
-        revision: approvalTime, binding: exact, validUntil: Math.min(envelope.expiresAt.getTime(), permit.expiresAt.getTime()),
+        revision: approvalTime, binding: exact, validUntil: permit.expiresAt.getTime(),
       } }, exact, t);
       if (!qualification || qualification.approvalRef !== projected.jsi.approvalRef
         || qualification.approvalRevision !== projected.jsi.approvalRevision || qualification.statusRevision !== projected.jsi.statusRevision

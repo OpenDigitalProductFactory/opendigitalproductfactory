@@ -189,15 +189,19 @@ async function auditOnBehalf(envelope: EnvelopeRow, by: string, reason: string, 
  */
 async function refuseIfLapsed(envelope: EnvelopeRow): Promise<EnvelopeActionResult<EnvelopeRow> | null> {
   if (!envelope.expiresAt || envelope.expiresAt.getTime() > Date.now()) return null;
+  const decisionOnly = approvalActionPolicy(envelope.manifestActionId)?.decision === "owner-one-time";
+  // For a decision-only rehearsal the stored cutoff dates the decision,
+  // not its separately revocable permit. Do not overwrite an owner decision.
+  if (decisionOnly && envelope.status !== "proposed") return null;
   if (envelope.status === "proposed" || envelope.status === "approved") {
     await prisma.coworkerActionEnvelope.updateMany({
-      where: { id: envelope.id, status: { in: ["proposed", "approved"] }, resolvedAt: null },
+      where: { id: envelope.id, status: { in: decisionOnly ? ["proposed"] : ["proposed", "approved"] }, resolvedAt: null },
       data: { status: "expired", resolvedAt: new Date() },
     });
   }
   return {
     ok: false,
-    reason: approvalActionPolicy(envelope.manifestActionId)
+    reason: decisionOnly
       ? "This rehearsal attempt expired and cannot be reopened."
       : "This request's decision window closed before it was answered, so it has expired. Your coworker can ask again.",
     httpStatus: 409,

@@ -3,13 +3,13 @@ export const s5ApprovalFixtureAttempt = { workroomId: "WC-FIXTURE", sessionRef: 
 export const s5ApprovalFixtureApproverPrincipal = "PRN-APPROVER";
 export const s5ApprovalFixtureAgent = { principalId: "PRN-AGENT", gaid: "gaid:priv:fixture:agent" };
 
-export function s5ApprovalFixture(expiresAt: number) {
+export function s5ApprovalFixture() {
   const p = s5ApprovalFixturePreview;
   return {
-    schemaVersion: "s5-rehearsal-approval-draft.v1", leaseId: p.leaseId, sourceSha: p.sourceSha,
+    schemaVersion: "s5-rehearsal-approval-draft.v2", leaseId: p.leaseId, sourceSha: p.sourceSha,
     approverPrincipalId: s5ApprovalFixtureApproverPrincipal,
     signingPublicKey: Buffer.alloc(44).toString("base64"), shapeRef: "shape@1",
-    expiresAt, operations: ["get_workroom", "post_room_message"],
+    operations: ["get_workroom", "post_room_message"],
     snapshot: { ...s5ApprovalFixtureAttempt, profile: "synthetic-rehearsal", mode: "read-only-coordination",
       issuer: "source-A", receiverRef: "control-A", hostRef: "host-A", resource: p.origin + "/api/internal/s5-rehearsal-admission",
       originRef: "origin-A", subject: s5ApprovalFixtureAgent, authority: { bindingRef: "binding-A", grantKeys: ["room_read", "room_write"] },
