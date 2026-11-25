@@ -6,10 +6,14 @@ import { HostDockerInTestError, isDockerIntegrationSuite, reachesHostDocker } fr
 
 describe("no host Docker in unit tests", () => {
   it("refuses every launcher that would run the Docker executable", async () => {
+    // ambient-host-guard: allow proving the setup guard throws before any process starts; docker is never launched
     expect(() => spawn("docker", ["ps"])).toThrow(HostDockerInTestError);
     expect(() => spawn("/usr/bin/docker", ["ps"])).toThrow(HostDockerInTestError);
+    // ambient-host-guard: allow proving the setup guard throws before any process starts; docker is never launched
     expect(() => spawnSync("docker", ["info"])).toThrow(HostDockerInTestError);
+    // ambient-host-guard: allow proving the setup guard throws before any process starts; docker is never launched
     expect(() => execFile("docker", ["ps"], () => undefined)).toThrow(HostDockerInTestError);
+    // ambient-host-guard: allow proving the setup guard throws before any process starts; docker is never launched
     expect(() => exec("docker ps", () => undefined)).toThrow(HostDockerInTestError);
     await expect(promisify(execFile)("docker", ["ps"])).rejects.toThrow(HostDockerInTestError);
     await expect(promisify(exec)("/usr/local/bin/docker rm -f x")).rejects.toThrow(HostDockerInTestError);
