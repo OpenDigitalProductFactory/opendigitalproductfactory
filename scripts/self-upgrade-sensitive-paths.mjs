@@ -4,6 +4,7 @@ const rule = (id, family, pattern) => Object.freeze({ id, family, pattern });
 
 export const SELF_UPGRADE_SENSITIVE_PATH_RULES = Object.freeze([
   rule("maintenance-epoch-evidence", "promoterClosure", /^scripts\/(?:promoter-epoch-evidence|lib\/maintenance-epoch-receipt)\.mjs$/),
+  rule("paired-teardown-promoter-closure", "promoterClosure", /^scripts\/(?:(?:backup-uploads|governed-teardown-recovery|restore-uploads)\.mjs|lib\/paired-recovery-contract\.generated\.cjs)$/),
   rule("promoter-artifacts", "promoter", /^(?:Dockerfile\.promoter|scripts\/(?:promote\.|build-promoter|repair-promoter).*)/),
   rule("self-upgrade-runtime", "selfUpgrade", /^apps\/web\/(?:lib|app\/api\/ops)\/self-upgrade(?:\/|\.|$)/),
   rule("self-upgrade-queue-actions", "selfUpgrade", /^apps\/web\/(?:lib\/queue\/functions\/self-upgrade|lib\/actions\/(?:self-upgrade|promotions))/),
