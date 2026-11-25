@@ -32,6 +32,20 @@ test("detects socket, CLI argv and shell-string Docker calls", () => {
   assert.deepEqual(findRawDockerLines(source), [1, 2, 3, 4, 5, 6, 7, 8, 9]);
 });
 
+test("detects the Docker executable by absolute path and argv built by a call", () => {
+  const source = [
+    'const child = spawn("/usr/bin/docker", buildSandboxExecArgs(owner, id), { env });',
+    'run("/usr/local/bin/docker", args);',
+    'spawn("/usr/bin/docker", ["--host", "unix:///var/run/docker.sock", "exec", id]);',
+    'const spec = { command: "/usr/bin/docker" };',
+    'await exec(`/usr/bin/docker exec ${id} ls`);',
+    'spawn("docker", options.args);',
+    'const label = "/usr/bin/dockerd-rootless";',
+    'if (name.endsWith("/docker")) return;',
+  ].join("\n");
+  assert.deepEqual(findRawDockerLines(source), [1, 2, 3, 4, 5, 6]);
+});
+
 test("ignores comments, substring checks and non-call literals", () => {
   const source = [
     "// spawn(\"docker\", [\"ps\"]) is what we used to do",

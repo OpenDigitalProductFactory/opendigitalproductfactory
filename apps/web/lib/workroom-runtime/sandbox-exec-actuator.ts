@@ -10,6 +10,9 @@
 // runs agent code; this hands the portal no host, Docker or writer authority.
 
 import { spawn } from "node:child_process";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 import { isRecord } from "@/lib/shared/coerce";
 import type { RuntimeProcess } from "./sandbox-launcher";
@@ -27,6 +30,8 @@ export type SandboxExecOwner = {
 type SandboxIdentity = { containerId: string; running: boolean };
 
 const ENV_NAME = /^[A-Za-z_][A-Za-z0-9_]{0,127}$/;
+/** Names that steer loaders, shells, Node or the Docker client; never forwarded. */
+const RESERVED_ENV = /^(?:LD_|DYLD_|DOCKER_|NODE_|NPM_CONFIG_|BASH_FUNC_)|^(?:PATH|HOME|SHELL|ENV|BASH_ENV|IFS|PS4|PROMPT_COMMAND|TMPDIR|USER)$/i;
 const WORKDIR = /^\/[A-Za-z0-9_.@/-]{0,1023}$/;
 const USER = /^(?:root|node|[0-9]{1,6}(?::[0-9]{1,6})?)$/;
 const ARG_LIMIT = 64 * 1024;
@@ -40,7 +45,8 @@ export function readSandboxExecOwner(value: unknown): SandboxExecOwner {
     || !value.command.every(arg => typeof arg === "string" && arg.length <= ARG_LIMIT && plain(arg))
     || (value.command[0] as string).length === 0
     || !isRecord(value.env) || Object.keys(value.env).length > 32
-    || !Object.entries(value.env).every(([name, text]) => ENV_NAME.test(name) && typeof text === "string" && text.length <= ARG_LIMIT && plain(text))
+    || !Object.entries(value.env).every(([name, text]) => ENV_NAME.test(name) && !RESERVED_ENV.test(name)
+      && typeof text === "string" && text.length <= ARG_LIMIT && plain(text) && !/[\r\n]/.test(text))
     || !(value.workdir === null || (typeof value.workdir === "string" && WORKDIR.test(value.workdir)
       && !value.workdir.split("/").some(part => part === "..")))
     || !(value.user === null || (typeof value.user === "string" && USER.test(value.user)))
@@ -51,24 +57,48 @@ export function readSandboxExecOwner(value: unknown): SandboxExecOwner {
     detach: value.detach };
 }
 
-/** The fixed Docker argv. Values travel in the child's environment, never argv. */
-export function buildSandboxExecArgs(owner: SandboxExecOwner, containerId: string): string[] {
+/** The fixed Docker argv. Caller values reach only the container, through a
+ * private env file; never argv and never the Docker client's own environment. */
+export function buildSandboxExecArgs(owner: SandboxExecOwner, containerId: string, envFile?: string): string[] {
   return ["--host", "unix:///var/run/docker.sock", "exec", ...(owner.interactive ? ["-i"] : []), ...(owner.detach ? ["-d"] : []),
     ...(owner.workdir ? ["-w", owner.workdir] : []), ...(owner.user ? ["-u", owner.user] : []),
-    ...Object.keys(owner.env).flatMap(name => ["-e", name]), containerId,
+    ...(envFile ? ["--env-file", envFile] : []), containerId,
     // A detached command is not tied to this stream; the sandbox owns its lifetime.
     ...(owner.detach ? [] : ["timeout", "-k", "3", "24h"]), ...owner.command];
 }
 
+type EnvFile = { path: string; remove: () => Promise<void> };
+
+/** A 0600 env file in a fresh 0700 directory, removed when the exec ends. */
+async function writePrivateEnvFile(env: Record<string, string>): Promise<EnvFile> {
+  const dir = await mkdtemp(join(tmpdir(), "dpf-sandbox-exec-"));
+  const path = join(dir, "env");
+  await writeFile(path, Object.entries(env).map(([name, text]) => `${name}=${text}\n`).join(""), { mode: 0o600, flag: "wx" });
+  return { path, remove: () => rm(dir, { recursive: true, force: true }) };
+}
+
+/** The Docker client's own environment: fixed, never the caller's. */
+export const SANDBOX_EXEC_CLIENT_ENV = Object.freeze({ PATH: "/usr/local/bin:/usr/bin:/bin", NODE_ENV: "production" });
+
 /** Actuator side. A refused request never reaches Docker. */
-export function createSandboxExecActuator(deps: { spawn?: typeof spawn } = {}) {
+export function createSandboxExecActuator(deps: { spawn?: typeof spawn; writeEnvFile?: (env: Record<string, string>) => Promise<EnvFile> } = {}) {
   const run = deps.spawn ?? spawn;
   return async (value: unknown, observeSandbox: () => Promise<SandboxIdentity>): Promise<RuntimeProcess> => {
     const owner = readSandboxExecOwner(value);
     const sandbox = await observeSandbox();
     if (!sandbox.running || !/^[a-f0-9]{64}$/.test(sandbox.containerId)) throw refuse();
-    const child = run("/usr/bin/docker", buildSandboxExecArgs(owner, sandbox.containerId),
-      { stdio: ["pipe", "pipe", "pipe"], env: { PATH: "/usr/local/bin:/usr/bin:/bin", NODE_ENV: "production", ...owner.env } });
+    const envFile = Object.keys(owner.env).length > 0 ? await (deps.writeEnvFile ?? writePrivateEnvFile)(owner.env) : null;
+    const cleanup = () => { void envFile?.remove().catch(() => undefined); };
+    let child: ReturnType<typeof spawn>;
+    try {
+      child = run("/usr/bin/docker", buildSandboxExecArgs(owner, sandbox.containerId, envFile?.path),
+        { stdio: ["pipe", "pipe", "pipe"], env: { ...SANDBOX_EXEC_CLIENT_ENV } });
+    } catch (error) {
+      cleanup();
+      throw error;
+    }
+    child.once("close", cleanup);
+    child.once("error", cleanup);
     child.stdin?.on("error", () => child.kill("SIGTERM"));
     return {
       write: (line: string | Buffer) => {

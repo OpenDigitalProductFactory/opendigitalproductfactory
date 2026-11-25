@@ -60,7 +60,7 @@ test('oversized response and invalid JSON do not escape or grow the buffer', asy
 
 test('stop timeout and non-contract HTTP response remain unverified', async () => {
   await assert.rejects(boundedDockerSocketStop(id, transport({ timeout: true }).factory), /docker_engine_timeout/);
-  await assert.rejects(boundedDockerSocketStop(id, transport({ status: 200 }).factory), /stop_response_unverified/);
+  await assert.rejects(boundedDockerSocketStop(id, transport({ status: 200 }).factory), /no_content_response_unverified/);
   await assert.rejects(boundedDockerSocketStop(id, transport({ status: 500, body: 'fixture-private-detail' }).factory), { message: 'docker_engine_http_500' });
 });
 

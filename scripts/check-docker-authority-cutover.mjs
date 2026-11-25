@@ -50,7 +50,7 @@ export const DOCKER_AUTHORITY_REGISTRY = Object.freeze({
   "apps/web/lib/build/sandbox/sandbox-admin.ts": { class: "routed", count: 1, reason: "readActuatorSandbox when the actuator mount is present; only the observed sandbox is reported and docker inspect stays the mount-absent path." },
   "apps/web/lib/build/sandbox/sandbox-db.ts": { class: "routed", count: 6, reason: "Readiness and seed go to the actuator's sandbox-db operation for the build's in-use slot; every other Docker line is refused by execSandboxCommandLine when the mount is present." },
   "apps/web/lib/build/sandbox/sandbox-promotion.ts": { class: "routed", count: 4, reason: "executePromotion refuses before any effect when the actuator is mounted (DI-062828328841: deliver through the protected PR and canonical self-upgrade), and every Docker line is refused by execSandboxCommandLine there." },
-  "apps/web/lib/build/sandbox/sandbox-recovery.ts": { class: "routed", count: 1, reason: "runSandboxRecoveryCommand: exec through the actuator, start and restart through its catalog sandbox restart, anything else refused when the mount is present." },
+  "apps/web/lib/build/sandbox/sandbox-recovery.ts": { class: "routed", count: 2, reason: "runSandboxRecoveryCommand: exec through the actuator, start and restart through its catalog sandbox restart, anything else refused when the mount is present." },
   "apps/web/lib/build/sandbox/sandbox.ts": { class: "routed", count: 18, reason: "Every Docker line goes through execSandboxCommandLine (exec into the observed sandbox, anything else refused when the actuator is mounted); portal copies stream a local tar into the sandbox; start uses the catalog sandbox restart." },
   "apps/web/lib/coworker/service-converge-report.ts": { class: "message", count: 1, reason: "A literal matched against recorded admin_run_command parameters; it runs nothing (the executing tool is admin-pack)." },
   "apps/web/lib/documents/conversion/availability.ts": { class: "routed", count: 1, reason: "readActuatorDoctoolsHealth when the actuator mount is present." },
@@ -85,8 +85,10 @@ export const DOCKER_AUTHORITY_REGISTRY = Object.freeze({
   "apps/web/lib/shared/run-process-with-budget.ts": { class: "routed", count: 1, reason: "Best-effort cleanup half of a budgeted Docker call; with the actuator mounted every portal-side budgeted Docker caller is routed or refused before it starts, so only the actuator reaches it." },
   "apps/web/lib/teardown/dispatcher.ts": { class: "routed", count: 2, reason: "Its only caller, executeInstallationTeardown, refuses before any drain, backup or launch when the actuator mount is present; a governed actuator teardown owner awaits an owner decision." },
   "apps/web/lib/work-capsules/scope-epoch-enrollment.server.ts": { class: "routed", count: 1, reason: "prepareHardenedEnrollment reads the actuator observation when the mount is present." },
+  "apps/web/lib/workroom-runtime/sandbox-exec-actuator.ts": { class: "actuator", count: 1, reason: "The private actuator execs a bounded command into the sandbox it observed (bound to the signed retirement), with a fixed client environment and caller values only in a private env file." },
   "apps/web/lib/workroom-runtime/sandbox-exec.ts": { class: "routed", count: 1, reason: "The mount-absent fallback of spawnSandboxExec; with the actuator mounted every exec goes to the observed sandbox and nothing spawns locally." },
   "apps/web/lib/workroom-runtime/sandbox-launcher.ts": { class: "routed", count: 1, reason: "openActuatorRuntimeSession when the actuator mount is present." },
+  "apps/web/lib/workroom-runtime/sandbox-session-actuator.ts": { class: "actuator", count: 1, reason: "The private actuator opens a Workroom session in the sandbox it observed after the room token is resolved and still active; environment names are fixed server-side." },
   "packages/db/src/discovery-collectors/docker.ts": { class: "routed", count: 4, reason: "Spawns only when a Docker socket path exists; the qualified portal mounts none, so the collector reports docker_unavailable there. Actuator-backed discovery awaits an owner decision." },
 });
 
@@ -107,13 +109,16 @@ const SOURCE_WRITE_PATTERNS = [
   /\b(?:writeFileSync|writeFile|appendFileSync|appendFile|renameSync|rename|copyFileSync|copyFile|cpSync|symlinkSync)\s*\(/,
 ];
 
+// The Docker executable, by name or by absolute path (/usr/bin/docker): an
+// absolute path is the same raw call and must not escape the ratchet.
+const DOCKER_EXE = String.raw`(?:\/[\w.-]+)*\/?docker`;
 const PATTERNS = [
   /\bsocketPath\s*:/,
   /\b(?:bounded)?[dD]ockerSocket(?:Get|Stop)\s*\(/,
-  /["']docker["']\s*,\s*(?:\[|\.{3}|[A-Za-z_$][\w$]*\s*[,)])/,
-  /^\s*["']docker["'],\s*$/,
-  /\bcommand:\s*["']docker["']/,
-  /[`"']docker\s+(?:exec|run|compose|inspect|ps|rm|rmi|image|images|start|stop|restart|logs|info|cp|create|buildx|builder|network|volume|pull|push|build|kill|container|system|tag|save|load|commit|wait|update|top|stats|port|attach|events|version|context|manifest|login|history|pause|unpause)\b/,
+  new RegExp(String.raw`["']${DOCKER_EXE}["']\s*,\s*(?:\[|\.{3}|[A-Za-z_$][\w$.]*\s*[,()])`),
+  new RegExp(String.raw`^\s*["']${DOCKER_EXE}["'],\s*$`),
+  new RegExp(String.raw`\bcommand:\s*["']${DOCKER_EXE}["']`),
+  /[`"'](?:\/[\w.-]+)*\/?docker\s+(?:exec|run|compose|inspect|ps|rm|rmi|image|images|start|stop|restart|logs|info|cp|create|buildx|builder|network|volume|pull|push|build|kill|container|system|tag|save|load|commit|wait|update|top|stats|port|attach|events|version|context|manifest|login|history|pause|unpause)\b/,
 ];
 
 function stripComments(source) {

@@ -37,6 +37,9 @@ describe("readSandboxExecOwner", () => {
       owner({ command: [] }),
       owner({ command: ["sh", "a\0b"] }),
       owner({ env: { "BAD-NAME": "x" } }),
+      ...["LD_PRELOAD", "ld_library_path", "DYLD_INSERT_LIBRARIES", "DOCKER_CONFIG", "DOCKER_HOST", "PATH", "NODE_OPTIONS", "HOME", "BASH_ENV"]
+        .map(name => owner({ env: { [name]: "/tmp/evil" } })),
+      owner({ env: { TOKEN: "a\nPATH=/tmp" } }),
       owner({ workdir: "/workspace/../../host" }),
       owner({ workdir: "relative" }),
       owner({ user: "root --privileged" }),
@@ -45,13 +48,57 @@ describe("readSandboxExecOwner", () => {
     ]) expect(() => readSandboxExecOwner(bad)).toThrow("sandbox_exec_admission_refused");
   });
 
-  it("builds a fixed argv: observed container, values only in the environment, never privileged", () => {
-    const args = buildSandboxExecArgs(owner({ env: { TOKEN: "secret" }, workdir: "/workspace", user: "node", interactive: true }), sandboxId);
-    expect(args).toEqual(["--host", "unix:///var/run/docker.sock", "exec", "-i", "-w", "/workspace", "-u", "node", "-e", "TOKEN",
+  it("builds a fixed argv: observed container, values only in a private env file, never privileged", () => {
+    const args = buildSandboxExecArgs(owner({ env: { TOKEN: "secret" }, workdir: "/workspace", user: "node", interactive: true }), sandboxId, "/tmp/x/env");
+    expect(args).toEqual(["--host", "unix:///var/run/docker.sock", "exec", "-i", "-w", "/workspace", "-u", "node", "--env-file", "/tmp/x/env",
       sandboxId, "timeout", "-k", "3", "24h", "sh", "-c", "echo ok"]);
     expect(args.join(" ")).not.toMatch(/secret|--privileged/);
     expect(buildSandboxExecArgs(owner({ detach: true }), sandboxId)).toEqual(["--host", "unix:///var/run/docker.sock", "exec", "-d",
       sandboxId, "sh", "-c", "echo ok"]);
+  });
+});
+
+describe("createSandboxExecActuator environment", () => {
+  it("runs the Docker client with a fixed environment and gives caller values only to the container, then removes them", async () => {
+    const { mkdtemp, readFile, stat, access } = await import("node:fs/promises");
+    const { tmpdir } = await import("node:os");
+    const { join } = await import("node:path");
+    const spawned: Array<{ args: string[]; env: unknown }> = [];
+    let child: EventEmitter & { stdin: PassThrough; stdout: PassThrough; stderr: PassThrough; kill: () => boolean } | undefined;
+    let fileText = "", fileMode = 0;
+    const spawn = ((_command: string, args: string[], options: { env: unknown }) => {
+      spawned.push({ args, env: options.env });
+      child = Object.assign(new EventEmitter(), { stdin: new PassThrough(), stdout: new PassThrough(), stderr: new PassThrough(), kill: () => true });
+      return child;
+    }) as never;
+    const base = await mkdtemp(join(tmpdir(), "sandbox-exec-test-"));
+    const writeEnvFile = async (env: Record<string, string>) => {
+      const { writeFile, rm } = await import("node:fs/promises");
+      const path = join(base, "env");
+      await writeFile(path, Object.entries(env).map(([n, v]) => `${n}=${v}\n`).join(""), { mode: 0o600 });
+      fileText = await readFile(path, "utf8"); fileMode = (await stat(path)).mode & 0o777;
+      return { path, remove: () => rm(path, { force: true }) };
+    };
+    const actuate = createSandboxExecActuator({ spawn, writeEnvFile });
+    await actuate(owner({ env: { OPENAI_API_KEY: "", TOKEN: "secret" } }), async () => ({ containerId: sandboxId, running: true }));
+    expect(spawned[0].env).toEqual({ PATH: "/usr/local/bin:/usr/bin:/bin", NODE_ENV: "production" });
+    expect(spawned[0].args).toContain("--env-file");
+    expect(spawned[0].args.join(" ")).not.toContain("secret");
+    expect(fileText).toBe("OPENAI_API_KEY=\nTOKEN=secret\n");
+    expect(fileMode).toBe(0o600);
+    child!.emit("close", 0);
+    await new Promise(resolve => setTimeout(resolve, 50));
+    await expect(access(join(base, "env"))).rejects.toThrow();
+  });
+
+  it("writes no env file and passes no --env-file without caller values", async () => {
+    const spawned: string[][] = [];
+    const spawn = ((_command: string, args: string[]) => {
+      spawned.push(args);
+      return Object.assign(new EventEmitter(), { stdin: new PassThrough(), stdout: new PassThrough(), stderr: new PassThrough(), kill: () => true });
+    }) as never;
+    await createSandboxExecActuator({ spawn, writeEnvFile: async () => { throw new Error("unexpected"); } })(owner(), async () => ({ containerId: sandboxId, running: true }));
+    expect(spawned[0]).not.toContain("--env-file");
   });
 });
 

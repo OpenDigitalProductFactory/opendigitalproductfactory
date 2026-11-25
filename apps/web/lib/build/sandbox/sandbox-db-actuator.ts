@@ -39,7 +39,8 @@ export function createSandboxDbOperator(deps: {
     }
     const production = await deps.resolveService("postgres");
     const result = await deps.pipe(["exec", production, "pg_dump", "--data-only", "-U", "dpf", "dpf"],
-      ["exec", "-i", sandboxDb, "psql", "-U", "dpf", "dpf"]);
+      // A failed statement stops psql non-zero and rolls the whole seed back.
+      ["exec", "-i", sandboxDb, "psql", "-v", "ON_ERROR_STOP=1", "--single-transaction", "-U", "dpf", "dpf"]);
     return { ok: result.exitCode === 0, detail: result.stderr.slice(-1024) };
   };
 }

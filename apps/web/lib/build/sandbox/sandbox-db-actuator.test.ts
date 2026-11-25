@@ -25,7 +25,20 @@ describe("createSandboxDbOperator", () => {
     expect(h.runs).toEqual([["exec", ids["sandbox-postgres"], "pg_isready", "-U", "dpf"]]);
     await expect(h.operate({ owner: { kind: "build", buildId }, operation: "seed" })).resolves.toMatchObject({ ok: true });
     expect(h.pipes).toEqual([[["exec", ids.postgres, "pg_dump", "--data-only", "-U", "dpf", "dpf"],
-      ["exec", "-i", ids["sandbox-postgres"], "psql", "-U", "dpf", "dpf"]]]);
+      ["exec", "-i", ids["sandbox-postgres"], "psql", "-v", "ON_ERROR_STOP=1", "--single-transaction", "-U", "dpf", "dpf"]]]);
+  });
+
+  it("reports a seed whose SQL fails as not ok, with the error detail", async () => {
+    const operate = createSandboxDbOperator({
+      readSlot: async () => ({ containerId: "dpf-sandbox-1", status: "in_use" }),
+      observeSandbox: async () => ({ name: "dpf-sandbox-1", running: true }),
+      resolveService: async (service) => ids[service],
+      run: async () => ({ exitCode: 0, stdout: "", stderr: "" }),
+      // psql with ON_ERROR_STOP exits 3 on the first failed statement.
+      pipe: async () => ({ exitCode: 3, stderr: 'ERROR:  relation "Missing" does not exist' }),
+    });
+    await expect(operate({ owner: { kind: "build", buildId }, operation: "seed" }))
+      .resolves.toEqual({ ok: false, detail: 'ERROR:  relation "Missing" does not exist' });
   });
 
   it.each([
