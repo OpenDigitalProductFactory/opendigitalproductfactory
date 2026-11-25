@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { launchCheckedPromoter, type GuardedPromoterPorts } from "./promoter-launch";
+import { launchCheckedPromoter, runAdmittedPromoter, type GuardedPromoterPorts } from "./promoter-launch";
 import { PROMOTER_ALREADY_RUNNING_EXIT_CODE } from "./promoter-exit-codes";
 
 const id = "a".repeat(64);
@@ -87,5 +87,16 @@ describe("canonical promoter launch", () => {
     expect((await launchCheckedPromoter({ name, binding: action, ownerKey: "SUR-SCOPE", argv, timeoutMs: 15_000 }, other.ports)).exitCode)
       .toBe(PROMOTER_ALREADY_RUNNING_EXIT_CODE);
     expect(other.started).not.toHaveBeenCalled();
+  });
+});
+
+describe("runAdmittedPromoter and the swap's drain fence (BI-3C3CCC59)", () => {
+  it("checks the fence after building the command and launches nothing when admission reopened", async () => {
+    const order: string[] = [];
+    const build = vi.fn(async () => { order.push("build"); return { args: argv }; });
+    await expect(runAdmittedPromoter({ containerName: name } as never, { kind: "self-upgrade", runId: "SUR-SCOPE", quiescenceRunId: "QR-1" },
+      image, build, async () => { order.push("fence"); throw new Error("admission-reopened-before-swap"); }))
+      .rejects.toThrow("admission-reopened-before-swap");
+    expect(order).toEqual(["build", "fence"]);
   });
 });

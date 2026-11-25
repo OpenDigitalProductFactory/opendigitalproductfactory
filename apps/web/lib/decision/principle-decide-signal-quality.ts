@@ -1,6 +1,7 @@
 // Build principle_decide signalQuality + operator summary (BI-1D23EC26).
 // Extracted from principle-decide-pack so the pack stays under the module-size ceiling.
 
+import type { DecisionRetrievalEvidence } from "./retrieval-budget";
 import type { DecisionResult } from "@dpf/validators/judgment/option-scoring";
 
 export type PrincipleDecideSignalQuality = {
@@ -9,6 +10,7 @@ export type PrincipleDecideSignalQuality = {
   autonomyBlockers: string[];
   insufficientSignal: boolean | undefined;
   retrievalDegraded: boolean;
+  retrievalEvidence: DecisionRetrievalEvidence;
   structuredCoverage: DecisionResult["flags"]["structuredCoverage"];
   semanticFallbackRatio: number;
   featureCoverageWeak: boolean;
@@ -20,19 +22,17 @@ export type PrincipleDecideSignalQuality = {
   advisory: string | null;
 };
 
-const DEGRADED_ADVISORY =
-  "EMBEDDING PROVIDER UNAVAILABLE — only commandment-tier principles were consulted; " +
-  "core and contextual retrieval returned nothing because the query could not be embedded, " +
-  "NOT because no relevant principle exists. Treat this as an incomplete consult, not a verdict. " +
-  "Restore the provider (docker model pull ai/nomic-embed-text-v1.5), then re-run.";
-
 export function buildPrincipleDecideSignalQuality(input: {
   result: DecisionResult;
-  retrievalDegraded: boolean;
+  retrievalEvidence: DecisionRetrievalEvidence;
   optionsWithFeatures: number;
   optionCount: number;
 }): PrincipleDecideSignalQuality {
-  const { result, retrievalDegraded, optionsWithFeatures, optionCount } = input;
+  const { result, retrievalEvidence, optionsWithFeatures, optionCount } = input;
+  const issues = Object.entries(retrievalEvidence)
+    .filter(([, status]) => status !== "complete" && status !== "not-run")
+    .map(([leg, status]) => `${leg}=${status}`);
+  const retrievalDegraded = issues.length > 0;
   const usable =
     !result.flags.insufficientSignal &&
     result.recommendation !== null &&
@@ -44,7 +44,7 @@ export function buildPrincipleDecideSignalQuality(input: {
       ? null
       : `Recommendation is advisory only — autonomyEligible=false (${(result.flags.autonomyBlockers ?? []).join(", ") || "quality gates"}). Do not auto-execute without operator ratification.`
     : retrievalDegraded
-      ? DEGRADED_ADVISORY
+      ? `Decision evidence is incomplete (${issues.join(", ")}). Diagnostic scores are not a verdict.`
       : optionsWithFeatures === 0
         ? "NO OPTION SUPPLIED `features`, so every principle scored exactly 0. Governance commandments carry full dimension vectors, so scoring takes the structured path and the semantic fallback never fires for them. Re-call with a features map per option — this is not a neutral or tie result."
         : "Signal was too weak to recommend. Widen per-option `features` coverage across the dimensions the applied principles actually weigh (see each contribution's missingDimensions), or decide by human judgement.";
@@ -55,6 +55,7 @@ export function buildPrincipleDecideSignalQuality(input: {
     autonomyBlockers: result.flags.autonomyBlockers ?? [],
     insufficientSignal: result.flags.insufficientSignal,
     retrievalDegraded,
+    retrievalEvidence,
     structuredCoverage: result.flags.structuredCoverage,
     semanticFallbackRatio: result.flags.semanticFallbackRatio,
     featureCoverageWeak: result.flags.featureCoverageWeak === true,
@@ -85,7 +86,7 @@ export function buildPrincipleDecideSummary(input: {
     return `Recommends ${result.recommendation.optionId} (confidence: ${result.recommendation.confidence}, composite ${result.recommendation.composite.toFixed(3)}; autonomyEligible: ${signalQuality.autonomyEligible}; governing profile: ${governingProfileKind})`;
   }
   if (retrievalDegraded) {
-    return `NO RECOMMENDATION — signalQuality.retrievalDegraded=true. ${DEGRADED_ADVISORY}`;
+    return `NO RECOMMENDATION — signalQuality.retrievalDegraded=true. ${signalQuality.advisory}`;
   }
   return `NO RECOMMENDATION — signalQuality.usable=false. ${result.reasoning} ${signalQuality.advisory}`;
 }

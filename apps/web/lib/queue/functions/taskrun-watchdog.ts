@@ -81,11 +81,8 @@ export async function recoverStuckQuiescenceCoordinators(now: Date): Promise<num
       // routinely exceeds 2 minutes in local mode. The 2-min heartbeat reaper
       // was therefore killing the coordinator mid-build on essentially every
       // local upgrade, flipping the level back to normal and wedging the run
-      // with the swap half-done. These caller-owned states are already bounded
-      // by the coordinator's own 60-min waitForEvent timeout and by the
-      // promoter timeout + runSelfUpgrade's failure path (failQuiescenceSwap),
-      // so a genuinely-crashed swap is still recovered — just not by this
-      // aggressive short-window reaper. (BI-QUIESCE-READY-REAP)
+      // with the swap half-done. The coordinator and orphan reaper use the
+      // persisted ready deadline instead of the short heartbeat window.
       status: {
         notIn: ["ready-to-swap", "swapping", "completed", "deferred", "aborted", "failed"],
       },

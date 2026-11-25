@@ -105,6 +105,12 @@ describe("SelfUpgradeTriggerControl – disabled", () => {
 // ─── Enabled ──────────────────────────────────────────────────────────────────
 
 describe("SelfUpgradeTriggerControl – enabled", () => {
+  it("shows the computed maximum separately from waiting for active work", () => {
+    const { message } = buildInstallConfirmation(null, 125 * 60_000);
+    expect(message).toContain("first waits for active work");
+    expect(message).toContain("up to 125 minutes");
+    expect(message).not.toContain("a few minutes");
+  });
   it("moves consequence, duration, recovery and undo into the invocation-time confirmation", () => {
     const confirmation = buildInstallConfirmation({
       consequence: "The portal restarts briefly.",

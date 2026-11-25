@@ -81,6 +81,18 @@ async function main() {
         },
         activeTransitionIds: activeRuntimeTransitionIds,
         run: promoter.runPromoterAtDaemon,
+        // BI-3C3CCC59: re-check the named drain from the database before reclaim and dispatch.
+        swapFence: (owner, params) => {
+          const quiescenceRunId = owner.quiescenceRunId;
+          if (!quiescenceRunId) return undefined;
+          return async () => {
+            const [{ guardAdmissionClosedForSwap }, { resolvePromoterTimeoutMs }] = await Promise.all([
+              import("../self-upgrade/drain-admission"), import("../self-upgrade/promoter-timeout")]);
+            const guard = await guardAdmissionClosedForSwap(quiescenceRunId,
+              { selfUpgradeRunId: owner.runId, minimumRemainingMs: resolvePromoterTimeoutMs(params) });
+            if (!guard.ok) throw new Error(`admission-reopened-before-swap: ${guard.error}`);
+          };
+        },
         readRunStatus: async runId => {
           const { prisma } = await import("@dpf/db");
           return (await prisma.selfUpgradeRun.findUnique({ where: { runId }, select: { status: true } }))?.status ?? null;

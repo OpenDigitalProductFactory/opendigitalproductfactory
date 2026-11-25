@@ -33,6 +33,7 @@ export type SelfUpgradeAdmissionRecord = Readonly<{
   dryRun: boolean;
   routine: boolean;
   impactSummaryId: string | null;
+  confirmedReadyToSwapMaxMs?: number | null;
   admissionFingerprint: string;
   dispatchStatus: SelfUpgradeDispatchStatus;
   dispatchAttemptCount: number;
@@ -50,6 +51,7 @@ export type SelfUpgradeAdmissionInput = Readonly<{
   dryRun: boolean;
   routine: boolean;
   impactSummaryId: string | null;
+  confirmedReadyToSwapMaxMs?: number | null;
 }>;
 
 type PersistedAdmissionInput = SelfUpgradeAdmissionInput & {
@@ -150,6 +152,7 @@ export function computeSelfUpgradeAdmissionFingerprint(
         dryRun: input.dryRun,
         routine: input.routine,
         impactSummaryId: input.impactSummaryId,
+        ...(input.confirmedReadyToSwapMaxMs != null ? { confirmedReadyToSwapMaxMs: input.confirmedReadyToSwapMaxMs } : {}),
       }),
     )
     .digest("hex");
@@ -177,6 +180,7 @@ function fingerprintMatches(
     dryRun: run.dryRun,
     routine: run.routine,
     impactSummaryId: run.impactSummaryId,
+    confirmedReadyToSwapMaxMs: run.confirmedReadyToSwapMaxMs,
   });
 }
 

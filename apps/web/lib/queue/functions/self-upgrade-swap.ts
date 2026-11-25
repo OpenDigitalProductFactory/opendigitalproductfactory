@@ -27,15 +27,17 @@ import { clearCooldown, recordCooldown } from "@/lib/self-upgrade/cooldown";
 import { emitUpgradeEvent } from "@/lib/self-upgrade/notifications";
 import {
   createSelfUpgradeRecoveryPoint,
-  summarizeRecoveryPointDegradation,
   summarizeRecoveryPointFailure,
 } from "@/lib/self-upgrade/recovery-point";
 import { failQuiescenceSwap, signalSwapComplete, signalSwapStarting } from "@/lib/self-upgrade/quiescence";
 import { readDrainControl } from "@/lib/self-upgrade/drain-wait";
 import { isTerminalQuiescenceStatus } from "@/lib/self-upgrade/quiescence-contract";
 import { guardAdmissionClosedForSwap } from "@/lib/self-upgrade/drain-admission";
+import { resolvePromoterTimeoutMs } from "@/lib/self-upgrade/promoter-timeout";
+import { agentEventBus } from "@/lib/tak/agent-event-bus";
 
 type PreflightParams = Parameters<typeof runCandidatePreflight>[0];
+class SwapAdmissionLostError extends Error {}
 
 /** The plain-data part of the candidate preflight, so it can be re-run after
  *  the drain if the install-state moved (the injected functions and the signing
@@ -49,7 +51,7 @@ export type SelfUpgradeSwapContext = {
   runId: string;
   quiescenceRunId: string | null;
   dryRun?: boolean;
-  /** Operator emergency override (shipForce) — the swap guard honours it. */
+  /** Operator override belongs to the pre-ready blocker check, not the swap fence. */
   force?: boolean;
   buildId?: string;
   cooldownMinutes: number;
@@ -126,34 +128,36 @@ export async function finishSelfUpgrade(ctx: SelfUpgradeSwapContext): Promise<Re
   }
   const { runtimeTransitionSecret, hostIdentity } = signingContext;
 
-  const recoveryPoint = await createSelfUpgradeRecoveryPoint({ runId, dryRun });
-  await recordRunRecoveryPoint(runId, recoveryPoint);
-  if (recoveryPoint.status === "degraded") {
-    // A best-effort (derived-store) backup failed — derived stores rebuild
-    // from source, so this does NOT block
-    // the upgrade. Record it loudly for the operator audit trail and proceed.
-    const note = summarizeRecoveryPointDegradation(recoveryPoint);
-    if (note) console.warn(`[self-upgrade] ${runId}: ${note}`);
+  const admissionFailure = (reason: string) => finishFailure(
+    "admission-reopened-before-swap: " + reason,
+    { reason: "admission-reopened-before-swap", excerpt: reason },
+  );
+  const checkAdmission = quiescenceRunId ? async () => {
+    const guard = await guardAdmissionClosedForSwap(quiescenceRunId, { selfUpgradeRunId: runId });
+    if (!guard.ok) throw new Error(guard.error);
+    return guard.data.deadline;
+  } : undefined;
+  if (quiescenceRunId) {
+    const guard = await guardAdmissionClosedForSwap(quiescenceRunId, { selfUpgradeRunId: runId });
+    if (!guard.ok) return admissionFailure(guard.error);
   }
+  const recoveryPoint = await createSelfUpgradeRecoveryPoint({ runId, dryRun, ...(checkAdmission ? { checkAdmission } : {}) });
   if (recoveryPoint.status === "failed") {
+    await recordRunRecoveryPoint(runId, recoveryPoint);
     const reason = summarizeRecoveryPointFailure(recoveryPoint);
     return finishFailure(reason, { reason: "recovery-point-failed", recoveryPoint, excerpt: reason });
   }
 
-  // Signal swap-starting for audit; record the moment we cross the
-  // ready-to-swap → actually-swapping boundary on the QuiescenceRun.
-  // No-op when quiescenceRunId is null (dryRun path).
-  if (quiescenceRunId) await signalSwapStarting(quiescenceRunId);
-
-  // BI-F9EE05E5: never swap with admission open. The drain may have waited an
-  // hour; if anything reopened admission meanwhile (a portal restart resets
-  // the level on boot), close it again and re-check before the promoter runs.
+  // If admission was reopened, keep the host artifacts for inspection but
+  // don't publish a usable recovery point or proceed with the swap.
   if (quiescenceRunId) {
-    const guard = await guardAdmissionClosedForSwap(quiescenceRunId, { forced: ctx.force });
+    const guard = await guardAdmissionClosedForSwap(quiescenceRunId, { selfUpgradeRunId: runId });
     if (!guard.ok) {
-      return finishFailure("admission-reopened-before-swap: " + guard.error, { reason: "admission-reopened-before-swap", excerpt: guard.error });
+      await recordRunRecoveryPoint(runId, { ...recoveryPoint, status: "failed", pairedReceipt: null, reason: guard.error });
+      return admissionFailure(guard.error);
     }
   }
+  await recordRunRecoveryPoint(runId, recoveryPoint);
 
   if (!dryRun) {
     const compatibility = await runReassessmentCandidatePreflight({ runId, targetSha: ctx.builtStamp,
@@ -211,15 +215,34 @@ export async function finishSelfUpgrade(ctx: SelfUpgradeSwapContext): Promise<Re
       installStateMigrationEnvelope: migrationHandoff ? Buffer.from(JSON.stringify(migrationHandoff.envelope)).toString("base64url") : undefined,
       installStateMigrationSignature: migrationHandoff?.signature,
       installStateMigrationRunId: migrationHandoff?.envelope.runId,
-      ...(migrationHandoff && resolvedPromoterDigest && !dryRun ? { launchOwner: { kind: "self-upgrade", runId } as const } : {}),
+      ...(migrationHandoff && resolvedPromoterDigest && !dryRun ? { launchOwner: { kind: "self-upgrade", runId, ...(quiescenceRunId ? { quiescenceRunId } : {}) } as const } : {}),
       maintenanceRecoveryPointDigest: createHash("sha256").update(canonicalJson(recoveryPoint)).digest("hex"),
       installStateMigrationHandoff: migrationHandoff,
       // Deterministic name so a stalled build can be force-removed by name on
       // timeout (runPromoter) or by the watchdog backstop.
       containerName: `dpf-promoter-${runId}`,
     };
-    result = await runPromoter(promoterParams);
+    let assertDispatchAdmission: (() => Promise<void>) | undefined;
+    if (quiescenceRunId) {
+      const fence = { selfUpgradeRunId: runId, minimumRemainingMs: resolvePromoterTimeoutMs(promoterParams) };
+      const start = await guardAdmissionClosedForSwap(quiescenceRunId, fence);
+      if (!start.ok) return admissionFailure(start.error);
+      await signalSwapStarting(quiescenceRunId);
+      const dispatch = await guardAdmissionClosedForSwap(quiescenceRunId, fence);
+      if (!dispatch.ok) return admissionFailure(dispatch.error);
+      agentEventBus.broadcastSystem({
+        type: "system:quiescence", level: "swapping", runId: quiescenceRunId, outcome: "swapping",
+        swapEtaSeconds: null, deferReason: null, deferSurface: null,
+        readyToSwapDeadlineAt: dispatch.data.deadline.toISOString(),
+      });
+      assertDispatchAdmission = async () => {
+        const guard = await guardAdmissionClosedForSwap(quiescenceRunId, fence);
+        if (!guard.ok) throw new SwapAdmissionLostError(guard.error);
+      };
+    }
+    result = await runPromoter(promoterParams, assertDispatchAdmission);
   } catch (err) {
+    if (err instanceof SwapAdmissionLostError) return admissionFailure(err.message);
     // The promoter failed to even spawn (e.g. docker missing). Without this
     // catch the rejection would leave the run stuck "running" — blocking every
     // future trigger.

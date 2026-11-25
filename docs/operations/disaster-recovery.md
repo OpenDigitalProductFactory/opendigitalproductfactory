@@ -67,7 +67,7 @@ A refusal leaves the run log, not recoverable artifacts.
 | Docker volumes (any) | NOT recoverable from Docker layer — the daily backup IS the durable copy | See dump-restore rows above |
 | Map region packs (`map_data` volume, `/var/lib/dpf/maps`) | Not backed up: packs are public OpenStreetMap-derived files, re-obtainable from their source | Re-copy each `<pack-id>.pmtiles` and `<pack-id>.manifest.json` into the volume; maps draw without a street layer until then |
 | Tool config / installer state | `install-state.json` in install dir | If lost: re-run `install-dpf.{ps1,sh}`; it's idempotent |
-| Failed platform upgrade / bad seed apply / migration damage | Governed upgrade recovery point: linked `BackupRun` rows under `$DPF_BACKUPS_HOST_PATH/postgres/<ts>/` plus previous runtime identity under `$DPF_BACKUPS_HOST_PATH/self-upgrade/<runId>/` | Upgrade Center rollback/restore flow; if unavailable, restore the Postgres member directly |
+| Failed platform upgrade / bad seed apply / migration damage | `$DPF_BACKUPS_HOST_PATH/self-upgrade/<runId>/recovery-point.json` binds the Postgres and uploads backups. Historical points recorded only the Postgres member | Preserve both members and rehearse their recovery together. The Upgrade Center rollback remains unavailable until BI-EDE6D56A |
 
 > **BET-5 changed this table.** Neo4j and Qdrant were retired onto PostgreSQL
 > (BI-A1E864A5). Their nightly backup jobs are **deactivated** and their backup
@@ -77,15 +77,11 @@ A refusal leaves the run log, not recoverable artifacts.
 > together, which also removes the old hazard of restoring three members to
 > three different points in time.
 
-Implementation note (2026-06-01): self-upgrade runs record the linked
-Postgres backup member in
-`SelfUpgradeRun.completionEvidence.recoveryPoint` after quiescence drains active
-work and before the swap boundary. `/ops/self-upgrade` can restore that matched
-recovery point for completed non-running runs; the action records
-`completionEvidence.rollback`, writes `self-upgrade-rollback` into
-`BackupRestore.trigger`, and marks the run `rolled-back` or
-`rollback-failed`. If the portal is unavailable, use the recorded `BackupRun`
-ids to restore through the backup substrate directly.
+Self-upgrade captures Postgres first and then archives uploads against that
+exact run. It reads back the paired host receipt before proceeding with the
+swap. The database row mirrors that receipt for the Upgrade Center but is not
+required to locate the members. A missing member blocks a new upgrade. It
+does not turn the capture into a historical Postgres-only point.
 
 Research note (2026-06-02): the sandbox server is a recovery rehearsal target,
 not a backup of record. Use it to prove that a recovery point can restore and
@@ -220,19 +216,23 @@ not as a fresh install problem.
 
 1. Do not reinstall and do not reset volumes. The recovery point taken before
    apply is the boundary between recoverable and data-lossy.
-2. In the portal, open `/ops/self-upgrade` and inspect the failed run. When the
-   run has a complete `pre-upgrade-recovery` point, type the confirmation text
-   and use the recovery-point restore action; it knows the exact Postgres
-   backup row created for the run and records rollback evidence on the run.
-3. If production is impaired but stable enough to wait, prefer a sandbox-assisted
-   rehearsal before touching production: restore the recovery-point members into
-   an isolated nonproduction target, boot the portal against that target, and
-   capture health/smoke evidence on the `SelfUpgradeRun`. Postgres
-   trial-restore is the shipped restore proof, and since BET-5 it covers graph
-   and vector state too — they are tables in the same dump.
-4. If the portal is unavailable, use `/admin/backups` after bringing the
-   database up, and restore the Postgres backup associated with the failed
-   upgrade. That single member carries relational, graph and vector state.
+2. Open the failed run in `/ops/self-upgrade` when the portal is available.
+   If the confirmed maintenance window expired before the swap, the upgrade
+   does not dispatch a new promoter or authorize a later attempt with the
+   expired capture. Preserve any partial artifacts for inspection and start a
+   fresh upgrade only after reviewing its maintenance limit.
+   Retain the named host receipt and both backup directories before any
+   runtime or storage changes. An older receipt may cover Postgres only.
+   BI-EDE6D56A tracks the history-preservation proof required to enable
+   Upgrade Center rollback.
+3. Rehearse the exact recovery point on an isolated target. Verify the
+   recorded dump, archive and manifest digests, restore Postgres before
+   uploads, then boot the rehearsal portal and compare its files with the
+   restored rows. The Postgres dump also carries graph and vector state.
+4. If the old database is missing, locate both run directories using the
+   paths in the host receipt, relative to the backup root. Follow the
+   corresponding recovery rows above. Do not treat a missing or broken
+   uploads member as an authorized Postgres-only recovery.
 5. After recovery, capture the failed `SelfUpgradeRun`, `BackupRun`, and
    restore records in the incident notes. Do not delete the failed recovery
    point until the next successful nightly backup and trial restore have passed.

@@ -78,6 +78,7 @@ function asAdmissionRecord(row: {
   dryRun: boolean;
   routine: boolean;
   impactSummaryId: string | null;
+  confirmedReadyToSwapMaxMs?: number | null;
   admissionFingerprint: string | null;
   dispatchStatus: string | null;
   dispatchAttemptCount: number;
@@ -168,6 +169,7 @@ export const selfUpgradeAdmissionRepository: SelfUpgradeAdmissionRepository = {
           dryRun: input.dryRun,
           routine: input.routine,
           impactSummaryId: input.impactSummaryId,
+          confirmedReadyToSwapMaxMs: input.confirmedReadyToSwapMaxMs,
           admissionFingerprint: input.admissionFingerprint,
           dispatchStatus: input.dispatchStatus,
         },

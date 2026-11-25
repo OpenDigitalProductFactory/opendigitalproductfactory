@@ -179,7 +179,7 @@ describe("readDrainControl / recordDrainProgress", () => {
       abortRequestedAt: null,
       abortRequestedBy: null,
     });
-    expect(await readDrainControl("QR-1")).toEqual({
+    expect(await readDrainControl("QR-1")).toMatchObject({
       status: "awaiting-operator",
       budgetMs: 90 * MIN,
       drainStartedAt: ago(95 * MIN).toISOString(),
@@ -287,8 +287,8 @@ describe("reconcilers never reap a drain that is still heartbeating", () => {
 
   it("selfUpgradeRunsWithLiveDrain names upgrade runs whose drain still heartbeats", async () => {
     db.quiescenceRunFindMany.mockResolvedValue([
-      { triggerRefId: "SUR-LIVE", lastHeartbeatAt: ago(30_000) },
-      { triggerRefId: "SUR-STALE", lastHeartbeatAt: ago(45 * MIN) },
+      { triggerRefId: "SUR-LIVE", status: "draining", lastHeartbeatAt: ago(30_000) },
+      { triggerRefId: "SUR-STALE", status: "awaiting-operator", lastHeartbeatAt: ago(45 * MIN) },
     ]);
     const live = await selfUpgradeRunsWithLiveDrain(["SUR-LIVE", "SUR-STALE"], NOW, 30 * MIN);
     expect([...live]).toEqual(["SUR-LIVE"]);
@@ -299,9 +299,9 @@ describe("reconcilers never reap a drain that is still heartbeating", () => {
     // (up to its 25-min budget + the 10-min handshake), so key on status — bounded,
     // so a coordinator that died at ready-to-swap is still reconciled eventually.
     db.quiescenceRunFindMany.mockResolvedValue([
-      { triggerRefId: "SUR-SWAP", status: "ready-to-swap", lastHeartbeatAt: ago(40 * MIN), enteredStateAt: { "ready-to-swap": ago(35 * MIN).toISOString() } },
-      { triggerRefId: "SUR-SWAPPING", status: "swapping", lastHeartbeatAt: ago(50 * MIN), enteredStateAt: { "ready-to-swap": ago(45 * MIN).toISOString(), swapping: ago(1 * MIN).toISOString() } },
-      { triggerRefId: "SUR-ORPHAN", status: "ready-to-swap", lastHeartbeatAt: ago(5 * 60 * MIN), enteredStateAt: { "ready-to-swap": ago(5 * 60 * MIN).toISOString() } },
+      { triggerRefId: "SUR-SWAP", status: "ready-to-swap", lastHeartbeatAt: ago(90 * MIN), readyToSwapDeadlineAt: ago(-35 * MIN) },
+      { triggerRefId: "SUR-SWAPPING", status: "swapping", lastHeartbeatAt: ago(100 * MIN), readyToSwapDeadlineAt: ago(-25 * MIN) },
+      { triggerRefId: "SUR-ORPHAN", status: "ready-to-swap", lastHeartbeatAt: NOW, readyToSwapDeadlineAt: NOW },
     ]);
     const live = await selfUpgradeRunsWithLiveDrain(["SUR-SWAP", "SUR-SWAPPING", "SUR-ORPHAN"], NOW, 30 * MIN);
     expect([...live].sort()).toEqual(["SUR-SWAP", "SUR-SWAPPING"]);
@@ -362,10 +362,14 @@ describe("awaitQuiescenceReady follows the moving deadline for an upgrade", () =
 });
 
 describe("admission stays closed while a self-upgrade drain is live (restart mid-drain)", () => {
+  const swapOwner = { selfUpgradeRunId: "SUR-1" };
+  const swapDeadline = new Date("2026-09-30T20:05:00.000Z");
   beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"], now: NOW });
     // The swap guard reads the run first: a live drain at ready-to-swap.
     db.quiescenceRunFindUnique.mockResolvedValue({
       status: "ready-to-swap", budgetMs: 60 * MIN, startedAt: ago(70 * MIN), enteredStateAt: {}, shipForceEscalatedAt: null,
+      trigger: "self-upgrade", triggerRefId: swapOwner.selfUpgradeRunId, readyToSwapDeadlineAt: swapDeadline,
     });
   });
 
@@ -396,24 +400,21 @@ describe("admission stays closed while a self-upgrade drain is live (restart mid
 
   it("swap guard: level already draining for this run → proceed, nothing written", async () => {
     level("draining", "QR-1");
-    expect(await guardAdmissionClosedForSwap("QR-1")).toEqual({ ok: true, data: { reasserted: false } });
+    expect(await guardAdmissionClosedForSwap("QR-1", swapOwner)).toEqual({ ok: true, data: { deadline: swapDeadline } });
     expect(db.platformConfigUpsert).not.toHaveBeenCalled();
   });
 
-  it("swap guard: level normal → re-asserts draining, re-checks blockers, proceeds when clear", async () => {
+  it("swap guard refuses to reopen a lost fence", async () => {
     level("normal", null);
-    expect(await guardAdmissionClosedForSwap("QR-1")).toEqual({ ok: true, data: { reasserted: true } });
-    expect(upsertedLevels()).toEqual([expect.objectContaining({ level: "draining", runId: "QR-1" })]);
-    expect(db.buildPhaseRunFindMany).toHaveBeenCalled(); // blockers re-captured
+    expect(await guardAdmissionClosedForSwap("QR-1", swapOwner)).toMatchObject({ ok: false });
+    expect(db.platformConfigUpsert).not.toHaveBeenCalled();
   });
 
-  it("swap guard: level normal and work started meanwhile → refuses (never swap with admission open)", async () => {
-    level("normal", null);
-    db.buildPhaseRunFindMany.mockResolvedValue([{ buildId: "FB-9", phase: "plan", startedAt: new Date(Date.now() - MIN) }]);
-    const r = await guardAdmissionClosedForSwap("QR-1");
-    expect(r).toMatchObject({ ok: false, error: expect.stringContaining("build-studio.phase.plan") });
-    // Admission is closed again regardless, so nothing new starts while the run fails.
-    expect(upsertedLevels()).toEqual([expect.objectContaining({ level: "draining", runId: "QR-1" })]);
+  it("swap guard refuses a replacement owner or a mismatched upgrade", async () => {
+    level("draining", "QR-2");
+    expect(await guardAdmissionClosedForSwap("QR-1", swapOwner)).toMatchObject({ ok: false, error: expect.stringContaining("no longer owns") });
+    expect(await guardAdmissionClosedForSwap("QR-1", { selfUpgradeRunId: "SUR-2" })).toMatchObject({ ok: false, error: expect.stringContaining("not ready for this upgrade") });
+    expect(db.platformConfigUpsert).not.toHaveBeenCalled();
   });
 
   it("swap guard: an aborted (or abort-requested) drain is refused without re-closing admission", async () => {
@@ -421,12 +422,12 @@ describe("admission stays closed while a self-upgrade drain is live (restart mid
     db.quiescenceRunFindUnique.mockResolvedValue({
       status: "aborted", budgetMs: MIN, startedAt: NOW, enteredStateAt: {}, shipForceEscalatedAt: null,
     });
-    expect(await guardAdmissionClosedForSwap("QR-1")).toMatchObject({ ok: false, error: expect.stringContaining("aborted") });
+    expect(await guardAdmissionClosedForSwap("QR-1", swapOwner)).toMatchObject({ ok: false, error: expect.stringContaining("aborted") });
     db.quiescenceRunFindUnique.mockResolvedValue({
       status: "ready-to-swap", budgetMs: MIN, startedAt: NOW, enteredStateAt: {}, shipForceEscalatedAt: null,
       abortRequestedAt: NOW, abortRequestedBy: "op-1",
     });
-    expect(await guardAdmissionClosedForSwap("QR-1", { forced: true })).toMatchObject({ ok: false, error: expect.stringContaining("op-1") });
+    expect(await guardAdmissionClosedForSwap("QR-1", swapOwner)).toMatchObject({ ok: false, error: expect.stringContaining("op-1") });
     expect(db.platformConfigUpsert).not.toHaveBeenCalled();
   });
 
@@ -439,12 +440,16 @@ describe("admission stays closed while a self-upgrade drain is live (restart mid
 
   it("swap guard refuses (fail closed) when the run cannot be found", async () => {
     db.quiescenceRunFindUnique.mockResolvedValue(null);
-    expect(await guardAdmissionClosedForSwap("QR-1")).toMatchObject({ ok: false, error: expect.stringContaining("not found") });
+    expect(await guardAdmissionClosedForSwap("QR-1", swapOwner)).toMatchObject({ ok: false, error: expect.stringContaining("not found") });
   });
 
-  it("swap guard: a forced drain proceeds past the re-check", async () => {
-    level("normal", null);
-    db.buildPhaseRunFindMany.mockResolvedValue([{ buildId: "FB-9", phase: "plan", startedAt: new Date(Date.now() - MIN) }]);
-    expect(await guardAdmissionClosedForSwap("QR-1", { forced: true })).toEqual({ ok: true, data: { reasserted: true } });
+  it("swap guard and boot share the exact cutoff; dispatch also requires time for the promoter", async () => {
+    level("draining", "QR-1");
+    vi.setSystemTime(new Date(+swapDeadline - 15 * MIN));
+    expect(await isLiveSelfUpgradeDrain("QR-1", new Date())).toBe(true);
+    expect(await guardAdmissionClosedForSwap("QR-1", { ...swapOwner, minimumRemainingMs: 25 * MIN })).toMatchObject({ ok: false, error: expect.stringContaining("insufficient time") });
+    vi.setSystemTime(swapDeadline);
+    expect(await isLiveSelfUpgradeDrain("QR-1", new Date())).toBe(false);
+    expect(await guardAdmissionClosedForSwap("QR-1", swapOwner)).toMatchObject({ ok: false, error: expect.stringContaining("expired") });
   });
 });

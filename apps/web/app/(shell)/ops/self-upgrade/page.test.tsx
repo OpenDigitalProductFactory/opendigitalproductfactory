@@ -260,7 +260,7 @@ describe("SelfUpgradePage", () => {
       id: "run-row", runId: "SUR-BACKUP", status: "succeeded", trigger: "manual:user", currentSha: "before",
       targetSha: "after", deployedSha: "after", reason: null, startedAt: new Date(), completedAt: new Date(),
       promoterContainerName: null, updatedAt: new Date(), recoveryOfRunId: null, targetTag: null,
-      requestedForce: false, dryRun: false, routine: false, admissionFingerprint: null, dispatchStatus: null,
+      requestedForce: false, dryRun: false, routine: false, admissionFingerprint: null, confirmedReadyToSwapMaxMs: null, dispatchStatus: null,
       dispatchAttemptCount: 0, dispatchLeaseToken: null, dispatchLeaseExpiresAt: null, dispatchEventIds: [],
       dispatchAttemptedAt: null, dispatchAcknowledgedAt: null, dispatchError: null, impactSummaryId: null,
       changeRequestId: null,

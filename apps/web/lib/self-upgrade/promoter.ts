@@ -764,33 +764,32 @@ import {
 } from "@/lib/shared/run-process-with-budget";
 
 /** The one fixed serializer for a promoter launch; shared with the actuator. */
-export const buildAdmittedPromoterCommand = (input: PromoterParams) => buildCompatiblePromoterCommand(input, buildPromoterCommand, createPromoterDockerRunner(input));
-export const runPromoter = async (params: PromoterParams): Promise<PromoterResult> => (await (await import("./promoter-actuator")).launchThroughPrivateActuator(params)) ?? runPromoterAtDaemon(params); // BI-224F56F1: no socket in the immutable portal; the actuator runs runPromoterAtDaemon after admission
-export async function runPromoterAtDaemon(params: PromoterParams): Promise<PromoterResult> {
+export const buildAdmittedPromoterCommand = (input: PromoterParams, docker = createPromoterDockerRunner(input)) => buildCompatiblePromoterCommand(input, buildPromoterCommand, docker);
+// BI-224F56F1: no socket in the immutable portal; the actuator runs runPromoterAtDaemon after admission and re-runs the swap fence itself (BI-3C3CCC59).
+export const runPromoter = async (params: PromoterParams, assertAdmission?: () => Promise<void>): Promise<PromoterResult> =>
+  (await (await import("./promoter-actuator")).launchThroughPrivateActuator(params, undefined, undefined, assertAdmission)) ?? runPromoterAtDaemon(params, assertAdmission);
+export async function runPromoterAtDaemon(params: PromoterParams, assertAdmission?: () => Promise<void>): Promise<PromoterResult> {
   if (params.launchOwner && !params.runtimeTransitionAuthorityOperation && !params.dryRun && params.phase !== "build") {
-    return (await import("./promoter-launch")).runAdmittedPromoter(params, params.launchOwner, params.promoterImage || DEFAULT_PROMOTER_IMAGE, buildAdmittedPromoterCommand);
+    return (await import("./promoter-launch")).runAdmittedPromoter(params, params.launchOwner, params.promoterImage || DEFAULT_PROMOTER_IMAGE, buildAdmittedPromoterCommand, assertAdmission);
   }
-  const { command, args } = await buildAdmittedPromoterCommand(params);
-  // Idempotency guard (SUR-E2BF265E). The container name is deterministic
-  // (`dpf-promoter-<runId>`), so a concurrent or retried dispatch of the SAME
-  // run reaching here would issue a second `docker run --name <name>` and hit
-  // "The container name is already in use" — recorded by the orchestrator as a
-  // build FAILURE even though the first promoter is still healthily building.
+  const docker = createPromoterDockerRunner(params); // A registry pull is also a new host effect: recheck admission first.
+  const { command, args } = await buildAdmittedPromoterCommand(params, async (args) => { if (args[0] === "pull") await assertAdmission?.(); return docker(args); });
+  // A retry must not replace or erroneously fail an already running promoter (SUR-E2BF265E).
   const name = params.containerName;
   if (name) {
     const action = decidePromoterLaunch(await inspectPromoterContainerState(name));
     if (action === "defer") {
-      return {
-        exitCode: PROMOTER_ALREADY_RUNNING_EXIT_CODE,
-        stdout: "",
-        stderr: `[promoter-already-running] a promoter container named ${name} is already building this run; deferring to it instead of launching a duplicate.`,
-      };
+      return { exitCode: PROMOTER_ALREADY_RUNNING_EXIT_CODE, stdout: "",
+        stderr: `[promoter-already-running] a promoter container named ${name} is already building this run; deferring to it instead of launching a duplicate.` };
     }
     if (action === "reclaim") {
-      // Release the name held by a stopped legacy promoter before relaunch.
+      // A stopped container may have survived --rm after a daemon restart.
+      await assertAdmission?.();
       await forceRemovePromoterContainer(name);
     }
   }
+  // Cap the process and remove an overrun so it cannot swap after the window (SUR-756751D1).
+  await assertAdmission?.();
   return runProcessWithBudget(command, args, {
     timeoutMs: resolvePromoterTimeoutMs(params),
     containerName: params.containerName,

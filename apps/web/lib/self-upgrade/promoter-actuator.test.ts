@@ -4,6 +4,7 @@ import {
   admitRuntimeTransitionLaunch,
   admitSelfUpgradeLaunch,
   launchPromoterAtActuator,
+  launchThroughPrivateActuator,
   readPromoterInstallBinding,
   requestPromoterLaunchThroughActuator,
   type PromoterInstallBinding,
@@ -322,5 +323,46 @@ describe("prebuild and readiness routing", () => {
     expect(bodies[0]!.params.artifact).toBeUndefined();
     expect(await readinessThroughPrivateActuator({ ...readiness, containerName: "other" } as never, on, send)).toBeNull();
     expect(await readinessThroughPrivateActuator(readiness as never, async () => false, send)).toBeNull();
+  });
+});
+
+describe("the swap's drain fence at the actuator boundary (BI-3C3CCC59)", () => {
+  const swap = (owner: Record<string, unknown>) => ({ owner: { kind: "self-upgrade", runId, ...owner }, params: params() });
+  const deps = (fenceCalls: string[], order: string[]) => ({
+    binding, readConfig: async () => config, hostContexts: async () => [], activeTransitionIds: async () => [],
+    swapFence: (owner: { runId: string; quiescenceRunId?: string }) => owner.quiescenceRunId
+      ? async () => { fenceCalls.push(`${owner.quiescenceRunId}:${owner.runId}`); order.push("fence"); } : undefined,
+    run: async (_params: PromoterParams, assertAdmission?: () => Promise<void>) => {
+      await assertAdmission?.();
+      order.push("launch");
+      return { exitCode: 0, stdout: "", stderr: "" };
+    },
+  });
+
+  it("re-checks the named drain before the launch and keeps it on the admitted owner", async () => {
+    const fenceCalls: string[] = [], order: string[] = [];
+    await launchPromoterAtActuator(swap({ quiescenceRunId: "QR-2026-11-25-abcd" }), deps(fenceCalls, order));
+    expect(fenceCalls).toEqual([`QR-2026-11-25-abcd:${runId}`]);
+    expect(order).toEqual(["fence", "launch"]);
+  });
+
+  it("names a drain only on the swap stage and only in the quiescence run format", () => {
+    expect(admitSelfUpgradeLaunch(swap({ quiescenceRunId: "QR-1" }), binding, config).owner)
+      .toEqual({ kind: "self-upgrade", runId, quiescenceRunId: "QR-1" });
+    for (const owner of [{ quiescenceRunId: "SUR-OTHER" }, { quiescenceRunId: "QR-1; rm" }, { quiescenceRunId: 7 },
+      { quiescenceRunId: "QR-1", stage: "prebuild" }]) {
+      expect(() => admitSelfUpgradeLaunch(swap(owner), binding, config)).toThrow();
+    }
+  });
+
+  it("holds the portal-side fence before the request and sends nothing when it fails", async () => {
+    const sent: unknown[] = [];
+    const launch = { ...params(), launchOwner: { kind: "self-upgrade", runId, quiescenceRunId: "QR-1" } } as unknown as PromoterParams;
+    await expect(launchThroughPrivateActuator(launch, async () => true, async (body) => { sent.push(body); return { exitCode: 0, stdout: "", stderr: "" }; },
+      async () => { throw new Error("admission-reopened-before-swap"); })).rejects.toThrow("admission-reopened-before-swap");
+    expect(sent).toHaveLength(0);
+    await launchThroughPrivateActuator(launch, async () => true, async (body) => { sent.push(body); return { exitCode: 0, stdout: "", stderr: "" }; },
+      async () => undefined);
+    expect(sent).toEqual([expect.objectContaining({ owner: { kind: "self-upgrade", runId, quiescenceRunId: "QR-1" } })]);
   });
 });

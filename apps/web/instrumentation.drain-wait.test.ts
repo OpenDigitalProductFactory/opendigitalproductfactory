@@ -79,6 +79,6 @@ describe("resetStuckQuiescenceLevelOnBoot — a live drain keeps admission close
   it("resets an orphaned drain (no live coordinator) to normal", async () => {
     m.isLiveSelfUpgradeDrain.mockResolvedValue(false);
     expect(await resetStuckQuiescenceLevelOnBoot(quiet)).toBe(true);
-    expect(m.setQuiescenceLevel).toHaveBeenCalledWith("normal", null);
+    expect(m.setQuiescenceLevel).toHaveBeenCalledWith("normal", null, expect.any(Date), "QR-1");
   });
 });

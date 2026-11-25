@@ -40,6 +40,7 @@ export type RuntimeHostContext = Pick<PromoterParams, "hostInstallPath" | "compo
 
 const refuse = (): never => { throw new Error("promoter_actuator_admission_refused"); };
 const PROJECT = /^[a-z0-9][a-z0-9_-]{0,99}$/;
+const QUIESCENCE_RUN_ID = /^QR-[A-Za-z0-9-]{1,100}$/;
 const RUN_ID = /^SUR-[A-Za-z0-9-]{1,100}$/;
 // prepare-source stamps a local working tree as HEAD plus "-dirty".
 const SHA = /^[a-f0-9]{40}(?:-dirty)?$/;
@@ -111,8 +112,11 @@ export function admitSelfUpgradeLaunch(value: unknown, binding: PromoterInstallB
   if (!isRecord(value) || Object.keys(value).length !== 2 || !isRecord(value.owner) || !isRecord(value.params)) return refuse();
   const owner = value.owner, params = value.params;
   const stage = (owner.stage ?? "swap") as SelfUpgradeStage;
-  if (Object.keys(owner).length !== (owner.stage === undefined ? 2 : 3) || owner.kind !== "self-upgrade"
-    || typeof owner.runId !== "string" || !RUN_ID.test(owner.runId) || !STAGES.has(stage)) refuse();
+  // A swap may name the quiescence run whose drain fence the actuator re-checks.
+  const quiescenceRunId = owner.quiescenceRunId;
+  if (Object.keys(owner).length !== 2 + (owner.stage === undefined ? 0 : 1) + (quiescenceRunId === undefined ? 0 : 1)
+    || owner.kind !== "self-upgrade" || typeof owner.runId !== "string" || !RUN_ID.test(owner.runId) || !STAGES.has(stage)
+    || (quiescenceRunId !== undefined && (stage !== "swap" || typeof quiescenceRunId !== "string" || !QUIESCENCE_RUN_ID.test(quiescenceRunId)))) refuse();
   const runId = owner.runId as string;
   if (Object.keys(params).some((key) => !ALLOWED_KEYS.has(key))) refuse();
 
@@ -161,7 +165,8 @@ export function admitSelfUpgradeLaunch(value: unknown, binding: PromoterInstallB
       || !["amd64", "arm64", "x86_64"].includes(String(identity.arch))
       || !["explicit", "install-state", "legacy-windows-paths"].includes(String(identity.provenance))) refuse();
   }
-  return { owner: { kind: "self-upgrade", runId }, params: params as unknown as PromoterParams, stage };
+  return { owner: { kind: "self-upgrade", runId, ...(quiescenceRunId === undefined ? {} : { quiescenceRunId: quiescenceRunId as string }) },
+    params: params as unknown as PromoterParams, stage };
 }
 
 const RUNTIME_ID = /^RCT-[A-Za-z0-9-]{1,48}$/;
@@ -235,20 +240,24 @@ export async function launchPromoterAtActuator(value: unknown, deps: {
   readConfig: () => Promise<SelfUpgradeConfig>;
   hostContexts: (params: Record<string, unknown>) => Promise<RuntimeHostContext[]>;
   activeTransitionIds: () => Promise<string[]>;
-  run: (params: PromoterParams) => Promise<PromoterResult>;
+  run: (params: PromoterParams, assertAdmission?: () => Promise<void>) => Promise<PromoterResult>;
   /** Resolves the artifact from the image itself, then runs readiness. */
   readiness?: (params: PromoterParams) => Promise<PromoterResult>;
   readRunStatus?: (runId: string) => Promise<string | null>;
+  /** BI-3C3CCC59: the swap's drain fence for an admitted owner, re-checked at the effect boundary. */
+  swapFence?: (owner: Extract<PromoterLaunchOwner, { kind: "self-upgrade" }>, params: PromoterParams) => (() => Promise<void>) | undefined;
 }): Promise<PromoterResult> {
   if (Buffer.byteLength(JSON.stringify(value ?? null)) > MAX_REQUEST_BYTES || !isRecord(value) || !isRecord(value.owner)
     || !isRecord(value.params)) refuse();
   const request = value as { owner: Record<string, unknown>; params: Record<string, unknown> };
   let params: PromoterParams;
+  let fence: (() => Promise<void>) | undefined;
   if (request.owner.kind === "self-upgrade") {
     const admitted = admitSelfUpgradeLaunch(request, deps.binding, await deps.readConfig());
     if (admitted.stage === "swap") {
       // launchDurablePromoter re-reads the run under the admission lock.
       params = { ...admitted.params, launchOwner: admitted.owner };
+      fence = deps.swapFence?.(admitted.owner, params);
     } else {
       if (!deps.readRunStatus || await deps.readRunStatus(admitted.owner.runId) !== "running") refuse();
       if (admitted.stage === "readiness") {
@@ -261,7 +270,7 @@ export async function launchPromoterAtActuator(value: unknown, deps: {
   } else {
     params = await admitRuntimeTransitionLaunch(request, deps.binding, await deps.hostContexts(request.params), deps.activeTransitionIds);
   }
-  const result = await deps.run(params);
+  const result = await deps.run(params, fence);
   return { exitCode: result.exitCode, stdout: tail(result.stdout), stderr: tail(result.stderr) };
 }
 
@@ -295,7 +304,7 @@ export async function requestPromoterLaunchThroughActuator(params: PromoterParam
 type ActuatorSend = (body: unknown, timeoutMs: number) => Promise<unknown>;
 
 export async function launchThroughPrivateActuator(params: PromoterParams,
-  available?: () => Promise<boolean>, send?: ActuatorSend): Promise<PromoterResult | null> {
+  available?: () => Promise<boolean>, send?: ActuatorSend, assertAdmission?: () => Promise<void>): Promise<PromoterResult | null> {
   if (params.dryRun) return null;
   const owner: ActuatorPromoterOwner | null = params.launchOwner && !params.runtimeTransitionAuthorityOperation
     ? params.phase === "build"
@@ -306,6 +315,9 @@ export async function launchThroughPrivateActuator(params: PromoterParams,
   if (!owner) return null;
   const observation = await import("../../../../scripts/lib/scope-writer-observation.mjs");
   if (!await (available ?? observation.usesPrivateActuator)()) return null;
+  // BI-3C3CCC59: the caller's drain fence holds before the request; the
+  // actuator re-checks it from the database before reclaim and dispatch.
+  await assertAdmission?.();
   return requestPromoterLaunchThroughActuator(params, owner,
     send ?? ((body, timeoutMs) => observation.launchActuatorPromoter(body, { timeoutMs })));
 }

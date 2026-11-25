@@ -10,6 +10,7 @@ export type SystemQuiescenceEvent = {
   level: "draining" | "swapping" | "cleared";
   runId: string;
   swapEtaSeconds: number | null;
+  readyToSwapDeadlineAt?: string;
   deferReason: string | null;
   deferSurface: string | null;
   outcome: "draining" | "swapping" | "succeeded" | "deferred" | "aborted" | "failed";

@@ -23,7 +23,7 @@ const mocks = vi.hoisted(() => ({
   failQuiescenceSwap: vi.fn(),
   signalSwapStarting: vi.fn(),
   signalSwapComplete: vi.fn(),
-  guardAdmissionClosedForSwap: vi.fn(async (): Promise<ActionResult<{ reasserted: boolean }>> => ok({ reasserted: false })),
+  guardAdmissionClosedForSwap: vi.fn(async (): Promise<ActionResult<{ deadline: Date }>> => ok({ deadline: new Date(Date.now() + 60_000) })),
   runPromoter: vi.fn(),
   getDeployedSha: vi.fn(),
   readQuiescenceOutcome: vi.fn(),
@@ -52,7 +52,6 @@ vi.mock("@/lib/self-upgrade/cooldown", () => ({ recordCooldown: mocks.recordCool
 vi.mock("@/lib/self-upgrade/notifications", () => ({ emitUpgradeEvent: mocks.emitUpgradeEvent }));
 vi.mock("@/lib/self-upgrade/recovery-point", () => ({
   createSelfUpgradeRecoveryPoint: mocks.createSelfUpgradeRecoveryPoint,
-  summarizeRecoveryPointDegradation: vi.fn(),
   summarizeRecoveryPointFailure: vi.fn(),
 }));
 vi.mock("@/lib/self-upgrade/quiescence", () => ({
@@ -155,6 +154,24 @@ describe("finishSelfUpgrade on a retried step (BI-0E216B0E)", () => {
     expect(mocks.loadInstallStateSigningContext).toHaveBeenCalled();
   });
 
+  it("refuses to use a point if admission was lost during capture", async () => {
+    mocks.getRun.mockResolvedValue({ runId: ctx.runId, status: "running", currentSha: "oldsha" });
+    mocks.getDeployedSha.mockResolvedValue("oldsha");
+    mocks.loadInstallStateSigningContext.mockResolvedValue({ ok: true, runtimeTransitionSecret: "s", hostIdentity: {} });
+    mocks.createSelfUpgradeRecoveryPoint.mockResolvedValue({ status: "ok" });
+    mocks.guardAdmissionClosedForSwap.mockResolvedValueOnce(ok({ deadline: new Date(Date.now() + 60_000) }));
+    mocks.guardAdmissionClosedForSwap.mockResolvedValue(err("the upgrade no longer owns closed admission"));
+    mocks.failRun.mockResolvedValue({ status: "failed", runId: ctx.runId });
+    const result = await finishSelfUpgrade(ctx);
+    expect(result).toMatchObject({ ok: false, status: "failed", reason: "admission-reopened-before-swap" });
+    expect(mocks.createSelfUpgradeRecoveryPoint).toHaveBeenCalledOnce();
+    expect(mocks.recordRunRecoveryPoint).toHaveBeenCalledExactlyOnceWith(ctx.runId, expect.objectContaining({
+      status: "failed", pairedReceipt: null,
+    }));
+    expect(mocks.runPromoter).not.toHaveBeenCalled();
+    expect(mocks.runReassessmentCandidatePreflight).not.toHaveBeenCalled();
+  });
+
   it("does not record a cooldown when the drain guard loses to a reconciliation that already succeeded", async () => {
     mocks.getRun.mockResolvedValue({ runId: ctx.runId, status: "running", currentSha: "oldsha" });
     mocks.getDeployedSha.mockResolvedValue("oldsha");
@@ -170,6 +187,24 @@ describe("finishSelfUpgrade on a retried step (BI-0E216B0E)", () => {
     expect(mocks.emitUpgradeEvent).not.toHaveBeenCalled();
     expect(mocks.runPromoter).not.toHaveBeenCalled();
   });
+
+  it("refuses a new host launch if admission is lost during promoter inspection", async () => {
+    mocks.getRun.mockResolvedValue({ runId: ctx.runId, status: "running", currentSha: "oldsha" });
+    mocks.getDeployedSha.mockResolvedValue("oldsha");
+    mocks.loadInstallStateSigningContext.mockResolvedValue({ ok: true, runtimeTransitionSecret: "s", hostIdentity: {} });
+    mocks.createSelfUpgradeRecoveryPoint.mockResolvedValue({ status: "ok" });
+    mocks.refreshMigrationHandoffAfterDrain.mockResolvedValue({ ok: true, data: { refreshed: false } });
+    mocks.guardAdmissionClosedForSwap.mockResolvedValue(ok({ deadline: new Date(Date.now() + 60_000) }));
+    mocks.failRun.mockResolvedValue({ status: "failed", runId: ctx.runId });
+    const spawn = vi.fn();
+    mocks.runPromoter.mockImplementationOnce(async (_params, assertAdmission) => {
+      mocks.guardAdmissionClosedForSwap.mockResolvedValue(err("the confirmed maintenance window has expired"));
+      await assertAdmission();
+      spawn();
+    });
+    expect(await finishSelfUpgrade(ctx)).toMatchObject({ ok: false, reason: "admission-reopened-before-swap", excerpt: expect.stringContaining("expired") });
+    expect(spawn).not.toHaveBeenCalled();
+  });
 });
 
 
@@ -183,7 +218,7 @@ describe("durable swap replay after process replacement", () => {
     mocks.loadInstallStateSigningContext.mockResolvedValue({ ok: true, runtimeTransitionSecret: "s", hostIdentity: {} });
     mocks.createSelfUpgradeRecoveryPoint.mockResolvedValue({ status: "ok" });
     mocks.refreshMigrationHandoffAfterDrain.mockResolvedValue({ ok: true, data: { refreshed: false } });
-    mocks.guardAdmissionClosedForSwap.mockResolvedValue(ok({ reasserted: false }));
+    mocks.guardAdmissionClosedForSwap.mockResolvedValue(ok({ deadline: new Date(Date.now() + 60_000) }));
     mocks.readQuiescenceOutcome.mockResolvedValue({ ok: true, outcome: "ready-to-swap" });
     let entered!: () => void;
     const swapping = new Promise<void>((resolve) => { entered = resolve; });

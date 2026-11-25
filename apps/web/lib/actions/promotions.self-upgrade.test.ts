@@ -262,8 +262,6 @@ afterEach(() => {
   vi.unstubAllEnvs();
 });
 
-// ─── Permission Guard ─────────────────────────────────────────────────────────
-
 describe("getSelfUpgradeStatus – access control", () => {
   it("rejects unauthenticated users", async () => {
     vi.mocked(auth).mockResolvedValue(null as never);
@@ -294,8 +292,6 @@ describe("getSelfUpgradeStatus – access control", () => {
     );
   });
 });
-
-// ─── getSelfUpgradeStatus ─────────────────────────────────────────────────────
 
 describe("getSelfUpgradeStatus", () => {
   it("uses the verified release stamp for a consumer without resolving Git", async () => {
@@ -595,8 +591,6 @@ describe("getSelfUpgradeStatus", () => {
   });
 });
 
-// ─── listSelfUpgradeRuns ──────────────────────────────────────────────────────
-
 describe("listSelfUpgradeRuns – access control", () => {
   it("rejects unauthenticated users", async () => {
     vi.mocked(auth).mockResolvedValue(null as never);
@@ -811,8 +805,6 @@ describe("listSelfUpgradeRuns – DTO shape", () => {
   });
 });
 
-// ─── rollbackSelfUpgrade ───────────────────────────────────────────────────────
-
 describe("rollbackSelfUpgrade", () => {
   beforeEach(() => {
     vi.mocked(runSelfUpgradeRollback).mockResolvedValue({
@@ -876,8 +868,6 @@ describe("rollbackSelfUpgrade", () => {
   });
 });
 
-// ─── triggerSelfUpgrade – access control ─────────────────────────────────────
-
 describe("triggerSelfUpgrade – access control", () => {
   it("rejects unauthenticated users", async () => {
     vi.mocked(auth).mockResolvedValue(null as never);
@@ -891,6 +881,20 @@ describe("triggerSelfUpgrade – access control", () => {
 });
 
 describe("triggerSelfUpgrade – dispatch", () => {
+  it("binds only the current displayed limit and refuses a stale or inflated confirmation", async () => {
+    vi.stubEnv("DPF_PROMOTER_TIMEOUT_MS", "1500000");
+    const confirmed = 125 * 60_000;
+    try {
+      for (const stale of [confirmed - 60_000, confirmed + 60_000]) {
+        expect(await triggerSelfUpgrade({ confirmedReadyToSwapMaxMs: stale })).toMatchObject({ queued: false, reason: "maintenance-limit-changed" });
+      }
+      expect(admitSelfUpgrade).not.toHaveBeenCalled();
+      expect(await triggerSelfUpgrade({ confirmedReadyToSwapMaxMs: confirmed })).toMatchObject({ queued: true });
+      expect(admitSelfUpgrade).toHaveBeenCalledWith(expect.objectContaining({ confirmedReadyToSwapMaxMs: confirmed }));
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
   it("does not grant recovery authority to a plain failed-run retry", async () => {
     vi.mocked(getLatestRun).mockResolvedValue(recoverableRun as never);
     const result = await triggerSelfUpgrade();
@@ -963,8 +967,6 @@ describe("triggerSelfUpgrade – dispatch", () => {
 
 });
 
-// ─── triggerSelfUpgrade – maintenance window gate + emergency override ─────────
-
 describe("triggerSelfUpgrade – manual is not window-gated", () => {
   it("QUEUES even when the store is open — the operator chose now", async () => {
     // Manual trigger must run regardless of the (store-closed) window; the window
@@ -995,8 +997,6 @@ describe("triggerSelfUpgrade – manual is not window-gated", () => {
     );
   });
 });
-
-// ─── triggerSelfUpgrade – guard: already-running ──────────────────────────────
 
 describe("triggerSelfUpgrade – guard: already-running", () => {
   it("returns queued: false with reason already-running when a run is active", async () => {

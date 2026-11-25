@@ -144,7 +144,8 @@ export type JobStepOutput<TFn extends () => unknown> = Jsonify<
 
 export interface JobWaitForEventOptions<TName extends string> {
   event: TName;
-  timeout: JobDuration;
+  /** A duration, or a specific instant that replay must not extend. */
+  timeout: JobDuration | Date;
   /** Expression over `event` (the trigger) and `async` (the awaited event). */
   if?: string;
 }

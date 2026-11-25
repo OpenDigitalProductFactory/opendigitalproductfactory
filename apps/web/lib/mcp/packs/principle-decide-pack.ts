@@ -11,11 +11,14 @@
 // The definition moved verbatim out of the inline PLATFORM_TOOLS array; grants
 // mirror agent-grants.ts TOOL_TO_GRANTS, which stays the gating source.
 
+import { wikiEmbeddingDigest } from "@dpf/db/wiki-embedding-digest";
 import { parseDecisionStakes } from "@dpf/validators/judgment/option-scoring";
 import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
 import {
   createRetrievalBudget,
+  readDecisionEvidence,
+  type DecisionRetrievalEvidence,
   resolveRetrievalBudgetMs,
   retrievePrincipleTiers,
 } from "@/lib/decision/retrieval-budget";
@@ -198,7 +201,7 @@ export async function runPrincipleDecision(
   // Used both for principle direction text (vector-sourced principles
   // have empty dimensionVector) and for option descriptions when the
   // caller passes empty features. Pre-fix, both produced alignment=0.
-  const { generateEmbedding, isEmbeddingAvailable } = await import(
+  const { generateEmbedding } = await import(
     "@/lib/inference/embedding"
   );
 
@@ -280,45 +283,40 @@ export async function runPrincipleDecision(
       ? params["sensitivityEpsilon"]
       : PRINCIPLE_DECIDE_DEFAULTS.sensitivityEpsilon;
 
-  const org = await prisma.organization
-    .findFirst({ select: { id: true } })
-    .catch(() => null);
-  const organizationId: string | null = org?.id ?? null;
+  const retrievalBudget = createRetrievalBudget(resolveRetrievalBudgetMs());
+  const scopeRead = await readDecisionEvidence(retrievalBudget, () =>
+    prisma.organization.findFirst({ select: { id: true } }), "organization scope");
+  const organizationId = scopeRead.status === "complete" ? scopeRead.value?.id ?? null : null;
 
-  // 1. Commandments from Postgres (full dimension vector). Always applied.
-  // limit 50 (not 10): commandments are uncapped doctrine as of 2026-05-22
-  // and the comment above claims they are "Always applied" — but there are
-  // now 19+ commandment principles, so a limit of 10 silently truncated ~9
-  // of them from every decision (ordered by lastReviewedAt/title), letting
-  // process commandments crowd out doctrine like architecture-over-shortcuts.
-  // 50 matches listPrinciplesByTier's own default and leaves headroom.
-  // See docs/superpowers/specs/2026-06-05-situational-aware-decision-weighting-design.md §1 RC4.
-  let commandments: Array<Record<string, unknown>> = [];
-  try {
-    commandments = (await listPrinciplesByTier(prisma, {
-      tier: "commandment",
-      organizationId,
-      appliesTo: callingPopulation,
-      ringScope,
-      consumerContexts,
-      limit: 50,
-    })) as Array<Record<string, unknown>>;
-  } catch (err) {
-    console.warn("[principle_decide] commandment Postgres lookup failed:", err);
+  // Fetch one sentinel past the bound before any in-memory filter. A full
+  // result at the supported bound is valid. The sentinel proves overflow.
+  const commandmentLimit = 50;
+  const mandatory = scopeRead.status === "complete"
+    ? await readDecisionEvidence(retrievalBudget, () => listPrinciplesByTier(prisma, {
+        tier: "commandment",
+        organizationId,
+        appliesTo: callingPopulation,
+        ringScope,
+        consumerContexts,
+        limit: commandmentLimit + 1,
+      }), "commandments")
+    : null;
+  const evidence: DecisionRetrievalEvidence = {
+    scope: scopeRead.status,
+    commandments: mandatory?.status ?? "not-run",
+    core: "not-run",
+    contextual: "not-run",
+    hydration: "complete",
+    inference: "complete",
+  };
+  let commandments = (mandatory?.status === "complete" ? mandatory.value : []) as Array<Record<string, unknown>>;
+  if (commandments.length > commandmentLimit) {
+    evidence.commandments = "overflow";
+    commandments = [];
   }
 
   const contextQuery = String(params["context"] ?? "");
-
-  // BI-D8D1371B: bound semantic retrieval so a stalling embedding provider
-  // degrades this call instead of hanging it. Reasoning: decision/retrieval-budget.ts.
-  const budgetMs = resolveRetrievalBudgetMs();
-  const retrievalBudget = createRetrievalBudget(budgetMs);
-  const withRetrievalBudget = <T,>(work: Promise<T>, whenLate: T) =>
-    retrievalBudget.run(work, whenLate);
-
-  // 2+3. Core and contextual tiers, both under the shared retrieval budget.
-  // eslint-disable-next-line prefer-const -- both are narrowed by the post-filter below.
-  let { core, contextual } = await retrievePrincipleTiers({
+  const tiers = evidence.commandments === "complete" ? await retrievePrincipleTiers({
     search: searchWikiPages as never,
     budget: retrievalBudget,
     query: contextQuery,
@@ -326,7 +324,13 @@ export async function runPrincipleDecision(
     callingPopulation,
     ringScope: ringScopeActive ? ringScope : undefined,
     contextualThreshold,
-  });
+  }) : null;
+  if (tiers) {
+    evidence.core = tiers.status.core;
+    evidence.contextual = tiers.status.contextual;
+  }
+  let core = tiers?.core ?? [];
+  let contextual = tiers?.contextual ?? [];
 
   // Post-filter (cheap belt-and-suspenders). Mirrors the contract used
   // by recallPrincipleContext: empty principleRingScope passes
@@ -375,78 +379,51 @@ export async function runPrincipleDecision(
   // findMany with no backfill and no drift surface.
   let relevanceHits = [...core, ...contextual];
   const hydratedById = new Map<string, Record<string, unknown>>();
-  // Did the rehydration QUERY succeed? Distinct from "did a given id resolve".
-  // The two failures mean opposite things and must not be conflated (see the
-  // phantom-drop below).
-  let rehydrationQueryOk = true;
-  if (relevanceHits.length > 0) {
-    const hitIds = Array.from(
-      new Set(
-        relevanceHits
-          .map((hit) => String(hit["pageId"] ?? ""))
-          .filter((id) => id.length > 0),
-      ),
-    );
-    if (hitIds.length > 0) {
-      try {
-        const rows = (await prisma.wikiPage.findMany({
-          where: { id: { in: hitIds } },
-        })) as Array<Record<string, unknown>>;
-        for (const row of rows) {
-          hydratedById.set(String(row["id"] ?? ""), row);
-        }
-      } catch (err) {
-        rehydrationQueryOk = false;
-        // Degrades to the pre-fix behaviour (semantic alignment), which the
-        // semanticFallbackRatio flag already surfaces to the caller. Counted
-        // in the recall trace below so the degradation is never silent.
-        console.warn(
-          "[principle_decide] core/contextual Postgres rehydration failed:",
-          err,
-        );
-      }
-    }
-  }
-
-  // BI-6ADB019D — drop phantom hits: vector points whose WikiPage no longer
-  // exists. Postgres is the authoring store, so an id the index returned that
-  // a SUCCESSFUL lookup could not find is a deleted page, not a slow one.
-  //
-  // Observed live: five hits titled "Live State Over Seed Data" when the DB
-  // holds exactly one — four vector points referencing rows that are gone.
-  // Left in place they cost nothing in score (they contribute 0.000) but they
-  // consume `maxPrinciples` slots, so real doctrine gets squeezed out of the
-  // relevance set by principles that do not exist. That is the same starvation
-  // RC6 just fixed, arriving by a different route.
-  //
-  // THE DISTINCTION THAT MATTERS: only drop when the query SUCCEEDED. If the
-  // lookup itself failed, every id is unresolved for a transient reason, and
-  // dropping them would silently delete the entire core/contextual tier from
-  // the decision — a far worse failure than carrying a few phantoms.
   let phantomHits = 0;
-  if (rehydrationQueryOk && relevanceHits.length > 0) {
-    const kept = relevanceHits.filter((hit) =>
-      hydratedById.has(String(hit["pageId"] ?? "")),
-    );
-    phantomHits = relevanceHits.length - kept.length;
-    if (phantomHits > 0) {
-      console.warn(
-        `[principle_decide] dropped ${phantomHits} retrieval hit(s) whose WikiPage no longer exists — the vector index disagrees with the authoring store (BI-6ADB019D). Reconcile the wiki store.`,
-      );
+  if (relevanceHits.length > 0) {
+    const hitIds = [...new Set(relevanceHits.map((hit) => String(hit["pageId"] ?? "")).filter(Boolean))];
+    const read = await readDecisionEvidence(retrievalBudget, () => prisma.wikiPage.findMany({
+      where: {
+        id: { in: hitIds },
+        status: "published",
+        pageKind: "principle",
+        OR: [
+          { isKernel: true, organizationId: null },
+          ...(organizationId ? [{ organizationId }] : []),
+        ],
+      },
+    }), "core/contextual hydration");
+    evidence.hydration = read.status;
+    if (read.status === "complete") {
+      for (const row of read.value) hydratedById.set(row.id, row);
+      const kept = relevanceHits.filter((hit) => {
+        const row = hydratedById.get(String(hit["pageId"] ?? ""));
+        if (!row) {
+          phantomHits++;
+          evidence.hydration = "stale";
+          return false;
+        }
+        const digest = hit["embeddingSourceDigest"];
+        if (digest === null) {
+          if (evidence.hydration === "complete") evidence.hydration = "missing";
+          return false;
+        }
+        if (typeof digest === "string" && (typeof row["body"] !== "string" ||
+          digest !== wikiEmbeddingDigest({
+            body: row["body"],
+            abstract: typeof row["abstract"] === "string" ? row["abstract"] : null,
+          }))) {
+          evidence.hydration = "stale";
+          return false;
+        }
+        return true;
+      });
       relevanceHits = kept;
+    } else {
+      relevanceHits = [];
     }
   }
-
-  // RC4 recurrence guard. Commandments are uncapped doctrine, but retrieval
-  // still passes limit: 50. Returning exactly the limit means the corpus may
-  // have outgrown it and doctrine is being silently truncated again — the
-  // original RC4 defect. 41 of 50 slots were in use as of 2026-07-23.
-  const commandmentLimit = 50;
-  if (commandments.length >= commandmentLimit) {
-    console.warn(
-      `[principle_decide] commandment retrieval returned ${commandments.length} rows at limit ${commandmentLimit} — the commandment corpus may be truncated (RC4). Raise the limit.`,
-    );
-  }
+  const rehydrationQueryOk = evidence.hydration !== "failed" && evidence.hydration !== "late";
 
   console.info(
     `[principle-recall-trace] ` +
@@ -462,7 +439,7 @@ export async function runPrincipleDecision(
         coreCount: core.length,
         contextualCount: contextual.length,
         hydratedCount: hydratedById.size,
-        unhydratedCount: relevanceHits.length - hydratedById.size,
+        unhydratedCount: core.length + contextual.length - relevanceHits.length,
         // BI-6ADB019D: hits dropped because their WikiPage is gone. A non-zero
         // value means the vector index disagrees with the authoring store.
         phantomHitsDropped: phantomHits,
@@ -528,9 +505,7 @@ export async function runPrincipleDecision(
     }),
     ...relevanceHits.map((hit): CandidateRow => {
       // Prefer the rehydrated Postgres row (authoritative: signed vector,
-      // weight override, direction text). Fall back to the vector payload
-      // field-by-field so a rehydration miss degrades to the pre-fix
-      // behaviour for that one principle rather than dropping it.
+      // weight override, direction text). Unverified hits were removed above.
       const row = hydratedById.get(String(hit["pageId"] ?? ""));
       const tier = String(
         row?.["principleTier"] ?? hit["principleTier"] ?? "core",
@@ -565,14 +540,18 @@ export async function runPrincipleDecision(
   // (empty dimensionVector), embed its direction text server-side.
   // Parallelized to amortize inference round-trips. Skipped for
   // structured-alignment rows since their embedding wouldn't be used.
-  const principleEmbeddings = await withRetrievalBudget(Promise.all(
-    candidateRows.map(async (row): Promise<number[] | undefined> => {
-      if (Object.keys(row.dimensionVector).length > 0) return undefined;
-      if (!row.directionText) return undefined;
-      const e = await generateEmbedding(row.directionText);
-      return e ?? undefined;
-    }),
-  ), candidateRows.map(() => undefined));
+  const embedForDecision = async (value: string) => {
+    const read = await readDecisionEvidence(retrievalBudget, () => generateEmbedding(value), "scoring embedding");
+    if (read.status === "complete" && read.value) return read.value;
+    if (read.status === "late") evidence.inference = "late";
+    else if (evidence.inference !== "late") evidence.inference = "failed";
+    return undefined;
+  };
+  const principleEmbeddings = await Promise.all(candidateRows.map(async (row) =>
+    Object.keys(row.dimensionVector).length > 0 || !row.directionText
+      ? undefined
+      : embedForDecision(row.directionText),
+  ));
 
   type DecisionPrinciple = Parameters<typeof decide>[1][number];
   const principleList: DecisionPrinciple[] = candidateRows.map(
@@ -616,7 +595,9 @@ export async function runPrincipleDecision(
   const decisionOptions = await buildScoredDecisionOptions({
     optionsParam,
     groundedFeaturesByIndex,
-    generateEmbedding,
+    generateEmbedding: evidence.commandments === "complete"
+      ? embedForDecision
+      : async () => undefined,
   });
 
   const result = decide(decisionOptions, cappedPrinciples, {
@@ -651,35 +632,10 @@ export async function runPrincipleDecision(
     (o) => Object.keys(o.features ?? {}).length > 0,
   ).length;
 
-  // BI-512FBD20. When BOTH semantic-retrieval passes come back empty, the
-  // consult ran on commandments alone — and that is indistinguishable, from
-  // the scores, between "no core/contextual principle was relevant" and "the
-  // embedding provider is down, so retrieval could not run at all". The second
-  // case is the silent kernel degradation this BI exists to kill: on
-  // 2026-07-22 the provider was 404ing and every consult applied ~18
-  // commandments out of 162 principles while flagging structuredCoverage
-  // "strong". So when both passes are empty we PROBE the provider once and, if
-  // it is unavailable, say so loudly — a consult must never again imply full
-  // coverage while core/contextual retrieval was structurally impossible.
-  // `make-silent-failures-observable`, applied to the kernel's own recall.
-  let retrievalDegraded = false;
-  if (retrievalBudget.exceeded()) {
-    // A ruling scored without core/contextual must not read as a healthy one.
-    retrievalDegraded = true;
-    console.error(
-      `[principle_decide] retrieval budget exceeded (${budgetMs}ms) — embedding `
-        + "provider slow; scored on the tiers that returned in time.",
-    );
-  }
-  if (core.length === 0 && contextual.length === 0) {
-    retrievalDegraded = !(await isEmbeddingAvailable());
-    if (retrievalDegraded) {
-      console.error(
-        "[principle_decide] retrieval degraded — embedding provider unavailable; " +
-          "consulted commandments only. Fix: docker model pull ai/nomic-embed-text-v1.5",
-      );
-    }
-  }
+  const retrievalDegraded = Object.values(evidence).some((status) => status !== "complete");
+  const verdictResult = retrievalDegraded
+    ? { ...result, recommendation: null, flags: { ...result.flags, autonomyEligible: false } }
+    : result;
 
   // BI-1D23EC26: signalQuality + summary extracted to keep this pack under LOC ceiling.
   const {
@@ -687,8 +643,8 @@ export async function runPrincipleDecision(
     buildPrincipleDecideSummary,
   } = await import("@/lib/decision/principle-decide-signal-quality");
   const signalQuality = buildPrincipleDecideSignalQuality({
-    result,
-    retrievalDegraded,
+    result: verdictResult,
+    retrievalEvidence: evidence,
     optionsWithFeatures,
     optionCount: decisionOptions.length,
   });
@@ -696,7 +652,7 @@ export async function runPrincipleDecision(
   const summary = buildPrincipleDecideSummary({
     usable,
     retrievalDegraded,
-    result,
+    result: verdictResult,
     signalQuality,
     governingProfileKind: governingProfile.governingProfileKind,
   });
@@ -712,7 +668,7 @@ export async function runPrincipleDecision(
   );
   const ledger = await recordKernelConsultInteraction({
     db: prisma,
-    result,
+    result: retrievalDegraded ? { ...verdictResult, reasoning: summary } : verdictResult,
     callerContext: governingProfile,
     question: contextQuery,
     optionIds: decisionOptions.map((o) => o.id),
@@ -740,6 +696,7 @@ export async function runPrincipleDecision(
     },
     signalQuality: {
       usable: signalQuality.usable,
+      retrievalEvidence: evidence,
       optionsWithFeatures: signalQuality.optionsWithFeatures,
       optionCount: signalQuality.optionCount,
       // BI-1D23EC26 — autonomy + MCDA quality (persisted for audit)
@@ -762,12 +719,12 @@ export async function runPrincipleDecision(
     success: true,
     message: summary,
     data: {
-      recommendation: result.recommendation,
+      recommendation: verdictResult.recommendation,
       // BI-E0151DB2: read this BEFORE acting on `recommendation`.
       signalQuality,
       scores: result.scores,
-      flags: result.flags,
-      reasoning: result.reasoning,
+      flags: verdictResult.flags,
+      reasoning: retrievalDegraded ? summary : result.reasoning,
       appliedPrincipleCount: cappedPrinciples.length,
       governingProfile: {
         profileId: governingProfile.governingProfileId,

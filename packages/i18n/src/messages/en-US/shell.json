@@ -1,4 +1,11 @@
 {
+  "platformMaintenance": {
+    "recoveryCompact": "Recovery backups",
+    "preparingRecovery": "Preparing recovery backups and the update.",
+    "installing": "Installing the platform update.",
+    "waiting": "Platform upgrading. Please wait.",
+    "finishBy": "Finish by"
+  },
   "account": {
     "trigger": "Signed in as {$name} — account details",
     "heading": "Your account",

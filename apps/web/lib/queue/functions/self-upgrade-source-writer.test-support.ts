@@ -12,7 +12,6 @@ export function registerSourceWriterRoutingTests(input: { mocks: any; runSelfUpg
   afterEach(() => {
     mocks.usesPrivateActuator.mockReset().mockResolvedValue(false);
     mocks.sourceWriterThroughPrivateActuator.mockReset().mockResolvedValue(null);
-    mocks.updateRunPlan.mockReset();
   });
   const qualify = (prep: unknown = { ok: true, mode: "upstream", stamp: SHA, upstreamSha: SHA }) => {
     mocks.usesPrivateActuator.mockResolvedValue(true);

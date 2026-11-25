@@ -55,6 +55,24 @@ describe("createRetrievalBudget", () => {
     }
   });
 
+  it("does not renew the deadline for a subsequent retrieval leg", async () => {
+    vi.useFakeTimers();
+    try {
+      const budget = createRetrievalBudget(8000);
+      const first = budget.run(new Promise<string>((resolve) =>
+        setTimeout(() => resolve("first"), 7000)), "late");
+      await vi.advanceTimersByTimeAsync(7000);
+      expect(await first).toBe("first");
+
+      const second = budget.run(new Promise<string>((resolve) =>
+        setTimeout(() => resolve("second"), 2000)), "late");
+      await vi.advanceTimersByTimeAsync(2000);
+      expect(await second).toBe("late");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("is inert on the healthy path", async () => {
     // The overwhelmingly common case must be unchanged and unmarked.
     const budget = createRetrievalBudget(8000);

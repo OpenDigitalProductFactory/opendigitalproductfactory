@@ -127,6 +127,22 @@ MCP writes. Delivery agents can still read quiescence status and release an
 owned nonproduction lease, then retry evidence publication after the portal
 returns to normal.
 
+Before you confirm **Install**, the dialog shows the current maximum for
+recovery backups and installation after active work clears. This is separate
+from waiting for active work. Once recovery starts, the maintenance banner
+shows the deadline for that attempt. If the required maximum grows after you
+review it, refresh the upgrade page and confirm the new estimate. A request
+without a confirmed maximum cannot receive the longer window.
+
+Scheduled and other unattended upgrades still have about 35 minutes after
+active work clears with the default settings. The upgrade reserves the full
+25-minute installer timeout, leaving roughly ten minutes for the Postgres and
+upload backups and any preparation before the swap. If the backups and
+installation cannot fit, the scheduled run fails safely without swapping.
+Open the Upgrade Center and choose **Install now** to review and confirm the
+longer window for a manual attempt. Standing approval for scheduled runs is
+tracked in BI-EAFE9732 and is not available yet.
+
 ### When work is still running
 
 An upgrade no longer gives up because work is in progress. When you press
@@ -139,7 +155,8 @@ pauses as **awaiting operator**: new work stays paused and nothing is
 interrupted. The upgrade page then offers three choices:
 
 - **Keep waiting** gives the running work another 60 minutes.
-- **Force now** installs immediately, interrupting whatever is still running.
+- **Force now** skips the check that waits for active work, which may interrupt
+  it. If admission to new work reopens, the upgrade still fails without swapping.
 - **Abort** cancels this upgrade and reopens the portal to new work.
 
 While it waits, the page shows how long it has waited and the limit. Force

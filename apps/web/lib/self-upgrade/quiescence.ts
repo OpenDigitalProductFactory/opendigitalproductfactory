@@ -21,6 +21,7 @@ import { prisma } from "@dpf/db";
 import { reserveQuiescenceStart, advanceOwnedQuiescenceLevel, clearOwnedQuiescenceLevel, QuiescenceStartUncertainError,
   type QuiescenceReservationDb } from "./quiescence-start-reservation";
 import { transitionState } from "./quiescence-state-write";
+import { readyToSwapBudgetMs, resolveConfirmedUpgradeWindow } from "./ready-to-swap-window";
 export { transitionState, heartbeatQuiescenceRun } from "./quiescence-state-write";
 import { sanitizeForLog } from "@/lib/security/safe-log";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
@@ -30,6 +31,7 @@ import { resolveReadOnlyToolNames } from "./read-only-tool-signal";
 import type { QuiescenceBlockerLine } from "./run-types";
 import {
   QUIESCENCE_RUN_STATUSES,
+  QUIESCENCE_CONFIG_KEY,
   TERMINAL_QUIESCENCE_STATUSES,
   isTerminalQuiescenceStatus,
   type ActiveSessionBlockers,
@@ -68,7 +70,7 @@ export type QuiescenceLevel = "normal" | "draining" | "swapping";
  *     runId: string | null,
  *     enteredAt: ISO string }
  */
-export const QUIESCENCE_CONFIG_KEY = "portal.quiescence";
+export { QUIESCENCE_CONFIG_KEY } from "./quiescence-contract";
 
 export type QuiescenceConfig = {
   level: QuiescenceLevel;
@@ -174,15 +176,6 @@ export async function setQuiescenceLevel(
 export type QuiescenceTrigger = "self-upgrade" | "manual" | "sandbox-recovery" | "installation-teardown" | "docker-vm-restart";
 
 /**
- * Single canonical state transition. Updates status + the per-state entry
- * timestamp + any outcome-related fields in one statement. The cache is
- * invalidated when level state is also touched.
- *
- * Returns the post-update row so callers can verify the transition (e.g.,
- * spot a concurrent transition that already advanced past the requested
- * state — defensive against the watchdog racing the coordinator).
- */
-/**
  * Flips every actively-working TaskRun to 'quiescing' status. Triggered on
  * the normal→draining transition. The cooperative-cancel pathway in
  * heartbeat.ts:27 then fires on the loop's next heartbeat (the filter is
@@ -204,6 +197,7 @@ export type StartQuiescenceOpts = {
   trigger: QuiescenceTrigger;
   triggerRefId?: string;
   budgetMs?: number;
+  confirmedReadyToSwapMaxMs?: number | null;
   targetVersion?: string;
   targetBundleHash?: string;
   /** Native host effects must own their original drain rather than join one. */
@@ -241,6 +235,7 @@ export async function startQuiescence(opts: StartQuiescenceOpts): Promise<{
 }> {
   const candidateRunId = generateRunId(new Date());
   const budgetMs = opts.budgetMs ?? DEFAULT_BUDGET_MS;
+  const readyBudget = opts.trigger === "self-upgrade" ? resolveConfirmedUpgradeWindow(opts.confirmedReadyToSwapMaxMs) : readyToSwapBudgetMs("unrelated");
 
   // We populate initialSnapshot here so the row is always queryable as
   // valid evidence even if the coordinator function fails to start. The
@@ -260,6 +255,7 @@ export async function startQuiescence(opts: StartQuiescenceOpts): Promise<{
       targetVersion: opts.targetVersion,
       targetBundleHash: opts.targetBundleHash,
       budgetMs,
+      readyToSwapBudgetMs: readyBudget,
       forcedSurfaces: opts.shipForce
         ? ([{ surface: "ship-force-flag", reason: "operator-pre-authorized", at: new Date().toISOString() }] as unknown as object)
         : ([] as unknown as object),
@@ -584,13 +580,13 @@ export async function reconcileQuiescenceOnBoot(opts: {
               startedAt: { lt: new Date(now.getTime() - staleAfterMs) },
             }
           : { status: { in: [...NON_TERMINAL_QUIESCENCE_STATUSES] } },
-      select: { runId: true, targetVersion: true, targetBundleHash: true, triggerRefId: true, lastHeartbeatAt: true },
+      select: { runId: true, targetVersion: true, targetBundleHash: true, triggerRefId: true, lastHeartbeatAt: true, trigger: true, status: true, enteredStateAt: true, readyToSwapDeadlineAt: true, abortRequestedAt: true },
     });
     for (const run of inFlight) {
       // BI-F9EE05E5: an upgrade drain may wait an hour or more for work. One that
       // is still heartbeating is live, whatever its startedAt — never fail it.
-      const { isDrainHeartbeatLive } = await import("./drain-wait");
-      if (staleAfterMs > 0 && isDrainHeartbeatLive({ lastHeartbeatAt: run.lastHeartbeatAt, now, thresholdMs: staleAfterMs })) continue;
+      const { isDrainHeartbeatLive, isSelfUpgradeDrainLive } = await import("./drain-wait");
+      if (staleAfterMs > 0 && (run.trigger === "self-upgrade" ? isSelfUpgradeDrainLive(run, now, staleAfterMs) : isDrainHeartbeatLive({ lastHeartbeatAt: run.lastHeartbeatAt, now, thresholdMs: staleAfterMs }))) continue;
       if (quiescenceTargetMatchesRunningBundle(run, opts.currentVersion, opts.currentBundleHash)) {
         // We booted on this run's target → the swap landed. Complete the
         // handshake the dying portal couldn't: the live coordinator resumes

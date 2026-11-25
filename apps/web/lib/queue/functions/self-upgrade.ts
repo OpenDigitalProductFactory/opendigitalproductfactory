@@ -44,6 +44,8 @@ import { DEFAULT_DRAIN_WAIT_BUDGET_MS } from "@/lib/self-upgrade/drain-wait";
 import { finishSelfUpgrade, type SelfUpgradeSwapContext } from "./self-upgrade-swap";
 import { runSelfUpgradeInSteps, type SelfUpgradeBegin, type SelfUpgradePhases } from "./self-upgrade-steps";
 import { rejectDuplicateSelfUpgradeDelivery } from "@/lib/self-upgrade/delivery-admission";
+import { resolveConfirmedUpgradeWindow } from "@/lib/self-upgrade/ready-to-swap-window";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 import { evaluateScheduledGate, recordScheduledDecline } from "@/lib/self-upgrade/scheduled-gate";
 import {
   SELF_UPGRADE_CRON,
@@ -92,15 +94,12 @@ export async function runSelfUpgrade(
 export async function beginSelfUpgrade(params: SelfUpgradeRunEventData): Promise<SelfUpgradeBegin> {
   const done = (result: Record<string, unknown>): SelfUpgradeBegin => ({ done: result });
   const duplicate = await rejectDuplicateSelfUpgradeDelivery(params.runId);
+  let ownedRunId = params.runId;
   if (duplicate) return done(duplicate);
   const config = await getSelfUpgradeConfig();
   const now = new Date();
   const cooldownMinutes = config.cooldownMinutes ?? DEFAULT_COOLDOWN_MINUTES;
 
-  // The run that owns this attempt. In the qualified portal a scheduled attempt
-  // creates it before source preparation, so the authorized source writer is
-  // keyed on an existing run (BI-224F56F1); otherwise it is created as before.
-  let ownedRunId: string | undefined = params.runId;
   async function skipAttempt(
     reason: string,
     persistedReason = reason,
@@ -125,7 +124,7 @@ export async function beginSelfUpgrade(params: SelfUpgradeRunEventData): Promise
   // An upgrade can now wait hours for work. A scheduled fire during one exits
   // here, before any costly check: no drain, no cooldown (BI-F9EE05E5).
   const activeRunOf = (r: Awaited<ReturnType<typeof getLatestRun>>) =>
-    r && ["running", "queued", "pending"].includes(r.status) && r.runId !== params.runId ? r : null;
+    r && ["running", "queued", "pending"].includes(r.status) && r.runId !== ownedRunId ? r : null;
   const activeAtStart = params.scheduled ? activeRunOf(await getLatestRun()) : null;
   if (activeAtStart) {
     return await skipAttempt("active-run", `active-run: ${activeAtStart.runId}`, { activeRunId: activeAtStart.runId });
@@ -359,10 +358,18 @@ export async function beginSelfUpgrade(params: SelfUpgradeRunEventData): Promise
   } else if (upgradeStrategy === "release") {
     builtStamp = upstreamSha!;
   } else {
+    if (params.scheduled && !ownedRunId) {
+      ownedRunId = (await createRun({
+        triggeredBy: params.triggeredBy,
+        fromVersion: deployedSha ?? undefined,
+        toVersion: upstreamSha ?? undefined,
+      })).runId;
+    }
     let prep: PrepareSourceResult | null = null;
     if (await usesPrivateActuator()) {
       // BI-224F56F1: prepared by the authorized source writer for an existing
-      // run; a refusal is reported, never retried as a local write.
+      // run (a manual attempt without one creates it here); a refusal is
+      // reported, never retried as a local write.
       if (hostSourcePath !== "/host-dpf") {
         prep = { ok: false, reason: "prep-error", message: "The authorized source writer prepares only the install checkout at /host-dpf." };
       } else {
@@ -547,9 +554,18 @@ export async function beginSelfUpgrade(params: SelfUpgradeRunEventData): Promise
   let quiescenceRunId: string | null = null;
   let awaitReady: (() => Promise<QuiescenceOutcome>) | undefined;
   if (!params.dryRun) {
+    try {
+      resolveConfirmedUpgradeWindow(run.confirmedReadyToSwapMaxMs);
+    } catch (error) {
+      const reason = getErrorMessage(error);
+      await failRun(run.runId, reason);
+      await emitFailure(run.runId);
+      return done({ ok: false, status: "failed", runId: run.runId, reason: "maintenance-limit-changed", excerpt: reason });
+    }
     const started = await startQuiescence({
       trigger: "self-upgrade",
       triggerRefId: run.runId,
+      ...(run.confirmedReadyToSwapMaxMs != null ? { confirmedReadyToSwapMaxMs: run.confirmedReadyToSwapMaxMs } : {}),
       budgetMs: params.budgetMs ?? config.drainWaitBudgetMs ?? DEFAULT_DRAIN_WAIT_BUDGET_MS,
       shipForce: params.force,
       // Stamp the QuiescenceRun with the real target identity so the drain is

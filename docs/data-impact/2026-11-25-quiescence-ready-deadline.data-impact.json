@@ -1,0 +1,46 @@
+{
+  "version": "1",
+  "accountableOwner": "platform-architecture",
+  "summary": "BI-3C3CCC59 adds an optional operator-confirmed maximum to the existing SelfUpgradeRun and the admitted budget and write-once deadline to its owned QuiescenceRun. No table or relationship is added.",
+  "affectedCopies": [
+    "SelfUpgradeRun retains the confirmed maximum alongside its existing admission fingerprint.",
+    "QuiescenceRun reserves the post-ready budget at the start and writes the timestamp in the same transaction as the ready state."
+  ],
+  "privacyAssessment": {
+    "personalData": false,
+    "sensitivity": "Operational duration and maintenance timestamp.",
+    "dataSubjectRights": "No change to export or deletion.",
+    "reviewDisposition": "Existing operational audit and retention apply."
+  },
+  "migration": {
+    "name": "20261125140200_quiescence_ready_to_swap_deadline",
+    "backfill": "None. Historical attempts remain null and receive no extended allowance.",
+    "rollback": "Forward-compatible additive columns. Revert the reader/writer after active upgrades settle, leaving the nullable columns and audit timestamps in place."
+  },
+  "tests": [
+    "apps/web/lib/self-upgrade/ready-to-swap-state.test.ts",
+    "apps/web/lib/self-upgrade/drain-wait.test.ts",
+    "apps/web/lib/jobs/postgres/engine.pg.test.ts"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:quiescence-run",
+      "prismaModel": "QuiescenceRun",
+      "lifecycleDisposition": "Unchanged. Telemetry-bounded at 90 days.",
+      "fields": [
+        { "fieldId": "data:quiescence-run#readyToSwapBudgetMs", "resolution": "inherited", "reason": "Existing drain audit lifetime.", "provenance": "apps/web/lib/self-upgrade/quiescence.ts", "flags": [] },
+        { "fieldId": "data:quiescence-run#readyToSwapDeadlineAt", "resolution": "inherited", "reason": "Existing drain audit lifetime.", "provenance": "apps/web/lib/self-upgrade/ready-to-swap-state.ts", "flags": [] }
+      ]
+    },
+    {
+      "kind": "model",
+      "assetId": "data:self-upgrade-run",
+      "prismaModel": "SelfUpgradeRun",
+      "lifecycleDisposition": "Unchanged. The maximum is part of the existing upgrade admission audit.",
+      "fields": [
+        { "fieldId": "data:self-upgrade-run#confirmedReadyToSwapMaxMs", "resolution": "inherited", "reason": "Scalar bound on the existing admitted request.", "provenance": "apps/web/lib/self-upgrade/admission.ts", "flags": [] }
+      ]
+    }
+  ]
+}

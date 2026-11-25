@@ -1,211 +1,118 @@
-import type { BackupTarget } from "@/lib/operate/backups/types";
+import type { PairedRecoveryReceipt } from "@dpf/integration-shared/paired-recovery-contract";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
+
+import { readCapturedBackupPair } from "@/lib/operate/backups/captured-backup-pair";
+import { persistSelfUpgradeRecoveryPoint, readSelfUpgradeRecoveryPoint } from "./recovery-point-store";
 
 const RECOVERY_TRIGGER = "pre-upgrade-recovery" as const;
 
-type BackupRunnerResult = {
-  runId: string;
-  status: "ok" | "failed";
-  /** Human-readable failure summary surfaced into the recovery-point member. */
-  error?: string;
-};
-type ClusteredBackupRunner = (args: {
+type Target = "postgres" | "uploads";
+type BackupRunnerResult = { runId: string | null; status: "ok" | "failed"; error?: string };
+type CapturedMember<T extends Target> = { target: T; runId: string; status: "ok" };
+type FailedMember<T extends Target> = { target: T; runId: string | null; status: "failed"; error?: string };
+type Member<T extends Target> = CapturedMember<T> | FailedMember<T>;
+
+interface RecoveryPointIdentity {
+  schemaVersion: 2;
   trigger: typeof RECOVERY_TRIGGER;
-  composeProject?: string;
-  backupsRoot?: string;
-}) => Promise<BackupRunnerResult>;
-
-interface RecoveryPointRunners {
-  postgres: ClusteredBackupRunner;
-}
-
-export type SelfUpgradeRecoveryPointStatus = "ok" | "degraded" | "failed" | "skipped";
-
-export interface SelfUpgradeRecoveryPointMember {
-  target: BackupTarget;
-  runId: string | null;
-  status: "ok" | "failed" | "skipped";
-  error?: string;
-  /** Why a target was skipped (a derived store that isn't backed up). */
-  reason?: string;
-}
-
-export interface SelfUpgradeRecoveryPoint {
-  schemaVersion: 1;
-  status: SelfUpgradeRecoveryPointStatus;
-  trigger: "pre-upgrade-recovery";
   selfUpgradeRunId: string;
   createdAt: string;
-  members: SelfUpgradeRecoveryPointMember[];
-  reason?: string;
 }
+
+export interface SuccessfulSelfUpgradeRecoveryPoint extends RecoveryPointIdentity {
+  status: "ok";
+  members: [CapturedMember<"postgres">, CapturedMember<"uploads">];
+  pairedReceipt: PairedRecoveryReceipt;
+}
+
+export type SelfUpgradeRecoveryPoint = SuccessfulSelfUpgradeRecoveryPoint | (RecoveryPointIdentity & {
+  status: "failed" | "skipped";
+  members: Member<Target>[];
+  pairedReceipt: null;
+  reason?: string;
+});
 
 interface CreateRecoveryPointArgs {
   runId: string;
   dryRun?: boolean;
   composeProject?: string;
   backupsRoot?: string;
-  runners?: Partial<RecoveryPointRunners>;
   now?: () => Date;
+  checkAdmission?: () => Promise<Date>;
 }
 
-export async function createSelfUpgradeRecoveryPoint(
-  args: CreateRecoveryPointArgs,
-): Promise<SelfUpgradeRecoveryPoint> {
-  const now = args.now ?? (() => new Date());
-  const createdAt = now().toISOString();
-
-  if (args.dryRun) {
-    return {
-      schemaVersion: 1,
-      status: "skipped",
-      trigger: RECOVERY_TRIGGER,
-      selfUpgradeRunId: args.runId,
-      createdAt,
-      members: [],
-      reason: "dry-run",
-    };
-  }
-
-  const backupTargets = resolveRecoveryBackupTargets();
-  const overrides = args.runners ?? {};
-
-  // Since BET-5 the graph and vectors live in postgres; the platform runs on
-  // postgres only. postgres is the primary data store and
-  // the only store a portal upgrade migrates, so it is the sole recovery-point
-  // target.
-  const members: SelfUpgradeRecoveryPointMember[] = [];
-  for (const target of RECOVERY_TARGET_ORDER) {
-    if (backupTargets.has(target)) {
-      members.push(await runBackupForTarget(target, overrides, args));
-    }
-  }
-
-  return {
-    schemaVersion: 1,
-    status: classifyRecoveryPointStatus(members),
-    trigger: RECOVERY_TRIGGER,
-    selfUpgradeRunId: args.runId,
-    createdAt,
-    members,
-  };
-}
-
-/**
- * The order recovery-point members are recorded in. postgres-only since BET-5.
- */
-const RECOVERY_TARGET_ORDER: readonly BackupTarget[] = ["postgres"];
-
-/**
- * The primary data store. Always backed up, and the only target whose backup
- * failure BLOCKS an upgrade: it holds the irreplaceable data (epics, backlog,
- * config, credentials) and the only schema migrations an upgrade runs.
- */
-export const PRIMARY_BACKUP_TARGET: BackupTarget = "postgres";
-
-/**
- * Which stores the pre-upgrade recovery point backs up. postgres only: since
- * BET-5 the graph and vectors live in postgres, so it is the sole store an upgrade needs to protect.
- */
-export function resolveRecoveryBackupTargets(): Set<BackupTarget> {
-  return new Set<BackupTarget>([PRIMARY_BACKUP_TARGET]);
-}
-
-/**
- * Classify a recovery point from its members:
- *   - "failed"   — a REQUIRED target's backup failed → the upgrade must abort.
- *   - "degraded" — only best-effort (derived-store) backups failed → the
- *                  upgrade proceeds, but the gap is recorded for the operator.
- *   - "ok"       — every backup succeeded.
- */
-export function classifyRecoveryPointStatus(
-  members: SelfUpgradeRecoveryPointMember[],
-  required: Set<BackupTarget> = new Set([PRIMARY_BACKUP_TARGET]),
-): SelfUpgradeRecoveryPointStatus {
-  const requiredFailed = members.some(
-    (member) => required.has(member.target) && member.status === "failed",
-  );
-  if (requiredFailed) return "failed";
-  const anyFailed = members.some((member) => member.status === "failed");
-  return anyFailed ? "degraded" : "ok";
-}
-
-/**
- * Run the backup for a single target, lazily importing only the runner we
- * actually need. postgres-only after BET-5. Test callers pass a runner override
- * to avoid spawning a real backup.
- */
-async function runBackupForTarget(
-  target: BackupTarget,
-  overrides: Partial<RecoveryPointRunners>,
-  args: CreateRecoveryPointArgs,
-): Promise<SelfUpgradeRecoveryPointMember> {
-  return runMember(target, async () => {
-    const run =
-      overrides.postgres ??
-      (await import("@/lib/operate/backups/postgres-backup-runner"))
-        .runPostgresBackup;
-    return run({
-      trigger: RECOVERY_TRIGGER,
-      composeProject: args.composeProject,
-      backupsRoot: args.backupsRoot,
-    });
-  });
-}
-
-async function runMember(
-  target: BackupTarget,
+async function capture<T extends Target>(
+  target: T,
   run: () => Promise<BackupRunnerResult>,
-): Promise<SelfUpgradeRecoveryPointMember> {
+): Promise<Member<T>> {
   try {
     const result = await run();
-    return {
-      target,
-      runId: result.runId,
-      status: result.status,
-      // A runner can return status:"failed" without throwing (e.g. the backup
-      // script exits non-zero). Carry its summary so the operator-facing
-      // recovery-point message names the cause, not just an opaque run id.
-      ...(result.status === "failed" && result.error
-        ? { error: result.error }
-        : {}),
-    };
-  } catch (err) {
-    return {
-      target,
-      runId: null,
-      status: "failed",
-      error: getErrorMessage(err),
-    };
+    if (result.status === "ok" && result.runId) return { target, runId: result.runId, status: "ok" };
+    const error = result.error ?? (result.status === "ok" ? "Backup did not return a run ID." : undefined);
+    return { target, runId: result.runId, status: "failed", ...(error ? { error } : {}) };
+  } catch (error) {
+    return { target, runId: null, status: "failed", error: getErrorMessage(error) };
+  }
+}
+
+export async function createSelfUpgradeRecoveryPoint(args: CreateRecoveryPointArgs): Promise<SelfUpgradeRecoveryPoint> {
+  const identity: RecoveryPointIdentity = {
+    schemaVersion: 2,
+    trigger: RECOVERY_TRIGGER,
+    selfUpgradeRunId: args.runId,
+    createdAt: (args.now?.() ?? new Date()).toISOString(),
+  };
+  if (args.dryRun) return { ...identity, status: "skipped", members: [], pairedReceipt: null, reason: "dry-run" };
+
+  const backupsRoot = args.backupsRoot ?? (await import("@/lib/operate/backups/managed-backup")).BACKUPS_ROOT;
+  const backupArgs = { trigger: RECOVERY_TRIGGER, composeProject: args.composeProject, backupsRoot, checkAdmission: args.checkAdmission };
+  const failed = (members: Member<Target>[], reason?: string): SelfUpgradeRecoveryPoint => ({
+    ...identity, status: "failed", members, pairedReceipt: null, ...(reason ? { reason } : {}),
+  });
+  try {
+    if (await readSelfUpgradeRecoveryPoint(backupsRoot, args.runId)) {
+      // The previous drain may have reopened on restart. Preserve its point for
+      // recovery, but never let its older data authorize another swap attempt.
+      return failed([], "This run already has a retained host point. Start a fresh upgrade to capture current data.");
+    }
+  } catch (error) {
+    return failed([], `Could not read the host recovery point: ${getErrorMessage(error)}`);
+  }
+
+  const postgres = await capture("postgres", async () => {
+    const { runPostgresBackup } = await import("@/lib/operate/backups/postgres-backup-runner");
+    return runPostgresBackup(backupArgs);
+  });
+  if (postgres.status !== "ok") return failed([postgres]);
+
+  const uploads = await capture("uploads", async () => {
+    const { runUploadsBackup } = await import("@/lib/operate/backups/uploads-backup-runner");
+    return runUploadsBackup({ ...backupArgs, pairedPostgresRunId: postgres.runId });
+  });
+  if (uploads.status !== "ok") return failed([postgres, uploads]);
+
+  try {
+    const pairedReceipt = await readCapturedBackupPair({
+      backupsRoot, postgresRunId: postgres.runId, uploadsRunId: uploads.runId,
+    });
+    await args.checkAdmission?.();
+    return await persistSelfUpgradeRecoveryPoint(backupsRoot, {
+      ...identity, status: "ok", members: [postgres, uploads], pairedReceipt,
+    });
+  } catch (error) {
+    return failed([postgres, uploads], getErrorMessage(error));
   }
 }
 
 export function summarizeRecoveryPointFailure(point: SelfUpgradeRecoveryPoint): string {
-  const failed = point.members.filter((member) => member.status === "failed");
-  if (failed.length === 0) return "recovery-point-failed";
-
-  const parts = failed.map((member) => {
+  if (point.status !== "failed") return "recovery-point-failed";
+  if (point.reason) return `recovery-point-failed: ${point.reason}`;
+  const parts: string[] = [];
+  for (const member of point.members) {
+    if (member.status !== "failed") continue;
     const runId = member.runId ? ` ${member.runId}` : "";
     const suffix = member.error ? `: ${member.error}` : "";
-    return `${member.target}${runId}${suffix}`;
-  });
-  return `recovery-point-failed: ${parts.join("; ")}`;
-}
-
-/**
- * Human-readable note naming the best-effort (derived-store) backups that
- * failed on a "degraded" recovery point. Returns null when nothing failed.
- * The upgrade proceeds regardless; this is for the operator audit trail.
- */
-export function summarizeRecoveryPointDegradation(
-  point: SelfUpgradeRecoveryPoint,
-): string | null {
-  const failed = point.members.filter((member) => member.status === "failed");
-  if (failed.length === 0) return null;
-
-  const parts = failed.map((member) => {
-    const suffix = member.error ? `: ${member.error}` : "";
-    return `${member.target}${suffix}`;
-  });
-  return `recovery-point-degraded (best-effort backup failed, upgrade proceeding): ${parts.join("; ")}`;
+    parts.push(`${member.target}${runId}${suffix}`);
+  }
+  return parts.length ? `recovery-point-failed: ${parts.join("; ")}` : "recovery-point-failed";
 }

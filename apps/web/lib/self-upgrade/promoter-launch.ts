@@ -7,7 +7,7 @@ import type { PromoterParams, PromoterResult } from "./promoter";
 import { PROMOTER_ALREADY_RUNNING_EXIT_CODE } from "./promoter-exit-codes";
 import { resolvePromoterTimeoutMs } from "./promoter-timeout";
 
-export type PromoterLaunchOwner = { kind: "self-upgrade"; runId: string }
+export type PromoterLaunchOwner = { kind: "self-upgrade"; runId: string; quiescenceRunId?: string }
   | { kind: "runtime-capability"; transitionId: string };
 
 export type GuardedPromoterPorts = {
@@ -98,6 +98,7 @@ const imageId = /^sha256:[a-f0-9]{64}$/;
 export async function runAdmittedPromoter(
   params: PromoterParams, owner: PromoterLaunchOwner, reference: string,
   build: (params: PromoterParams) => Promise<{ args: string[] }>,
+  assertAdmission?: () => Promise<void>,
 ): Promise<PromoterResult> {
   if (!imageId.test(reference)) {
     const inspected = await runProcessWithBudget("docker", ["image", "inspect", "--format", "{{.Id}}", reference], {
@@ -109,7 +110,11 @@ export async function runAdmittedPromoter(
     reference = inspected.stdout.trim();
   }
   const pinned = { ...params, promoterImage: reference };
-  return launchDurablePromoter(pinned, (await build(pinned)).args, owner);
+  const argv = (await build(pinned)).args;
+  // BI-3C3CCC59: the swap's drain fence, immediately before reclaim and
+  // dispatch. Outside the admission transaction, which holds the runtime lock.
+  await assertAdmission?.();
+  return launchDurablePromoter(pinned, argv, owner);
 }
 
 /** The action identity selects its existing row. A request cannot supply a
@@ -119,7 +124,9 @@ export async function launchDurablePromoter(params: PromoterParams, argv: string
   const name = params.containerName ?? "";
   const project = params.composeProject || "dpf";
   if (!/^[a-z0-9][a-z0-9_-]{0,99}$/.test(project)) return { ...pending(), exitCode: runtime ? 75 : PROMOTER_ALREADY_RUNNING_EXIT_CODE };
-  const binding = digest({ owner, project, target: params.targetSha, image: params.promoterImage ?? "",
+  // The binding names the owner, not the drain that fenced this attempt.
+  const bound = owner.kind === "self-upgrade" ? { kind: owner.kind, runId: owner.runId } : owner;
+  const binding = digest({ owner: bound, project, target: params.targetSha, image: params.promoterImage ?? "",
     action: params.runtimeCapabilityTransitionId ?? "", signature: params.runtimeCapabilitySignature ?? "",
     recoveryPoint: params.maintenanceRecoveryPointDigest ?? "" });
   const ownerKey = owner.kind === "self-upgrade" ? owner.runId : owner.transitionId;
