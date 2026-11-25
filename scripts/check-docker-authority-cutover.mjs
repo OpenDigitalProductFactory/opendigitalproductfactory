@@ -48,6 +48,7 @@ export const DOCKER_AUTHORITY_REGISTRY = Object.freeze({
   "apps/web/lib/coworker/service-converge-report.ts": { class: "pending", count: 1, reason: "Writer-reachable raw Docker call; migrate to a typed actuator operation before the immutable recipe." },
   "apps/web/lib/documents/conversion/availability.ts": { class: "routed", count: 1, reason: "readActuatorDoctoolsHealth when the actuator mount is present." },
   "apps/web/lib/documents/conversion/command.ts": { class: "routed", count: 1, reason: "Builds converter argv shared by the actuator and the mount-absent fallback; spawns nothing itself." },
+  "apps/web/lib/platform-runtime/portal-actuator-entry.ts": { class: "actuator", count: 1, reason: "The private actuator launches the authorized source writer after createSourceWriterLauncher admits the request (DI-250233FBDD9B)." },
   "apps/web/lib/documents/conversion/doctools-actuator.ts": { class: "actuator", count: 3, reason: "Runs only inside the private actuator (imported by portal-actuator-entry.ts)." },
   "apps/web/lib/documents/generation/render.ts": { class: "routed", count: 1, reason: "runActuatorDoctools when the actuator mount is present." },
   "apps/web/lib/edge-node/remote-provisioning.ts": { class: "message", count: 2, reason: "Script text executed on a remote edge host, never by the portal." },
