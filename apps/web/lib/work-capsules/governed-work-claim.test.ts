@@ -63,6 +63,7 @@ describe("claimGovernedBacklogWorkspace", () => {
     const result = await claimGovernedBacklogWorkspace({ db, input: { ...input, ...source }, actor,
       workIntent: "plan", dependencies: { claimWorkspace, discoverCanonicalArtifact, prepareCurrentDesign: prepare } });
     expect(result.ok).toBe(false);
+    expect(prepare).toHaveBeenCalledWith(expect.objectContaining({ allowArchivedBootstrap: false }));
     expect(claimWorkspace).not.toHaveBeenCalled();
     expect(readCurrentArtifact).toHaveBeenCalledWith(expect.objectContaining({ room: rooms[0] }));
     expect(lock).toHaveBeenCalled();
@@ -74,6 +75,7 @@ describe("claimGovernedBacklogWorkspace", () => {
   it("keeps trusted task identity when coverage synthesizes spec approval for a fix", async () => {
     taskAuthority.resolve.mockResolvedValue("oauth-family:claim");
     const history = vi.spyOn(prisma.taskRun, "findFirst").mockResolvedValue(null);
+    const pending = vi.spyOn(prisma.taskRun, "findMany").mockResolvedValue([]);
     try {
       const db = database([receipt("research", "research")]);
       const item = await db.backlogItem!.findFirst({});
@@ -84,6 +86,7 @@ describe("claimGovernedBacklogWorkspace", () => {
         dependencies: { claimWorkspace: vi.fn(), discoverCanonicalArtifact },
       });
       expect(result.ok).toBe(false);
+      expect(currentDesign.prepare).toHaveBeenCalledWith(expect.objectContaining({ allowArchivedBootstrap: true }));
       if (result.ok) throw new Error("Missing coverage must not admit implementation");
       expect(result.data.readiness.profile).toBe("fix");
       expect(result.data.readiness.unmet.map(entry => entry.code)).toEqual(["PLAN_REQUIRED"]);
@@ -91,6 +94,7 @@ describe("claimGovernedBacklogWorkspace", () => {
       expect(request.initiativeReviewBinding?.expectedCurrentBaselineId).toBeNull();
       expect(request.requestKey).toMatch(/:reviewer:[a-f0-9]{64}$/);
     } finally {
+      pending.mockRestore();
       history.mockRestore();
     }
   });
@@ -98,6 +102,7 @@ describe("claimGovernedBacklogWorkspace", () => {
   it("issues a fresh design request with the same trusted task identity as admission", async () => {
     taskAuthority.resolve.mockResolvedValue("oauth-family:claim");
     const history = vi.spyOn(prisma.taskRun, "findFirst").mockResolvedValue(null);
+    const pending = vi.spyOn(prisma.taskRun, "findMany").mockResolvedValue([]);
     try {
       const result = await claimGovernedBacklogWorkspace({
         db: database(), input, actor: { ...actor, taskAuthorityTokenId: "access" }, workIntent: "plan",
@@ -110,6 +115,7 @@ describe("claimGovernedBacklogWorkspace", () => {
       expect(request.requestKey).toMatch(/:reviewer:[a-f0-9]{64}$/);
       expect(taskAuthority.resolve).toHaveBeenCalledWith({ tokenId: "access", userId: actor.userId, source: "oauth" });
     } finally {
+      pending.mockRestore();
       history.mockRestore();
     }
   });
