@@ -624,7 +624,9 @@ describe("searchWikiPages: two-pass overlay-aware retrieval", () => {
       principleDimensions: ["architecture_alignment"],
       principlePublic: true,
     }]);
+    const onRetrievalDisposition = vi.fn();
     const results = await searchWikiPages({
+      onRetrievalDisposition,
       query: "Universal Work Formula",
       organizationId: null,
       pageKind: "principle",
@@ -635,6 +637,7 @@ describe("searchWikiPages: two-pass overlay-aware retrieval", () => {
       source: "kernel",
     })]);
     expect(searchSimilar).not.toHaveBeenCalled();
+    expect(onRetrievalDisposition).toHaveBeenCalledExactlyOnceWith("lexical-only");
   });
 
   it("falls back to Postgres when semantic search misses an existing published page", async () => {

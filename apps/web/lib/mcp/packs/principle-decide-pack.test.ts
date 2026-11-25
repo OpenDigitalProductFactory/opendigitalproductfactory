@@ -91,8 +91,7 @@ beforeEach(() => {
   db.organizationFindFirst.mockResolvedValue({ id: "org-1" });
   wiki.searchWikiPages.mockResolvedValue([]);
   db.wikiPageFindMany.mockResolvedValue([]);
-  wiki.generateEmbedding.mockResolvedValue(undefined);
-  // Provider healthy by default; the degradation tests flip this to false.
+  wiki.generateEmbedding.mockResolvedValue([1, 0]);
   wiki.isEmbeddingAvailable.mockResolvedValue(true);
   wiki.principleMatchesRingScope.mockReturnValue(true);
   decision.resolveDecisionCallerContext.mockResolvedValue({
@@ -407,8 +406,10 @@ describe("principle-decide pack — retrieval degradation is loud (BI-512FBD20)"
   // structurally impossible.
 
   it("flags retrievalDegraded and refuses to be usable when the provider is down", async () => {
-    // Both passes empty (searchWikiPages default) AND the provider is down.
-    wiki.isEmbeddingAvailable.mockResolvedValue(false);
+    wiki.searchWikiPages.mockImplementation(async (input) => {
+      input.onRetrievalDisposition?.("lexical-only");
+      return [];
+    });
     wiki.decide.mockReturnValue({
       // Even if the commandment-only field produced a nominal winner, a
       // degraded consult is not a verdict.
@@ -431,8 +432,7 @@ describe("principle-decide pack — retrieval degradation is loud (BI-512FBD20)"
       .signalQuality;
     expect(sq.retrievalDegraded).toBe(true);
     expect(sq.usable).toBe(false);
-    expect(sq.advisory).toMatch(/EMBEDDING PROVIDER UNAVAILABLE/);
-    expect(sq.advisory).toMatch(/docker model pull ai\/nomic-embed-text-v1\.5/);
+    expect(sq.advisory).toMatch(/core=lexical-only.*contextual=lexical-only/);
   });
 
   it("does NOT flag degradation when both passes are empty but the provider is up (a genuine no-match)", async () => {
@@ -458,8 +458,8 @@ describe("principle-decide pack — retrieval degradation is loud (BI-512FBD20)"
   });
 
   it("does NOT probe the provider when retrieval actually returned principles", async () => {
-    // A populated core pass means retrieval ran — no reason to probe, and no
-    // degradation regardless of provider state.
+    // Healthy evidence is attested by the actual reads, not a provider probe.
+    db.wikiPageFindMany.mockResolvedValue([{ id: "p1", principleTier: "core" }]);
     wiki.searchWikiPages.mockResolvedValueOnce([
       { pageId: "p1", title: "Some Core Principle", principleTier: "core", contentPreview: "direction" },
     ]);
@@ -605,7 +605,12 @@ describe("principle-decide pack — core/contextual reach structured scoring", (
 
     expect(db.wikiPageFindMany).toHaveBeenCalledOnce();
     expect(db.wikiPageFindMany).toHaveBeenCalledWith({
-      where: { id: { in: ["wp-core-1", "wp-core-2", "wp-ctx-1"] } },
+      where: {
+        id: { in: ["wp-core-1", "wp-core-2", "wp-ctx-1"] },
+        status: "published",
+        pageKind: "principle",
+        OR: [{ isKernel: true, organizationId: null }, { organizationId: "org-1" }],
+      },
     });
   });
 
@@ -631,31 +636,31 @@ describe("principle-decide pack — core/contextual reach structured scoring", (
     expect(scoredPrinciples().find((p) => p.id === "wp-core-1")!.weight).toBe(0.4);
   });
 
-  // SEMANTICS REVISED by BI-6ADB019D. This originally asserted that a
-  // rehydration miss kept the principle on semantic fallback, on the theory
-  // that a miss might be transient. Live evidence showed the opposite: a miss
-  // on a SUCCESSFUL query means the WikiPage was deleted and the vector point
-  // is a phantom, so keeping it just burns a maxPrinciples slot. The original
-  // intent — never silently drop doctrine for a transient reason — is preserved
-  // by the query-failure test below, which is the case that actually is
-  // transient.
   it("drops a principle whose row is absent from a SUCCESSFUL rehydration", async () => {
     wiki.searchWikiPages.mockResolvedValueOnce([CORE_HIT]).mockResolvedValueOnce([]);
     db.wikiPageFindMany.mockResolvedValue([]); // page no longer exists
 
-    await invoke();
+    const res = await invoke();
 
+    expect(res.data).toMatchObject({
+      recommendation: null,
+      signalQuality: { retrievalEvidence: { hydration: "stale" } },
+    });
     expect(scoredPrinciples().find((p) => p.id === "wp-core-1")).toBeUndefined();
   });
 
-  it("survives a rehydration failure without failing the decision", async () => {
+  it("returns diagnostics without a verdict when hydration fails", async () => {
     wiki.searchWikiPages.mockResolvedValueOnce([CORE_HIT]).mockResolvedValueOnce([]);
     db.wikiPageFindMany.mockRejectedValue(new Error("connection reset"));
 
     const res = await invoke();
 
     expect(res.success).toBe(true);
-    expect(scoredPrinciples().find((p) => p.id === "wp-core-1")).toBeDefined();
+    expect(res.data).toMatchObject({
+      recommendation: null,
+      signalQuality: { usable: false, retrievalEvidence: { hydration: "failed" } },
+    });
+    expect(scoredPrinciples().find((p) => p.id === "wp-core-1")).toBeUndefined();
   });
 
   it("RC6: a commandment corpus larger than maxPrinciples no longer starves core", async () => {
@@ -696,22 +701,6 @@ describe("principle-decide pack — core/contextual reach structured scoring", (
     const ids = scoredPrinciples().map((p) => p.id);
     expect(ids).toContain("wp-core-1");
     expect(ids).not.toContain("wp-deleted");
-  });
-
-  it("BI-6ADB019D: does NOT drop anything when the rehydration QUERY failed", async () => {
-    // The distinction that matters. A failed lookup leaves every id unresolved
-    // for a transient reason; dropping them would silently delete the whole
-    // core/contextual tier from the decision.
-    wiki.searchWikiPages
-      .mockResolvedValueOnce([CORE_HIT, { ...CORE_HIT, pageId: "wp-core-2" }])
-      .mockResolvedValueOnce([]);
-    db.wikiPageFindMany.mockRejectedValue(new Error("connection reset"));
-
-    await invoke();
-
-    const ids = scoredPrinciples().map((p) => p.id);
-    expect(ids).toContain("wp-core-1");
-    expect(ids).toContain("wp-core-2");
   });
 
   it("RC6: maxPrinciples still caps the relevance-retrieved set it names", async () => {

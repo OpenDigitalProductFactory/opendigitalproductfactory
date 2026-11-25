@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const { mockPrisma } = vi.hoisted(() => ({
   mockPrisma: {
+    wikiPage: { findMany: vi.fn() },
     organization: {
       findFirst: vi.fn(),
     },
@@ -43,18 +44,22 @@ import { executeTool } from "@/lib/mcp-tools";
 
 afterEach(() => {
   mockPrisma.organization.findFirst.mockReset();
+  mockPrisma.wikiPage.findMany.mockReset();
   listPrinciplesByTier.mockReset();
   searchWikiPages.mockReset();
   generateEmbedding.mockReset();
   isEmbeddingAvailable.mockReset();
 });
 
-// Provider healthy by default — these tests predate BI-512FBD20 and assert on
-// retrieval + scoring, not on the degradation path. The pack only probes
-// isEmbeddingAvailable when BOTH retrieval passes are empty; a default of true
-// keeps a genuinely-empty consult classified as "no match", not "provider down".
 beforeEach(() => {
-  isEmbeddingAvailable.mockResolvedValue(true);
+  mockPrisma.organization.findFirst.mockResolvedValue({ id: "org_a" });
+  mockPrisma.wikiPage.findMany.mockImplementation(async (query) =>
+    (query.where.id?.in ?? []).map((id: string) => principlePgRow(id, {
+      principleTier: "core",
+      ...(id === "rs" ? { principleWeight: 0.9 } : {}),
+    })),
+  );
+  generateEmbedding.mockResolvedValue([1, 0, 0]);
 });
 
 // ─── Fixtures ───────────────────────────────────────────────────────────────
@@ -190,8 +195,130 @@ describe("principle_decide MCP tool", () => {
     expect(res.message).toMatch(/^NO RECOMMENDATION/);
     expect(res.data).toMatchObject({
       appliedPrincipleCount: 1,
-      recommendation: { optionId: "refactor" },
+      recommendation: null,
       signalQuality: { retrievalDegraded: true, usable: false, autonomyEligible: false },
+    });
+  });
+
+  function consultWithStructuredOptions() {
+    return executeTool("principle_decide", {
+      context: "Should we take the quick patch or refactor?",
+      options: [
+        { id: "patch", description: "Quick patch", features: { schema_grounding: 0.1 } },
+        { id: "refactor", description: "Refactor", features: { schema_grounding: 0.9 } },
+      ],
+      callingPopulation: "external_coding_agent",
+    }, "user_test");
+  }
+
+  it("holds when the 51st commandment proves the bounded read is incomplete", async () => {
+    const rows = Array.from({ length: 51 }, (_, i) =>
+      principlePgRow(`commandment-${i}`, { principleDimensionVector: { schema_grounding: 1 } }),
+    );
+    listPrinciplesByTier.mockImplementation(async (_db, { limit }) => rows.slice(0, limit));
+    searchWikiPages.mockResolvedValue([]);
+
+    const res = await consultWithStructuredOptions();
+
+    expect(res.data).toMatchObject({
+      recommendation: null,
+      signalQuality: {
+        usable: false,
+        autonomyEligible: false,
+        retrievalEvidence: { commandments: "overflow" },
+      },
+    });
+  });
+
+  it("withholds the verdict when mandatory doctrine fails despite healthy recall", async () => {
+    listPrinciplesByTier.mockRejectedValue(new Error("commandment read failed"));
+    searchWikiPages.mockResolvedValue([]);
+
+    const res = await consultWithStructuredOptions();
+
+    expect(res.data).toMatchObject({
+      recommendation: null,
+      signalQuality: {
+        usable: false,
+        autonomyEligible: false,
+        retrievalEvidence: { commandments: "failed" },
+      },
+    });
+  });
+
+  it("does not turn failed recall into a healthy no-match when the embedder is reachable", async () => {
+    listPrinciplesByTier.mockResolvedValue([
+      principlePgRow("arch", { principleDimensionVector: { schema_grounding: 1 } }),
+    ]);
+    searchWikiPages
+      .mockRejectedValueOnce(new Error("core retrieval failed"))
+      .mockResolvedValueOnce([]);
+
+    const res = await consultWithStructuredOptions();
+
+    expect(res.data).toMatchObject({
+      recommendation: null,
+      signalQuality: {
+        usable: false,
+        autonomyEligible: false,
+        retrievalEvidence: { core: "failed", contextual: "complete" },
+      },
+    });
+  });
+
+  it("holds a consult when optional recall can only run lexically", async () => {
+    listPrinciplesByTier.mockResolvedValue([
+      principlePgRow("arch", { principleDimensionVector: { schema_grounding: 1 } }),
+    ]);
+    searchWikiPages.mockImplementation(async (input) => {
+      if (input.principleTier === "core") input.onRetrievalDisposition?.("lexical-only");
+      return [];
+    });
+
+    const res = await consultWithStructuredOptions();
+
+    expect(res.data).toMatchObject({
+      recommendation: null,
+      signalQuality: {
+        usable: false,
+        retrievalEvidence: { core: "lexical-only", contextual: "complete" },
+      },
+    });
+  });
+
+  it("holds a consult when the vector was built from older doctrine", async () => {
+    listPrinciplesByTier.mockResolvedValue([
+      principlePgRow("arch", { principleDimensionVector: { schema_grounding: 1 } }),
+    ]);
+    searchWikiPages
+      .mockResolvedValueOnce([{ ...principleVectorHit("old", "core"), embeddingSourceDigest: "old-digest" }])
+      .mockResolvedValueOnce([]);
+    mockPrisma.wikiPage.findMany.mockImplementation(async (query) =>
+      (query.where.id?.in ?? []).map(() => ({ ...principlePgRow("old"), body: "Current doctrine" })),
+    );
+
+    const res = await consultWithStructuredOptions();
+
+    expect(res.data).toMatchObject({
+      recommendation: null,
+      signalQuality: { usable: false, retrievalEvidence: { hydration: "stale" } },
+    });
+  });
+
+  it("keeps a completed zero-match usable when mandatory doctrine has enough signal", async () => {
+    listPrinciplesByTier.mockResolvedValue([
+      principlePgRow("arch", { principleDimensionVector: { schema_grounding: 1 } }),
+    ]);
+    searchWikiPages.mockResolvedValue([]);
+
+    const res = await consultWithStructuredOptions();
+
+    expect(res.data).toMatchObject({
+      recommendation: { optionId: "refactor" },
+      signalQuality: {
+        usable: true,
+        retrievalEvidence: { commandments: "complete", core: "complete", contextual: "complete" },
+      },
     });
   });
 

@@ -10,6 +10,7 @@
 // outcome is always observable in the tool response (`ledger.recorded`),
 // per make-silent-failures-observable.
 
+import type { DecisionRetrievalEvidence } from "./retrieval-budget";
 import type { RetryAttemptRecord } from "@dpf/validators/judgment/uncertain-retry";
 import {
   readVerdict,
@@ -232,6 +233,7 @@ export async function recordKernelConsultInteraction(input: {
    */
   signalQuality?: {
     usable: boolean;
+    retrievalEvidence?: DecisionRetrievalEvidence;
     optionsWithFeatures: number;
     optionCount: number;
     /** BI-1D23EC26 */
@@ -288,18 +290,31 @@ export async function recordKernelConsultInteraction(input: {
       return { recorded: false, profileId, reason: "profile-not-provisioned" };
     }
 
-    const { outcomeType, riskTier, confidenceScore, verdictCause, retryHint } =
-      mapConsultOutcome(input.result);
+    const retrievalEvidence = input.signalQuality?.retrievalEvidence;
+    const retrievalIncomplete = retrievalEvidence
+      && Object.values(retrievalEvidence).some((status) => status !== "complete");
+    const result = retrievalIncomplete
+      ? { ...input.result, recommendation: null }
+      : input.result;
+    const { outcomeType, riskTier, confidenceScore, verdictCause, retryHint } = retrievalIncomplete
+      ? {
+          outcomeType: "defer" as const,
+          riskTier: "medium" as const,
+          confidenceScore: 0,
+          verdictCause: "retrieval-incomplete",
+          retryHint: "Restore the missing decision evidence before retrying.",
+        }
+      : mapConsultOutcome(result);
     // BI-2107B5D2: read through readVerdict so the edges recorded are the ones
     // actually applied — including for a legacy result that carried none.
-    const recordedVerdict = input.result.recommendation
-      ? readVerdict(input.result.recommendation, input.result.flags)
+    const recordedVerdict = result.recommendation
+      ? readVerdict(result.recommendation, result.flags)
       : null;
 
     // Top contributions for the recommended option — the "why" the audit
     // drill-in shows without replaying the scoring math.
-    const winner = input.result.recommendation
-      ? input.result.scores.find((s) => s.optionId === input.result.recommendation?.optionId)
+    const winner = result.recommendation
+      ? result.scores.find((s) => s.optionId === result.recommendation?.optionId)
       : null;
     const topContributors = winner
       ? [...winner.contributions]
@@ -330,15 +345,15 @@ export async function recordKernelConsultInteraction(input: {
       // recommendations were unqueryable — and agreement cannot be measured
       // against a value nothing can select. `coverageGap` below already tracks
       // the absence of a recommendation, so null here means "none was made".
-      recommendedOptionId: input.result.recommendation?.optionId ?? null,
+      recommendedOptionId: result.recommendation?.optionId ?? null,
       selectedProfileId: profile.profileId,
       fallbackProfileId: null,
       profileVersionId: version.versionId,
       confidenceBefore: confidenceScore,
       confidenceAfter: confidenceScore,
       confidenceScore,
-      coverageGap: !input.result.recommendation,
-      principleConflict: input.result.flags.commandmentConflict,
+      coverageGap: !result.recommendation,
+      principleConflict: result.flags.commandmentConflict,
       domainClass: "kernel-consult",
       resolvedProfileChain: [profile.profileId],
       materialCount: input.appliedPrincipleCount,
@@ -347,7 +362,7 @@ export async function recordKernelConsultInteraction(input: {
       question: input.question,
       options: input.optionIds,
       scoredOptions: input.scoredOptions,
-      rationale: input.result.reasoning,
+      rationale: result.reasoning,
       materialScores: [],
       sources,
     };
@@ -365,8 +380,8 @@ export async function recordKernelConsultInteraction(input: {
           optionIds: input.optionIds,
           criteria: input.scoredCriteria ?? {},
           evidenceDigests: input.evidenceDigests ?? {},
-          recommendedOptionId: input.result.recommendation?.optionId ?? null,
-          composite: input.result.recommendation?.composite ?? null,
+          recommendedOptionId: result.recommendation?.optionId ?? null,
+          composite: result.recommendation?.composite ?? null,
         };
         chain = sealDecision({ chainId, prevHash, payload, now: input.now ?? new Date() });
       } catch (sealErr) {
@@ -405,10 +420,10 @@ export async function recordKernelConsultInteraction(input: {
         callingPopulation: input.callerContext.callingPopulation,
         callingSurface: input.callingSurface ?? null,
         caller: input.caller ?? null,
-        recommendedOptionId: input.result.recommendation?.optionId ?? null,
-        composite: input.result.recommendation?.composite ?? null,
-        margin: input.result.recommendation?.margin ?? null,
-        recommendationConfidence: input.result.recommendation?.confidence ?? null,
+        recommendedOptionId: result.recommendation?.optionId ?? null,
+        composite: result.recommendation?.composite ?? null,
+        margin: result.recommendation?.margin ?? null,
+        recommendationConfidence: result.recommendation?.confidence ?? null,
         // BI-2107B5D2: the three-band verdict, its cause, the band edges in
         // force, and what to change before retrying. Persisting the EDGES
         // alongside the margin is what lets a later histogram tell a moved bar
@@ -423,27 +438,28 @@ export async function recordKernelConsultInteraction(input: {
         // changed on each attempt. A later histogram can then separate a
         // first-pass assurance from one that took two tries to reach.
         retryAttempts: input.retryAttempts ?? null,
-        insufficientSignal: input.result.flags.insufficientSignal === true,
-        commandmentConflictPrinciples: input.result.flags.commandmentConflictPrinciples,
-        structuredCoverage: input.result.flags.structuredCoverage,
+        insufficientSignal: result.flags.insufficientSignal === true,
+        commandmentConflictPrinciples: result.flags.commandmentConflictPrinciples,
+        structuredCoverage: result.flags.structuredCoverage,
         // BI-E0151DB2. Signal quality must be QUERYABLE, not just inferable.
         // Before this, answering "how often does the kernel abstain, and why?"
         // meant inferring it from outcomeType='escalate' — which conflates
         // insufficient signal (an agent supplied no scoreable features) with a
         // commandment conflict (genuine doctrine collision needing a human).
         // Those need opposite responses, so the ledger names them apart.
-        commandmentConflict: input.result.flags.commandmentConflict === true,
-        semanticFallbackRatio: input.result.flags.semanticFallbackRatio ?? null,
+        commandmentConflict: result.flags.commandmentConflict === true,
+        semanticFallbackRatio: result.flags.semanticFallbackRatio ?? null,
         optionsWithFeatures: input.signalQuality?.optionsWithFeatures ?? null,
         optionCount: input.signalQuality?.optionCount ?? null,
-        signalUsable: input.signalQuality?.usable ?? null,
+        signalUsable: retrievalIncomplete ? false : input.signalQuality?.usable ?? null,
+        retrievalEvidence: retrievalEvidence ?? null,
         // BI-1D23EC26 MCDA quality gates (queryable autonomy evidence)
-        autonomyEligible: input.signalQuality?.autonomyEligible ?? null,
+        autonomyEligible: retrievalIncomplete ? false : input.signalQuality?.autonomyEligible ?? null,
         featureCoverageWeak: input.signalQuality?.featureCoverageWeak ?? null,
         sensitivityUnstable: input.signalQuality?.sensitivityUnstable ?? null,
-        featureCoverage: input.result.flags.featureCoverage ?? null,
-        sensitivity: input.result.flags.sensitivity ?? null,
-        autonomyBlockers: input.result.flags.autonomyBlockers ?? null,
+        featureCoverage: result.flags.featureCoverage ?? null,
+        sensitivity: result.flags.sensitivity ?? null,
+        autonomyBlockers: result.flags.autonomyBlockers ?? null,
         optionDescriptions: input.optionDescriptions,
         topContributors,
         policyAffirmativeOptionId: input.policyProjection?.policyAffirmativeOptionId ?? null,
