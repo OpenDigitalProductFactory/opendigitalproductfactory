@@ -377,3 +377,15 @@ export async function readinessThroughPrivateActuator(params: PromoterParams & {
   return requestPromoterLaunchThroughActuator(rest, { kind: "self-upgrade", runId, stage: "readiness" },
     send ?? ((body, timeoutMs) => observation.launchActuatorPromoter(body, { timeoutMs })));
 }
+
+/** BI-224F56F1: in the qualified portal every promoter launch goes to the
+ * actuator. A launch it cannot route (a dry run, an ownerless launch) is
+ * refused, never run against a local Docker socket the portal does not have. */
+export async function routedOrLocalPromoter(
+  routed: PromoterResult | null, local: () => Promise<PromoterResult>, available?: () => Promise<boolean>,
+): Promise<PromoterResult> {
+  if (routed) return routed;
+  const observation = await import("../../../../scripts/lib/scope-writer-observation.mjs");
+  if (await (available ?? observation.usesPrivateActuator)()) throw new Error("promoter_launch_unroutable_in_qualified_portal");
+  return local();
+}

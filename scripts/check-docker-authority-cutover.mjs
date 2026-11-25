@@ -80,7 +80,7 @@ export const DOCKER_AUTHORITY_REGISTRY = Object.freeze({
   "apps/web/lib/self-upgrade/doctools-release-image.ts": { class: "routed", count: 2, reason: "Converter image resolve, presence and pull go to the actuator's fixed operations for the install's own dpf-doctools repository when it is mounted; local builds are refused there." },
   "apps/web/lib/self-upgrade/doctools-source-lineage.ts": { class: "message", count: 1, reason: "Error text only; the build runs through the promoter." },
   "apps/web/lib/self-upgrade/preflight.ts": { class: "routed", count: 1, reason: "The candidate reassessment proof runs in the actuator, admitted for the running run, when it is mounted; this runner serves installs without it." },
-  "apps/web/lib/self-upgrade/promoter-launch.ts": { class: "pending", count: 2, reason: "Writer-reachable raw Docker call; migrate to a typed actuator operation before the immutable recipe." },
+  "apps/web/lib/self-upgrade/promoter-launch.ts": { class: "routed", count: 2, reason: "Admitted launches run inside the private actuator; with it mounted the portal refuses any launch it cannot route (routedOrLocalPromoter), so these calls serve only installs without it." },
   "apps/web/lib/self-upgrade/promoter-sweep.ts": { class: "routed", count: 2, reason: "reconcileActuatorPromoters when the mount is present; *AtDaemon runs in the actuator." },
   "apps/web/lib/self-upgrade/promoter.ts": { class: "pending", count: 5, reason: "Writer-reachable raw Docker call; migrate to a typed actuator operation before the immutable recipe." },
   "apps/web/lib/self-upgrade/runtime-image-identity.ts": { class: "routed", count: 1, reason: "readActuatorPortalImage when the actuator mount is present." },

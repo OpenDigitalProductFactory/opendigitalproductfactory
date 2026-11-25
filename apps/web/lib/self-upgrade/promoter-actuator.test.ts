@@ -7,6 +7,7 @@ import {
   launchPromoterAtActuator,
   launchThroughPrivateActuator,
   readPromoterInstallBinding,
+  routedOrLocalPromoter,
   requestPromoterLaunchThroughActuator,
   type PromoterInstallBinding,
   type RuntimeHostContext,
@@ -402,5 +403,19 @@ describe("the swap's drain fence at the actuator boundary (BI-3C3CCC59)", () => 
     await expect(launchThroughPrivateActuator(launch, async () => true, async (body) => { sent.push(body); return { exitCode: 0, stdout: "", stderr: "" }; },
       async () => { throw new Error("admission-reopened-before-swap"); })).rejects.toThrow("admission-reopened-before-swap");
     expect(sent).toHaveLength(0);
+  });
+});
+
+describe("routedOrLocalPromoter (BI-224F56F1)", () => {
+  const routed = { exitCode: 0, stdout: "routed", stderr: "" };
+  const local = async () => ({ exitCode: 0, stdout: "local", stderr: "" });
+
+  it("returns the actuator's result, keeps the local launch without the actuator, and refuses an unroutable launch with it", async () => {
+    await expect(routedOrLocalPromoter(routed, local, async () => true)).resolves.toBe(routed);
+    await expect(routedOrLocalPromoter(null, local, async () => false)).resolves.toEqual({ exitCode: 0, stdout: "local", stderr: "" });
+    let ranLocally = false;
+    await expect(routedOrLocalPromoter(null, async () => { ranLocally = true; return routed; }, async () => true))
+      .rejects.toThrow("promoter_launch_unroutable_in_qualified_portal");
+    expect(ranLocally).toBe(false);
   });
 });

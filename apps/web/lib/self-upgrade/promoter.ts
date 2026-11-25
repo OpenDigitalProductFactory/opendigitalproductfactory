@@ -84,8 +84,8 @@ export async function resolvePromoterArtifact(
   );
 }
 
-export const runPromoterReadiness = async (params: PromoterParams & { artifact: ResolvedPromoterArtifact }): Promise<PromoterResult> =>
-  (await (await import("./promoter-actuator")).readinessThroughPrivateActuator(params)) ?? runPromoterReadinessAtDaemon(params); // BI-224F56F1
+export const runPromoterReadiness = async (params: PromoterParams & { artifact: ResolvedPromoterArtifact }): Promise<PromoterResult> => // BI-224F56F1
+  (await import("./promoter-actuator")).routedOrLocalPromoter(await (await import("./promoter-actuator")).readinessThroughPrivateActuator(params), () => runPromoterReadinessAtDaemon(params));
 export async function runPromoterReadinessAtDaemon(params: PromoterParams & { artifact: ResolvedPromoterArtifact }): Promise<PromoterResult> {
   const { command, args } = await buildCompatiblePromoterCommand(params, buildPromoterReadinessCommand, createPromoterDockerRunner(params));
   return runProcessWithBudget(command, args, { timeoutMs: Math.min(resolvePromoterTimeoutMs(params), 5 * 60_000), containerName: params.containerName });
@@ -766,8 +766,7 @@ import {
 /** The one fixed serializer for a promoter launch; shared with the actuator. */
 export const buildAdmittedPromoterCommand = (input: PromoterParams, docker = createPromoterDockerRunner(input)) => buildCompatiblePromoterCommand(input, buildPromoterCommand, docker);
 // BI-224F56F1: no socket in the immutable portal; the actuator runs runPromoterAtDaemon after admission and re-runs the swap fence itself (BI-3C3CCC59).
-export const runPromoter = async (params: PromoterParams, assertAdmission?: () => Promise<void>): Promise<PromoterResult> =>
-  (await (await import("./promoter-actuator")).launchThroughPrivateActuator(params, undefined, undefined, assertAdmission)) ?? runPromoterAtDaemon(params, assertAdmission);
+export const runPromoter = async (params: PromoterParams, assertAdmission?: () => Promise<void>): Promise<PromoterResult> => (await import("./promoter-actuator")).routedOrLocalPromoter(await (await import("./promoter-actuator")).launchThroughPrivateActuator(params, undefined, undefined, assertAdmission), () => runPromoterAtDaemon(params, assertAdmission));
 export async function runPromoterAtDaemon(params: PromoterParams, assertAdmission?: () => Promise<void>): Promise<PromoterResult> {
   if (params.launchOwner && !params.runtimeTransitionAuthorityOperation && !params.dryRun && params.phase !== "build") {
     return (await import("./promoter-launch")).runAdmittedPromoter(params, params.launchOwner, params.promoterImage || DEFAULT_PROMOTER_IMAGE, buildAdmittedPromoterCommand, assertAdmission);
