@@ -73,6 +73,20 @@ room:
 (`post-push-ci-failure`: 2, `queue-stale-base`: 1) are the budget. No new
 policy table.
 
+**Queue follow-through (BI-BE53F0A0).** Build Studio is the control point for
+authorized delivery regardless of where the request originated. A queued PR
+means GitHub confirms enrollment, not just that auto-merge is armed. The room
+records queue removal separately from PR-head checks, with the provider event,
+merge-group SHA, any available failing checks, and the accountable lane's next
+action. It routes a failed group to hosted CI and a disarmed or unconfirmed
+attempt to the Workroom owner through the existing escalation seam. Quiet and
+observe-only rooms retain the hold without sending it. A failed handoff is
+still pending and retried on the delivery tick. The room also keeps observing
+for an authorized new queue attempt or a confirmed merge. It does not re-arm a
+removed, disarmed, or unconfirmed attempt automatically or treat a queue-group
+failure as a verdict on the author head. Existing writers retain source repair,
+humans retain required decisions, and GitHub retains every protected check.
+
 ### 3.3 Inputs: events first, poll as the safety net
 
 - **Webhook.** The receiver adds `check_suite` (completed), `workflow_run`

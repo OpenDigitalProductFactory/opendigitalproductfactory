@@ -110,6 +110,53 @@ describe("runBuildPrDeliveryReconcile — every room with a PR, whichever client
     vi.unstubAllGlobals();
   });
 
+  it("routes a removed group's failure, records the receipt, and observes the next transition", async () => {
+    let now = Date.parse("2026-11-25T23:00:00Z");
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(now);
+    let workspaceState: unknown = {};
+    mocks.findMany.mockImplementation(async () => [room({ workspaceState })]);
+    mocks.updateMany.mockImplementation(async ({ data }) => {
+      workspaceState = data.workspaceState;
+      return { count: 1 };
+    });
+    const healthy = observation([{ name: "UX Route Budget Sweep", status: "COMPLETED", conclusion: "SUCCESS" }], "CLEAN");
+    mocks.observe.mockResolvedValue({
+      ...healthy,
+      queueEvent: { kind: "removed", id: "event-1", at: "2026-11-25T22:54:08Z", reason: "failed_checks",
+        groupHeadSha: "group1", failingChecks: [{ name: "UX Route Budget Sweep", conclusion: "FAILURE",
+          url: "https://github.com/o/r/actions/runs/9" }] },
+    });
+    try {
+      await runBuildPrDeliveryReconcile();
+      expect(workspaceState).toMatchObject({ prDelivery: { status: "removed", nextObservationAt: "2026-11-25T23:05:00.000Z",
+        queueHold: { owner: "hosted-ci-owner", routeReportId: "PIR-1", groupHeadSha: "group1" } } });
+      expect(mocks.createIssue).toHaveBeenCalledTimes(1);
+      expect(mocks.createIssue).toHaveBeenCalledWith(expect.objectContaining({
+        description: expect.stringContaining("https://github.com/o/r/actions/runs/9"),
+      }));
+
+      now += 60_000;
+      vi.setSystemTime(now);
+      await runBuildPrDeliveryReconcile();
+      expect(mocks.observe).toHaveBeenCalledTimes(1);
+
+      now += 4 * 60_000;
+      vi.setSystemTime(now);
+      mocks.observe.mockResolvedValue({ ...healthy, mergeQueueEntry: true });
+      await runBuildPrDeliveryReconcile();
+      expect(workspaceState).toMatchObject({ prDelivery: { status: "queued", queueHold: null } });
+
+      mocks.observe.mockResolvedValue({ ...healthy, state: "MERGED", merged: true });
+      await runBuildPrDeliveryReconcile();
+      expect(workspaceState).toMatchObject({ prDelivery: { status: "awaiting-release" } });
+      expect(mocks.createIssue).toHaveBeenCalledTimes(1);
+      expect(mocks.fetch).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("eventually observes every eligible room despite repeated unrelated drive timestamp writes", async () => {
     let clock = Date.parse("2026-11-01T00:00:00Z");
     let cursor: string | null = null;
@@ -453,7 +500,7 @@ describe("runBuildPrDeliveryReconcile — re-evaluating stopped rooms (BI-0EDCF2
 
     expect(result).toMatchObject({ observed: 1, actuated: 1, escalated: 0 });
     const write = mocks.updateMany.mock.calls.find((call) => call[0].where.id === "stopped")?.[0];
-    expect(write.data.workspaceState.prDelivery).toMatchObject({ status: "queued", escalationKey: null });
+    expect(write.data.workspaceState.prDelivery).toMatchObject({ status: "armed", escalationKey: null });
     expect(mocks.activityCreate).toHaveBeenCalledWith({ data: expect.objectContaining({
       workCapsuleId: "stopped", kind: "workroom-pr-delivery-resumed",
     }) });
@@ -731,7 +778,7 @@ describe("BI-C3EBDCEC VERIFY-PR-2 & VERIFY-PR-3: PR-only custody repair and term
     expect(String(mocks.fetch.mock.calls[0]?.[1]?.body)).toContain('"expectedHeadOid":"sha2-repaired"');
     const write = mocks.updateMany.mock.calls[0]?.[0];
     expect(write.data).toMatchObject({ headSha: "sha2-repaired" });
-    expect(write.data.workspaceState.prDelivery).toMatchObject({ status: "queued" });
+    expect(write.data.workspaceState.prDelivery).toMatchObject({ status: "armed" });
     expect(write.data.workspaceState.prDelivery.followThrough.hold).toBeNull();
   });
 

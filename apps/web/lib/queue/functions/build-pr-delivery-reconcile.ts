@@ -130,6 +130,7 @@ export async function runBuildPrDeliveryReconcile(): Promise<{
   const { publishFailureReadinessStatus } = await import("@/lib/change-review/failure-readiness-status");
   const {
     executeBuildPrDeliveryAction,
+    holdsPrQueueAttempt,
     resolveBuildPrReconcilerMode,
   } = await import("@/lib/build/build-pr-delivery-reconciler");
   const {
@@ -301,7 +302,7 @@ export async function runBuildPrDeliveryReconcile(): Promise<{
       });
       // Build Studio rooms were gated by autonomy eligibility above.
       const actuationAllowed = capsule.featureBuildId ? true : posture.actuationAllowed;
-      if (mode === "enforce" && actuationAllowed) {
+      if (mode === "enforce" && actuationAllowed && !holdsPrQueueAttempt(state, readiness)) {
         // A passed review's status expires after an hour (BI-4D0B2AAB); refresh
         // it from the server verdict before queueing or when it is the only red check.
         const refresh = await refreshFailureReadinessForDelivery({
@@ -335,6 +336,33 @@ export async function runBuildPrDeliveryReconcile(): Promise<{
         owner,
         repo,
         actuationAllowed,
+        routeQueueHold: async (hold) => {
+          const facts = hold.failingChecks.map((check) =>
+            `${check.name} (${check.conclusion})${check.url ? ` — ${check.url}` : ""}`);
+          const filed = await routeToHuman({
+            producer: "build-pr-delivery",
+            subject: { kind: "workroom", id: capsule.capsuleId },
+            blockingFacts: [hold.reason, ...facts],
+            report: {
+              source: capsule.featureBuildId ? "build-studio" : "workroom-pr-follow-through",
+              severity: "medium",
+              title: `PR #${prNumber} queue follow-through: ${hold.owner}`,
+              description: [
+                `Workroom ${capsule.capsuleId} observed ${hold.reason} at ${hold.eventAt}.`,
+                `Current PR head: ${hold.headSha}. Removed group: ${hold.groupHeadSha ?? "unread"}.`,
+                "Queue-group checks are not a verdict on the current author head.",
+                facts.length ? facts.join("\n") : "Queue-group failing check details are unread.",
+                `Next action for ${hold.owner}: ${hold.nextAction}`,
+                "Build Studio checks again on the existing delivery tick. It does not re-arm this request.",
+                prUrl,
+              ].join("\n"),
+              featureBuildId: capsule.featureBuildId,
+              triggerKind: "build-pr-delivery-reconcile",
+              dedupeKey: `build-pr-delivery:${capsule.capsuleId}:queue-hold:${hold.headSha}:${hold.eventId}`,
+            },
+          });
+          return filed.error ? null : filed.reportId;
+        },
         prOnlyCustody: prOnlyCloseout,
         // BI-085A37EC / BI-C3EBDCEC: Build Studio builds and eligible PR-only
         // Build Studio custody rooms dispatch bounded CI repair unless the room

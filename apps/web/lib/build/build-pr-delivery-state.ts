@@ -1,4 +1,4 @@
-import type { GithubPrReadiness } from "@/lib/build/github-pr-readiness";
+import type { GithubPrReadiness, GithubQueueFailure } from "@/lib/build/github-pr-readiness";
 import { createPrFollowThrough, readPrFollowThrough, type PrFollowThroughV1 } from "./pr-follow-through";
 
 /**
@@ -12,7 +12,9 @@ export const BUILD_PR_DELIVERY_STATUSES = [
   "created",
   "checking",
   "updating",
+  "armed",
   "queued",
+  "removed",
   "awaiting-release",
   "deployed",
   "escalated",
@@ -20,6 +22,18 @@ export const BUILD_PR_DELIVERY_STATUSES = [
 ] as const;
 
 export type BuildPrDeliveryStatus = (typeof BUILD_PR_DELIVERY_STATUSES)[number];
+
+export type BuildPrQueueHold = {
+  headSha: string;
+  eventId: string;
+  reason: string;
+  eventAt: string;
+  groupHeadSha: string | null;
+  failingChecks: GithubQueueFailure[];
+  owner: "hosted-ci-owner" | "workroom-owner";
+  nextAction: string;
+  routeReportId: string | null;
+};
 
 export type BuildPrDeliveryStateV1 = {
   schemaVersion: 1;
@@ -44,6 +58,7 @@ export type BuildPrDeliveryStateV1 = {
   nextObservationAt: string | null;
   /** CI follow-through: classification, holds and the reused recovery budget. */
   followThrough: PrFollowThroughV1;
+  queueHold?: BuildPrQueueHold | null;
 };
 
 type JsonObject = Record<string, unknown>;
@@ -74,6 +89,24 @@ export function createBuildPrDeliveryState(input: {
     unknownObservations: 0,
     nextObservationAt: null,
     followThrough: createPrFollowThrough(),
+  };
+}
+
+function readQueueHold(input: unknown): BuildPrQueueHold | null {
+  const value = asObject(input);
+  if (typeof value.headSha !== "string" || typeof value.eventId !== "string"
+    || typeof value.reason !== "string" || typeof value.eventAt !== "string" || typeof value.nextAction !== "string"
+    || (value.owner !== "hosted-ci-owner" && value.owner !== "workroom-owner")) return null;
+  const failingChecks = (Array.isArray(value.failingChecks) ? value.failingChecks : []).slice(0, 12).flatMap((raw) => {
+    const c = asObject(raw);
+    return typeof c.name === "string" && typeof c.conclusion === "string"
+      ? [{ name: c.name, conclusion: c.conclusion, url: typeof c.url === "string" ? c.url : null }] : [];
+  });
+  return {
+    headSha: value.headSha, eventId: value.eventId, reason: value.reason, eventAt: value.eventAt,
+    groupHeadSha: typeof value.groupHeadSha === "string" ? value.groupHeadSha : null,
+    failingChecks, owner: value.owner, nextAction: value.nextAction,
+    routeReportId: typeof value.routeReportId === "string" ? value.routeReportId : null,
   };
 }
 
@@ -117,6 +150,7 @@ export function readBuildPrDeliveryState(workspaceState: unknown): BuildPrDelive
     unknownObservations: integer(value.unknownObservations),
     nextObservationAt: typeof value.nextObservationAt === "string" ? value.nextObservationAt : null,
     followThrough: readPrFollowThrough(value.followThrough),
+    ...(value.queueHold !== undefined ? { queueHold: readQueueHold(value.queueHold) } : {}),
   };
 }
 

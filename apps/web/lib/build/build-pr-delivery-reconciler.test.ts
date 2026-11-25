@@ -19,7 +19,7 @@ describe("decideBuildPrDeliveryAction", () => {
     expect(decideBuildPrDeliveryAction({
       state: { ...state, lastActuatedHeadSha: "abc", status: "queued" },
       readiness: { kind: "ready", headSha: "abc" },
-    })).toEqual({ kind: "wait", status: "queued", headSha: "abc", reason: "already-actuated" });
+    })).toEqual({ kind: "wait", status: "checking", headSha: "abc", reason: "queue-confirmation-missing" });
   });
 
   it("updates a stale head within budget and escalates when exhausted", () => {
@@ -108,6 +108,7 @@ async function run(input: {
   repairAuthority?: "dispatch" | "propose" | "record";
   dispatchRepair?: Parameters<typeof executeBuildPrDeliveryAction>[0]["dispatchRepair"];
   from?: typeof state;
+  routeQueueHold?: Parameters<typeof executeBuildPrDeliveryAction>[0]["routeQueueHold"];
 }) {
   const github = githubFake();
   const outcome = await executeBuildPrDeliveryAction({
@@ -122,6 +123,7 @@ async function run(input: {
     actuationAllowed: input.actuationAllowed,
     repairAuthority: input.repairAuthority,
     dispatchRepair: input.dispatchRepair,
+    routeQueueHold: input.routeQueueHold,
   });
   return { ...outcome, calls: github.calls };
 }
@@ -139,7 +141,7 @@ describe("executeBuildPrDeliveryAction — PR follow-through (BI-88341B5D)", () 
   it("arms auto-merge through the merge queue when checks are green, and never merges by hand", async () => {
     const outcome = await run({ observed: observation() });
     expect(outcome.actuated).toBe(true);
-    expect(outcome.state.status).toBe("queued");
+    expect(outcome.state.status).toBe("armed");
     expect(outcome.calls).toHaveLength(1);
     expect(outcome.calls[0]?.body).toContain("enablePullRequestAutoMerge");
     expect(outcome.calls[0]?.body).toContain('"expectedHeadOid":"sha1"');
@@ -150,6 +152,60 @@ describe("executeBuildPrDeliveryAction — PR follow-through (BI-88341B5D)", () 
         return /mergePullRequest/.test(text) || /\/merge"?$/.test(text);
       }),
     ).toBe(false);
+  });
+
+  it("owns an ejected queue attempt through a named handoff and checks for authorized recovery", async () => {
+    const armed = await run({ observed: observation({ autoMergeEnabled: true }) });
+    expect(armed.state.status).toBe("armed");
+    const enrolled = await run({ observed: observation({ mergeQueueEntry: true }), from: armed.state });
+    expect(enrolled.state.status).toBe("queued");
+    const routeQueueHold = vi.fn().mockResolvedValue("PIR-queue");
+    const removed = observation({
+      queueEvent: {
+        kind: "removed", id: "event-1", at: "2026-11-25T22:54:08Z", reason: "failed_checks",
+        groupHeadSha: "group1",
+        failingChecks: [{ name: "UX Route Budget Sweep", conclusion: "FAILURE", url: "https://github.com/o/r/actions/runs/9" }],
+      },
+    });
+    const held = await run({ from: enrolled.state, observed: removed, routeQueueHold });
+    expect(held.state.status).toBe("removed");
+    expect(held.state.queueHold).toMatchObject({
+      headSha: "sha1", eventId: "event-1", groupHeadSha: "group1", owner: "hosted-ci-owner",
+      failingChecks: [{ name: "UX Route Budget Sweep" }], routeReportId: "PIR-queue",
+    });
+    expect(held.state.nextObservationAt).toEqual(expect.any(String));
+    expect(held.calls).toEqual([]);
+    expect(routeQueueHold).toHaveBeenCalledTimes(1);
+    const replay = await run({ from: held.state, observed: removed, routeQueueHold });
+    expect(replay.state.queueHold).toEqual(held.state.queueHold);
+    expect(replay.calls).toEqual([]);
+    expect(routeQueueHold).toHaveBeenCalledTimes(1);
+    const staleIntent = await run({ from: replay.state,
+      observed: { ...removed, autoMergeEnabled: true, autoMergeEnabledAt: "2026-11-25T22:54:07Z" }, routeQueueHold });
+    expect(staleIntent.state.status).toBe("removed");
+    const rearmed = await run({ from: replay.state,
+      observed: { ...removed, autoMergeEnabled: true, autoMergeEnabledAt: "2026-11-25T22:54:09Z" }, routeQueueHold });
+    expect(rearmed.state.status).toBe("armed");
+    expect(rearmed.calls).toEqual([]);
+    const settled = await run({ from: rearmed.state, observed: observation({ state: "MERGED", merged: true }) });
+    expect(settled.state.status).toBe("awaiting-release");
+  });
+
+  it("keeps a disarm stopped and retries a failed route without making GitHub writes", async () => {
+    const routeQueueHold = vi.fn().mockRejectedValueOnce(new Error("temporary routing failure")).mockResolvedValue("PIR-disarm");
+    const observed = observation({
+      queueEvent: { kind: "disarmed", id: "disable", at: "2026-11-25T22:27:11Z",
+        reason: "disarmed", groupHeadSha: null, failingChecks: [] },
+    });
+    const failed = await run({ observed, routeQueueHold });
+    expect(failed.state.queueHold).toMatchObject({ owner: "workroom-owner", routeReportId: null });
+    const next = await run({ observed, from: failed.state, routeQueueHold });
+    expect(next.state.queueHold?.routeReportId).toBe("PIR-disarm");
+    expect(routeQueueHold).toHaveBeenCalledTimes(2);
+    expect([...failed.calls, ...next.calls]).toEqual([]);
+    const quiet = await run({ observed, repairAuthority: "record", routeQueueHold });
+    expect(quiet.state.queueHold?.routeReportId).toBeNull();
+    expect(routeQueueHold).toHaveBeenCalledTimes(2);
   });
 
   it("withholds GitHub actuation when the room's boundary does, but still records the state", async () => {
@@ -281,7 +337,7 @@ describe("executeBuildPrDeliveryAction — PR #6983's undecided merge state (BI-
 
     const decided = await run({ observed: green("UNSTABLE"), from: current });
     expect(decided.action).toEqual({ kind: "queue", headSha: "sha1" });
-    expect(decided.state).toMatchObject({ status: "queued", unknownObservations: 0, nextObservationAt: null });
+    expect(decided.state).toMatchObject({ status: "armed", unknownObservations: 0, nextObservationAt: null });
     expect(decided.calls.some((call) => call.body?.includes("enablePullRequestAutoMerge"))).toBe(true);
   });
 });
