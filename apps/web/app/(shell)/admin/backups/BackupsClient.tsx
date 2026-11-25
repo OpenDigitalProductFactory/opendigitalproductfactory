@@ -15,7 +15,8 @@ import {
   listRestoreRunsAction,
   previewRestoreAction,
 } from "@/lib/actions/backup-restore";
-import type { BackupTarget, ReadinessSummary } from "@/lib/operate/backups/types";
+import type { AllBackupReadiness } from "@/lib/operate/backups/readiness";
+import type { BackupTarget } from "@/lib/operate/backups/types";
 import type {
   RestoreImpactPreview,
   RestoreRunListItem,
@@ -23,15 +24,12 @@ import type {
 
 import { RestoreConfirmModal } from "./RestoreConfirmModal";
 import { RestoreHistorySection } from "./RestoreHistorySection";
+import { UploadsBackupReadiness } from "./UploadsBackupReadiness";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 import { formatTimestamp } from "@/lib/datetime";
 
-interface AllReadiness {
-  postgres: ReadinessSummary;
-}
-
 interface Props {
-  initialReadiness: AllReadiness;
+  initialReadiness: AllBackupReadiness;
   initialPgRuns: BackupRunListItem[];
   initialRestoreRuns: RestoreRunListItem[];
 }
@@ -127,7 +125,7 @@ function StatusPill({ status }: { status: string }) {
   );
 }
 
-// Postgres is the only backup target (BET-5, BI-A1E864A5).
+// The manual actions and history below apply only to Postgres.
 const TARGET_LABELS: Record<"postgres", string> = {
   postgres: "Postgres",
 };
@@ -141,7 +139,7 @@ export function BackupsClient({
   initialPgRuns,
   initialRestoreRuns,
 }: Props) {
-  const [readiness, setReadiness] = useState<AllReadiness>(initialReadiness);
+  const [readiness, setReadiness] = useState<AllBackupReadiness>(initialReadiness);
   const [runsByTarget, setRunsByTarget] = useState<Record<"postgres", BackupRunListItem[]>>({
     postgres: initialPgRuns,
   });
@@ -399,6 +397,7 @@ export function BackupsClient({
                 value={`${r.retainedCount} backup${r.retainedCount === 1 ? "" : "s"} · ${formatBytes(r.retainedBytes)}`}
               />
               <ReadinessRow label="Storage path" value={r.storagePath} />
+              <UploadsBackupReadiness readiness={readiness.uploads} />
             </div>
 
             {overdue && (

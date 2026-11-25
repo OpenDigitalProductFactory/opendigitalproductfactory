@@ -20,7 +20,7 @@ import { computeNextCronRun } from "@/lib/operate/cron-next-run";
 import { err, ok } from "@/lib/shared/action-result";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 
-import { getCatalogEntry } from "./catalog";
+import { getCatalogEntry, getScheduledJobHeartbeat } from "./catalog";
 import {
   AGENT_RETUNABLE_TOKENS,
   EDITABLE_SCHEDULE_OPTIONS,
@@ -39,7 +39,16 @@ export * from "./cadence";
  * Synchronous policy refusal from the reviewed catalog. Runs BEFORE any I/O so
  * a locked job or a bad cadence is refused without touching the database.
  */
+function heartbeatRefusal(jobId: string): MutationResult | null {
+  const heartbeat = getScheduledJobHeartbeat(jobId);
+  return heartbeat
+    ? err(`'${jobId}' is a read-only heartbeat for '${heartbeat.parentJobId}'. This step runs with its parent job.`)
+    : null;
+}
+
 function catalogLockRefusal(jobId: string): MutationResult | null {
+  const heartbeat = heartbeatRefusal(jobId);
+  if (heartbeat) return heartbeat;
   const entry = getCatalogEntry(jobId);
   if (entry?.category === "core") {
     return err(`'${jobId}' is a core-locked platform-integrity cron and cannot be modified from this surface.`);
@@ -285,6 +294,8 @@ export async function setWorkEnabled(
  * no way to be invoked by hand at all.
  */
 export async function runWorkNow(jobId: string, actor: string): Promise<MutationResult> {
+  const refusal = heartbeatRefusal(jobId);
+  if (refusal) return refusal;
   const task = await prisma.scheduledAgentTask.findUnique({
     where: { taskId: jobId },
     select: { agentId: true, title: true },
@@ -326,6 +337,8 @@ export async function runWorkNow(jobId: string, actor: string): Promise<Mutation
  * claim. Retiring only removes it from the operator's register view.
  */
 export async function retireWork(jobId: string, actor: string): Promise<MutationResult> {
+  const refusal = heartbeatRefusal(jobId);
+  if (refusal) return refusal;
   const [row, task] = await Promise.all([
     prisma.scheduledJob.findUnique({ where: { jobId }, select: { schedule: true, metadata: true } }),
     prisma.scheduledAgentTask.findUnique({ where: { taskId: jobId }, select: { schedule: true, isActive: true } }),

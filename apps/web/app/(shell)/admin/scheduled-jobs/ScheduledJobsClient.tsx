@@ -500,9 +500,11 @@ export function ScheduledJobsClient({ initialJobs }: { initialJobs: ScheduledWor
                       </Td>
                       <Td>
                         <div>{job.cadence}</div>
-                        <div className="text-dpf-caption font-mono mt-0.5" style={{ color: "var(--dpf-muted)" }}>
-                          {job.schedule}
-                        </div>
+                        {job.substrate !== "scheduled-step" && (
+                          <div className="text-dpf-caption font-mono mt-0.5" style={{ color: "var(--dpf-muted)" }}>
+                            {job.schedule}
+                          </div>
+                        )}
                         {job.substrate === "inngest-cron" && job.inCatalog && (
                           <div className="text-dpf-caption mt-0.5" style={{ color: "var(--dpf-muted)" }}>
                             set in code
@@ -533,7 +535,9 @@ export function ScheduledJobsClient({ initialJobs }: { initialJobs: ScheduledWor
                         )}
                       </Td>
                       <Td>
-                        {job.kind === "recurring" && !job.reportsRunData ? (
+                        {job.substrate === "scheduled-step" ? (
+                          <div className="text-dpf-muted">{t("scheduledWork.withParentJob")}</div>
+                        ) : job.kind === "recurring" && !job.reportsRunData ? (
                           <div style={{ color: "var(--dpf-muted)" }}>on its cron</div>
                         ) : job.kind === "recurring" ? (
                           <>

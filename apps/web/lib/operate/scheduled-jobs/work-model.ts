@@ -44,7 +44,7 @@ import { SCHEDULE_INTERVALS_MS } from "@/lib/inference/ai-provider-types";
 import { computeNextCronRun, isOneShotCron } from "@/lib/operate/cron-next-run";
 import type { ProactivityLevel } from "@dpf/validators/workroom-policy/proactivity-types";
 
-import { getCatalogEntry } from "./catalog";
+import { getCatalogEntry, getScheduledJobHeartbeat } from "./catalog";
 import type { JobCategory } from "./catalog-types";
 
 /**
@@ -62,6 +62,8 @@ export type WorkKind =
 /** Which engine actually runs the work, and therefore which table is truth. */
 export type WorkSubstrate =
   | "inngest-cron"
+  /** Read-only run history. A parent job owns the schedule and invokes this step. */
+  | "scheduled-step"
   /** A ScheduledAgentTask driven by the every-5-min agent-task-dispatch cron. */
   | "agent-task"
   /** A ScheduledJob row with no catalog entry and no agent task behind it. */
@@ -599,37 +601,37 @@ export function selectRegisterIds(
 export function buildWorkView(
   jobId: string,
   job: JobRow | undefined,
-  task: AgentTaskRow | undefined,
+  agentTask: AgentTaskRow | undefined,
   now: Date,
   proactivity: WorkProactivity | null = null,
 ): ScheduledWorkView {
   const entry = getCatalogEntry(jobId);
+  const heartbeat = getScheduledJobHeartbeat(jobId);
+  const task = heartbeat ? undefined : agentTask;
 
-  const substrate: WorkSubstrate = task
-    ? "agent-task"
-    : entry
-      ? "inngest-cron"
-      : "unregistered";
+  const substrate: WorkSubstrate = heartbeat ? "scheduled-step"
+    : task ? "agent-task" : entry ? "inngest-cron" : "unregistered";
 
   // The authoritative record for cadence + run state.
-  const schedule = task?.schedule ?? job?.schedule ?? entry?.cron ?? "unknown";
-  const enabled = task ? task.isActive : (job?.enabled ?? true);
+  const schedule = heartbeat?.schedule ?? task?.schedule ?? job?.schedule ?? entry?.cron ?? "unknown";
+  // Stored scheduling controls are not consulted by a parent-owned step.
+  const enabled = heartbeat ? true : task ? task.isActive : (job?.enabled ?? true);
   const lastRunAt = task?.lastRunAt ?? job?.lastRunAt ?? null;
-  const nextRunAt = task?.nextRunAt ?? job?.nextRunAt ?? null;
+  const nextRunAt = heartbeat ? null : task?.nextRunAt ?? job?.nextRunAt ?? null;
   const lastStatus = task?.lastStatus ?? job?.lastStatus ?? null;
   const lastError = task?.lastError ?? job?.lastError ?? null;
 
   const kind = deriveKind(schedule);
-  const category: JobCategory = entry
+  const category: JobCategory = heartbeat ? "core" : entry
     ? entry.category
     : job?.category === "core"
       ? "core"
       : "editable";
-  const locked = entry ? entry.category === "core" : (job?.locked ?? false);
+  const locked = heartbeat ? true : entry ? entry.category === "core" : (job?.locked ?? false);
 
   // A job reports run data when it actually has a row, or when its catalog entry
   // says it instruments one. An uncatalogued row obviously reports (it exists).
-  const reportsRunData = job != null || task != null || (entry?.tracksRunData ?? false);
+  const reportsRunData = heartbeat != null || job != null || task != null || (entry?.tracksRunData ?? false);
   const killSwitchEnforced = task != null || (entry?.honorsEnabledGate ?? false);
 
   const { health, overdueByMs } = deriveHealth(
@@ -649,8 +651,9 @@ export function buildWorkView(
       }
     : null;
 
-  const name = entry?.name ?? task?.title ?? job?.name ?? jobId;
+  const name = heartbeat?.name ?? entry?.name ?? task?.title ?? job?.name ?? jobId;
   const purposeText =
+    heartbeat?.purpose ??
     entry?.purpose ??
     task?.title ??
     (kind === "slot-lock"
@@ -671,7 +674,7 @@ export function buildWorkView(
     locked,
     enabled,
     schedule,
-    cadence: describeSchedule(schedule),
+    cadence: heartbeat?.cadence ?? describeSchedule(schedule),
     lastRunAt: lastRunAt?.toISOString() ?? null,
     nextRunAt: nextRunAt?.toISOString() ?? null,
     lastStatus,
@@ -682,13 +685,13 @@ export function buildWorkView(
     killSwitchEnforced,
     reportsRunData,
     projectionStale:
-      kind === "recurring" && isProjectionStale(schedule, lastRunAt, nextRunAt),
+      !heartbeat && kind === "recurring" && isProjectionStale(schedule, lastRunAt, nextRunAt),
     agent,
     // Every row can now be triggered by hand — a cron via its registered event,
     // an agent task by re-arming nextRunAt. Only rows with neither cannot.
     canRunNow: task != null || entry?.runNowEvent != null,
     scheduleEditable: !locked && kind === "recurring",
     retirable: health === "spent" && kind !== "recurring",
-    inCatalog: entry != null,
+    inCatalog: heartbeat != null || entry != null,
   };
 }

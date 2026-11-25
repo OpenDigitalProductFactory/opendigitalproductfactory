@@ -93,7 +93,7 @@ function bucketLabel(range: WindowRange, at: Date): string {
 /**
  * Project every live, enabled, recurring job forward across the window.
  *
- * Spent one-shots, slot-locks and disabled jobs are excluded by construction —
+ * Parent-owned steps, spent one-shots, slot-locks and disabled jobs are excluded —
  * they will not fire, and the whole point of the chart is what is going to
  * happen.
  */
@@ -120,7 +120,7 @@ export function buildScheduleWindow(
   const quiet: ScheduleWindow["quiet"] = [];
 
   for (const view of views) {
-    if (view.kind !== "recurring" || !view.enabled) continue;
+    if (view.substrate === "scheduled-step" || view.kind !== "recurring" || !view.enabled) continue;
     const isAgent = view.substrate === "agent-task";
     const entry = { jobId: view.jobId, name: view.name, cadence: view.cadence, isAgent };
 

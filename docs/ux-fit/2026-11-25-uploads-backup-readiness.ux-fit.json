@@ -1,0 +1,14 @@
+{
+  "version": "1",
+  "decidedOption": "paired-status-in-existing-readiness",
+  "decisionInteractionId": "DI-D3B3326C8DE3",
+  "scope": {
+    "files": [
+      "apps/web/app/(shell)/admin/backups/UploadsBackupReadiness.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": ["paired-status-in-existing-readiness", "separate-upload-readiness-card"]
+  }
+}
