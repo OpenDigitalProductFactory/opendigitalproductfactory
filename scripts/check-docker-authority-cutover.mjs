@@ -59,7 +59,7 @@ export const DOCKER_AUTHORITY_REGISTRY = Object.freeze({
   "apps/web/lib/documents/conversion/doctools-actuator.ts": { class: "actuator", count: 3, reason: "Runs only inside the private actuator (imported by portal-actuator-entry.ts)." },
   "apps/web/lib/documents/generation/render.ts": { class: "routed", count: 1, reason: "runActuatorDoctools when the actuator mount is present." },
   "apps/web/lib/edge-node/remote-provisioning.ts": { class: "message", count: 2, reason: "Script text executed on a remote edge host, never by the portal." },
-  "apps/web/lib/govern/preview-automation-sign-in.ts": { class: "pending", count: 3, reason: "Writer-reachable raw Docker call; migrate to a typed actuator operation before the immutable recipe." },
+  "apps/web/lib/govern/preview-automation-sign-in.ts": { class: "routed", count: 3, reason: "Refused before the lease read or any Docker call when the actuator mount is present (no preview secret enters the qualified portal); actuator-side issuance awaits an owner decision." },
   "apps/web/lib/infra/docker-disk-prune.ts": { class: "routed", count: 7, reason: "pruneActuatorDockerDisk when the actuator mount is present; the AtDaemon body runs in the actuator and refusals never fall back." },
   "apps/web/lib/mcp-task-reassessment-contract.ts": { class: "routed", count: 1, reason: "readActuatorReassessmentProof when the actuator mount is present; the default runner refuses there and the actuator passes its own." },
   "apps/web/lib/mcp/build-lifecycle-handlers.ts": { class: "message", count: 2, reason: "Operator remediation text only." },
@@ -83,11 +83,11 @@ export const DOCKER_AUTHORITY_REGISTRY = Object.freeze({
   "apps/web/lib/self-upgrade/promoter.ts": { class: "routed", count: 5, reason: "runPromoter, runPromoterReadiness and isPromoterAvailable go through the actuator when the mount is present, the AtDaemon halves and artifact resolution run inside it, and ensurePromoterImage reports presence without building there (DI-B3171A8F09DC)." },
   "apps/web/lib/self-upgrade/runtime-image-identity.ts": { class: "routed", count: 1, reason: "readActuatorPortalImage when the actuator mount is present." },
   "apps/web/lib/shared/run-process-with-budget.ts": { class: "routed", count: 1, reason: "Best-effort cleanup half of a budgeted Docker call; with the actuator mounted every portal-side budgeted Docker caller is routed or refused before it starts, so only the actuator reaches it." },
-  "apps/web/lib/teardown/dispatcher.ts": { class: "pending", count: 2, reason: "Writer-reachable raw Docker call; migrate to a typed actuator operation before the immutable recipe." },
+  "apps/web/lib/teardown/dispatcher.ts": { class: "routed", count: 2, reason: "Its only caller, executeInstallationTeardown, refuses before any drain, backup or launch when the actuator mount is present; a governed actuator teardown owner awaits an owner decision." },
   "apps/web/lib/work-capsules/scope-epoch-enrollment.server.ts": { class: "routed", count: 1, reason: "prepareHardenedEnrollment reads the actuator observation when the mount is present." },
   "apps/web/lib/workroom-runtime/sandbox-exec.ts": { class: "routed", count: 1, reason: "The mount-absent fallback of spawnSandboxExec; with the actuator mounted every exec goes to the observed sandbox and nothing spawns locally." },
   "apps/web/lib/workroom-runtime/sandbox-launcher.ts": { class: "routed", count: 1, reason: "openActuatorRuntimeSession when the actuator mount is present." },
-  "packages/db/src/discovery-collectors/docker.ts": { class: "pending", count: 4, reason: "Writer-reachable raw Docker call; migrate to a typed actuator operation before the immutable recipe." },
+  "packages/db/src/discovery-collectors/docker.ts": { class: "routed", count: 4, reason: "Spawns only when a Docker socket path exists; the qualified portal mounts none, so the collector reports docker_unavailable there. Actuator-backed discovery awaits an owner decision." },
 });
 
 export const SOURCE_WRITE_REGISTRY = {
