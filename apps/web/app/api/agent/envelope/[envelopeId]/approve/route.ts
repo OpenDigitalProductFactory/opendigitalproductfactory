@@ -27,7 +27,6 @@ import { approveEnvelope, describeOnBehalfDecision } from "@/lib/coworker/envelo
 import { readOnBehalfRequest } from "@/lib/coworker/envelope-on-behalf-request";
 import { readMakeStandingRequest } from "@/lib/coworker/envelope-standing-request";
 import { recordApprovalOutcome } from "@/lib/coworker/approval-outcome-store";
-import { S5_REHEARSAL_APPROVAL_ACTION } from "@/lib/workroom-runtime/s5-rehearsal-approval-action";
 
 type RouteContext = {
   params: Promise<{ envelopeId: string }>;
@@ -68,11 +67,6 @@ export async function POST(request: Request, context: RouteContext): Promise<Res
       : await approveEnvelope(envelopeId, session.user.id);
   if (!result.ok) {
     return NextResponse.json({ error: result.reason }, { status: result.httpStatus });
-  }
-  if (result.envelope.manifestActionId === S5_REHEARSAL_APPROVAL_ACTION) {
-    return NextResponse.json({ ok: true, envelope: result.envelope, execution: {
-      status: "not-run", reason: "no-pending-call", message: "One-time rehearsal approval recorded. No run started.",
-    } });
   }
   const decidedOnBehalf = onBehalf ? await describeOnBehalfDecision(result.envelope.argsJson) : null;
 

@@ -38,10 +38,12 @@ import {
   type ApprovalCredentialDb,
 } from "./approved-request-credential";
 import { runApprovedTaskRequest, type ApprovedTaskDb } from "./approved-task-run";
+import { approvalActionPolicy } from "./approval-action-policy";
 import type { ApprovedRequestNotRunReason, ApprovedRequestRun, PlatformRequestRun } from "./approved-request-run-types";
 import { readApprovalResumeMarker, type ApprovalResumeMarker } from "./approval-resume-marker";
 
 const NOT_RUN_COPY: Record<ApprovedRequestNotRunReason, string> = {
+  "decision-only": "Your decision was saved. This approval does not start a run.",
   "task-bound": "It resumes when your coworker's task continues.",
   "not-approved": "It is not in an approved state.",
   expired: "The approval window closed before it could run.",
@@ -57,6 +59,17 @@ const NOT_RUN_COPY: Record<ApprovedRequestNotRunReason, string> = {
 
 function notRun(reason: ApprovedRequestNotRunReason): ApprovedRequestRun {
   return { status: "not-run", reason, message: NOT_RUN_COPY[reason] };
+}
+
+/** Stop before reading any parked call or resuming a task, even if one exists. */
+function completeDecisionOnly(
+  envelope: { manifestActionId: string; status: string; expiresAt: Date | null },
+  now: Date,
+): ApprovedRequestRun | null {
+  if (approvalActionPolicy(envelope.manifestActionId)?.completion !== "decision-only") return null;
+  if (envelope.status !== "approved") return notRun("not-approved");
+  if (!envelope.expiresAt || envelope.expiresAt <= now) return notRun("expired");
+  return notRun("decision-only");
 }
 
 type RunnerDb = ApprovalCredentialDb & Partial<ApprovedTaskDb> & {
@@ -87,6 +100,8 @@ export async function runApprovedExternalRequest(
   const envelope = await db.coworkerActionEnvelope.findUnique({ where: { id: envelopeId } });
   if (!envelope || envelope.status !== "approved") return notRun("not-approved");
   if (!envelope.expiresAt || envelope.expiresAt.getTime() <= now.getTime()) return notRun("expired");
+  const decisionOnly = completeDecisionOnly(envelope, now);
+  if (decisionOnly) return decisionOnly;
   if (envelope.taskRunId) {
     const outcome = await (deps.resumeTask ?? runApprovedTaskRequest)({ ...envelope, taskRunId: envelope.taskRunId }, { db: db as never });
     return outcome.status === "not-run" ? notRun(outcome.reason) : outcome;
@@ -256,6 +271,8 @@ export async function runApprovedPlatformRequest(
 
   const envelope = await db.coworkerActionEnvelope.findUnique({ where: { id: envelopeId } });
   if (!envelope) return null;
+  const decisionOnly = completeDecisionOnly(envelope, now);
+  if (decisionOnly) return decisionOnly;
   const park = await db.toolExecution.findFirst({
     where: {
       // A re-raised request's copied park row names the new envelope only in its result (envelope-reraise.ts).

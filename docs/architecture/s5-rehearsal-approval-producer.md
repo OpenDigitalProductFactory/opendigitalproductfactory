@@ -26,7 +26,10 @@ Under the exact Workroom command lock, reserve a stable result for the one
 attempt, raise the canonical pending Inbox envelope and persist the enforced
 exact-stage permit linked to that envelope in the same transaction. The
 approval fingerprint names that permit. An exact replay only reads the
-stored result. The human uses the ordinary Inbox decision, which for this
-action records approval without dispatching, resuming, or making it standing.
+stored result. The signed permit is prepared while the envelope is pending
+but is not usable for S5 admission until the owner records the exact one-time
+approval. The ordinary Inbox uses the server's decision-only action
+registration. Both completion paths stop before looking for a call to replay
+or a task to resume, and the decision cannot become standing.
 Provider send still requires the separate joined no-send proof and current
 rehearsal admission. No provider call is made by either action here.
