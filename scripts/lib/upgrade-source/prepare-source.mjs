@@ -20,6 +20,7 @@
 import { buildHeadShaCommand, buildDirtyCheckCommand, deriveDeployedStamp, } from "./version-stamp.mjs";
 import { buildLfsLsFilesCommand, buildLfsPullCommand, describeUnmaterialized, parseLfsLsFiles, unmaterializedPaths, } from "./lfs-materialization.mjs";
 import { getErrorMessage } from "../error-message.mjs";
+import { runGitAsync } from "../git.mjs";
 import { retryOnTransientNetwork } from "./transient-network.mjs";
 function trim(s) {
     return s.trim();
@@ -446,7 +447,6 @@ const GIT_RUNNER_TIMEOUT_MS = 120_000;
  * as a non-zero result (never a hang) — see GIT_RUNNER_TIMEOUT_MS.
  */
 export async function defaultGitRunner(args) {
-    const { execFile } = await import("node:child_process");
     // Run prep's internal git ops with repo hooks DISABLED. The host clone ships a
     // Git LFS post-checkout/post-merge hook (the repo uses filter=lfs); the hook is
     // noise for mechanical prep and, on any host missing the binary, makes an
@@ -465,28 +465,13 @@ export async function defaultGitRunner(args) {
     // `-c` is a git GLOBAL option and must precede the subcommand — prepend it
     // ahead of the caller's args (which start with "-C <path> <cmd>").
     const safeArgs = ["-c", "core.hooksPath=/dev/null", ...args];
-    return new Promise((resolve) => {
-        execFile("git", safeArgs, {
-            maxBuffer: 10 * 1024 * 1024,
-            timeout: GIT_RUNNER_TIMEOUT_MS,
-            killSignal: "SIGKILL",
-            env: { ...process.env, GIT_LFS_SKIP_SMUDGE: "1" },
-        }, (err, stdout, stderr) => {
-            const out = stdout?.toString() ?? "";
-            const errOut = stderr?.toString() ?? "";
-            if (err) {
-                // execFile flags a timeout kill via err.killed + err.signal; surface it
-                // as a distinct, non-zero result so callers degrade rather than hang.
-                const killed = err.killed === true;
-                const code = typeof err.code === "number" ? err.code : 1;
-                const stderrOut = killed
-                    ? errOut || `git timed out after ${GIT_RUNNER_TIMEOUT_MS}ms and was terminated`
-                    : errOut || errMsg(err);
-                resolve({ stdout: out, stderr: stderrOut, code: killed ? 124 : code });
-            }
-            else {
-                resolve({ stdout: out, stderr: errOut, code: 0 });
-            }
-        });
+    const result = await runGitAsync(safeArgs, {
+        cwd: process.cwd(),
+        maxBuffer: 10 * 1024 * 1024,
+        timeout: GIT_RUNNER_TIMEOUT_MS,
+        killSignal: "SIGKILL",
+        env: { ...process.env, GIT_LFS_SKIP_SMUDGE: "1" },
     });
+    // A timeout kill is a distinct, non-zero result so callers degrade rather than hang.
+    return { stdout: result.stdout, stderr: result.stderr, code: result.status };
 }
