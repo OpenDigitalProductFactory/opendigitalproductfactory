@@ -4,6 +4,7 @@ import { prisma } from "@dpf/db";
 import { canonicalJson } from "@dpf/integration-shared/canonical-json";
 import { isRecord } from "@/lib/shared/coerce";
 import { verifyMaintenanceEpoch } from "../../../../scripts/lib/maintenance-epoch-receipt.mjs";
+import { readSuccessfulMaintenanceRecoveryPoint } from "./recovery-eligibility";
 
 export const MAINTENANCE_EPOCH_RECEIPT_PATH = "/dpf-state/maintenance-epoch-retirement.json";
 type EpochRun = {
@@ -49,13 +50,9 @@ export async function attachMaintenanceEpochEvidence(deps: {
   if (!run || run.status !== "succeeded" || !run.targetSha || run.deployedSha !== run.targetSha
     || !run.startedAt || !isRecord(run.completionEvidence)) return unavailable;
   const evidence = run.completionEvidence;
-  const recovery = isRecord(evidence.recoveryPoint) ? evidence.recoveryPoint : null;
+  const recovery = readSuccessfulMaintenanceRecoveryPoint(evidence.recoveryPoint, run.runId);
   const readiness = isRecord(evidence.readiness) ? evidence.readiness : null;
-  if (recovery?.schemaVersion !== 1 || recovery.status !== "ok" || recovery.trigger !== "pre-upgrade-recovery"
-    || recovery.selfUpgradeRunId !== run.runId || typeof recovery.createdAt !== "string"
-    || !Array.isArray(recovery.members) || !recovery.members.length
-    || recovery.members.some(member => !isRecord(member) || member.target !== "postgres" || member.status !== "ok"
-      || typeof member.runId !== "string" || !member.runId.trim())
+  if (!recovery
     || readiness?.result !== "ready" || readiness.mode !== "enforced"
     || readiness.targetSha !== run.targetSha || typeof readiness.imageDigest !== "string") return unavailable;
   let secret: string;
