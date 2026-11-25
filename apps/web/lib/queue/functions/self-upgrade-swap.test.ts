@@ -52,7 +52,6 @@ vi.mock("@/lib/self-upgrade/cooldown", () => ({ recordCooldown: mocks.recordCool
 vi.mock("@/lib/self-upgrade/notifications", () => ({ emitUpgradeEvent: mocks.emitUpgradeEvent }));
 vi.mock("@/lib/self-upgrade/recovery-point", () => ({
   createSelfUpgradeRecoveryPoint: mocks.createSelfUpgradeRecoveryPoint,
-  summarizeRecoveryPointDegradation: vi.fn(),
   summarizeRecoveryPointFailure: vi.fn(),
 }));
 vi.mock("@/lib/self-upgrade/quiescence", () => ({
@@ -153,6 +152,24 @@ describe("finishSelfUpgrade on a retried step (BI-0E216B0E)", () => {
     await finishSelfUpgrade(ctx);
     expect(mocks.completeRun).not.toHaveBeenCalled();
     expect(mocks.loadInstallStateSigningContext).toHaveBeenCalled();
+  });
+
+  it("refuses to use a point if admission had to be closed again after capture", async () => {
+    mocks.getRun.mockResolvedValue({ runId: ctx.runId, status: "running", currentSha: "oldsha" });
+    mocks.getDeployedSha.mockResolvedValue("oldsha");
+    mocks.loadInstallStateSigningContext.mockResolvedValue({ ok: true, runtimeTransitionSecret: "s", hostIdentity: {} });
+    mocks.createSelfUpgradeRecoveryPoint.mockResolvedValue({ status: "ok" });
+    mocks.guardAdmissionClosedForSwap.mockResolvedValueOnce(ok({ reasserted: false }));
+    mocks.guardAdmissionClosedForSwap.mockResolvedValue(ok({ reasserted: true }));
+    mocks.failRun.mockResolvedValue({ status: "failed", runId: ctx.runId });
+    const result = await finishSelfUpgrade(ctx);
+    expect(result).toMatchObject({ ok: false, status: "failed", reason: "admission-reopened-before-swap" });
+    expect(mocks.createSelfUpgradeRecoveryPoint).toHaveBeenCalledOnce();
+    expect(mocks.recordRunRecoveryPoint).toHaveBeenCalledExactlyOnceWith(ctx.runId, expect.objectContaining({
+      status: "failed", pairedReceipt: null,
+    }));
+    expect(mocks.runPromoter).not.toHaveBeenCalled();
+    expect(mocks.runReassessmentCandidatePreflight).not.toHaveBeenCalled();
   });
 
   it("does not record a cooldown when the drain guard loses to a reconciliation that already succeeded", async () => {
