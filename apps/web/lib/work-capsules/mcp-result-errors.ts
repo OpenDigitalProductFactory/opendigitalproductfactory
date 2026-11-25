@@ -1,9 +1,10 @@
 import type { ToolResult } from "@/lib/mcp-tool-types";
+import { scopeEpochEnrollmentRefusal } from "./scope-epoch-enrollment.server";
 import { CapsuleBranchOccupiedError } from "./work-capsule-branch-identity";
 import { ScopeClaimLeaseHeldError } from "./scope-claim-lease";
 import { ScopeOverlapError } from "./work-capsule-store";
 
-/** The two ways a scope claim is refused without writing anything. */
+/** Known preconditions that hold a scope claim without writing anything. */
 export function scopeClaimRefusal(error: unknown): ToolResult | null {
   if (error instanceof ScopeOverlapError) {
     return {
@@ -24,7 +25,7 @@ export function scopeClaimRefusal(error: unknown): ToolResult | null {
       data: { holderPrincipalId: error.holderPrincipalId, leaseExpiresAt: error.leaseExpiresAt.toISOString() },
     };
   }
-  return null;
+  return scopeEpochEnrollmentRefusal(error);
 }
 
 export function branchOccupiedResult(error: unknown): ToolResult | null {

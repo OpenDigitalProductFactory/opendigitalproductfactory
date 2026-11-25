@@ -44,6 +44,7 @@ import {
 } from "./managed-restore";
 import { POSTGRES_RESTORE_SPEC, type RestoreEngineSpec } from "./engine-specs";
 import { runManagedScript } from "./managed-script-path";
+import { prepareRestoreJournal } from "./paired-restore-journal";
 
 type Mock = ReturnType<typeof vi.fn>;
 const runScriptMock = runManagedScript as unknown as Mock;
@@ -104,6 +105,35 @@ async function makeArtifact(spec: RestoreEngineSpec, subdir: string) {
 }
 
 const okSafety = async () => ({ runId: "safety-1", status: "ok" as const });
+
+it("does not run a standalone Postgres restore while a paired host journal is unfinished", async () => {
+  const { backupsRoot, storagePath } = await makeArtifact(POSTGRES_RESTORE_SPEC, "postgres");
+  try {
+    const prisma = makePrisma();
+    prisma.backupRun.findUnique.mockResolvedValue(makeSource(POSTGRES_RESTORE_SPEC, storagePath));
+    const sha = "d".repeat(64);
+    const pair = (id: string) => ({
+      postgres: { runId: id, storagePath: `postgres/${id}`, sha256: sha },
+      uploads: { runId: `uploads-${id}`, storagePath: `uploads/${id}`, sha256: sha, manifestSha256: sha },
+    });
+    await prepareRestoreJournal(await fs.realpath(backupsRoot), {
+      operationId: "fixture-unfinished",
+      installationId: "fixture-install",
+      selected: pair("selected"),
+      safety: pair("safety"),
+      receiver: [{ name: "upload-store", path: "/fixture/uploads", dev: "1", ino: "2" }],
+      collisionSetSha256: sha,
+    });
+    const safety = vi.fn(okSafety);
+    await expect(runManagedRestore(POSTGRES_RESTORE_SPEC, {
+      sourceBackupRunId: "src", backupsRoot, prismaClient: prisma as never, takeSafetyBackup: safety,
+    })).rejects.toThrow(/unfinished paired/i);
+    expect(safety).not.toHaveBeenCalled();
+    expect(runScriptMock).not.toHaveBeenCalled();
+  } finally {
+    await fs.rm(backupsRoot, { recursive: true, force: true });
+  }
+});
 
 beforeEach(() => {
   vi.clearAllMocks();

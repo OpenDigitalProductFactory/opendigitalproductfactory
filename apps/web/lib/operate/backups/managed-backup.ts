@@ -43,6 +43,7 @@ import type { AnyBackupManifest, BackupEngineSpec } from "./engine-specs";
 import { managedPostgresConnection } from "./managed-postgres-connection";
 import { usesPrivateActuator } from "../../../../../scripts/lib/scope-writer-observation.mjs";
 import type { BackupPreflightResult } from "./extension-preflight";
+import { listUnfinishedRestoreJournals } from "./paired-restore-journal";
 
 export const BACKUPS_ROOT = "/backups";
 
@@ -233,10 +234,46 @@ export async function applyRetention(
   backupsRoot: string,
   trace: (...parts: unknown[]) => void,
 ): Promise<void> {
+  const { acquireRestoreLock, RestoreLockedError } = await import("./managed-restore");
+  let release: () => void;
+  try { release = acquireRestoreLock("backup retention"); } catch (error) {
+    if (!(error instanceof RestoreLockedError)) throw error;
+    trace("retention deferred while a restore holds the store");
+    return;
+  }
+  try {
+    await applyRetentionWithRestorePins(prisma, target, policy, backupsRoot, trace);
+  } finally {
+    release();
+  }
+}
+
+async function applyRetentionWithRestorePins(
+  prisma: PrismaLike,
+  target: BackupTarget,
+  policy: BackupRetentionPolicy,
+  backupsRoot: string,
+  trace: (...parts: unknown[]) => void,
+): Promise<void> {
+  const pinnedIds = new Set<string>();
+  const pinnedPaths = new Set<string>();
+  try {
+    for (const { selected, safety } of await listUnfinishedRestoreJournals(await fs.realpath(backupsRoot))) {
+      for (const member of [selected[target], safety[target]]) {
+        pinnedIds.add(member.runId);
+        pinnedPaths.add(member.storagePath);
+      }
+    }
+  } catch {
+    trace("retention deferred because host restore evidence could not be read");
+    return;
+  }
+
   const runs = await prisma.backupRun.findMany({
     where: { target },
     orderBy: { startedAt: "desc" },
   });
+  const protectedRuns = new Set(runs.filter((run) => pinnedIds.has(run.id) || pinnedPaths.has(run.storagePath)).map((run) => run.id));
 
   const partition = partitionForRetention(
     runs.map((r) => ({
@@ -254,10 +291,10 @@ export async function applyRetention(
   // a metadata-only sweep (just to flip prunedAt for failed runs whose files
   // we never wrote, so the UI can hide them).
   const eligibleToPrune = partition.prune.filter(
-    (r) => r.status === "ok" && r.prunedAt === null,
+    (r) => r.status === "ok" && r.prunedAt === null && !protectedRuns.has(r.id),
   );
   const failedSweep = partition.prune.filter(
-    (r) => r.status === "failed" && r.prunedAt === null,
+    (r) => r.status === "failed" && r.prunedAt === null && !protectedRuns.has(r.id),
   );
 
   for (const run of eligibleToPrune) {
@@ -401,6 +438,15 @@ export async function runManagedBackup(
   const durationMs = finishedAt.getTime() - startedAt.getTime();
 
   if (outcome.ok && manifest) {
+    if (spec.recordCaptureEvidence) {
+      try {
+        await spec.recordCaptureEvidence({
+          backupsRoot, storagePath: relativePath, runId: created.id, manifest, env,
+        });
+      } catch {
+        return recordFailure("The backup finished writing files but could not record its host capture evidence.");
+      }
+    }
     await prisma.backupRun.update({
       where: { id: created.id },
       data: {

@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { afterEach, it } from "node:test";
 
 import { buildManifest, serializeManifest, writeArchive } from "./backup-uploads.mjs";
-import { verifyUploadsRun as verify, verifyUploadsTrial as trial } from "./restore-uploads.mjs";
+import { verifyUploadsRun as verify, verifyUploadsTrial as trial, withVerifiedUploadsArchive } from "./restore-uploads.mjs";
 
 const directories = [];
 afterEach(() => {
@@ -115,6 +115,24 @@ it("refuses bytes after two complete zero end blocks", async () => {
   const f = fixture();
   writeFileSync(f.archivePath, Buffer.concat([readFileSync(f.archivePath), Buffer.alloc(512)]));
   await assert.rejects(() => verify(f.bind()), /archive end/i);
+});
+
+it("only offers payload access after the entire archive is admitted", async () => {
+  const f = fixture([["a", Buffer.from("verified bytes")], ["b", Buffer.alloc(0)]]);
+  const applied = await withVerifiedUploadsArchive(f.args, async ({ members, readPayload }) => {
+    const contents = [];
+    for (const member of members) {
+      const chunks = [];
+      for await (const chunk of readPayload(member)) chunks.push(chunk);
+      contents.push(Buffer.concat(chunks).toString());
+    }
+    return contents;
+  });
+  assert.deepEqual(applied, ["verified bytes", ""]);
+  writeFileSync(f.archivePath, Buffer.concat([readFileSync(f.archivePath), Buffer.alloc(512)]));
+  let receivedPayloadAccess = false;
+  await assert.rejects(withVerifiedUploadsArchive(f.bind(), () => { receivedPayloadAccess = true; }), /archive end/i);
+  assert.equal(receivedPayloadAccess, false);
 });
 
 it("refuses a linked artifact under a physical backup run directory", async () => {

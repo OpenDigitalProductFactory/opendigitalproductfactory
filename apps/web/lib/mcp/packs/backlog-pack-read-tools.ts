@@ -585,7 +585,7 @@ export async function getBacklogItem(params: Record<string, unknown>, currentAge
       }
     }
     if (selected?.ok && !await selected.isCurrent()) return selectionRefusal;
-    return boundedBacklogRecoveryRead({ itemId: item.itemId, status: item.status, workShape: boundWorkShape, gate: requestedGate, recovery });
+    return boundedBacklogRecoveryRead({ itemId: item.itemId, status: item.status, workShape: boundWorkShape, gate: requestedGate, profile: completion?.profile, recovery });
   }
   if (selected?.ok && !await selected.isCurrent()) return selectionRefusal;
   return {

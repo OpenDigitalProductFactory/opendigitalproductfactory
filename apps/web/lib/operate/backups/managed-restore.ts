@@ -39,6 +39,7 @@ import { resolveManagedScriptPath, runManagedScript } from "./managed-script-pat
 import type { RestoreEngineSpec } from "./engine-specs";
 import { managedPostgresConnection } from "./managed-postgres-connection";
 import { usesPrivateActuator } from "../../../../../scripts/lib/scope-writer-observation.mjs";
+import { listUnfinishedRestoreJournals } from "./paired-restore-journal";
 
 const BACKUPS_ROOT = "/backups";
 
@@ -215,6 +216,13 @@ export async function runManagedRestore(
           spec.messages.checksumMismatch(source.sha256, actual),
         );
       }
+    }
+
+    // A previous paired restore may have lost its process and database audit,
+    // so the in-memory mutex alone cannot admit a standalone restore here.
+    const journalRoot = await fs.realpath(backupsRoot);
+    if ((await listUnfinishedRestoreJournals(journalRoot)).length) {
+      throw new RestoreIntegrityError("Resolve the unfinished paired restore before starting a standalone restore.");
     }
 
     const env = spec.target === "postgres" && !args.scriptPath && await usesPrivateActuator()

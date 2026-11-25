@@ -273,6 +273,34 @@ describe("backlog deferral read projection", () => {
     expect(denied.data ?? {}).not.toHaveProperty("recovery");
   });
 
+  it("explains why a doc item's data-owner criterion uses the acceptance lane", async () => {
+    mocks.findUnique.mockResolvedValue({
+      ...baseItem, id: "row-bi", workType: "doc", status: "in-progress",
+      body: "## Acceptance\n- AC-3: The data owner's agreement is recorded.",
+      deferOwnerPrincipal: null, digitalProduct: null, organization: null,
+      productLine: null, businessProduct: null, demandEvidenceLinks: [], activities: [],
+    });
+    const completion = {
+      profile: "doc-only", verdict: "input-required", blockers: [],
+      unmet: [readinessRequirement({
+        code: "ACCEPTANCE_EVIDENCE_REQUIRED", state: "missing", accountableRole: "acceptance-reviewer",
+      })],
+    };
+    mocks.projectReadiness.mockReturnValue({ decisions: { completion } });
+    mocks.resolveTerminalRecovery.mockResolvedValue({
+      reviewerRoutes: [], unroutable: [], escalations: [{ reason: "body-baseline-unpersisted" }],
+    });
+
+    const result = await getBacklogItem({ itemId: baseItem.itemId, recoveryGate: "data-review" });
+
+    expect(result).toMatchObject({
+      success: false, error: "recovery_gate_not_applicable",
+      message: expect.stringContaining("doc-only"),
+      data: { nextAction: expect.stringContaining("record_execution_evidence") },
+    });
+    expect(result.data).not.toHaveProperty("recovery");
+  });
+
   it("offers author-owned research recovery even when six pre-delivery gates are unmet", async () => {
     mocks.findUnique.mockResolvedValue({
       ...baseItem, id: "row-bi", status: "open", body: null,
