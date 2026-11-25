@@ -7,13 +7,46 @@ const point = {
   members: [{ target: "postgres", runId: "BR-PG", status: "ok" }],
 };
 const run = { status: "succeeded", completionEvidence: { recoveryPoint: point } };
+const paired = {
+  ...point,
+  schemaVersion: 2,
+  members: [...point.members, { target: "uploads", runId: "BR-UP", status: "ok" }],
+  pairedReceipt: {
+    schemaVersion: 2,
+    postgres: { runId: "BR-PG", storagePath: "postgres/saved", sha256: "a".repeat(64) },
+    uploads: {
+      runId: "BR-UP", storagePath: "uploads/saved", sha256: "b".repeat(64), manifestSha256: "c".repeat(64),
+      pairedPostgresRunId: "BR-PG", pairedPostgresSha256: "a".repeat(64),
+    },
+  },
+};
 
 describe("self-upgrade recovery availability", () => {
   it("recognizes the saved backup without authorizing restoration", () => {
     expect(getSelfUpgradeRecoveryState(run)).toMatchObject({
       point, backupRunIds: { postgres: "BR-PG" }, available: false,
+      membership: "legacy-postgres",
       reason: "reassessment-rollback-retention-unproven",
       detail: "Database restoration is unavailable until review history can be preserved safely.",
+    });
+  });
+
+  it("identifies the complete paired point without removing the review retention interlock", () => {
+    expect(getSelfUpgradeRecoveryState({ ...run, completionEvidence: { recoveryPoint: paired } })).toMatchObject({
+      point: paired, membership: "paired", backupRunIds: { postgres: "BR-PG", uploads: "BR-UP" },
+      available: false, reason: "reassessment-rollback-retention-unproven",
+    });
+  });
+
+  it.each([
+    { ...paired, pairedReceipt: null },
+    { ...paired, members: point.members },
+    { ...paired, members: [...paired.members, paired.members[1]] },
+    { ...paired, pairedReceipt: { ...paired.pairedReceipt, uploads: { ...paired.pairedReceipt.uploads, runId: "BR-OTHER" } } },
+    { ...paired, schemaVersion: 1 },
+  ])("does not downgrade incomplete or ambiguous paired evidence to legacy", (candidate) => {
+    expect(getSelfUpgradeRecoveryState({ ...run, completionEvidence: { recoveryPoint: candidate } })).toMatchObject({
+      membership: "incomplete", backupRunIds: null, available: false, reason: "recovery-point-incomplete",
     });
   });
 
