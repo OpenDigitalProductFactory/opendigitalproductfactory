@@ -42,6 +42,12 @@ Before admitting a new consent-bound independent spec-approval request, the serv
 
 A plan-only review can start from an unchanged source branch. Request authorization resolves the same baseline-validated plan as the claim issuer; it does not require a changed design file. Exact packet identity, current Workroom head, independent reviewer and caller authority checks still apply.
 
+Stale Build Studio plan coverage still leaves current coverage due. When the item
+has no own or inherited scope baseline history, the exact Workroom can request
+its first independent spec approval on the current immutable design. A passing
+review creates the baseline before the author records current coverage. The
+historical coverage remains available for audit and cannot satisfy implementation.
+
 When an exact plan-review task exhausts its terminal-writer attempts, refresh
 the governed claim. For that user and current OAuth task family, the issuer
 skips only the recorded exhausted packet and selects the next currently

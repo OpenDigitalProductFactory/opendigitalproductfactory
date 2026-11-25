@@ -183,7 +183,9 @@ own executor surface acting for the room's owner. The handler (`work-capsules/qu
 refuses unless the PR head is the room head and a passing, unexpired gate result is
 bound to the room there. GitHub's `expectedHeadOid` guards the head. The pack also
 gained `claim_backlog_item_for_work.harness` (`t3-code`) and `heartbeat_workroom`'s
-`checkpoint.capacity`. See the [T3 executor design](../superpowers/specs/2026-11-13-t3-code-first-class-executor-design.md).
+`checkpoint.capacity`. The claim also takes `harnessRef` (the harness's own
+thread, project, environment and provider instance), and `list_workrooms` takes
+`harnessThreadId` to find the room from that thread (BI-75AB446B). See the [T3 executor design](../superpowers/specs/2026-11-13-t3-code-first-class-executor-design.md).
 
 `rebind_workroom_shape` (BI-CB5C0DCE) lives in this pack, but its handler is
 its own lazy module (`work-capsules/workroom-shape-rebind-handler.ts`), so

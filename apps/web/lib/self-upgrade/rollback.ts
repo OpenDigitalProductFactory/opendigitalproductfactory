@@ -1,6 +1,7 @@
+import type { BackupTarget } from "@/lib/operate/backups/types";
+
 import { prisma as defaultPrisma, type Prisma } from "@dpf/db";
 
-import type { BackupTarget } from "@/lib/operate/backups/types";
 import {
   acquireRestoreLock,
   RestoreIntegrityError,
@@ -10,10 +11,17 @@ import {
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 import { getSelfUpgradeRecoveryState, type SelfUpgradeRecoveryPointSnapshot } from "./recovery-eligibility";
 
+/**
+ * The targets a self-upgrade recovery point restores. Only Postgres today; the
+ * upload-store engine (BI-1C6BF6B6) is backed up daily but not yet part of the
+ * pre-upgrade recovery point, so rollback must not expect an uploads member.
+ */
+type RecoveryTarget = Extract<BackupTarget, "postgres">;
+
 export const SELF_UPGRADE_ROLLBACK_CONFIRMATION_TEXT = "ROLLBACK";
 const ROLLBACK_TRIGGER = "self-upgrade-rollback";
 // Postgres is the only restore target (BET-5).
-const RESTORE_ORDER: BackupTarget[] = ["postgres"];
+const RESTORE_ORDER: RecoveryTarget[] = ["postgres"];
 
 type PrismaLike = typeof defaultPrisma;
 
@@ -46,7 +54,7 @@ type RestoreRunner = (args: {
 }) => Promise<RestoreRunnerResult>;
 
 export interface SelfUpgradeRollbackMemberResult {
-  target: BackupTarget;
+  target: RecoveryTarget;
   sourceBackupRunId: string;
   restoreId: string | null;
   status: "ok" | "failed";
@@ -61,7 +69,7 @@ export interface SelfUpgradeRollbackEvidence {
   startedAt: string;
   completedAt: string;
   initiatedByUserId: string | null;
-  restoreOrder: BackupTarget[];
+  restoreOrder: RecoveryTarget[];
   restores: SelfUpgradeRollbackMemberResult[];
 }
 
@@ -87,7 +95,7 @@ interface RollbackArgs {
   initiatedByUserId?: string | null;
   prismaClient?: PrismaLike;
   now?: () => Date;
-  runners?: Partial<Record<BackupTarget, RestoreRunner>>;
+  runners?: Partial<Record<RecoveryTarget, RestoreRunner>>;
 }
 
 function toRecord(value: unknown): Record<string, unknown> | null {
@@ -96,12 +104,12 @@ function toRecord(value: unknown): Record<string, unknown> | null {
 }
 
 async function resolveRunners(
-  overrides?: Partial<Record<BackupTarget, RestoreRunner>>,
-): Promise<Record<BackupTarget, RestoreRunner>> {
+  overrides?: Partial<Record<RecoveryTarget, RestoreRunner>>,
+): Promise<Record<RecoveryTarget, RestoreRunner>> {
   // postgres-only after BET-5.
   return {
     postgres: overrides?.postgres ?? runPostgresRestore,
-  } as Record<BackupTarget, RestoreRunner>;
+  } as Record<RecoveryTarget, RestoreRunner>;
 }
 
 function backupRunSnapshotData(row: BackupRunSnapshot) {
@@ -218,7 +226,7 @@ async function recordRollbackEvidence(args: {
 
 async function loadRecoverySourceSnapshots(
   prisma: PrismaLike,
-  memberRunIds: Record<BackupTarget, string>,
+  memberRunIds: Record<RecoveryTarget, string>,
 ): Promise<BackupRunSnapshot[]> {
   const ids = RESTORE_ORDER.map((target) => memberRunIds[target]);
   const rows = await prisma.backupRun.findMany({
@@ -235,7 +243,7 @@ async function loadRecoverySourceSnapshots(
 }
 
 async function runRestoreMember(args: {
-  target: BackupTarget;
+  target: RecoveryTarget;
   sourceBackupRunId: string;
   runner: RestoreRunner;
   initiatedByUserId: string | null;

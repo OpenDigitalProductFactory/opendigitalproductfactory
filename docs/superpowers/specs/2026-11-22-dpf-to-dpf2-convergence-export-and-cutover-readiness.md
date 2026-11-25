@@ -33,7 +33,7 @@ Source schema: `packages/db/prisma/schema/core-identity.prisma`.
 | 3 | `OrgSettings` (`"OrgSettings"`) | Active install row(s) | `id` | None |
 | 4 | `BusinessProfile` (`"BusinessProfile"`) | `isActive = true` | `profileKey` | None |
 | 5 | `OrganizationCapabilityActivation` (`"OrganizationCapabilityActivation"`) | `organizationId = :org_id` | `id` | None |
-| 6 | `Principal` (`"Principal"`) | `status = 'active'` AND referenced by org (`topAccountablePrincipalId`), Slice 2 profiles/versions, or Slice 3 documents/ownership (including `sponsorPrincipalId` closure) | `principalId`, `id` | None |
+| 6 | `Principal` (`"Principal"`) | `status = 'active'` AND referenced by org (`topAccountablePrincipalId`), Slice 2 profiles/versions, Slice 3 documents/ownership, or Slice 3 `createdById` users resolved through §2.3.3 (including `sponsorPrincipalId` closure) | `principalId`, `id` | None |
 | 7 | `PrincipalAlias` (`"PrincipalAlias"`) | `principalId IN (:exported_principals)` | `(aliasType, aliasValue, issuer)` | None |
 | 8 | `AuthorityBinding` + `AuthorityBindingSubject` + `AuthorityBindingGrant` | Active non-revoked bindings for `:exported_principals` | `id` | Never export raw tokens (`McpApiToken`, `ApiToken`, `OAuthClient`, `OAuthAuthorizationCode`, `OAuthRefreshToken`, `PasswordResetToken`) or `User.passwordHash` |
 
@@ -45,7 +45,7 @@ Source schemas: `packages/db/prisma/schema/decision-governance.prisma`, `package
 
 | Order | Prisma Model (Postgres Table) | Filter / Scope | Natural / Join Key | Notes |
 | --- | --- | --- | --- | --- |
-| 9 | `DecisionPerspectiveProfile` (`"DecisionPerspectiveProfile"`) | `status = 'active'` AND (`(kind = 'organization' AND "ownerOrganizationId" = :org_id)` [WWWD] OR `kind = 'profession'` [WSID]) | `profileId` | Preserves `scope`, `fallbackProfileId`, `defaultResolver`, `autonomyPolicy`, `currentVersionId` |
+| 9 | `DecisionPerspectiveProfile` (`"DecisionPerspectiveProfile"`) | `status = 'active'` AND (`(kind = 'organization' AND "ownerOrganizationId" = :org_id)` [WWWD] OR `(kind = 'profession' AND ("ownerOrganizationId" IS NULL OR "ownerOrganizationId" = :org_id))` [WSID: shared or owned by the selected organization, never another tenant's]) | `profileId` | Preserves `scope`, `fallbackProfileId`, `defaultResolver`, `autonomyPolicy`, `currentVersionId` |
 | 10 | `DecisionPerspectiveProfileVersion` (`"DecisionPerspectiveProfileVersion"`) | `profileId IN (:exported_profiles)` (full lineage or at minimum `currentVersionId`) | `versionId`, `(profileId, versionNumber)` | Preserves `materialFingerprint`, `changeSummary`, `promotedByPrincipalId` |
 | 11 | `PerspectiveMaterial` (`"PerspectiveMaterial"`) | `profileId IN (:exported_profiles)` AND `freshness = 'current'` AND `reviewStatus <> 'rejected'` AND `promotionState IN ('promoted', 'candidate')` | `materialId` | Preserves `sourceType`, `sourceRef`, `domainClass`, `direction`, `domains`, `evidenceGrade`, `stalenessPolicy`, `confidenceWeight`, `summary` |
 | 12 | `WikiPage` (`"WikiPage"`) | (`organizationId = :org_id` AND `status = 'published'` [WWWD overlays]) OR (`id IN (:material_referenced_page_ids)` [WSID profession pages carrying `metadata.professionJurisdiction` / `professionCompetencyLevel`]) | `(organizationId, slug)` / `id` | Base `isKernel = true` pages come from DPF2's kernel seed; org overrides retain `kernelPageId` + `derivedFromKernelVersion` |
@@ -63,13 +63,39 @@ Select **one** representative active customer commitment chain (`CustomerAccount
 | 15 | `CustomerAccount` (`"CustomerAccount"`) | `id = :rehearsal_account_id` AND `status = 'active'` AND `"mergedIntoId" IS NULL` | `accountId`, `id` | Never committed; stays in local rehearsal bundle only |
 | 16 | `CustomerContact` + `ContactAccountRole` | `accountId = :rehearsal_account_id` AND `isActive = true` | `email`, `id` | **Exclude `passwordHash`** |
 | 17 | `Subscription` (`"Subscription"`) | `accountId = :rehearsal_account_id` AND `status = 'active'` (1 chosen active contract) | `subscriptionRef`, `id` | Optional `SalesOrder`/`Quote` ref exported as metadata if linked |
-| 18 | `RecurringSchedule` + `RecurringLineItem` | `accountId = :rehearsal_account_id` AND `status = 'active'` (matching `:rehearsal_schedule_id`, linked via `subscriptionId` where present) | `scheduleId`, `id` | Preserves `frequency`, `nextInvoiceDate`, `lastInvoicedAt`, `autoSend`, `recurrenceScheduleId` |
-| 19 | `Invoice` + `InvoiceLineItem` | `sourceType = 'recurring'` AND `sourceId = :rehearsal_schedule_id` (most recent 1–3 cycles) | `invoiceRef`, `id` | **Exclude/null `payToken` and `signatureDataUrl` if unneeded for dry-run** so live customer payment URLs cannot collide |
+| 18 | `RecurringSchedule` + `RecurringLineItem` | Schedule located by `"scheduleId" = :rehearsal_schedule_id` (the operator-facing reference) AND `"accountId" = :rehearsal_account_id` AND `status = 'active'` (linked via `subscriptionId` where present). Line items by `RecurringLineItem."scheduleId" = RecurringSchedule.id` (the internal id, despite the column name) | `scheduleId`, `id` | Preserves `frequency`, `nextInvoiceDate`, `lastInvoicedAt`, `autoSend`, `recurrenceScheduleId`. When `recurrenceScheduleId` is set, export the referenced `RecurrenceSchedule` row too |
+| 19 | `Invoice` + `InvoiceLineItem` | `"sourceType" = 'recurring'` AND `"sourceId" = RecurringSchedule.id` of the row located in order 18 (most recent 1–3 cycles by `"issueDate"`). The writer stores the internal id (`apps/web/lib/actions/recurring.ts`, `generateDueInvoices`), never `scheduleId` | `invoiceRef`, `id` | **Exclude/null `payToken` and `signatureDataUrl` if unneeded for dry-run** so live customer payment URLs cannot collide |
 | 20 | `InvoiceDocument` (`"InvoiceDocument"`) | `invoiceId IN (:exported_invoice_ids)` | `(invoiceId, role, revision)` | Write-once binding to `DocumentVersion.id` (`sent-copy` / `signed-copy`) |
-| 21 | `Document` (`"Document"`) | `id IN (SELECT "documentId" FROM "DocumentVersion" WHERE id IN (:exported_doc_version_ids))` | `documentId`, `id` | Preserves `currentVersionId`, `currentState`, `accessScope`, `classification` |
+| 21 | `Document` (`"Document"`) | `"organizationId" = :org_id` AND `id IN (SELECT "documentId" FROM "DocumentVersion" WHERE id IN (:exported_doc_version_ids))`. A referenced document owned by another organization is a hold, not a silent drop | `documentId`, `id` | Preserves `currentVersionId`, `currentState`, `accessScope`, `classification` |
 | 22 | `DocumentVersion` (`"DocumentVersion"`) | All versions referenced by `InvoiceDocument` or `Document.currentVersionId` | `(documentId, version)`, `id` | Preserves `contentSha256`, `sizeBytes`, `contentBlobId` |
 | 23 | `DocumentBlob` (`"DocumentBlob"`) | `id IN (:exported_blob_ids)` | `sha256`, `storageKey` | Paired with raw bytes copied read-only from `<BLOB_ROOT>/<storageKey>` (`documents/sha256/<aa>/<bb>/<sha256>`) |
 | 24 | `DocumentLifecycleEvent`, `DocumentTag`, `DocumentReference`, `DocumentAccessGrant` | `documentId IN (:exported_document_ids)` | `id` | Preserves document audit & access metadata |
+
+#### 2.3.1 Tenant scoping for the commerce slice
+
+`CustomerAccount`, `CustomerContact`, `Subscription`, `RecurringSchedule`, `RecurringLineItem`, `Invoice` and `InvoiceLineItem` carry no organization key, so no filter can scope them to one tenant. For the first rehearsal the export asserts, inside the same snapshot transaction, that exactly one `Organization` row exists and that its `slug` equals `:org_slug`. The manifest records the assertion as `tenantScope: { mode: "single-organization-install", organizationCount, matchedSlug }`.
+
+If the snapshot holds more than one organization, the export still writes Slices 1 and 2 but writes no Slice 3 rows and records `slice3: { status: "held", reason: "commerce-ownership-unverifiable" }`. The hold lifts only when a supported mapping proves which organization owns the commerce rows; the export never guesses from account names or contact emails.
+
+Rows that do carry an organization key stay filtered by it: `Document."organizationId"` (order 21) and `DecisionPerspectiveProfile."ownerOrganizationId"` (order 9). A two-tenant fixture verifies the filters: the second tenant's documents and organization-owned profession profiles are absent, and Slice 3 is held.
+
+#### 2.3.2 Value encoding
+
+- `Decimal` columns (amounts, quantities, unit prices, tax and discount rates, totals) are emitted as JSON strings carrying the exact PostgreSQL `numeric` text (`"amount"::text`). Never as JSON numbers: a double cannot represent every `numeric` value, and a rounding drift fails the invoice-total parity gate (§2.5.4) for reasons unrelated to the successor.
+- Timestamps are emitted as ISO-8601 strings with an explicit `+00:00` offset. Prisma `DateTime` columns are PostgreSQL `timestamp without time zone` holding UTC, so the export runs `SET LOCAL TIME ZONE 'UTC'` and casts each one `AT TIME ZONE 'UTC'`; a bare `timestamp` would serialize with no offset and could be read as local time.
+- JSON columns are emitted as JSON values, not re-encoded strings.
+
+#### 2.3.3 `User` references in the commerce slice
+
+`RecurringSchedule."createdById"`, `Invoice."createdById"` and `InvoiceDocument."createdById"` reference `User`, which this contract never exports (it carries `passwordHash` and login state). Slice 1 exports `Principal`. The existing platform mapping is `PrincipalAlias` with `aliasType = 'user'`, `issuer = ''`, `aliasValue = User.id` (used by `packages/db/src/install-work-owner.ts` and the Workroom stage-decision lookup).
+
+For each of the three columns the export:
+
+1. resolves the user through that alias to an active `Principal` and adds the principal to the Slice 1 closure (order 6);
+2. emits the resolved `createdByPrincipalId` and does not emit the raw `User.id`;
+3. emits `null` when the column is null, the alias is missing, or the principal is not active, and counts each case in the manifest under `unresolvedReferences: [{ table, column, nullCount, unresolvedCount }]`.
+
+The import treats an unresolved creator as unknown authorship, never as authorship by the importing principal. Creator attribution is not part of the recurring-invoice parity gate.
 
 ### 2.4 Read-Only Export Command & Manifest
 
@@ -98,34 +124,57 @@ mkdir -p "$EXPORT_DIR/tables" "$EXPORT_DIR/blobs"
 docker exec -i "$DPF_PRODUCTION_DB_CONTAINER" \
   psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 \
   -v org_slug="$ORG_SLUG" -v schedule_id="$REHEARSAL_SCHEDULE_ID" \
-  --tuples-only --no-align <<'SQL' > "$EXPORT_DIR/snapshot.ndjson"
+  --quiet --tuples-only --no-align <<'SQL' > "$EXPORT_DIR/snapshot.ndjson"
 BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY;
+SET LOCAL TIME ZONE 'UTC';
 
-WITH target_org AS (
-  SELECT id FROM "Organization" WHERE slug = :'org_slug' LIMIT 1
+WITH org_guard AS (
+  -- §2.3.1: the commerce slice has no organization key, so it is exported
+  -- only when the snapshot holds exactly one organization and it is the target.
+  SELECT count(*) AS organization_count,
+         count(*) FILTER (WHERE slug = :'org_slug') AS matched_count
+  FROM "Organization"
+),
+target_org AS (
+  SELECT id FROM "Organization" WHERE slug = :'org_slug'
+),
+slice3_allowed AS (
+  SELECT (organization_count = 1 AND matched_count = 1) AS ok FROM org_guard
 ),
 target_sched AS (
-  SELECT id, "accountId", "subscriptionId"
+  -- Located by the operator-facing scheduleId; every FK uses the internal id.
+  SELECT id, "scheduleId", "accountId", "subscriptionId", "createdById",
+         amount::text AS amount, currency, frequency, "nextInvoiceDate"
   FROM "RecurringSchedule"
   WHERE "scheduleId" = :'schedule_id' AND status = 'active'
-  LIMIT 1
+    AND (SELECT ok FROM slice3_allowed)
 ),
 target_invoices AS (
-  SELECT id FROM "Invoice"
+  SELECT id, "createdById" FROM "Invoice"
   WHERE "sourceType" = 'recurring'
     AND "sourceId" IN (SELECT id FROM target_sched)
   ORDER BY "issueDate" DESC
   LIMIT 3
 ),
-target_doc_versions AS (
-  SELECT DISTINCT "documentVersionId" AS id
+target_invoice_docs AS (
+  SELECT "documentVersionId", "createdById"
   FROM "InvoiceDocument"
   WHERE "invoiceId" IN (SELECT id FROM target_invoices)
 ),
+target_doc_versions AS (
+  SELECT DISTINCT v.id, v."documentId", v."contentBlobId"
+  FROM "DocumentVersion" v
+  JOIN "Document" d ON d.id = v."documentId"
+  WHERE v.id IN (SELECT "documentVersionId" FROM target_invoice_docs)
+    AND d."organizationId" IN (SELECT id FROM target_org)
+),
+foreign_doc_versions AS (
+  -- §2.3.1: a referenced document owned by another organization is a hold.
+  SELECT "documentVersionId" FROM target_invoice_docs
+  WHERE "documentVersionId" NOT IN (SELECT id FROM target_doc_versions)
+),
 target_docs AS (
-  SELECT DISTINCT "documentId" AS id
-  FROM "DocumentVersion"
-  WHERE id IN (SELECT id FROM target_doc_versions)
+  SELECT DISTINCT "documentId" AS id FROM target_doc_versions
 ),
 target_profiles AS (
   SELECT "profileId"
@@ -133,13 +182,40 @@ target_profiles AS (
   WHERE status = 'active'
     AND (
       (kind = 'organization' AND "ownerOrganizationId" IN (SELECT id FROM target_org))
-      OR kind = 'profession'
+      OR (kind = 'profession' AND ("ownerOrganizationId" IS NULL
+                                   OR "ownerOrganizationId" IN (SELECT id FROM target_org)))
     )
+),
+creator_refs AS (
+  -- §2.3.3: resolve User creators through the canonical PrincipalAlias mapping.
+  SELECT 'RecurringSchedule' AS tbl, "createdById" AS user_id FROM target_sched
+  UNION ALL SELECT 'Invoice', "createdById" FROM target_invoices
+  UNION ALL SELECT 'InvoiceDocument', "createdById" FROM target_invoice_docs
+),
+creator_resolution AS (
+  SELECT r.tbl, r.user_id, p.id AS principal_id
+  FROM creator_refs r
+  LEFT JOIN "PrincipalAlias" a
+    ON a."aliasType" = 'user' AND a.issuer = '' AND a."aliasValue" = r.user_id
+  LEFT JOIN "Principal" p ON p.id = a."principalId" AND p.status = 'active'
 )
 SELECT json_build_object(
-  'contractVersion', '1.0',
+  'contractVersion', '1.1',
   'exportedAt', now(),
   'schemaMigrationHead', (SELECT migration_name FROM _prisma_migrations ORDER BY finished_at DESC NULLS LAST LIMIT 1),
+  'tenantScope', (
+    SELECT json_build_object('mode', 'single-organization-install',
+                             'organizationCount', organization_count,
+                             'matchedSlug', matched_count = 1)
+    FROM org_guard
+  ),
+  'slice3', CASE
+    WHEN NOT (SELECT ok FROM slice3_allowed)
+      THEN json_build_object('status', 'held', 'reason', 'commerce-ownership-unverifiable')
+    WHEN EXISTS (SELECT 1 FROM foreign_doc_versions)
+      THEN json_build_object('status', 'held', 'reason', 'document-owned-by-another-organization')
+    ELSE json_build_object('status', 'exported')
+  END,
   'counts', json_build_object(
     'Organization', (SELECT count(*) FROM target_org),
     'DecisionPerspectiveProfile', (SELECT count(*) FROM target_profiles),
@@ -148,10 +224,28 @@ SELECT json_build_object(
     'Document', (SELECT count(*) FROM target_docs),
     'DocumentVersion', (SELECT count(*) FROM target_doc_versions)
   ),
+  -- §2.3.2: Decimal values travel as exact strings.
+  'schedule', (
+    SELECT json_build_object('scheduleId', "scheduleId", 'amount', amount,
+                             'currency', currency, 'frequency', frequency,
+                             'nextInvoiceDate', "nextInvoiceDate" AT TIME ZONE 'UTC')
+    FROM target_sched
+  ),
+  'unresolvedReferences', (
+    SELECT coalesce(json_agg(json_build_object(
+             'table', tbl, 'column', 'createdById',
+             'nullCount', null_count, 'unresolvedCount', unresolved_count)), '[]'::json)
+    FROM (
+      SELECT tbl,
+             count(*) FILTER (WHERE user_id IS NULL) AS null_count,
+             count(*) FILTER (WHERE user_id IS NOT NULL AND principal_id IS NULL) AS unresolved_count
+      FROM creator_resolution GROUP BY tbl
+    ) per_table
+  ),
   'blobStorageKeys', (
     SELECT coalesce(json_agg(json_build_object('id', b.id, 'sha256', b.sha256, 'storageKey', b."storageKey", 'sizeBytes', b."sizeBytes")), '[]'::json)
     FROM "DocumentBlob" b
-    WHERE b.id IN (SELECT "contentBlobId" FROM "DocumentVersion" WHERE id IN (SELECT id FROM target_doc_versions) AND "contentBlobId" IS NOT NULL)
+    WHERE b.id IN (SELECT "contentBlobId" FROM target_doc_versions WHERE "contentBlobId" IS NOT NULL)
   )
 );
 
@@ -165,6 +259,25 @@ sha256sum "$EXPORT_DIR/snapshot.ndjson" > "$EXPORT_DIR/snapshot.ndjson.sha256"
 ```
 
 *(Full table-by-table `COPY (SELECT ...) TO STDOUT` / JSONL extraction uses the same `REPEATABLE READ READ ONLY` transaction boundary and CTEs above, writing one file per table under `$EXPORT_DIR/tables/<Model>.jsonl`, copying each referenced `documents/sha256/<aa>/<bb>/<sha256>` file read-only into `$EXPORT_DIR/blobs/`, verifying `sha256sum`, and emitting `$EXPORT_DIR/manifest.json`.)*
+
+#### 2.4.1 Scratch-database verification of the example (2026-11-24)
+
+On 2026-11-24 the SQL above was copied exactly from this file and run, with the flags shown, against a throwaway `pgvector/pgvector:pg16` container. All 666 migrations were applied in order, through `20261120180000_workroom_dispatch_build_effect`. The data was a synthetic fixture; no live tenant database was read. Each output was checked by parsing every line as JSON. (This record was meant to land with PR #7185 and is added here.)
+
+- **One organization:** exit 0, one valid NDJSON line, `slice3.status = "exported"`. A decoy invoice whose `sourceId` held the operator `scheduleId` instead of the internal id was excluded: 2 invoices exported, not 3. The schedule amount came back as the exact string `"12345678901234567.890123456789000000000000000000"`. Prisma `Decimal` maps to `numeric(65,30)`, so trailing zeros are part of the exact value; the importer compares values numerically, not as text. `nextInvoiceDate` serialized as `2026-12-01T00:00:00+00:00`. Creator counts matched the fixture: the schedule creator resolved through `PrincipalAlias`, one invoice creator was unresolved, one invoice-document creator was null.
+- **Two organizations:** exit 0, one valid line, `slice3 = { status: "held", reason: "commerce-ownership-unverifiable" }`, every Slice 3 count 0. The second tenant's organization and profession profiles were excluded (3 profiles exported).
+
+Without `--quiet`, psql writes `BEGIN`, `SET` and `COMMIT` command tags into `snapshot.ndjson` and the file is no longer valid NDJSON. The `document-owned-by-another-organization` hold is defensive: it cannot trigger while the single-organization guard holds, and becomes reachable once a supported commerce ownership mapping lifts that guard.
+
+#### 2.4.2 Synthetic restore artifact for the same-schema rehearsal
+
+WWMD advisory `DI-520267766767` and the ratified install-is-the-tenant rule make the first Gate 3 rehearsal a same-schema cold restore of DPF's own database, not a translated export. [`scripts/convergence/build-synthetic-restore-artifact.sh`](../../../scripts/convergence/build-synthetic-restore-artifact.sh) builds its input from fictional data only (BI-3357F36E):
+
+1. Start a throwaway `pgvector/pgvector:pg16` container. Apply every migration in order, each in one transaction as Prisma does, and record each in `_prisma_migrations` with the SHA-256 of its `migration.sql`.
+2. Load [`synthetic-restore-fixture.sql`](../../../scripts/convergence/synthetic-restore-fixture.sql): one organization, a creator mapped through `PrincipalAlias(user)`, one with no alias, and one recurring customer chain through invoice documents, with amounts a double cannot carry.
+3. Run the production `scripts/backup-postgres.sh` against that container. Its `pg_restore --list` check runs with the container's own PostgreSQL 16 client.
+
+The output folder holds `backup/` (exactly `manifest.json`, `dpf.dump`, `dpf.dump.sha256`, `log.txt`, the shape DPF2's intake reads), `files/` (the synthetic document bytes at their storage keys) and `provenance.json` (source commit, migration head, fixture and dump digests, files manifest). Nothing is added to `backup/`, because DPF2's intake refuses any extra entry. The files manifest moves into the backup shape once BI-1C6BF6B6 agrees one with DPF2. The script writes outside any git checkout with owner-only permissions and refuses to overwrite an existing artifact.
 
 ### 2.5 Rehearsal Restore & Parity Verification Gates
 

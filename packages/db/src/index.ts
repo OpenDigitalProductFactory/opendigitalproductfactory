@@ -76,6 +76,8 @@ export * from "./healthcare-patient-authority";
 export * from "./healthcare-care-intake";
 export * from "./subject-reference";
 export * from "./agent-principal-convergence";
+// The install is the tenant (W18): ask for the install's organization by name (BI-EE2F38D5).
+export * from "./install-organization";
 
 // Quality-issue lifecycle governance (BI-0B420A1D): the registry is the
 // compile-time contract; the drift sweep is the runtime half.
