@@ -439,7 +439,11 @@ async function hostSourcePath(): Promise<string> {
   );
 }
 
-function productionRunDocker(args: string[], options?: { timeoutMs?: number }): Promise<DoctoolsDockerResult> {
+// BI-224F56F1: in the qualified portal the converter image operations go to the
+// private actuator, which admits only the install's own dpf-doctools repository.
+async function productionRunDocker(args: string[], options?: { timeoutMs?: number }): Promise<DoctoolsDockerResult> {
+  const routed = await (await import("./doctools-image-actuator")).doctoolsDockerThroughActuator(args);
+  if (routed) return routed;
   return runProcessWithBudget("docker", args, {
     timeoutMs: options?.timeoutMs ?? INSPECT_TIMEOUT_MS,
     timeoutLabel: "doctools-image-timeout",
@@ -463,8 +467,10 @@ function productionDeps(): DoctoolsReconcileDeps {
       buildLocalDoctoolsImage({
         sourceRoot: lineage.sourceRoot,
         imageTag: lineage.imageTag,
-        runDocker: (args, options) =>
-          runProcessWithBudget("docker", args, {
+        // The qualified portal cannot build from source: the actuator refuses the
+        // build, and the reconciler reports the converter unavailable instead.
+        runDocker: async (args, options) =>
+          (await (await import("./doctools-image-actuator")).doctoolsDockerThroughActuator(args)) ?? runProcessWithBudget("docker", args, {
             timeoutMs: options?.timeoutMs ?? INSPECT_TIMEOUT_MS,
             timeoutLabel: "doctools-image-build-timeout",
           }),

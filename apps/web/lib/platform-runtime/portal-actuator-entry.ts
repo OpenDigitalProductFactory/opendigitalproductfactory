@@ -21,6 +21,7 @@ async function main() {
       launchPromoter: (body: unknown) => Promise<unknown>;
       sourceWriter: (body: unknown) => Promise<unknown>;
       promoterCandidate: (body: unknown) => Promise<unknown>;
+      doctoolsImage: (body: unknown) => Promise<unknown>;
     }): Promise<void>;
   };
   let previewPass: ReturnType<typeof fenceEndedPreviewRuntimesAtDaemon> | undefined;
@@ -149,6 +150,15 @@ async function main() {
         run: (args, options) => runProcessWithBudget("docker", args, options),
         resolve: params => resolvePromoterArtifact(params),
         readVerifiedRelease: async () => (await import("../release-health/state")).readFreshVerifiedReleaseTarget(),
+      })(body);
+    },
+    doctoolsImage: async body => {
+      const [{ createDoctoolsImageOperator }, { runProcessWithBudget }] = await Promise.all([
+        import("../self-upgrade/doctools-image-actuator"), import("../shared/run-process-with-budget"),
+      ]);
+      return createDoctoolsImageOperator({
+        ghcrOwner: process.env.GHCR_OWNER?.trim().toLowerCase(),
+        run: (args, options) => runProcessWithBudget("docker", args, options),
       })(body);
     },
     doctools: createDoctoolsActuator(project),

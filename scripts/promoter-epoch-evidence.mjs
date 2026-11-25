@@ -170,7 +170,7 @@ const actuatorSecretOptions = [
 const actuatorBindingKeys = ['DPF_HOST_INSTALL_PATH', 'PROMOTE_SOURCE', 'DPF_STATE_DIR_HOST', 'DPF_BACKUPS_HOST_PATH',
   'PROMOTE_BACKUP_PATH', 'PROMOTE_HEALTH_URL', 'DPF_SELF_UPGRADE_COMPOSE_FILES', 'DPF_RUNTIME_TRANSITION_SECRET_FILE_HOST',
   'APP_URL', 'COMPOSE_PROJECT_NAME', 'DPF_HOST_PLATFORM', 'DPF_HOST_ARCH', 'DPF_IMAGE_TAG', 'DPF_IMAGE_CHANNEL_TAG', 'GHCR_OWNER',
-  'REPO_REMOTE', 'REPO_BRANCH'];
+  'REPO_REMOTE', 'REPO_BRANCH', 'GHCR_OWNER'];
 const bindingValue = /^[A-Za-z0-9 _./:@$+-]{1,1024}$/;
 const actuatorEnvKeys = new Set([...actuatorSecretOptions, ...actuatorBindingKeys, 'PROMOTE_COMPOSE_PROJECT', 'TSX_TSCONFIG_PATH',
   'TSX_DISABLE_CACHE', 'DPF_RUNTIME_SECRET_NAMES']);
@@ -566,7 +566,7 @@ export async function readScopeWriterObserverBinding({ stateDir, secret, now = n
  *   openRuntimeSession: (owner: unknown, resolveSandbox: () => Promise<unknown>) => Promise<unknown> }} owners
  */
 export async function serveScopeWriterObserver(env, { fencePreviews, observeCiCapacity, reconcileSubstrate, sweepPromoters,
-  doctools, openRuntimeSession, pruneDockerDisk, launchPromoter, sourceWriter, promoterCandidate }) {
+  doctools, openRuntimeSession, pruneDockerDisk, launchPromoter, sourceWriter, promoterCandidate, doctoolsImage }) {
   const { createScopeWriterObserver, observeActuatorProjectServices, observeActuatorProjectContainers, observeActuatorPortalImage,
     observeActuatorSandbox, publishActuatorSocket, restartActuatorProjectService } =
     await import('./lib/scope-writer-observation.mjs');
@@ -635,6 +635,7 @@ export async function serveScopeWriterObserver(env, { fencePreviews, observeCiCa
     launchPromoter,
     sourceWriter,
     promoterCandidate,
+    doctoolsImage,
     doctools,
   });
   process.umask(0o117);
