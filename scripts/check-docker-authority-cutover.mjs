@@ -42,11 +42,11 @@ const SCOPES = ["apps/web/lib", "apps/web/app", "packages/db/src"];
 const RECIPE_LABEL = /^\s*LABEL\b[^\n]*com\.opendpf\.scope-writer\.recipe\s*=\s*"?portal-immutable-v1"?/m;
 
 export const DOCKER_AUTHORITY_REGISTRY = Object.freeze({
-  "apps/web/lib/build/grok-device-login-core.ts": { class: "pending", count: 5, reason: "Writer-reachable raw Docker call; migrate to a typed actuator operation before the immutable recipe." },
+  "apps/web/lib/build/grok-device-login-core.ts": { class: "routed", count: 5, reason: "Lines run through execSandboxCommandLine (directly or via sandboxExec()): exec into the observed sandbox when the actuator is mounted, anything else refused; a test checks every line passes the host command check." },
   "apps/web/lib/build/grok-dispatch.ts": { class: "routed", count: 1, reason: "sandboxExec() runs it through execSandboxCommandLine: the private actuator execs into its observed canonical sandbox when mounted; any other Docker call is refused." },
   "apps/web/lib/build/ideate-dispatch.ts": { class: "routed", count: 1, reason: "sandboxExec() runs it through execSandboxCommandLine: the private actuator execs into its observed canonical sandbox when mounted; any other Docker call is refused." },
   "apps/web/lib/build/sandbox/agent-cli-runtime.ts": { class: "routed", count: 2, reason: "spawnSandboxExec/execSandboxCommandLine: the private actuator execs into its observed canonical sandbox when mounted; any other Docker call is refused." },
-  "apps/web/lib/build/sandbox/grok-governance-seed.ts": { class: "pending", count: 5, reason: "Writer-reachable raw Docker call; migrate to a typed actuator operation before the immutable recipe." },
+  "apps/web/lib/build/sandbox/grok-governance-seed.ts": { class: "routed", count: 5, reason: "Lines run through execSandboxCommandLine (directly or via sandboxExec()): exec into the observed sandbox when the actuator is mounted, anything else refused; a test checks every line passes the host command check." },
   "apps/web/lib/build/sandbox/sandbox-admin.ts": { class: "routed", count: 1, reason: "readActuatorSandbox when the actuator mount is present; only the observed sandbox is reported and docker inspect stays the mount-absent path." },
   "apps/web/lib/build/sandbox/sandbox-db.ts": { class: "routed", count: 6, reason: "Readiness and seed go to the actuator's sandbox-db operation for the build's in-use slot; every other Docker line is refused by execSandboxCommandLine when the mount is present." },
   "apps/web/lib/build/sandbox/sandbox-promotion.ts": { class: "routed", count: 4, reason: "executePromotion refuses before any effect when the actuator is mounted (DI-062828328841: deliver through the protected PR and canonical self-upgrade), and every Docker line is refused by execSandboxCommandLine there." },
@@ -65,7 +65,7 @@ export const DOCKER_AUTHORITY_REGISTRY = Object.freeze({
   "apps/web/lib/mcp/build-lifecycle-handlers.ts": { class: "message", count: 2, reason: "Operator remediation text only." },
   "apps/web/lib/mcp/packs/admin-pack.ts": { class: "pending", count: 2, reason: "Writer-reachable raw Docker call; migrate to a typed actuator operation before the immutable recipe." },
   "apps/web/lib/mcp/packs/public-web-design-pack.ts": { class: "message", count: 1, reason: "Operator remediation text only." },
-  "apps/web/lib/mcp/packs/sandbox-pack.ts": { class: "pending", count: 4, reason: "Writer-reachable raw Docker call; migrate to a typed actuator operation before the immutable recipe." },
+  "apps/web/lib/mcp/packs/sandbox-pack.ts": { class: "routed", count: 1, reason: "readActuatorSandbox and the actuator catalog restart (via sandbox.ts startSandbox) when the mount is present; docker inspect stays the mount-absent path." },
   "apps/web/lib/nonprod/local-ci-capacity-broker.ts": { class: "routed", count: 1, reason: "readActuatorCiCapacity when the actuator mount is present; *AtDaemon runs in the actuator." },
   "apps/web/lib/operate/backups/extension-preflight.ts": { class: "routed", count: 2, reason: "Queries pg_extension over the configured database when the actuator mount is present; the other line is remediation text." },
   "apps/web/lib/operate/service-restart.ts": { class: "routed", count: 3, reason: "restartActuatorService when the actuator mount is present; a refusal never falls back to shell Docker." },

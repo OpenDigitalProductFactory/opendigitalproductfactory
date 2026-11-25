@@ -305,14 +305,30 @@ async function recoverSandboxTool(params: Record<string, unknown>, userId: strin
   };
 }
 
+/** The canonical sandbox's container state, or null when it does not exist.
+ * BI-224F56F1: the qualified portal reads the actuator's observed sandbox. */
+async function readSandboxStatus(sandboxId: string, timeout: number): Promise<string | null> {
+  const observation = await import("../../../../../scripts/lib/scope-writer-observation.mjs");
+  if (await observation.usesPrivateActuator()) {
+    const selected = await observation.readActuatorSandbox().catch(() => null) as { containerId?: string; name?: string; running?: boolean } | null;
+    if (!selected?.containerId || (sandboxId !== selected.containerId && sandboxId !== selected.name)) return null;
+    return selected.running ? "running" : "exited";
+  }
+  const { exec: execCb } = lazyChildProcess();
+  const { promisify } = lazyUtil();
+  try {
+    const { stdout } = await promisify(execCb)(`docker inspect -f "{{.State.Status}}" ${sandboxId}`, { timeout });
+    return String(stdout).trim();
+  } catch {
+    return null;
+  }
+}
+
 async function checkSandbox(): Promise<ToolResult> {
   const sandboxId = process.env.SANDBOX_CONTAINER_ID ?? "dpf-sandbox-1";
   try {
-    const { exec: execCb } = lazyChildProcess();
-    const { promisify } = lazyUtil();
-    const execAsync = promisify(execCb);
-    const { stdout } = await execAsync(`docker inspect -f "{{.State.Status}}" ${sandboxId}`, { timeout: 5_000 });
-    const status = stdout.trim(); // "running", "exited", "paused", etc.
+    const status = await readSandboxStatus(sandboxId, 5_000); // "running", "exited", "paused", etc.
+    if (status === null) throw new Error("sandbox_not_found");
     const isRunning = status === "running";
     return {
       success: true,
@@ -333,16 +349,9 @@ async function checkSandbox(): Promise<ToolResult> {
 async function startSandbox(_params: Record<string, unknown>, userId: string): Promise<ToolResult> {
   const sandboxId = process.env.SANDBOX_CONTAINER_ID ?? "dpf-sandbox-1";
   try {
-    const { exec: execCb } = lazyChildProcess();
-    const { promisify } = lazyUtil();
-    const execAsync = promisify(execCb);
-
     // First check current status
-    let currentStatus: string;
-    try {
-      const { stdout } = await execAsync(`docker inspect -f "{{.State.Status}}" ${sandboxId}`, { timeout: 5_000 });
-      currentStatus = stdout.trim();
-    } catch {
+    const currentStatus = await readSandboxStatus(sandboxId, 5_000);
+    if (currentStatus === null) {
       return {
         success: false,
         error: "Sandbox container not found.",
@@ -354,16 +363,15 @@ async function startSandbox(_params: Record<string, unknown>, userId: string): P
       return { success: true, message: `Sandbox (${sandboxId}) is already running.`, data: { status: "running" } };
     }
 
-    // Start the container
-    await execAsync(`docker start ${sandboxId}`, { timeout: 15_000 });
+    // Start the container (the actuator's catalog restart in the qualified portal)
+    await (await import("@/lib/build/sandbox/sandbox")).startSandbox(sandboxId);
 
     // Wait up to 20s for it to become running
     const deadline = Date.now() + 20_000;
     while (Date.now() < deadline) {
       await new Promise(r => setTimeout(r, 1_500));
       try {
-        const { stdout } = await execAsync(`docker inspect -f "{{.State.Status}}" ${sandboxId}`, { timeout: 3_000 });
-        if (stdout.trim() === "running") {
+        if (await readSandboxStatus(sandboxId, 3_000) === "running") {
           // Auto-replay (EP-2D477458 Phase 3): a freshly (re)started sandbox
           // may have lost any on-demand-provisioned engine. Restore desired,
           // previously-provisioned, now-absent engines in the background —

@@ -9,17 +9,15 @@
 import { prisma } from "@dpf/db";
 import { encryptSecret } from "@/lib/credential-crypto";
 import { activateProvider } from "@/lib/govern/activate-provider";
-import { lazyChildProcess, lazyUtil } from "@/lib/shared/lazy-node";
+import { execSandboxCommandLine } from "@/lib/workroom-runtime/sandbox-exec";
 
 const SANDBOX_CONTAINER = process.env.SANDBOX_CONTAINER_ID ?? "dpf-sandbox-1";
 const XAI_PROVIDER_ID = "xai";
 const LOGIN_OUT = "/tmp/grok-device-login.out";
 
 function dockerExecAsync(): (cmd: string, opts?: { timeout?: number }) => Promise<{ stdout: string; stderr: string }> {
-  const { exec } = lazyChildProcess();
-  const { promisify } = lazyUtil();
-  const execAsync = promisify(exec) as (cmd: string, opts?: { timeout?: number }) => Promise<{ stdout: string; stderr: string }>;
-  return (cmd, opts) => execAsync(cmd, opts).catch(() => ({ stdout: "", stderr: "" }));
+  // BI-224F56F1: unchanged without the actuator; routed to the observed sandbox otherwise.
+  return (cmd, opts) => execSandboxCommandLine(cmd, opts).catch(() => ({ stdout: "", stderr: "" }));
 }
 
 /**
