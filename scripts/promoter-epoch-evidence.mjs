@@ -566,9 +566,9 @@ export async function readScopeWriterObserverBinding({ stateDir, secret, now = n
  *   openRuntimeSession: (owner: unknown, resolveSandbox: () => Promise<unknown>) => Promise<unknown> }} owners
  */
 export async function serveScopeWriterObserver(env, { fencePreviews, observeCiCapacity, reconcileSubstrate, sweepPromoters,
-  doctools, openRuntimeSession, pruneDockerDisk, launchPromoter, sourceWriter, promoterCandidate, doctoolsImage, reassessmentCandidate, runtimeProtocol }) {
+  doctools, openRuntimeSession, pruneDockerDisk, launchPromoter, sourceWriter, promoterCandidate, doctoolsImage, reassessmentCandidate, runtimeProtocol, sandboxDb }) {
   const { createScopeWriterObserver, observeActuatorProjectServices, observeActuatorProjectContainers, observeActuatorPortalImage,
-    observeActuatorSandbox, publishActuatorSocket, restartActuatorProjectService } =
+    observeActuatorSandbox, publishActuatorSocket, restartActuatorProjectService, resolveActuatorProjectServiceContainer } =
     await import('./lib/scope-writer-observation.mjs');
   const stateDir = '/dpf-state';
   const project = env.PROMOTE_COMPOSE_PROJECT;
@@ -638,6 +638,8 @@ export async function serveScopeWriterObserver(env, { fencePreviews, observeCiCa
     doctoolsImage,
     reassessmentCandidate,
     runtimeProtocol,
+    // The sandbox it observed and the bound project's services, never the caller's.
+    sandboxDb: sandboxDb && (body => sandboxDb(body, observeSandbox, service => resolveActuatorProjectServiceContainer(project, service))),
     doctools,
   });
   process.umask(0o117);

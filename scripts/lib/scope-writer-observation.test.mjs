@@ -417,13 +417,14 @@ it('carries one bounded candidate stage request to its owner only', unixOnly, as
 });
 
 it('carries image, reassessment and runtime protocol requests only to their own owners', unixOnly, async () => {
-  const { createScopeWriterObserver, runActuatorDoctoolsImage, proveActuatorReassessmentCandidate, probeActuatorRuntimeProtocol } = await load();
+  const { createScopeWriterObserver, runActuatorDoctoolsImage, proveActuatorReassessmentCandidate, probeActuatorRuntimeProtocol, runActuatorSandboxDb } = await load();
   const received = [];
   const owner = (name, reply) => async body => { received.push([name, body]); return reply; };
   await withServer(observe => createScopeWriterObserver({ observe,
     doctoolsImage: owner('image', { exitCode: 0, stdout: 'sha256:x', stderr: '' }),
     reassessmentCandidate: owner('reassessment', { proof: true }),
     runtimeProtocol: owner('protocol', { info: true }),
+    sandboxDb: owner('sandbox-db', { ok: true, detail: '' }),
   }), async () => ({}), async socketPath => {
     const image = { operation: 'present', reference: `dpf-promoter:${'a'.repeat(40)}` };
     const reassessment = { owner: { kind: 'self-upgrade', runId: 'SUR-R1' }, input: { targetSha: 'a'.repeat(40), release: false } };
@@ -431,11 +432,14 @@ it('carries image, reassessment and runtime protocol requests only to their own 
     assert.deepEqual(await runActuatorDoctoolsImage(image, { socketPath, timeoutMs: 2_000 }), { exitCode: 0, stdout: 'sha256:x', stderr: '' });
     assert.deepEqual(await proveActuatorReassessmentCandidate(reassessment, { socketPath, timeoutMs: 2_000 }), { proof: true });
     assert.deepEqual(await probeActuatorRuntimeProtocol(protocol, { socketPath, timeoutMs: 2_000 }), { info: true });
+    const database = { owner: { kind: 'build', buildId: 'FB-12345678' }, operation: 'ready' };
+    assert.deepEqual(await runActuatorSandboxDb(database, { socketPath, timeoutMs: 2_000 }), { ok: true, detail: '' });
+    await assert.rejects(runActuatorSandboxDb({ pad: 'x'.repeat(2048) }, { socketPath, timeoutMs: 2_000 }));
     await assert.rejects(proveActuatorReassessmentCandidate({ pad: 'x'.repeat(2048) }, { socketPath, timeoutMs: 2_000 }));
     await assert.rejects(probeActuatorRuntimeProtocol({ pad: 'x'.repeat(70 * 1024) }, { socketPath, timeoutMs: 2_000 }));
-    for (const path of ['/v1/runtime/doctools-image', '/v1/runtime/reassessment-candidate', '/v1/runtime/runtime-protocol']) {
+    for (const path of ['/v1/runtime/doctools-image', '/v1/runtime/reassessment-candidate', '/v1/runtime/runtime-protocol', '/v1/runtime/sandbox-db']) {
       assert.equal(await call(socketPath, { method: 'GET', path }), 404);
     }
-    assert.deepEqual(received, [['image', image], ['reassessment', reassessment], ['protocol', protocol]]);
+    assert.deepEqual(received, [['image', image], ['reassessment', reassessment], ['protocol', protocol], ['sandbox-db', database]]);
   });
 });

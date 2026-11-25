@@ -27,6 +27,7 @@ const promoterCandidatePath = '/v1/runtime/promoter-candidate';
 const doctoolsImagePath = '/v1/runtime/doctools-image';
 const reassessmentCandidatePath = '/v1/runtime/reassessment-candidate';
 const runtimeProtocolPath = '/v1/runtime/runtime-protocol';
+const sandboxDbPath = '/v1/runtime/sandbox-db';
 const promoterLaunchRequestLimit = 256 * 1024;
 const promoterLaunchResponseLimit = 600 * 1024;
 const doctoolsPath = '/v1/runtime/doctools/';
@@ -76,7 +77,7 @@ async function readBoundedStream(stream, bytes) {
  * The observer derives scope from host-owned state, never from the request. */
 export function createScopeWriterObserver({ observe, observeServices, observeCiCapacity, readRetirement, fencePreviews,
   reconcileSubstrate, readServiceLogs, observeProjectContainers, observePortalImage, observeSandbox, sweepPromoters,
-  doctools, openRuntimeSession, readReassessmentProof, restartService, pruneDockerDisk, launchPromoter, sourceWriter, promoterCandidate, doctoolsImage, reassessmentCandidate, runtimeProtocol }) {
+  doctools, openRuntimeSession, readReassessmentProof, restartService, pruneDockerDisk, launchPromoter, sourceWriter, promoterCandidate, doctoolsImage, reassessmentCandidate, runtimeProtocol, sandboxDb }) {
   const operations = new Map([
     [`GET ${cohortPath}`, observe], [`GET ${projectServicesPath}`, observeServices],
     [`GET ${ciCapacityPath}`, observeCiCapacity],
@@ -90,7 +91,7 @@ export function createScopeWriterObserver({ observe, observeServices, observeCiC
     [`POST ${pruneDockerDiskPath}`, pruneDockerDisk],
   ]);
   let doctoolsInFlight = 0;
-  const jsonRoutes = new Map([[promoterLaunchPath, launchPromoter], [sourceWriterPath, sourceWriter], [promoterCandidatePath, promoterCandidate], [doctoolsImagePath, doctoolsImage], [reassessmentCandidatePath, reassessmentCandidate], [runtimeProtocolPath, runtimeProtocol]]
+  const jsonRoutes = new Map([[promoterLaunchPath, launchPromoter], [sourceWriterPath, sourceWriter], [promoterCandidatePath, promoterCandidate], [doctoolsImagePath, doctoolsImage], [reassessmentCandidatePath, reassessmentCandidate], [runtimeProtocolPath, runtimeProtocol], [sandboxDbPath, sandboxDb]]
     .filter(([, owner]) => owner));
   let jsonActionsInFlight = 0;
   const server = createServer({ headersTimeout: 2_000, requestTimeout: 2_000, maxHeaderSize: 1024 }, async (req, res) => {
@@ -434,6 +435,15 @@ export function runActuatorSourceWriter(body, { socketPath = SCOPE_WRITER_OBSERV
   return requestActuator(sourceWriterPath, socketPath, { method: 'POST', timeoutMs, maxBytes: 64 * 1024, body });
 }
 
+/** A Build Studio build's sandbox database step (BI-224F56F1). */
+export function runActuatorSandboxDb(body, { socketPath = SCOPE_WRITER_OBSERVER_SOCKET, timeoutMs }) {
+  const size = Buffer.byteLength(JSON.stringify(body ?? null));
+  if (!body || typeof body !== 'object' || size > 1024 || !Number.isSafeInteger(timeoutMs) || timeoutMs < 1) {
+    return Promise.reject(unavailable());
+  }
+  return requestActuator(sandboxDbPath, socketPath, { method: 'POST', timeoutMs, maxBytes: 16 * 1024, body });
+}
+
 /** The packaged runtime-capability protocol probe (BI-224F56F1). */
 export function probeActuatorRuntimeProtocol(body, { socketPath = SCOPE_WRITER_OBSERVER_SOCKET, timeoutMs }) {
   const size = Buffer.byteLength(JSON.stringify(body ?? null));
@@ -528,6 +538,13 @@ async function ownProjectContainers(project, get) {
   return containers.filter(item => item?.Labels?.['com.docker.compose.project'] === project
     && item.Labels['com.docker.compose.oneoff']?.toLowerCase() !== 'true'
     && /^[a-z0-9][a-z0-9_-]{0,99}$/.test(item.Labels['com.docker.compose.service'] ?? ''));
+}
+
+/** The one running container of an owned project service, by full ID (BI-224F56F1). */
+export async function resolveActuatorProjectServiceContainer(project, service, get = dockerSocketGet) {
+  const matches = (await ownProjectContainers(project, get)).filter(item => item.Labels['com.docker.compose.service'] === service);
+  if (matches.length !== 1 || matches[0].State !== 'running' || !/^[a-f0-9]{64}$/.test(matches[0].Id ?? '')) throw unavailable();
+  return matches[0].Id;
 }
 
 export async function observeActuatorPortalImage(project, get = dockerSocketGet) {

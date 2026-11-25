@@ -25,6 +25,8 @@ async function main() {
       doctoolsImage: (body: unknown) => Promise<unknown>;
       reassessmentCandidate: (body: unknown) => Promise<unknown>;
       runtimeProtocol: (body: unknown) => Promise<unknown>;
+      sandboxDb: (body: unknown, observeSandbox: () => Promise<{ name: string; running: boolean }>,
+        resolveService: (service: "postgres" | "sandbox-postgres") => Promise<string>) => Promise<unknown>;
     }): Promise<void>;
   };
   let previewPass: ReturnType<typeof fenceEndedPreviewRuntimesAtDaemon> | undefined;
@@ -190,6 +192,39 @@ async function main() {
       if (snapshot === undefined || (snapshot !== null && (typeof snapshot !== "object" || Array.isArray(snapshot)))) throw new Error("runtime_protocol_admission_refused");
       const { inspectPackagedReconciliationProtocolAtDaemon } = await import("./runtime-capability-executor");
       return inspectPackagedReconciliationProtocolAtDaemon((snapshot ?? undefined) as never, process.env.GHCR_OWNER?.trim().toLowerCase() ?? "");
+    },
+    // A build's sandbox database steps, admitted on its in-use sandbox slot.
+    sandboxDb: async (body, observeSandbox, resolveService) => {
+      const [{ createSandboxDbOperator }, { runProcessWithBudget }, { spawn }] = await Promise.all([
+        import("../build/sandbox/sandbox-db-actuator"), import("../shared/run-process-with-budget"), import("node:child_process"),
+      ]);
+      return createSandboxDbOperator({
+        readSlot: async buildId => {
+          const { prisma } = await import("@dpf/db");
+          return prisma.sandboxSlot.findFirst({ where: { buildId }, select: { containerId: true, status: true } });
+        },
+        observeSandbox,
+        resolveService,
+        run: args => runProcessWithBudget("docker", args, { timeoutMs: 30_000, maxStdoutBytes: 4096 }),
+        pipe: (from, to) => new Promise(resolve => {
+          const source = spawn("docker", from, { stdio: ["ignore", "pipe", "pipe"] });
+          const sink = spawn("docker", to, { stdio: ["pipe", "ignore", "pipe"] });
+          let stderr = "", sourceCode: number | null | undefined, sinkCode: number | null | undefined;
+          const timer = setTimeout(() => { source.kill("SIGTERM"); sink.kill("SIGTERM"); }, 10 * 60_000);
+          const settle = () => {
+            if (sourceCode === undefined || sinkCode === undefined) return;
+            clearTimeout(timer);
+            resolve({ exitCode: sourceCode === 0 && sinkCode === 0 ? 0 : 1, stderr: stderr.slice(-4096) });
+          };
+          source.stdout.pipe(sink.stdin);
+          sink.stdin.on("error", () => source.kill("SIGTERM"));
+          for (const child of [source, sink]) child.stderr.on("data", (chunk: Buffer) => { stderr = (stderr + chunk.toString("utf8")).slice(-8192); });
+          source.once("error", () => { sourceCode = 1; settle(); });
+          sink.once("error", () => { sinkCode = 1; settle(); });
+          source.once("close", code => { sourceCode ??= code; settle(); });
+          sink.once("close", code => { sinkCode ??= code; settle(); });
+        }),
+      })(body);
     },
     doctools: createDoctoolsActuator(project),
     // One stream transport, two owners: a Workroom session or a bounded
