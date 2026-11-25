@@ -15,9 +15,9 @@ const artifact = { digest: builtImageId, sourceSha: targetSha } as unknown as Re
 const request = (overrides: Record<string, unknown> = {}) => ({ owner: { kind: "self-upgrade", runId }, input: { targetSha, ...overrides } });
 
 function harness(options: { run?: { status: string; deployedSha: string | null } | null; config?: SelfUpgradeConfig;
-  built?: string; resolved?: ResolvedPromoterArtifact } = {}) {
+  built?: string; resolved?: ResolvedPromoterArtifact; release?: { ghcrOwner: string; candidate: { tag: string; sourceSha: string } } | null } = {}) {
   const launched: string[][] = [];
-  const resolved: Array<{ promoterImage: string; targetSha: string }> = [];
+  const resolved: Array<{ promoterImage: string; candidateReference?: string; targetSha: string }> = [];
   const launch = createCandidateLauncher({
     binding,
     readConfig: async () => options.config ?? config,
@@ -28,6 +28,7 @@ function harness(options: { run?: { status: string; deployedSha: string | null }
       return { exitCode: 0, stdout: options.built ?? `{"ok":true,"image":"dpf-promoter:${targetSha}","imageId":"${builtImageId}"}\n`, stderr: "" };
     },
     resolve: async (params) => { resolved.push(params); return options.resolved ?? artifact; },
+    readVerifiedRelease: async () => (options.release === undefined ? { ghcrOwner: "OpenDPF", candidate: { tag: "v2.0.0", sourceSha: targetSha } } : options.release),
   });
   return { launch, launched, resolved };
 }
@@ -85,6 +86,28 @@ describe("createCandidateLauncher", () => {
     await expect(harness({ built: `{"ok":true,"image":"dpf-promoter:other","imageId":"${builtImageId}"}` }).launch(request())).rejects.toThrow("promoter_candidate_build_failed");
     await expect(harness({ resolved: { ...artifact, digest: builderImageId } as ResolvedPromoterArtifact }).launch(request()))
       .rejects.toThrow("promoter_candidate_identity_mismatch");
+  });
+});
+
+describe("release-mode candidates", () => {
+  const reference = "ghcr.io/opendpf/dpf-promoter:v2.0.0";
+
+  it("resolves the verified publisher's promoter for exactly this target and builds nothing", async () => {
+    const h = harness();
+    await expect(h.launch(request({ release: reference }))).resolves.toBe(artifact);
+    expect(h.launched).toHaveLength(0);
+    expect(h.resolved).toEqual([{ promoterImage: reference, candidateReference: reference, targetSha }]);
+  });
+
+  it.each([
+    ["no fresh verified target", { release: null }, reference],
+    ["a verified target for another commit", { release: { ghcrOwner: "opendpf", candidate: { tag: "v2.0.0", sourceSha: "f".repeat(40) } } }, reference],
+    ["a portal reference that differs from the evidence", {}, "ghcr.io/opendpf/dpf-promoter:v9.9.9"],
+    ["a reference outside the promoter repository", {}, "ghcr.io/opendpf/dpf-portal:v2.0.0"],
+  ])("refuses %s", async (_label, options, sent) => {
+    const h = harness(options as never);
+    await expect(h.launch(request({ release: sent }))).rejects.toThrow("promoter_candidate_admission_refused");
+    expect(h.resolved).toHaveLength(0);
   });
 });
 

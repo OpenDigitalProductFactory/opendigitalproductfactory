@@ -148,6 +148,7 @@ async function main() {
         },
         run: (args, options) => runProcessWithBudget("docker", args, options),
         resolve: params => resolvePromoterArtifact(params),
+        readVerifiedRelease: async () => (await import("../release-health/state")).readFreshVerifiedReleaseTarget(),
       })(body);
     },
     doctools: createDoctoolsActuator(project),

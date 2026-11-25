@@ -210,10 +210,12 @@ export async function runCandidatePreflight(params: {
   }
   const runtime = await params.runtime();
   try {
-    // BI-224F56F1 (DI-B3171A8F09DC): in the qualified portal a source-mode
-    // candidate is built and verified by the actuator's admitted candidate stage.
-    const staged = params.candidatePromoterReference ? null
-      : await (await import("./promoter-candidate-actuator")).candidateThroughPrivateActuator({ runId: params.runId, targetSha: params.targetSha });
+    // BI-224F56F1 (DI-B3171A8F09DC): in the qualified portal the candidate is
+    // built (source) or resolved (release) and verified by the actuator.
+    const staged = await (await import("./promoter-candidate-actuator")).candidateThroughPrivateActuator({
+      runId: params.runId, targetSha: params.targetSha,
+      ...(params.candidatePromoterReference ? { release: params.candidatePromoterReference } : {}),
+    });
     const artifact = staged ?? await runtime.resolvePromoterArtifact({
       promoterImage: params.candidatePromoterReference ?? await runtime.buildCandidatePromoterImage({
         sourcePath: params.sourcePath, targetSha: params.targetSha, promoterImage: params.promoterImage,
