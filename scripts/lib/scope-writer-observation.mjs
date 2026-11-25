@@ -22,6 +22,7 @@ const sweepPromotersPath = '/v1/runtime/sweep-promoters';
 const restartServicePath = '/v1/runtime/restart-service';
 const pruneDockerDiskPath = '/v1/runtime/prune-docker-disk';
 const promoterLaunchPath = '/v1/runtime/promoter-launch';
+const sourceWriterPath = '/v1/runtime/source-writer';
 const promoterLaunchRequestLimit = 256 * 1024;
 const promoterLaunchResponseLimit = 600 * 1024;
 const doctoolsPath = '/v1/runtime/doctools/';
@@ -71,7 +72,7 @@ async function readBoundedStream(stream, bytes) {
  * The observer derives scope from host-owned state, never from the request. */
 export function createScopeWriterObserver({ observe, observeServices, observeCiCapacity, readRetirement, fencePreviews,
   reconcileSubstrate, readServiceLogs, observeProjectContainers, observePortalImage, observeSandbox, sweepPromoters,
-  doctools, openRuntimeSession, readReassessmentProof, restartService, pruneDockerDisk, launchPromoter }) {
+  doctools, openRuntimeSession, readReassessmentProof, restartService, pruneDockerDisk, launchPromoter, sourceWriter }) {
   const operations = new Map([
     [`GET ${cohortPath}`, observe], [`GET ${projectServicesPath}`, observeServices],
     [`GET ${ciCapacityPath}`, observeCiCapacity],
@@ -85,7 +86,8 @@ export function createScopeWriterObserver({ observe, observeServices, observeCiC
     [`POST ${pruneDockerDiskPath}`, pruneDockerDisk],
   ]);
   let doctoolsInFlight = 0;
-  let promoterLaunchesInFlight = 0;
+  const jsonRoutes = new Map([[promoterLaunchPath, launchPromoter], [sourceWriterPath, sourceWriter]].filter(([, owner]) => owner));
+  let jsonActionsInFlight = 0;
   const server = createServer({ headersTimeout: 2_000, requestTimeout: 2_000, maxHeaderSize: 1024 }, async (req, res) => {
     res.setHeader('Connection', 'close');
     const document = req.method === 'POST' ? parseDoctoolsPath(req.url) : null;
@@ -112,23 +114,26 @@ export function createScopeWriterObserver({ observe, observeServices, observeCiC
       finally { clearTimeout(deadline); doctoolsInFlight--; }
       return;
     }
-    if (req.method === 'POST' && req.url === promoterLaunchPath && launchPromoter) {
+    // Owner-keyed actions with one bounded JSON body; each owner re-derives
+    // every host-facing field before it acts (BI-224F56F1).
+    const jsonOwner = req.method === 'POST' ? jsonRoutes.get(req.url) : undefined;
+    if (jsonOwner) {
       const length = Number(req.headers['content-length']);
       if (req.headers['content-type'] !== 'application/json') return res.writeHead(415).end();
       if (req.headers['transfer-encoding'] !== undefined || !Number.isSafeInteger(length) || length < 2
         || length > promoterLaunchRequestLimit) return res.writeHead(413).end();
-      if (promoterLaunchesInFlight >= 2) return res.writeHead(503).end();
-      promoterLaunchesInFlight++;
+      if (jsonActionsInFlight >= 2) return res.writeHead(503).end();
+      jsonActionsInFlight++;
       try {
         let body;
         try { body = JSON.parse((await readBoundedStream(req, length)).toString('utf8')); } catch { return res.writeHead(400).end(); }
         if (!body || typeof body !== 'object' || Array.isArray(body)) return res.writeHead(400).end();
-        const reply = JSON.stringify(await launchPromoter(body));
+        const reply = JSON.stringify(await jsonOwner(body));
         if (res.destroyed) return;
         if (!reply || Buffer.byteLength(reply) > promoterLaunchResponseLimit) throw unavailable();
         res.writeHead(200, { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(reply) }).end(reply);
       } catch { if (!res.destroyed) res.writeHead(503).end(); }
-      finally { promoterLaunchesInFlight--; }
+      finally { jsonActionsInFlight--; }
       return;
     }
     const requestedLog = req.method === 'GET' && req.url?.startsWith(`${serviceLogsPath}?`)
@@ -412,6 +417,16 @@ export function launchActuatorPromoter(body, { socketPath = SCOPE_WRITER_OBSERVE
     return Promise.reject(unavailable());
   }
   return requestActuator(promoterLaunchPath, socketPath, { method: 'POST', timeoutMs, maxBytes: promoterLaunchResponseLimit, body });
+}
+
+/** The actuator re-checks the owning run or refresh bound and the install's
+ * configuration before it launches the fixed source writer. */
+export function runActuatorSourceWriter(body, { socketPath = SCOPE_WRITER_OBSERVER_SOCKET, timeoutMs }) {
+  const size = Buffer.byteLength(JSON.stringify(body ?? null));
+  if (!body || typeof body !== 'object' || size > 8 * 1024 || !Number.isSafeInteger(timeoutMs) || timeoutMs < 1) {
+    return Promise.reject(unavailable());
+  }
+  return requestActuator(sourceWriterPath, socketPath, { method: 'POST', timeoutMs, maxBytes: 64 * 1024, body });
 }
 
 export function readActuatorProjectContainers({ socketPath = SCOPE_WRITER_OBSERVER_SOCKET } = {}) {

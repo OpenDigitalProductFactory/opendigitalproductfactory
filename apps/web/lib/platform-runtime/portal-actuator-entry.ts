@@ -19,11 +19,14 @@ async function main() {
       openRuntimeSession: ReturnType<typeof createSandboxSessionActuator>;
       pruneDockerDisk: () => Promise<unknown>;
       launchPromoter: (body: unknown) => Promise<unknown>;
+      sourceWriter: (body: unknown) => Promise<unknown>;
     }): Promise<void>;
   };
   let previewPass: ReturnType<typeof fenceEndedPreviewRuntimesAtDaemon> | undefined;
   let promoterPass: ReturnType<typeof sweepOrphanedPromoterContainersAtDaemon> | undefined;
   let prunePass: Promise<unknown> | undefined;
+  // One launcher per actuator process, so the upstream refresh bound holds.
+  let sourceWriterLauncher: Promise<(body: unknown) => Promise<unknown>> | undefined;
   const project = process.env.PROMOTE_COMPOSE_PROJECT;
   if (!project) throw new Error("actuator_project_unavailable");
   await serveScopeWriterObserver(process.env, {
@@ -90,6 +93,24 @@ async function main() {
           return promoter.runPromoterReadinessAtDaemon({ ...params, artifact });
         },
       });
+    },
+    sourceWriter: async body => {
+      sourceWriterLauncher ??= (async () => {
+        const [{ createSourceWriterLauncher }, { readPromoterInstallBinding }, { getSelfUpgradeConfig }, { runProcessWithBudget }] = await Promise.all([
+          import("../self-upgrade/source-writer-actuator"), import("../self-upgrade/promoter-actuator"),
+          import("../self-upgrade/config"), import("../shared/run-process-with-budget"),
+        ]);
+        return createSourceWriterLauncher({
+          binding: readPromoterInstallBinding(process.env),
+          readConfig: getSelfUpgradeConfig,
+          readRunStatus: async runId => {
+            const { prisma } = await import("@dpf/db");
+            return (await prisma.selfUpgradeRun.findUnique({ where: { runId }, select: { status: true } }))?.status ?? null;
+          },
+          run: (args, options) => runProcessWithBudget("docker", args, options),
+        });
+      })();
+      return (await sourceWriterLauncher)(body);
     },
     doctools: createDoctoolsActuator(project),
     openRuntimeSession: createSandboxSessionActuator(),

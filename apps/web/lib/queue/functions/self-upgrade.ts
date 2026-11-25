@@ -8,6 +8,9 @@ import { loadReleaseInstallContext, resolveUpgradeStrategy, type ReleaseTargetRe
 import { resolveWorkerReleaseTarget } from "@/lib/self-upgrade/worker-release-target";
 import { countPendingUpstreamCommits, evaluateReleaseBatch } from "@/lib/self-upgrade/release-batch";
 import { prepareUpgradeSource, defaultGitRunner } from "@/lib/self-upgrade/prepare-source";
+import type { PrepareSourceResult } from "@/lib/self-upgrade/prepare-source";
+import { sourceWriterThroughPrivateActuator } from "@/lib/self-upgrade/source-writer-actuator";
+import { usesPrivateActuator } from "../../../../../scripts/lib/scope-writer-observation.mjs";
 import {
   runCandidatePreflight,
   runReassessmentCandidatePreflight,
@@ -94,12 +97,16 @@ export async function beginSelfUpgrade(params: SelfUpgradeRunEventData): Promise
   const now = new Date();
   const cooldownMinutes = config.cooldownMinutes ?? DEFAULT_COOLDOWN_MINUTES;
 
+  // The run that owns this attempt. In the qualified portal a scheduled attempt
+  // creates it before source preparation, so the authorized source writer is
+  // keyed on an existing run (BI-224F56F1); otherwise it is created as before.
+  let ownedRunId: string | undefined = params.runId;
   async function skipAttempt(
     reason: string,
     persistedReason = reason,
     extra: Record<string, unknown> = {},
   ): Promise<SelfUpgradeBegin> {
-    if (params.runId) await skipRun(params.runId, persistedReason);
+    if (ownedRunId) await skipRun(ownedRunId, persistedReason);
     // BI-3CA18934: the scheduled cron carries no runId, so without this a
     // declined unattended tick left NO trace at all — no row, no reason — and
     // the only evidence was the absence of a run, which reads like a broken
@@ -110,7 +117,7 @@ export async function beginSelfUpgrade(params: SelfUpgradeRunEventData): Promise
     return done({
       skipped: true,
       reason,
-      ...(params.runId ? { runId: params.runId } : {}),
+      ...(ownedRunId ? { runId: ownedRunId } : {}),
       ...extra,
     });
   }
@@ -292,9 +299,17 @@ export async function beginSelfUpgrade(params: SelfUpgradeRunEventData): Promise
     upstreamSha = target.sourceSha;
     releaseTarget = target;
   } else if (config.sourceMode === "upstream") {
-    await gitRun(buildFetchCommand({ hostSourcePath, remote, branch }).slice(1));
-    const head = await gitRun(buildRemoteHeadCommand({ hostSourcePath, remote, branch }).slice(1));
-    upstreamSha = head.code === 0 ? head.stdout.trim() : null;
+    // BI-224F56F1: the qualified portal cannot write the install checkout; the
+    // authorized source writer runs the bounded upstream refresh instead.
+    const refreshed = await sourceWriterThroughPrivateActuator({ owner: { kind: "upstream-refresh" },
+      operation: "refresh-upstream-head", input: { remote, branch } });
+    if (refreshed) {
+      upstreamSha = refreshed.ok ? refreshed.upstreamSha : null;
+    } else {
+      await gitRun(buildFetchCommand({ hostSourcePath, remote, branch }).slice(1));
+      const head = await gitRun(buildRemoteHeadCommand({ hostSourcePath, remote, branch }).slice(1));
+      upstreamSha = head.code === 0 ? head.stdout.trim() : null;
+    }
     if (!upstreamSha) return await skipAttempt("no-target");
     const lastOk = await getLatestSucceededRun();
     if (!params.dryRun && !params.force && lastOk?.targetSha === upstreamSha) {
@@ -345,7 +360,21 @@ export async function beginSelfUpgrade(params: SelfUpgradeRunEventData): Promise
   } else if (upgradeStrategy === "release") {
     builtStamp = upstreamSha!;
   } else {
-    const prep = await prepareUpgradeSource(
+    let prep: PrepareSourceResult | null = null;
+    if (await usesPrivateActuator()) {
+      // BI-224F56F1: prepared by the authorized source writer for an existing
+      // run; a refusal is reported, never retried as a local write.
+      if (hostSourcePath !== "/host-dpf") {
+        prep = { ok: false, reason: "prep-error", message: "The authorized source writer prepares only the install checkout at /host-dpf." };
+      } else {
+        ownedRunId ??= (await createRun({ triggeredBy: params.triggeredBy, fromVersion: deployedSha ?? undefined,
+          toVersion: upstreamSha ?? undefined })).runId;
+        prep = await sourceWriterThroughPrivateActuator({ owner: { kind: "self-upgrade", runId: ownedRunId },
+          operation: "prepare-upgrade-source", input: { sourceMode: config.sourceMode, remote, branch,
+            installBranch: config.installBranch, isolatedWorkspace: Boolean(upgradeWorkspaceMountPath) } });
+      }
+    }
+    prep ??= await prepareUpgradeSource(
       {
         sourceMode: config.sourceMode,
         hostSourcePath,
@@ -360,8 +389,8 @@ export async function beginSelfUpgrade(params: SelfUpgradeRunEventData): Promise
       // Conflict / no-target / prep-error: record for audit, do NOT drain or
       // swap. A merge conflict defers (operator resolves in the Upgrade Center);
       // the current build keeps running.
-      const failedRun = params.runId
-        ? await updateRunPlan(params.runId, {
+      const failedRun = ownedRunId
+        ? await updateRunPlan(ownedRunId, {
             fromVersion: deployedSha ?? undefined,
             toVersion: upstreamSha ?? undefined,
           })
@@ -410,8 +439,8 @@ export async function beginSelfUpgrade(params: SelfUpgradeRunEventData): Promise
     }
   }
 
-  const run = params.runId
-    ? await updateRunPlan(params.runId, {
+  const run = ownedRunId
+    ? await updateRunPlan(ownedRunId, {
         fromVersion: deployedSha ?? undefined,
         // targetSha column carries the upstream lineage marker (what the build
         // contains), falling back to the built stamp in local mode.

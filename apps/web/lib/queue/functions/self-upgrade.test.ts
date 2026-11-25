@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { err, ok } from "@/lib/shared/action-result";
 import { createHash } from "node:crypto";
-import { registerPrebuildTests } from "./self-upgrade-prebuild.test-support"; import { configureReleaseUpgradeTest, registerCoreSelfUpgradeSuccessTest, registerInstallStateHandoffTests, registerReleaseWorkerTargetRecoveryTests, registerSelfUpgradeFunctionTests } from "./self-upgrade-handoff.test-support";
+import { registerPrebuildTests } from "./self-upgrade-prebuild.test-support"; import { registerSourceWriterRoutingTests } from "./self-upgrade-source-writer.test-support"; import { configureReleaseUpgradeTest, registerCoreSelfUpgradeSuccessTest, registerInstallStateHandoffTests, registerReleaseWorkerTargetRecoveryTests, registerSelfUpgradeFunctionTests } from "./self-upgrade-handoff.test-support";
 const TEST_INSTALL_STATE = JSON.stringify({ platform: "linux", arch: "amd64" });
 const TEST_INSTALL_STATE_HASH = createHash("sha256").update(TEST_INSTALL_STATE).digest("hex");
 
@@ -59,6 +59,7 @@ const mocks = vi.hoisted(() => ({
   readRegistryReleaseCandidate: vi.fn(),
   loadVerifiedReleaseTargetEvidence: vi.fn(),
   recordVerifiedReleaseTargetEvidence: vi.fn().mockResolvedValue(true),
+  sourceWriterThroughPrivateActuator: vi.fn(async (..._a: unknown[]): Promise<unknown> => null), usesPrivateActuator: vi.fn(async () => false),
 }));
 vi.mock("@/lib/self-upgrade/config", () => ({
   getSelfUpgradeConfig: mocks.getSelfUpgradeConfig,
@@ -133,7 +134,7 @@ vi.mock("@/lib/self-upgrade/run-store", () => ({
   getLatestSucceededRun: mocks.getLatestSucceededRun,
   getRun: mocks.getRun,
 }));
-vi.mock("@/lib/self-upgrade/delivery-admission", () => ({ rejectDuplicateSelfUpgradeDelivery: vi.fn().mockResolvedValue(null) }));
+vi.mock("@/lib/self-upgrade/delivery-admission", () => ({ rejectDuplicateSelfUpgradeDelivery: vi.fn().mockResolvedValue(null) })); vi.mock("@/lib/self-upgrade/source-writer-actuator", () => ({ sourceWriterThroughPrivateActuator: mocks.sourceWriterThroughPrivateActuator })); vi.mock("../../../../../scripts/lib/scope-writer-observation.mjs", async (importOriginal) => ({ ...(await importOriginal<object>()), usesPrivateActuator: mocks.usesPrivateActuator }));
 vi.mock("@/lib/self-upgrade/promoter", async (importOriginal) => ({
   // Keep the real pure exports (constants like PROMOTER_ALREADY_RUNNING_EXIT_CODE
   // that the orchestrator imports statically) and mock only the spawn-heavy fns.
@@ -303,7 +304,7 @@ describe("success path", () => {
     mocks.isFeatureBuildDeployed.mockResolvedValue(true);
   });
 
-  registerCoreSelfUpgradeSuccessTest({ mocks, runSelfUpgrade }); registerPrebuildTests({ mocks, runSelfUpgrade });
+  registerCoreSelfUpgradeSuccessTest({ mocks, runSelfUpgrade }); registerPrebuildTests({ mocks, runSelfUpgrade }); registerSourceWriterRoutingTests({ mocks, runSelfUpgrade });
   registerReleaseWorkerTargetRecoveryTests({ mocks, runSelfUpgrade, installState: TEST_INSTALL_STATE });
 
   it("classifies a source-free consumer at the verified release as up to date without Git", async () => {

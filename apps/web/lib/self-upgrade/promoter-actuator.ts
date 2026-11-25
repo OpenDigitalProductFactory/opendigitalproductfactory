@@ -31,6 +31,8 @@ export type PromoterInstallBinding = {
   healthUrl?: string;
   transitionSecretFileHostPath?: string;
   appUrl?: string;
+  repoRemote?: string;
+  repoBranch?: string;
 };
 
 /** Host context fields a runtime-transition promoter receives. */
@@ -95,6 +97,8 @@ export function readPromoterInstallBinding(env: Record<string, string | undefine
     healthUrl: env.PROMOTE_HEALTH_URL || undefined,
     transitionSecretFileHostPath: optionalPath(env.DPF_RUNTIME_TRANSITION_SECRET_FILE_HOST),
     appUrl: env.APP_URL || undefined,
+    repoRemote: env.REPO_REMOTE || undefined,
+    repoBranch: env.REPO_BRANCH || undefined,
   };
 }
 

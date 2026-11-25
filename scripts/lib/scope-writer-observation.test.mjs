@@ -382,3 +382,20 @@ it('carries one bounded JSON promoter launch request to its owner and nothing el
     assert.deepEqual(received, [body]);
   });
 });
+
+it('carries one bounded JSON source writer request to its owner only', unixOnly, async () => {
+  const { createScopeWriterObserver, runActuatorSourceWriter } = await load();
+  const received = [];
+  await withServer(observe => createScopeWriterObserver({ observe, sourceWriter: async body => {
+    received.push(body);
+    return { ok: true, upstreamSha: 'b'.repeat(40) };
+  } }), async () => ({}), async socketPath => {
+    const body = { owner: { kind: 'upstream-refresh' }, operation: 'refresh-upstream-head', input: { remote: 'origin', branch: 'main' } };
+    assert.deepEqual(await runActuatorSourceWriter(body, { socketPath, timeoutMs: 2_000 }), { ok: true, upstreamSha: 'b'.repeat(40) });
+    const json = { 'Content-Type': 'application/json' };
+    assert.equal(await call(socketPath, { method: 'POST', path: '/v1/runtime/source-writer?op=push', headers: { ...json, 'Content-Length': 2 } }, '{}'), 404);
+    assert.equal(await call(socketPath, { method: 'POST', path: '/v1/runtime/source-writer', headers: { 'Content-Type': 'text/plain', 'Content-Length': 2 } }, '{}'), 415);
+    assert.equal(await call(socketPath, { method: 'GET', path: '/v1/runtime/source-writer' }), 404);
+    assert.deepEqual(received, [body]);
+  });
+});
