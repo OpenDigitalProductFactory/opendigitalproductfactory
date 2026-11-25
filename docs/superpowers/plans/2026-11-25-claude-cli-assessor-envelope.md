@@ -1,3 +1,9 @@
+---
+title: Claude Code assessor envelope
+status: draft
+backlogItem: BI-AE054B53
+---
+
 # Claude Code assessor envelope
 
 **Backlog:** BI-AE054B53
