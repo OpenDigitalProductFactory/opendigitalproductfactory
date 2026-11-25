@@ -52,8 +52,14 @@ const ALLOWED_KEYS = new Set([
   "hostInstallPath", "canonicalInstallPath", "targetSha", "backupPath", "backupHostPath", "composeEnvFileHostPath",
   "composeFiles", "composeProject", "healthUrl", "promoterImage", "release", "stateDirHostPath", "dryRun",
   "installStateMigrationEnvelope", "installStateMigrationSignature", "installStateMigrationRunId",
-  "maintenanceRecoveryPointDigest", "installStateMigrationHandoff", "containerName", "timeoutMs", "hostIdentity",
+  "maintenanceRecoveryPointDigest", "installStateMigrationHandoff", "containerName", "timeoutMs", "hostIdentity", "phase",
 ]);
+
+/** Self-upgrade promoter stages, each with its own fixed container and inputs. */
+export type SelfUpgradeStage = "swap" | "prebuild" | "readiness";
+const STAGES = new Set<SelfUpgradeStage>(["swap", "prebuild", "readiness"]);
+const MIGRATION_KEYS = ["installStateMigrationEnvelope", "installStateMigrationSignature", "installStateMigrationRunId",
+  "maintenanceRecoveryPointDigest", "installStateMigrationHandoff"] as const;
 
 function safeHostPath(value: unknown): value is string {
   if (typeof value !== "string" || value.length < 2 || value.length > 1024 || /[\0\r\n]/.test(value)) return false;
@@ -93,13 +99,16 @@ export function readPromoterInstallBinding(env: Record<string, string | undefine
 }
 
 /** Strictly parse and bind a self-upgrade launch. Every host-facing field must
- * equal the value the actuator derives for itself. */
+ * equal the value the actuator derives for itself; each stage has a fixed
+ * container name, backup path and field set. */
 export function admitSelfUpgradeLaunch(value: unknown, binding: PromoterInstallBinding,
   config: Pick<SelfUpgradeConfig, "hostInstallPath" | "useIsolatedWorkspace" | "upgradeWorkspaceHostPath" | "composeProject" | "composeFiles" | "healthUrl">,
-): { owner: Extract<PromoterLaunchOwner, { kind: "self-upgrade" }>; params: PromoterParams } {
+): { owner: Extract<PromoterLaunchOwner, { kind: "self-upgrade" }>; params: PromoterParams; stage: SelfUpgradeStage } {
   if (!isRecord(value) || Object.keys(value).length !== 2 || !isRecord(value.owner) || !isRecord(value.params)) return refuse();
   const owner = value.owner, params = value.params;
-  if (Object.keys(owner).length !== 2 || owner.kind !== "self-upgrade" || typeof owner.runId !== "string" || !RUN_ID.test(owner.runId)) refuse();
+  const stage = (owner.stage ?? "swap") as SelfUpgradeStage;
+  if (Object.keys(owner).length !== (owner.stage === undefined ? 2 : 3) || owner.kind !== "self-upgrade"
+    || typeof owner.runId !== "string" || !RUN_ID.test(owner.runId) || !STAGES.has(stage)) refuse();
   const runId = owner.runId as string;
   if (Object.keys(params).some((key) => !ALLOWED_KEYS.has(key))) refuse();
 
@@ -110,23 +119,34 @@ export function admitSelfUpgradeLaunch(value: unknown, binding: PromoterInstallB
   const composeProject = config.composeProject ?? binding.project;
   const composeFiles = config.composeFiles ?? binding.composeFiles;
   const healthUrl = config.healthUrl ?? binding.healthUrl ?? "";
+  const backupPath = binding.backupPathOverride ?? `/backups/self-upgrade/${runId}`;
+  const expected: Record<SelfUpgradeStage, { container: string; backupPath: string; canonical: string | undefined; maxTimeoutMs: number }> = {
+    swap: { container: `dpf-promoter-${runId}`, backupPath, canonical, maxTimeoutMs: 60 * 60_000 },
+    prebuild: { container: `dpf-promoter-${runId}-prebuild`, backupPath: `${backupPath.replace(/\/$/, "")}/prebuild`, canonical, maxTimeoutMs: 4 * 60 * 60_000 },
+    readiness: { container: `dpf-promoter-readiness-${runId}`, backupPath, canonical: undefined, maxTimeoutMs: 60 * 60_000 },
+  };
+  const rule = expected[stage];
 
   if (composeProject !== binding.project || params.composeProject !== binding.project
-    || params.canonicalInstallPath !== canonical || params.hostInstallPath !== (workspace ?? canonical)
+    || params.canonicalInstallPath !== rule.canonical || params.hostInstallPath !== (workspace ?? canonical)
     || params.backupHostPath !== backupHostPath
     || params.composeEnvFileHostPath !== `${trimSlash(canonical)}/.env`
-    || params.backupPath !== (binding.backupPathOverride ?? `/backups/self-upgrade/${runId}`)
+    || params.backupPath !== rule.backupPath
     || (params.stateDirHostPath ?? undefined) !== binding.stateDirHostPath
     || params.healthUrl !== healthUrl
-    || params.containerName !== `dpf-promoter-${runId}`
-    || params.installStateMigrationRunId !== runId
+    || params.containerName !== rule.container
+    || (params.phase ?? undefined) !== (stage === "prebuild" ? "build" : undefined)
     || params.dryRun === true
     || typeof params.targetSha !== "string" || !SHA.test(params.targetSha)
     || typeof params.promoterImage !== "string" || !IMAGE_ID.test(params.promoterImage)
-    || typeof params.maintenanceRecoveryPointDigest !== "string" || !HEX64.test(params.maintenanceRecoveryPointDigest)
-    || typeof params.installStateMigrationEnvelope !== "string" || !ENVELOPE.test(params.installStateMigrationEnvelope)
-    || typeof params.installStateMigrationSignature !== "string" || !HEX64.test(params.installStateMigrationSignature)
-    || (params.timeoutMs !== undefined && (typeof params.timeoutMs !== "number" || params.timeoutMs <= 0 || params.timeoutMs > 60 * 60_000))) refuse();
+    || (params.timeoutMs !== undefined && (typeof params.timeoutMs !== "number" || params.timeoutMs <= 0 || params.timeoutMs > rule.maxTimeoutMs))) refuse();
+  if (stage === "swap") {
+    // Only the swap carries the signed migration handoff and recovery point.
+    if (params.installStateMigrationRunId !== runId
+      || typeof params.maintenanceRecoveryPointDigest !== "string" || !HEX64.test(params.maintenanceRecoveryPointDigest)
+      || typeof params.installStateMigrationEnvelope !== "string" || !ENVELOPE.test(params.installStateMigrationEnvelope)
+      || typeof params.installStateMigrationSignature !== "string" || !HEX64.test(params.installStateMigrationSignature)) refuse();
+  } else if (MIGRATION_KEYS.some((key) => params[key] !== undefined)) refuse();
   const files = params.composeFiles;
   if (!Array.isArray(files) || files.length > 8 || files.some((file) => typeof file !== "string" || !COMPOSE_FILE.test(file))
     || (composeFiles && JSON.stringify(files) !== JSON.stringify(composeFiles))) refuse();
@@ -137,7 +157,7 @@ export function admitSelfUpgradeLaunch(value: unknown, binding: PromoterInstallB
       || !["amd64", "arm64", "x86_64"].includes(String(identity.arch))
       || !["explicit", "install-state", "legacy-windows-paths"].includes(String(identity.provenance))) refuse();
   }
-  return { owner: { kind: "self-upgrade", runId }, params: params as unknown as PromoterParams };
+  return { owner: { kind: "self-upgrade", runId }, params: params as unknown as PromoterParams, stage };
 }
 
 const RUNTIME_ID = /^RCT-[A-Za-z0-9-]{1,48}$/;
@@ -212,6 +232,9 @@ export async function launchPromoterAtActuator(value: unknown, deps: {
   hostContexts: (params: Record<string, unknown>) => Promise<RuntimeHostContext[]>;
   activeTransitionIds: () => Promise<string[]>;
   run: (params: PromoterParams) => Promise<PromoterResult>;
+  /** Resolves the artifact from the image itself, then runs readiness. */
+  readiness?: (params: PromoterParams) => Promise<PromoterResult>;
+  readRunStatus?: (runId: string) => Promise<string | null>;
 }): Promise<PromoterResult> {
   if (Buffer.byteLength(JSON.stringify(value ?? null)) > MAX_REQUEST_BYTES || !isRecord(value) || !isRecord(value.owner)
     || !isRecord(value.params)) refuse();
@@ -219,7 +242,18 @@ export async function launchPromoterAtActuator(value: unknown, deps: {
   let params: PromoterParams;
   if (request.owner.kind === "self-upgrade") {
     const admitted = admitSelfUpgradeLaunch(request, deps.binding, await deps.readConfig());
-    params = { ...admitted.params, launchOwner: admitted.owner };
+    if (admitted.stage === "swap") {
+      // launchDurablePromoter re-reads the run under the admission lock.
+      params = { ...admitted.params, launchOwner: admitted.owner };
+    } else {
+      if (!deps.readRunStatus || await deps.readRunStatus(admitted.owner.runId) !== "running") refuse();
+      if (admitted.stage === "readiness") {
+        if (!deps.readiness) refuse();
+        const result = await deps.readiness!(admitted.params);
+        return { exitCode: result.exitCode, stdout: tail(result.stdout), stderr: tail(result.stderr) };
+      }
+      params = admitted.params;
+    }
   } else {
     params = await admitRuntimeTransitionLaunch(request, deps.binding, await deps.hostContexts(request.params), deps.activeTransitionIds);
   }
@@ -229,7 +263,8 @@ export async function launchPromoterAtActuator(value: unknown, deps: {
 
 /** Portal side. A lost or refused reply keeps the owner pending: the launch is
  * idempotent by name and binding, and the run watchdog settles a stuck run. */
-type ActuatorPromoterOwner = PromoterLaunchOwner | { kind: "runtime-authority"; operation: string };
+type ActuatorPromoterOwner = PromoterLaunchOwner | { kind: "self-upgrade"; runId: string; stage: SelfUpgradeStage }
+  | { kind: "runtime-authority"; operation: string };
 
 export async function requestPromoterLaunchThroughActuator(params: PromoterParams, owner: ActuatorPromoterOwner,
   request: (body: unknown, timeoutMs: number) => Promise<unknown>): Promise<PromoterResult> {
@@ -253,15 +288,34 @@ export async function requestPromoterLaunchThroughActuator(params: PromoterParam
  * mounted, admitted launches and host authority operations go to it; null
  * keeps the existing path (build, readiness and dry runs are migrated
  * separately). The actuator itself calls runPromoterAtDaemon, never this. */
+type ActuatorSend = (body: unknown, timeoutMs: number) => Promise<unknown>;
+
 export async function launchThroughPrivateActuator(params: PromoterParams,
-  available?: () => Promise<boolean>): Promise<PromoterResult | null> {
-  const admitted = params.launchOwner && !params.runtimeTransitionAuthorityOperation && !params.dryRun && params.phase !== "build";
-  const owner: ActuatorPromoterOwner | null = admitted ? params.launchOwner!
-    : params.runtimeTransitionAuthorityOperation && !params.dryRun && params.phase !== "build"
+  available?: () => Promise<boolean>, send?: ActuatorSend): Promise<PromoterResult | null> {
+  if (params.dryRun) return null;
+  const owner: ActuatorPromoterOwner | null = params.launchOwner && !params.runtimeTransitionAuthorityOperation
+    ? params.phase === "build"
+      ? params.launchOwner.kind === "self-upgrade" ? { ...params.launchOwner, stage: "prebuild" } : null
+      : params.launchOwner
+    : params.runtimeTransitionAuthorityOperation && params.phase !== "build"
       ? { kind: "runtime-authority", operation: params.runtimeTransitionAuthorityOperation } : null;
   if (!owner) return null;
   const observation = await import("../../../../scripts/lib/scope-writer-observation.mjs");
   if (!await (available ?? observation.usesPrivateActuator)()) return null;
   return requestPromoterLaunchThroughActuator(params, owner,
-    (body, timeoutMs) => observation.launchActuatorPromoter(body, { timeoutMs }));
+    send ?? ((body, timeoutMs) => observation.launchActuatorPromoter(body, { timeoutMs })));
+}
+
+/** Readiness runs in a promoter container keyed by its run's name. The
+ * actuator re-resolves the artifact from the image; the caller's copy stays. */
+export async function readinessThroughPrivateActuator(params: PromoterParams & { artifact: unknown },
+  available?: () => Promise<boolean>, send?: ActuatorSend): Promise<PromoterResult | null> {
+  const runId = /^dpf-promoter-readiness-(SUR-[A-Za-z0-9-]{1,100})$/.exec(params.containerName ?? "")?.[1];
+  if (!runId) return null;
+  const observation = await import("../../../../scripts/lib/scope-writer-observation.mjs");
+  if (!await (available ?? observation.usesPrivateActuator)()) return null;
+  const { artifact: _artifact, ...rest } = params;
+  void _artifact;
+  return requestPromoterLaunchThroughActuator(rest, { kind: "self-upgrade", runId, stage: "readiness" },
+    send ?? ((body, timeoutMs) => observation.launchActuatorPromoter(body, { timeoutMs })));
 }

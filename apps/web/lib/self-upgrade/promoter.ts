@@ -84,14 +84,11 @@ export async function resolvePromoterArtifact(
   );
 }
 
-export async function runPromoterReadiness(
-  params: PromoterParams & { artifact: ResolvedPromoterArtifact },
-): Promise<PromoterResult> {
+export const runPromoterReadiness = async (params: PromoterParams & { artifact: ResolvedPromoterArtifact }): Promise<PromoterResult> =>
+  (await (await import("./promoter-actuator")).readinessThroughPrivateActuator(params)) ?? runPromoterReadinessAtDaemon(params); // BI-224F56F1
+export async function runPromoterReadinessAtDaemon(params: PromoterParams & { artifact: ResolvedPromoterArtifact }): Promise<PromoterResult> {
   const { command, args } = await buildCompatiblePromoterCommand(params, buildPromoterReadinessCommand, createPromoterDockerRunner(params));
-  return runProcessWithBudget(command, args, {
-    timeoutMs: Math.min(resolvePromoterTimeoutMs(params), 5 * 60_000),
-    containerName: params.containerName,
-  });
+  return runProcessWithBudget(command, args, { timeoutMs: Math.min(resolvePromoterTimeoutMs(params), 5 * 60_000), containerName: params.containerName });
 }
 
 /** Probe the verified packaged actuator without any host authority or mounts. */

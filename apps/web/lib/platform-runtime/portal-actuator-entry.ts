@@ -78,6 +78,17 @@ async function main() {
         },
         activeTransitionIds: activeRuntimeTransitionIds,
         run: promoter.runPromoterAtDaemon,
+        readRunStatus: async runId => {
+          const { prisma } = await import("@dpf/db");
+          return (await prisma.selfUpgradeRun.findUnique({ where: { runId }, select: { status: true } }))?.status ?? null;
+        },
+        // Re-resolve the artifact from the admitted image and require the same
+        // identity; the caller's artifact copy is never trusted.
+        readiness: async params => {
+          const artifact = await promoter.resolvePromoterArtifact({ promoterImage: params.promoterImage, targetSha: params.targetSha });
+          if (artifact.digest !== params.promoterImage) throw new Error("promoter_actuator_artifact_mismatch");
+          return promoter.runPromoterReadinessAtDaemon({ ...params, artifact });
+        },
       });
     },
     doctools: createDoctoolsActuator(project),

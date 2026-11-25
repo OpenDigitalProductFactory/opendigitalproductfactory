@@ -239,3 +239,88 @@ describe("launchThroughPrivateActuator routing", () => {
     }
   });
 });
+
+describe("self-upgrade prebuild and readiness stages", () => {
+  const prebuild = (overrides: Record<string, unknown> = {}) => {
+    const { installStateMigrationEnvelope: _e, installStateMigrationSignature: _s, installStateMigrationRunId: _r,
+      maintenanceRecoveryPointDigest: _m, ...rest } = params();
+    void _e; void _s; void _r; void _m;
+    return { owner: { kind: "self-upgrade", runId, stage: "prebuild" },
+      params: { ...rest, phase: "build", containerName: `dpf-promoter-${runId}-prebuild`,
+        backupPath: `/backups/self-upgrade/${runId}/prebuild`, timeoutMs: 75 * 60_000, ...overrides } };
+  };
+  const readiness = (overrides: Record<string, unknown> = {}) => {
+    const { installStateMigrationEnvelope: _e, installStateMigrationSignature: _s, installStateMigrationRunId: _r,
+      maintenanceRecoveryPointDigest: _m, canonicalInstallPath: _c, ...rest } = params();
+    void _e; void _s; void _r; void _m; void _c;
+    return { owner: { kind: "self-upgrade", runId, stage: "readiness" },
+      params: { ...rest, containerName: `dpf-promoter-readiness-${runId}`, ...overrides } };
+  };
+
+  it("admits a prebuild bound to its own container and backup path", () => {
+    const admitted = admitSelfUpgradeLaunch(prebuild(), binding, config);
+    expect(admitted.stage).toBe("prebuild");
+    expect(admitted.params.phase).toBe("build");
+  });
+
+  it("admits readiness without a canonical path or migration envelope", () => {
+    expect(admitSelfUpgradeLaunch(readiness(), binding, config).stage).toBe("readiness");
+  });
+
+  it.each([
+    ["prebuild container", () => prebuild({ containerName: `dpf-promoter-${runId}` })],
+    ["prebuild backup", () => prebuild({ backupPath: `/backups/self-upgrade/${runId}` })],
+    ["prebuild without build phase", () => prebuild({ phase: undefined })],
+    ["prebuild with migration envelope", () => prebuild({ installStateMigrationEnvelope: "e".repeat(64) })],
+    ["prebuild host path", () => prebuild({ hostInstallPath: "/Users/other" })],
+    ["readiness container", () => readiness({ containerName: `dpf-promoter-${runId}` })],
+    ["readiness with caller artifact", () => readiness({ artifact: { digest: "sha256:x" } })],
+    ["readiness with build phase", () => readiness({ phase: "build" })],
+    ["readiness backup host path", () => readiness({ backupHostPath: "/tmp" })],
+    ["unknown stage", () => ({ ...readiness(), owner: { kind: "self-upgrade", runId, stage: "teardown" } })],
+  ])("refuses %s", (_label, build) => {
+    expect(() => admitSelfUpgradeLaunch(build(), binding, config)).toThrow("promoter_actuator_admission_refused");
+  });
+
+  it("runs prebuild only while the owning run is running, and re-resolves readiness artifacts itself", async () => {
+    const calls: string[] = [];
+    const deps = (status: string) => ({
+      binding, readConfig: async () => config, hostContexts: async () => [], activeTransitionIds: async () => [],
+      readRunStatus: async () => status,
+      run: async (launched: PromoterParams) => { calls.push(`run:${launched.containerName}`); return { exitCode: 0, stdout: "", stderr: "" }; },
+      readiness: async (launched: PromoterParams) => { calls.push(`readiness:${launched.containerName}`); return { exitCode: 0, stdout: "{}", stderr: "" }; },
+    });
+    await launchPromoterAtActuator(prebuild(), deps("running"));
+    await launchPromoterAtActuator(readiness(), deps("running"));
+    await expect(launchPromoterAtActuator(prebuild(), deps("failed"))).rejects.toThrow();
+    await expect(launchPromoterAtActuator(readiness(), deps("succeeded"))).rejects.toThrow();
+    expect(calls).toEqual([`run:dpf-promoter-${runId}-prebuild`, `readiness:dpf-promoter-readiness-${runId}`]);
+  });
+});
+
+describe("prebuild and readiness routing", () => {
+  const on = async () => true;
+  it("sends a prebuild as its run's prebuild stage and leaves dry runs local", async () => {
+    const { launchThroughPrivateActuator } = await import("./promoter-actuator");
+    const bodies: unknown[] = [];
+    const send = async (body: unknown) => { bodies.push(body); return { exitCode: 0, stdout: "", stderr: "" }; };
+    const prebuild = { ...params(), phase: "build", launchOwner: { kind: "self-upgrade", runId } } as unknown as PromoterParams;
+    await launchThroughPrivateActuator(prebuild, on, send);
+    expect((bodies[0] as { owner: unknown }).owner).toEqual({ kind: "self-upgrade", runId, stage: "prebuild" });
+    expect(await launchThroughPrivateActuator({ ...prebuild, dryRun: true }, on, send)).toBeNull();
+    expect(await launchThroughPrivateActuator({ ...prebuild, launchOwner: undefined }, on, send)).toBeNull();
+    expect(bodies).toHaveLength(1);
+  });
+
+  it("sends readiness keyed by its run name without the caller's artifact", async () => {
+    const { readinessThroughPrivateActuator } = await import("./promoter-actuator");
+    const bodies: Array<{ owner: unknown; params: Record<string, unknown> }> = [];
+    const send = async (body: unknown) => { bodies.push(body as never); return { exitCode: 0, stdout: "{}", stderr: "" }; };
+    const readiness = { ...params(), containerName: `dpf-promoter-readiness-${runId}`, artifact: { digest: "sha256:caller" } };
+    await readinessThroughPrivateActuator(readiness as never, on, send);
+    expect(bodies[0]!.owner).toEqual({ kind: "self-upgrade", runId, stage: "readiness" });
+    expect(bodies[0]!.params.artifact).toBeUndefined();
+    expect(await readinessThroughPrivateActuator({ ...readiness, containerName: "other" } as never, on, send)).toBeNull();
+    expect(await readinessThroughPrivateActuator(readiness as never, async () => false, send)).toBeNull();
+  });
+});
