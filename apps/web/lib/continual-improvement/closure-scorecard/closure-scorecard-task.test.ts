@@ -4,84 +4,126 @@ vi.mock("@dpf/db", () => ({ prisma: {} }));
 
 import {
   CLOSURE_SCORECARD_ARTIFACT_KIND,
-  closureScorecardPatternKey,
-  countsFromArtifactParts,
+  artifactFromParts,
+  closureScorecardRunId,
   runClosureScorecard,
+  type ClosureScorecardArtifact,
   type ClosureScorecardStore,
+  type RecordedRun,
 } from "./closure-scorecard-task";
 import type { ClosureCounts } from "./measures";
 
 function counts(signalsClosed: number): ClosureCounts {
   return {
-    builds: { started: 5, completed: 1, abandoned: 1, failed: 0, stranded: 3 },
-    signals: { filed: 4, closed: signalsClosed, open: 10 },
-    proposals: { filed: 2, closedOrVerified: 0, open: 9 },
-    escalations: { routedToAgent: 3, reachedOwner: 1, held: 2, oldestHeldDays: 4.5 },
-    decisions: { total: 10, recommended: 8 },
-    acceptance: { local: 2, peerOwned: 7, localMedianAgeDays: 3 },
-    backlog: { filed: 6, done: 3, retired: 1 },
-    selfFiled: { filed: 2, done: 1 },
+    snapshot: {
+      builds: { total: 5, complete: 1, abandoned: 1, failed: 0, stranded: 3 },
+      signals: { total: 10, open: 10 - signalsClosed, closed: signalsClosed },
+      proposals: { total: 9, open: 9, implemented: 0, rejected: 0 },
+      backlog: { total: 6, done: 3, retired: 1 },
+      selfFiled: { total: 2, done: 1 },
+      acceptance: { local: 2, peerOwned: 7, localMedianDaysSinceChange: 3 },
+      escalations: { held: 2, oldestHeldDays: 4.5 },
+    },
+    window: { asks: { forOwner: 1, routedToAgent: 3 }, decisions: { total: 10, recommended: 8 } },
   };
 }
 
-function fakeStore(seed: Record<string, ClosureCounts> = {}) {
-  const runs = new Map<string, { taskRunId: string; counts: ClosureCounts }>();
-  for (const [key, value] of Object.entries(seed)) runs.set(key, { taskRunId: `TR-${key}`, counts: value });
+type Row = { artifact: ClosureScorecardArtifact | null };
+
+function fakeStore(seed: Record<string, Row> = {}, opts: { failArtifactOnce?: boolean; raceWinner?: Row } = {}) {
+  const runs = new Map<string, Row>(Object.entries(seed));
+  let failNext = opts.failArtifactOnce ?? false;
   const loadCounts = vi.fn(async () => counts(4));
+  const addArtifact = vi.fn(async (taskRunId: string, artifact: ClosureScorecardArtifact) => {
+    runs.set(taskRunId, { artifact });
+  });
   const store: ClosureScorecardStore = {
-    findRun: async (key) => (runs.has(key) ? { taskRunId: runs.get(key)!.taskRunId } : null),
-    findCounts: async (key) => runs.get(key)?.counts ?? null,
-    loadCounts,
-    recordRun: async (input) => {
-      const taskRunId = `TR-${input.repeatedPatternKey}`;
-      runs.set(input.repeatedPatternKey, { taskRunId, counts: input.artifact.counts });
-      return { taskRunId };
+    findRun: async (taskRunId): Promise<RecordedRun | null> => {
+      const row = runs.get(taskRunId);
+      return row ? { taskRunId, artifact: row.artifact } : null;
     },
+    loadCounts,
+    createRun: async (input) => {
+      if (opts.raceWinner) {
+        runs.set(input.taskRunId, opts.raceWinner);
+        return "conflict";
+      }
+      if (runs.has(input.taskRunId)) return "conflict";
+      if (failNext) {
+        // The transaction rolls back: neither run nor artifact persists.
+        failNext = false;
+        throw new Error("artifact write failed");
+      }
+      runs.set(input.taskRunId, { artifact: input.artifact });
+      return "created";
+    },
+    addArtifact,
   };
-  return { store, runs, loadCounts };
+  return { store, runs, loadCounts, addArtifact };
 }
 
 const NOW = new Date("2026-11-25T06:29:00Z");
 const INPUT = { ownerUserId: "u1", agentId: "platform-engineer", taskId: "closure-scorecard-daily", now: NOW };
+const TODAY = closureScorecardRunId("2026-11-25");
 
 describe("runClosureScorecard", () => {
-  it("measures the trailing seven days and records one run for the day", async () => {
+  it("keys the run uniquely by UTC day and measures the trailing seven days", async () => {
     const { store, runs, loadCounts } = fakeStore();
     const result = await runClosureScorecard(store, INPUT);
-    expect(result.idempotent).toBe(false);
+    expect(TODAY).toBe("TR-CSC-20261125");
+    expect(result.outcome).toBe("created");
     expect(loadCounts).toHaveBeenCalledWith({ since: new Date("2026-11-18T06:29:00Z"), until: NOW });
-    expect(runs.has(closureScorecardPatternKey("2026-11-25"))).toBe(true);
-    if (!result.idempotent) {
-      expect(result.artifact.previousPeriodKey).toBe("2026-11-18");
-      expect(result.artifact.previousFound).toBe(false);
-    }
+    expect(runs.get(TODAY)?.artifact?.priorPeriodKey).toBe("2026-11-18");
   });
 
-  it("is idempotent within a UTC day", async () => {
+  it("is idempotent within a UTC day once the artifact exists", async () => {
     const { store, loadCounts } = fakeStore();
     await runClosureScorecard(store, INPUT);
     const again = await runClosureScorecard(store, { ...INPUT, now: new Date("2026-11-25T18:00:00Z") });
-    expect(again.idempotent).toBe(true);
+    expect(again.outcome).toBe("idempotent");
     expect(loadCounts).toHaveBeenCalledTimes(1);
   });
 
-  it("compares against the run recorded seven days earlier", async () => {
-    const { store } = fakeStore({ [closureScorecardPatternKey("2026-11-18")]: counts(0) });
+  it("repairs a run that was recorded without its artifact instead of reporting success", async () => {
+    const { store, addArtifact } = fakeStore({ [TODAY]: { artifact: null } });
     const result = await runClosureScorecard(store, INPUT);
-    expect(result.idempotent).toBe(false);
-    if (result.idempotent) return;
-    expect(result.artifact.previousFound).toBe(true);
-    const closed = result.artifact.scorecard.lines.find((l) => l.key === "signals.closed");
-    expect(closed).toMatchObject({ value: 4, previous: 0, direction: "improving" });
+    expect(result.outcome).toBe("repaired");
+    expect(addArtifact).toHaveBeenCalledTimes(1);
+    expect((await runClosureScorecard(store, INPUT)).outcome).toBe("idempotent");
+  });
+
+  it("leaves nothing behind when the atomic write fails, so the retry creates the day cleanly", async () => {
+    const { store, runs } = fakeStore({}, { failArtifactOnce: true });
+    await expect(runClosureScorecard(store, INPUT)).rejects.toThrow("artifact write failed");
+    expect(runs.has(TODAY)).toBe(false);
+    expect((await runClosureScorecard(store, INPUT)).outcome).toBe("created");
+  });
+
+  it("repairs the winner's run when a concurrent writer took the day key without an artifact", async () => {
+    const { store, addArtifact } = fakeStore({}, { raceWinner: { artifact: null } });
+    const result = await runClosureScorecard(store, INPUT);
+    expect(result.outcome).toBe("repaired");
+    expect(addArtifact).toHaveBeenCalledTimes(1);
+  });
+
+  it("compares against the run recorded seven days earlier", async () => {
+    const prior = fakeStore();
+    await runClosureScorecard(prior.store, { ...INPUT, now: new Date("2026-11-18T06:29:00Z") });
+    const priorRow = prior.runs.get(closureScorecardRunId("2026-11-18"))!;
+    const { store } = fakeStore({ [closureScorecardRunId("2026-11-18")]: { artifact: { ...priorRow.artifact!, counts: counts(0) } } });
+    const result = await runClosureScorecard(store, INPUT);
+    if (result.outcome === "idempotent") throw new Error("expected a fresh run");
+    expect(result.artifact.priorFound).toBe(true);
+    expect(result.artifact.flows.signalsClosed).toBe(4);
   });
 });
 
-describe("countsFromArtifactParts", () => {
-  it("reads counts back from a recorded artifact and rejects anything else", () => {
-    const good = [{ type: CLOSURE_SCORECARD_ARTIFACT_KIND, data: { counts: counts(1) } }];
-    expect(countsFromArtifactParts(good)?.signals.closed).toBe(1);
-    expect(countsFromArtifactParts([{ type: "other", data: { counts: counts(1) } }])).toBeNull();
-    expect(countsFromArtifactParts([{ type: CLOSURE_SCORECARD_ARTIFACT_KIND, data: { counts: { builds: {} } } }])).toBeNull();
-    expect(countsFromArtifactParts(null)).toBeNull();
+describe("artifactFromParts", () => {
+  it("reads a recorded artifact back and rejects anything malformed", () => {
+    const artifact = { counts: counts(1) } as unknown as ClosureScorecardArtifact;
+    expect(artifactFromParts([{ type: CLOSURE_SCORECARD_ARTIFACT_KIND, data: artifact }])?.counts.snapshot.signals.closed).toBe(1);
+    expect(artifactFromParts([{ type: "other", data: artifact }])).toBeNull();
+    expect(artifactFromParts([{ type: CLOSURE_SCORECARD_ARTIFACT_KIND, data: { counts: { snapshot: {} } } }])).toBeNull();
+    expect(artifactFromParts(null)).toBeNull();
   });
 });

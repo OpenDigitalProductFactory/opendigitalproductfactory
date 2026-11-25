@@ -1,8 +1,13 @@
 // The deterministic executor for the daily `closure-scorecard` scheduled task
 // (BI-97C56E20). Mirrors executeHarnessEvolutionLoopTask: a typed kind off the
-// LLM path, one proactive TaskRun per UTC day, its result an artifact on that
-// run. It compares the trailing week with the run recorded seven days earlier,
-// so a fix shows as a change of direction.
+// LLM path, its result an artifact on a proactive TaskRun.
+//
+// One run per UTC day under a unique key: the TaskRun's taskRunId is
+// `TR-CSC-<yyyymmdd>` (TaskRun.taskRunId is unique). The run and its artifact
+// are written in one transaction, and a run found without its artifact is
+// repaired rather than reported as done, so a partial write cannot leave a day
+// silently empty. A concurrent second writer loses on the unique key and falls
+// through to the same repair-or-idempotent path.
 
 import { randomUUID } from "node:crypto";
 
@@ -16,6 +21,8 @@ import {
   describeClosureScorecard,
   type ClosureCounts,
   type ClosureScorecard,
+  type PriorRun,
+  type WeekFlows,
 } from "./measures";
 
 export const CLOSURE_SCORECARD_ARTIFACT_KIND = "closure-scorecard";
@@ -26,149 +33,192 @@ export type ClosureScorecardArtifact = {
   periodKey: string;
   window: { since: string; until: string };
   counts: ClosureCounts;
-  previousPeriodKey: string;
-  previousFound: boolean;
+  flows: WeekFlows;
+  priorPeriodKey: string;
+  priorFound: boolean;
   scorecard: ClosureScorecard;
 };
 
+export type RecordedRun = { taskRunId: string; artifact: ClosureScorecardArtifact | null };
+
 export interface ClosureScorecardStore {
-  findRun(repeatedPatternKey: string): Promise<{ taskRunId: string } | null>;
-  /** The counts recorded by an earlier run, or null when that run is missing or unreadable. */
-  findCounts(repeatedPatternKey: string): Promise<ClosureCounts | null>;
+  /** The run recorded under this day key, with its artifact if one exists. */
+  findRun(taskRunId: string): Promise<RecordedRun | null>;
   loadCounts(window: { since: Date; until: Date }): Promise<ClosureCounts>;
-  recordRun(input: {
-    ownerUserId: string;
-    agentId: string;
-    taskId: string;
-    periodKey: string;
-    repeatedPatternKey: string;
-    summary: string;
-    artifact: ClosureScorecardArtifact;
-    completedAt: Date;
-  }): Promise<{ taskRunId: string }>;
+  /** Write run and artifact atomically; "conflict" when the day key already exists. */
+  createRun(input: RunWrite): Promise<"created" | "conflict">;
+  /** Attach the artifact to a run that was recorded without one. */
+  addArtifact(taskRunId: string, artifact: ClosureScorecardArtifact, summary: string): Promise<void>;
 }
 
-/** UTC calendar day: one scorecard per day. */
+export type RunWrite = {
+  taskRunId: string;
+  ownerUserId: string;
+  agentId: string;
+  taskId: string;
+  periodKey: string;
+  summary: string;
+  artifact: ClosureScorecardArtifact;
+  completedAt: Date;
+};
+
+/** UTC calendar day. */
 export function closureScorecardPeriodKey(now: Date): string {
   return now.toISOString().slice(0, 10);
 }
 
-export function closureScorecardPatternKey(periodKey: string): string {
-  return `closure-scorecard:${periodKey}`;
+/** The unique per-day TaskRun key. */
+export function closureScorecardRunId(periodKey: string): string {
+  return `TR-CSC-${periodKey.replaceAll("-", "")}`;
 }
 
-function isCounts(value: unknown): value is ClosureCounts {
-  if (!value || typeof value !== "object") return false;
-  const v = value as Record<string, unknown>;
-  return ["builds", "signals", "proposals", "escalations", "decisions", "acceptance", "backlog", "selfFiled"]
-    .every((key) => v[key] !== null && typeof v[key] === "object");
+function isObject(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
-/** Read an artifact's counts back; anything malformed counts as no baseline. */
-export function countsFromArtifactParts(parts: unknown): ClosureCounts | null {
+/** Read an artifact back; anything malformed counts as missing. */
+export function artifactFromParts(parts: unknown): ClosureScorecardArtifact | null {
   if (!Array.isArray(parts)) return null;
   for (const part of parts) {
-    if (!part || typeof part !== "object") continue;
-    const p = part as { type?: unknown; data?: unknown };
-    if (p.type !== CLOSURE_SCORECARD_ARTIFACT_KIND || !p.data || typeof p.data !== "object") continue;
-    const counts = (p.data as { counts?: unknown }).counts;
-    if (isCounts(counts)) return counts;
+    if (!isObject(part) || part.type !== CLOSURE_SCORECARD_ARTIFACT_KIND || !isObject(part.data)) continue;
+    const data = part.data;
+    const counts = data.counts;
+    if (!isObject(counts) || !isObject(counts.snapshot) || !isObject(counts.window)) continue;
+    const snapshot = counts.snapshot;
+    if (!["builds", "signals", "proposals", "backlog", "selfFiled", "acceptance", "escalations"].every((k) => isObject(snapshot[k]))) continue;
+    return data as unknown as ClosureScorecardArtifact;
   }
   return null;
 }
 
-export const prismaClosureScorecardStore: ClosureScorecardStore = {
-  async findRun(repeatedPatternKey) {
-    return prisma.taskRun.findFirst({ where: { repeatedPatternKey }, select: { taskRunId: true } });
-  },
+function isUniqueViolation(error: unknown): boolean {
+  return isObject(error) && error.code === "P2002";
+}
 
-  async findCounts(repeatedPatternKey) {
-    const run = await prisma.taskRun.findFirst({ where: { repeatedPatternKey }, select: { id: true } });
+function artifactParts(artifact: ClosureScorecardArtifact): Prisma.InputJsonValue {
+  // Widen through `unknown`: counts carry `null` ages, which Prisma's
+  // InputJsonValue type excludes although null is valid JSON.
+  return [{ type: CLOSURE_SCORECARD_ARTIFACT_KIND, mimeType: "application/json", data: artifact }] as unknown as Prisma.InputJsonValue;
+}
+
+export const prismaClosureScorecardStore: ClosureScorecardStore = {
+  async findRun(taskRunId) {
+    const run = await prisma.taskRun.findUnique({ where: { taskRunId }, select: { id: true, taskRunId: true } });
     if (!run) return null;
-    const artifact = await prisma.taskArtifact.findFirst({ where: { taskRunId: run.id }, select: { parts: true } });
-    return artifact ? countsFromArtifactParts(artifact.parts) : null;
+    const rows = await prisma.taskArtifact.findMany({ where: { taskRunId: run.id }, select: { parts: true } });
+    const artifact = rows.map((row) => artifactFromParts(row.parts)).find((a) => a !== null) ?? null;
+    return { taskRunId: run.taskRunId, artifact };
   },
 
   loadCounts: (window) => loadClosureCounts(window),
 
-  async recordRun(input) {
-    const taskRun = await prisma.taskRun.create({
-      data: {
-        taskRunId: `TR-CSC-${randomUUID().slice(0, 8).toUpperCase()}`,
-        userId: input.ownerUserId,
-        title: `Closure scorecard ${input.periodKey}`,
-        objective: "Measure whether platform work finished at least what it started over the trailing week.",
-        source: "proactive",
-        status: "completed",
-        authorityScope: [],
-        a2aMetadata: { trigger: "closure-scorecard", scheduledTaskId: input.taskId },
-        initiatingAgentId: input.agentId,
-        currentAgentId: null,
-        routeContext: "/platform/ai/skills",
-        repeatedPatternKey: input.repeatedPatternKey,
-        progressPayload: { summary: input.summary } as Prisma.InputJsonValue,
-        completedAt: input.completedAt,
-      },
-      select: { id: true, taskRunId: true },
-    });
+  async createRun(input) {
+    try {
+      await prisma.$transaction(async (tx) => {
+        const run = await tx.taskRun.create({
+          data: {
+            taskRunId: input.taskRunId,
+            userId: input.ownerUserId,
+            title: `Closure scorecard ${input.periodKey}`,
+            objective: "Measure whether platform work finished at least what it started over the trailing week.",
+            source: "proactive",
+            status: "completed",
+            authorityScope: [],
+            a2aMetadata: { trigger: "closure-scorecard", scheduledTaskId: input.taskId },
+            initiatingAgentId: input.agentId,
+            currentAgentId: null,
+            routeContext: "/platform/ai/skills",
+            repeatedPatternKey: `closure-scorecard:${input.periodKey}`,
+            progressPayload: { summary: input.summary } as Prisma.InputJsonValue,
+            completedAt: input.completedAt,
+          },
+          select: { id: true },
+        });
+        await tx.taskArtifact.create({
+          data: {
+            id: randomUUID(),
+            artifactId: `ta_${randomUUID()}`,
+            taskRunId: run.id,
+            name: "Closure scorecard",
+            description: input.summary,
+            parts: artifactParts(input.artifact),
+            metadata: { kind: CLOSURE_SCORECARD_ARTIFACT_KIND, periodKey: input.periodKey },
+          },
+        });
+      });
+      return "created";
+    } catch (error) {
+      if (isUniqueViolation(error)) return "conflict";
+      throw error;
+    }
+  },
+
+  async addArtifact(taskRunId, artifact, summary) {
+    const run = await prisma.taskRun.findUniqueOrThrow({ where: { taskRunId }, select: { id: true } });
     await prisma.taskArtifact.create({
       data: {
         id: randomUUID(),
         artifactId: `ta_${randomUUID()}`,
-        taskRunId: taskRun.id,
+        taskRunId: run.id,
         name: "Closure scorecard",
-        description: input.summary,
-        // Widen through `unknown`: counts carry `null` ages, which Prisma's
-        // InputJsonValue type excludes although null is valid JSON.
-        parts: [{ type: CLOSURE_SCORECARD_ARTIFACT_KIND, mimeType: "application/json", data: input.artifact }] as unknown as Prisma.InputJsonValue,
-        metadata: { kind: CLOSURE_SCORECARD_ARTIFACT_KIND, periodKey: input.periodKey },
+        description: summary,
+        parts: artifactParts(artifact),
+        metadata: { kind: CLOSURE_SCORECARD_ARTIFACT_KIND, periodKey: artifact.periodKey, repaired: true },
       },
     });
-    return { taskRunId: taskRun.taskRunId };
   },
 };
 
 export type ClosureScorecardRunResult =
-  | { idempotent: true; periodKey: string; taskRunId: string }
-  | { idempotent: false; periodKey: string; taskRunId: string; summary: string; artifact: ClosureScorecardArtifact };
+  | { outcome: "idempotent"; periodKey: string; taskRunId: string }
+  | { outcome: "created" | "repaired"; periodKey: string; taskRunId: string; summary: string; artifact: ClosureScorecardArtifact };
 
 export async function runClosureScorecard(
   store: ClosureScorecardStore,
   input: { ownerUserId: string; agentId: string; taskId: string; now: Date },
 ): Promise<ClosureScorecardRunResult> {
   const periodKey = closureScorecardPeriodKey(input.now);
-  const repeatedPatternKey = closureScorecardPatternKey(periodKey);
-  const existing = await store.findRun(repeatedPatternKey);
-  if (existing) return { idempotent: true, periodKey, taskRunId: existing.taskRunId };
+  const taskRunId = closureScorecardRunId(periodKey);
+  const existing = await store.findRun(taskRunId);
+  if (existing?.artifact) return { outcome: "idempotent", periodKey, taskRunId };
 
   const until = input.now;
   const since = new Date(until.getTime() - WINDOW_DAYS * MS_PER_DAY);
-  const previousPeriodKey = closureScorecardPeriodKey(since);
-  const [counts, previous] = await Promise.all([
+  const priorPeriodKey = closureScorecardPeriodKey(since);
+  const [counts, priorRun] = await Promise.all([
     store.loadCounts({ since, until }),
-    store.findCounts(closureScorecardPatternKey(previousPeriodKey)),
+    store.findRun(closureScorecardRunId(priorPeriodKey)),
   ]);
-  const scorecard = computeClosureScorecard(counts, previous);
+  const prior: PriorRun | null = priorRun?.artifact
+    ? { counts: priorRun.artifact.counts, flows: priorRun.artifact.flows ?? null }
+    : null;
+  const scorecard = computeClosureScorecard(counts, prior);
   const summary = describeClosureScorecard(scorecard);
   const artifact: ClosureScorecardArtifact = {
     periodKey,
     window: { since: since.toISOString(), until: until.toISOString() },
     counts,
-    previousPeriodKey,
-    previousFound: previous !== null,
+    flows: scorecard.flows,
+    priorPeriodKey,
+    priorFound: prior !== null,
     scorecard,
   };
-  const run = await store.recordRun({
-    ownerUserId: input.ownerUserId,
-    agentId: input.agentId,
-    taskId: input.taskId,
-    periodKey,
-    repeatedPatternKey,
-    summary,
-    artifact,
-    completedAt: new Date(),
+
+  if (existing) {
+    await store.addArtifact(taskRunId, artifact, summary);
+    return { outcome: "repaired", periodKey, taskRunId, summary, artifact };
+  }
+  const written = await store.createRun({
+    taskRunId, ownerUserId: input.ownerUserId, agentId: input.agentId, taskId: input.taskId,
+    periodKey, summary, artifact, completedAt: new Date(),
   });
-  return { idempotent: false, periodKey, taskRunId: run.taskRunId, summary, artifact };
+  if (written === "created") return { outcome: "created", periodKey, taskRunId, summary, artifact };
+
+  // Another writer took the day key first: repair its run if it has no artifact yet.
+  const winner = await store.findRun(taskRunId);
+  if (winner?.artifact) return { outcome: "idempotent", periodKey, taskRunId };
+  await store.addArtifact(taskRunId, artifact, summary);
+  return { outcome: "repaired", periodKey, taskRunId, summary, artifact };
 }
 
 /** The scheduled-task fields this branch reads. */
@@ -192,7 +242,9 @@ export async function executeClosureScorecardTask(
       taskId: task.taskId,
       now: startedAt,
     });
-    const summary = result.idempotent ? `already recorded for ${result.periodKey} (${result.taskRunId})` : result.summary;
+    const summary = result.outcome === "idempotent"
+      ? `already recorded for ${result.periodKey} (${result.taskRunId})`
+      : `${result.outcome === "repaired" ? "repaired missing artifact: " : ""}${result.summary}`;
     console.info("[closure-scorecard] %s", summary);
     await prisma.scheduledAgentTask.update({
       where: { taskId: task.taskId },
