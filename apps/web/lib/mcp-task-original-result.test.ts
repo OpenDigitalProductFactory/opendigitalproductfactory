@@ -423,10 +423,18 @@ describe("original review read-only evidence collection", () => {
     expect(await readOriginalReviewResult(input)).toMatchObject({ classification: "unknown" });
   });
 
-  it.each(["classification", "research", "dependency-disposition"])("leaves ordinary %s initiative evidence on its existing task result path", async gate => {
+  it.each(["classification", "research"])("leaves ordinary %s initiative evidence on its existing task result path", async gate => {
     db.task.mockResolvedValue({ ...row, a2aMetadata: { ...row.a2aMetadata, initiativeReviewBinding: {
       ...raw.initiativeReviewBinding, writerToolName: "record_initiative_evidence", gate,
     } } });
     expect(await readOriginalReviewResult(input)).toBeNull(); expect(db.writers).not.toHaveBeenCalled();
+  });
+
+  it("does not fall back to ordinary task readback for a changed dependency disposition binding", async () => {
+    db.task.mockResolvedValue({ ...row, a2aMetadata: { ...row.a2aMetadata, initiativeReviewBinding: {
+      ...raw.initiativeReviewBinding, writerToolName: "record_initiative_evidence", gate: "dependency-disposition",
+    } } });
+    expect(await readOriginalReviewResult(input)).toMatchObject({ classification: "unknown", replayAllowed: false });
+    expect(db.writers).not.toHaveBeenCalled();
   });
 });

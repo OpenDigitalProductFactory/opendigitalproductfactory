@@ -13,6 +13,7 @@ import {
 import type { ToolDefinition, ToolExecutionContext, ToolResult } from "@/lib/mcp-tool-types";
 import {
   INITIATIVE_READINESS_LANES as LANES,
+  readinessLaneForGate,
   type InitiativeReadinessLane as Lane,
 } from "@/lib/tak/initiative-readiness-tool-grants";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
@@ -436,14 +437,21 @@ async function resolvePlatformReviewBinding(
 /** One trusted binding selection for admission and execution; caller fields never replace it. */
 async function prepareInitiativeWrite(actionKey: string, lane: Lane, params: Record<string, unknown>,
   context?: ToolExecutionContext): Promise<{ params: Record<string, unknown>; binding: ExternalInitiativeReviewBinding | null;
-    platformReview: boolean } | { refusal: ToolResult }> {
+    platformReview: boolean; independent: boolean } | { refusal: ToolResult }> {
     const resolved = await resolveExternalInitiativeReviewBinding(actionKey, context?.taskRunId, context?.taskExecutionFence);
     let binding = resolved.binding;
     if (binding?.workroomRef === null) return { refusal: { success: false, error: "CANONICAL_DESIGN_AMBIGUOUS",
       message: "The accepted review's workroom binding is malformed. Reconcile the server-issued packet before retrying." } };
-    if (lane.independent && resolved.externalMcp && !resolved.validated) {
+    const gate = binding?.gate ?? (typeof params.gate === "string" ? params.gate : "");
+    const independent = readinessLaneForGate(actionKey, gate)?.independent ?? lane.independent;
+    if (independent && resolved.externalMcp && (!resolved.validated
+      || (gate === "dependency-disposition" && !binding?.workroomRef))) {
       return { refusal: { success: false, error: "initiative_review_binding_required",
         message: "An external independent review writer requires its accepted immutable review binding. Refresh the governed review packet before publication." } };
+    }
+    if (binding?.gate === "dependency-disposition" && params.operation !== undefined && params.operation !== "gate-receipt") {
+      return { refusal: { success: false, error: "gate-not-authorized",
+        message: "The dependency-disposition task may only record its bound gate receipt." } };
     }
     if (!binding) {
       const steward = await resolveStewardRoomBinding(actionKey, params, context?.taskRunId);
@@ -468,7 +476,7 @@ async function prepareInitiativeWrite(actionKey: string, lane: Lane, params: Rec
           : {}),
       };
     }
-    return { params, binding, platformReview };
+    return { params, binding, platformReview, independent };
 }
 
 /** Read-only admission for the ordinary evidence lane, before any owner escalation. */
@@ -498,7 +506,7 @@ function handlerFor(actionKey: string, lane: Lane): ToolPackHandler {
   return async (params, userId, context): Promise<ToolResult> => {
     const prepared = await prepareInitiativeWrite(actionKey, lane, params, context);
     if ("refusal" in prepared) return prepared.refusal;
-    const { binding, platformReview } = prepared;
+    const { binding, platformReview, independent } = prepared;
     params = prepared.params;
     const operation = params.operation ?? "gate-receipt";
     if (actionKey === "record_initiative_evidence" && operation === "objective-mapping") {
@@ -655,7 +663,7 @@ function handlerFor(actionKey: string, lane: Lane): ToolPackHandler {
       gate: gate as InitiativeGateKey,
       decision,
       artifactRef: params.artifactRef as InitiativeArtifactRef,
-      boundReviewTask: lane.independent ? binding?.boundReviewTask : undefined,
+      boundReviewTask: independent ? binding?.boundReviewTask : undefined,
       workroomRef: binding?.workroomRef ?? undefined,
       expectedCurrentBaselineId: binding?.expectedCurrentBaselineId,
       sourceWorkroomId: params.workroomId,
@@ -669,7 +677,7 @@ function handlerFor(actionKey: string, lane: Lane): ToolPackHandler {
       // platform's own authority, recorded as such (platform-review-room.ts).
       tokenScope: context?.tokenScope ?? (platformReview
         ? (await import("@/lib/backlog/initiative-readiness/platform-review-room")).PLATFORM_REVIEW_TOKEN_SCOPE : null),
-      requiresIndependentReviewer: lane.independent,
+      requiresIndependentReviewer: independent,
       authorizationParams: params,
       selectedProfile: gate === "classification" && decision === "pass" ? selectedProfile as never : undefined,
     });

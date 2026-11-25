@@ -16,7 +16,7 @@ import { loadCapsuleLivenessInventory } from "@/lib/work-capsules/liveness-inven
 import { loadBaselineSource, type BaselineSourceDb } from "./baseline-source";
 import { currentBaseline, parseBaselinePayloads, type BaselinePayload } from "./baseline-head";
 import { discoverCanonicalReviewArtifact } from "./canonical-artifact-discovery";
-import { designPhaseReviewDecision, isArchetypePhaseReview, loadPlanReviewArtifact, routeDesignReviewsBeforeBaseline } from "./design-phase-recovery";
+import { designPhaseReviewDecision, isArchetypePhaseReview, loadPlanReviewArtifact, preDeliveryReviewDecision, routeDesignReviewsBeforeBaseline } from "./design-phase-recovery";
 import {
   MAX_OBJECTIVE_MAPPING_EVIDENCE_ACTIVITIES,
   selectEligibleObjectiveEvidenceActivityIds,
@@ -596,7 +596,7 @@ export async function resolveTerminalInitiativeRecovery(args: {
     });
   }
 
-  const designPhase = designPhaseReviewDecision(args.decision); // BI-817556D8: before acceptance lanes fail closed
+  const designPhase = preDeliveryReviewDecision(args.decision); // BI-817556D8: before acceptance lanes fail closed
   const payloads = bodyPayloads ?? await ports.loadBaselinePayloads(args.decision.subject.id);
   if (payloads.length === 0) {
     if (designPhase) return room.baseSha ? routeDesignReviewsBeforeBaseline({ designPhase, currentAgentId: args.currentAgentId, baseSha: room.baseSha, dispatchContext, ports }) : missingIdentity(); // BI-1D8E53D9

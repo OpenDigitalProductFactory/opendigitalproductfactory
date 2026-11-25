@@ -41,16 +41,27 @@ function isDesignReviewEntry(entry: { code: string; accountableRole?: string }):
     || (entry.code === "OBJECTIVE_BASELINE_REQUIRED" && entry.accountableRole === "design-checklist-reviewer");
 }
 
-export function designPhaseReviewDecision(
+function isDependencyDispositionEntry(entry: ReadinessRequirementResult): boolean {
+  return entry.code === "DEPENDENCY_UNRESOLVED" && entry.accountableRole === "portfolio-management";
+}
+
+function selectReviewDecision(
   decision: InitiativeReadinessDecision,
+  includes: (entry: ReadinessRequirementResult) => boolean,
 ): InitiativeReadinessDecision | null {
-  const isDesignReview = isDesignReviewEntry;
-  if (![...decision.blockers, ...decision.unmet].some(isDesignReview)) return null;
-  return {
-    ...decision,
-    blockers: decision.blockers.filter(isDesignReview),
-    unmet: decision.unmet.filter(isDesignReview),
-  };
+  const blockers = decision.blockers.filter(includes);
+  const unmet = decision.unmet.filter(includes);
+  return blockers.length || unmet.length ? { ...decision, blockers, unmet } : null;
+}
+
+export function designPhaseReviewDecision(decision: InitiativeReadinessDecision): InitiativeReadinessDecision | null {
+  return selectReviewDecision(decision, isDesignReviewEntry);
+}
+
+/** Pre-delivery routing also resolves disposition against the found room's live head.
+ * Writer-specific design review selection must not treat disposition as design approval. */
+export function preDeliveryReviewDecision(decision: InitiativeReadinessDecision): InitiativeReadinessDecision | null {
+  return selectReviewDecision(decision, entry => isDesignReviewEntry(entry) || isDependencyDispositionEntry(entry));
 }
 
 /** Validate pre-delivery packets against the same obligations their claim uses.
@@ -90,7 +101,16 @@ export function decisionForIndependentReview(
   writerToolName: string,
   decisions: Partial<Record<"plan" | "implementation" | "completion", InitiativeReadinessDecision>>,
   planBaselinePrerequisite?: ReadinessRequirementResult | null,
+  gate?: string,
 ): InitiativeReadinessDecision | null {
+  if (writerToolName === "record_initiative_evidence" && gate === "dependency-disposition") {
+    for (const decision of [decisions.implementation, decisions.plan, decisions.completion]) {
+      if (!decision || decision.verdict === "allowed") continue;
+      const owed = selectReviewDecision(decision, isDependencyDispositionEntry);
+      if (owed) return owed;
+    }
+    return null;
+  }
   if (writerToolName === "record_initiative_design_review"
     || writerToolName === "record_initiative_architecture_review") {
     const decision = decisions.implementation ?? decisions.plan;
