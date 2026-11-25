@@ -57,3 +57,8 @@ rehearsal admission. No provider call is made by either action here.
 Before any scoped room credential is issued, the Build Studio dispatch test
 route must refuse Workroom and other non-operator credentials, as well as
 revoked or expired operator PATs (BI-38C7C842).
+
+Admin service logs also refuse the direct Docker fallback if the private
+actuator mount is present or the mount table cannot be read and parsed.
+A missing mount table on a non-Linux development host is the only read-error
+exception. BI-42438509 owns the later switch to the shared actuator client.
