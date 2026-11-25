@@ -191,7 +191,18 @@ for remote fetches, and the applied revision of a reviewed skill proposal for
 seed write-back. For the seed, the actuator rereads that revision and sends
 its body only while it is the skill's latest revision and still equals the
 live definition, so the portal never supplies the bytes written. The writer
-overwrites an existing seed file and never creates one. The container is named and labeled per owner, like an
+overwrites an existing seed file and never creates one. Source-mode upgrades
+also build a candidate promoter image from the workspace, which neither the
+portal nor the actuator can read. The actuator therefore launches that build
+as an admitted `candidate` stage of the running self-upgrade run (kernel
+decision `DI-B3171A8F09DC`), with the same trust as the prebuild stage. The
+stage runs in a container from the installed promoter image, pinned to its
+local image ID, with the workspace mounted read-only. It runs the fixed
+`promoter-candidate-build.mjs`, which stages only the target's declared
+promoter build context. The actuator admits the stage only while the run is
+running and the requested target is the run's expected deployed stamp. It
+then resolves and validates the built image itself and returns only the
+verified artifact. Release-mode candidates keep the signed-reference path. The container is named and labeled per owner, like an
 admitted promoter, and settles a lost reply by exact readback. Neither the
 portal nor the actuator holds a writable source mount. Later owners, such as
 Build Studio commits, contribution branches and Hive Mind contributions, are
