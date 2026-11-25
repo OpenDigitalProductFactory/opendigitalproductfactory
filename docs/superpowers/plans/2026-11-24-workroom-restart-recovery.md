@@ -39,7 +39,7 @@ Design and acceptance criteria are in the [restart-recovery design](../specs/202
 
 - Decision: atomic
 - Parent: `BI-224F56F1`
-- Receipt: `cmwwekd282ch50ep1igifhnio`
+- Receipt: `cmwwf7g0w2gp30ep1dzr9coxn`
 - Dependencies: none
 - Rationale: The phases are not independently shippable. An upgrade that only changes the timestamp predicate would reopen scope without the reviewed writer guarantee, and the immutable recipe cannot be enabled until the Docker authority migration removes every writer-reachable raw caller.
 
