@@ -186,6 +186,7 @@ async function verifyMembers({ list, archive, declared, onEntry }) {
     if (!(await take(BLOCK)).equals(ustarHeader(member, entry.sizeBytes))) {
       refuse("archive ustar header does not match the ordered files.ndjson entry");
     }
+    const payloadOffset = offset;
     const payloadHash = createHash("sha256");
     for (let remaining = entry.sizeBytes; remaining > 0;) {
       const bytes = await take(Math.min(remaining, PAYLOAD_CHUNK));
@@ -197,7 +198,7 @@ async function verifyMembers({ list, archive, declared, onEntry }) {
     if (padding && (await take(padding)).some((byte) => byte !== 0)) refuse("archive member has nonzero padding");
     fileCount += 1;
     totalBytes += entry.sizeBytes;
-    await onEntry?.(Object.freeze(entry));
+    await onEntry?.(Object.freeze(entry), payloadOffset);
   }
   if (archive.stat.size - offset !== 2 * BLOCK || (await take(2 * BLOCK)).some((byte) => byte !== 0)) {
     refuse("archive end must consist of exactly two zero blocks");
@@ -213,6 +214,37 @@ async function verifyMembers({ list, archive, declared, onEntry }) {
  * The callback is for read-only trial accounting, not output publication.
  */
 export async function verifyUploadsRun({ runDir, expected, onEntry }) {
+  return admitUploadsRun({ runDir, expected, onEntry: onEntry && ((entry) => onEntry(entry)) });
+}
+
+/** Payloads can be staged only from the still-open, fully verified archive. */
+export async function withVerifiedUploadsArchive({ runDir, expected }, use) {
+  const members = [];
+  const offsets = new WeakMap();
+  return admitUploadsRun({
+    runDir, expected,
+    onEntry: (member, offset) => { members.push(member); offsets.set(member, offset); },
+  }, (result, archive) => use({
+    ...result,
+    members: Object.freeze(members),
+    async *readPayload(member) {
+      if (!offsets.has(member)) refuse("upload payload is not an admitted member of this archive");
+      await assertUnchanged(archive);
+      const start = offsets.get(member);
+      const hash = createHash("sha256");
+      for (let read = 0; read < member.sizeBytes;) {
+        const chunk = await readExact(archive, start + read, Math.min(member.sizeBytes - read, PAYLOAD_CHUNK));
+        hash.update(chunk);
+        read += chunk.length;
+        yield chunk;
+      }
+      if (hash.digest("hex") !== member.sha256) refuse("upload archive payload changed during staging");
+      await assertUnchanged(archive);
+    },
+  }));
+}
+
+async function admitUploadsRun({ runDir, expected, onEntry }, use) {
   if (typeof expected?.pairedPostgresRunId !== "string" || !expected.pairedPostgresRunId
     || !isDigest(expected.pairedPostgresSha256) || !isDigest(expected.archiveSha256)
     || !isDigest(expected.manifestSha256)) refuse("trusted upload and paired Postgres identities are required");
@@ -236,12 +268,13 @@ export async function verifyUploadsRun({ runDir, expected, onEntry }) {
     const archive = await acquire("uploads.tar", UPLOAD_BACKUP_LIMITS.archiveBytes);
     await verifyMembers({ list, archive, declared, onEntry });
     await Promise.all(opened.map(assertUnchanged));
-    return {
+    const result = {
       rootNames: [...declared.rootNames],
       fileCount: declared.manifest.fileCount,
       totalBytes: declared.manifest.totalBytes,
       deletedAfterSnapshot: declared.manifest.deletedAfterSnapshot,
     };
+    return use ? await use(result, archive) : result;
   } finally {
     await Promise.all(opened.map(({ file }) => file.close()));
   }
