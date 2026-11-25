@@ -20,14 +20,14 @@ import { getErrorMessage } from "@/lib/shared/get-error-message";
 import { SANDBOX_RECOVERY_ACTIONS, isSandboxRecoveryAction } from "@/lib/build/sandbox/sandbox-admin-types";
 import { lazyFsPromises, lazyPath, lazyChildProcess, lazyUtil } from "@/lib/shared/lazy-node";
 import { resolveActiveBuildId, extractBuildIdHint, logBuildActivity } from "@/lib/mcp/build-tool-helpers";
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
+import type { RegisteredToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
 
 function optionalString(value: unknown): string | null {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
 }
 
-const definitions: ToolDefinition[] = [
+const definitions: RegisteredToolDefinition[] = [
   {
     name: "get_build_sandbox_state",
     description: "Read the source-bounded sandbox/git state for a Build Studio build, including branch, head SHA, source diffstat, ignored generated/dependency paths, and expected plan files.",
@@ -37,6 +37,7 @@ const definitions: ToolDefinition[] = [
         buildId: { type: "string", description: "Optional FB-* build ID. Omit to target the current active build." },
       },
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: false,
@@ -53,6 +54,7 @@ const definitions: ToolDefinition[] = [
         expectedWorkspaceRoot: { type: "string", description: "Optional host worktree path expected to own the sandbox Compose project." },
       },
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: false,
@@ -87,6 +89,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["action"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: true,
@@ -102,6 +105,7 @@ const definitions: ToolDefinition[] = [
     name: "check_sandbox",
     description: "Check whether the sandbox container (dpf-sandbox-1) is running. Returns status: 'running', 'stopped', or 'not_found'. If the result is not_found or detached, call diagnose_sandbox for governed recovery guidance.",
     inputSchema: { type: "object", properties: {} },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: false,
@@ -111,6 +115,7 @@ const definitions: ToolDefinition[] = [
     name: "start_sandbox",
     description: "Start the sandbox container if it is stopped. If status is 'stopped', this will start it and wait up to 20 seconds for it to become ready. If status is 'not_found', call diagnose_sandbox because sandbox creation or rebinding is a platform-owned recovery action.",
     inputSchema: { type: "object", properties: {} },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: true,
@@ -126,6 +131,7 @@ const definitions: ToolDefinition[] = [
         auto_fix: { type: "boolean", description: "When true, automatically diagnose test failures and attempt fixes (max 3 retries). Default: false." },
       },
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: false,
@@ -143,6 +149,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["path"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: false,
@@ -163,6 +170,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["path", "content"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: false, // Sandbox only
@@ -184,6 +192,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["path"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: false, // Sandbox only
@@ -201,6 +210,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["pattern"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: false,
@@ -217,6 +227,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["pattern"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: false,
@@ -233,6 +244,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["command"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: false, // Sandbox is isolated from production — safe in any mode

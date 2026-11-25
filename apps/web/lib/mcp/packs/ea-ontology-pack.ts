@@ -13,10 +13,10 @@
 // Definitions moved verbatim out of the inline PLATFORM_TOOLS array; grants
 // mirror agent-grants.ts TOOL_TO_GRANTS, which stays the gating source.
 
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
+import type { RegisteredToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
 
-const definitions: ToolDefinition[] = [
+const definitions: RegisteredToolDefinition[] = [
   {
     name: "create_ea_element",
     description: "Create a new element in the ontology graph. Use when a user describes a new architectural entity (product, component, actor, service, etc). Defaults to refinementLevel=conceptual.",
@@ -35,6 +35,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["name", "elementTypeSlug"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_ea_model",
     sideEffect: true,
   },
@@ -51,6 +52,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["fromElementId", "toElementId", "relationshipTypeSlug"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_ea_model",
     sideEffect: true,
   },
@@ -67,6 +69,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["elementId"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_ea_model",
     sideEffect: true,
   },
@@ -87,6 +90,7 @@ const definitions: ToolDefinition[] = [
         limit:                { type: "number", description: "Max results, default 20" },
       },
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_ea_modeler",
     sideEffect: false,
   },
@@ -102,6 +106,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["patternSlug", "startElementIds"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_ea_modeler",
     sideEffect: false,
   },
@@ -118,6 +123,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["fileContentBase64", "fileName"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_ea_model",
     sideEffect: true,
   },
@@ -133,6 +139,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["scopeType", "scopeRef"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_ea_modeler",
     sideEffect: false,
   },
@@ -146,6 +153,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["viewId"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_ea_modeler",
     sideEffect: false,
   },
@@ -159,6 +167,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["viewId"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_ea_modeler",
     sideEffect: true,
   },

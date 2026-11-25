@@ -13,7 +13,7 @@
 // start_deliberation's proposal executionMode + autoApproveWhen predicate).
 // Grants mirror agent-grants.ts TOOL_TO_GRANTS, which stays the gating source.
 
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
+import type { RegisteredToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
 import {
   DELIBERATION_ARTIFACT_TYPES,
@@ -22,7 +22,7 @@ import {
 } from "@/lib/deliberation/types";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 
-const definitions: ToolDefinition[] = [
+const definitions: RegisteredToolDefinition[] = [
   {
     name: "start_deliberation",
     description:
@@ -80,6 +80,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["patternSlug", "artifactType"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_platform",
     executionMode: "proposal",
     sideEffect: true,
@@ -104,6 +105,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["deliberationRunId"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: false,
@@ -122,6 +124,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["deliberationRunId"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: false,

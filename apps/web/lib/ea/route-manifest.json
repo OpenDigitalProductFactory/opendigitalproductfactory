@@ -1,6 +1,6 @@
 {
   "generator": "apps/web/scripts/build-route-manifest.ts",
-  "routeCount": 691,
+  "routeCount": 692,
   "routes": [
     {
       "routePath": "/",
@@ -1168,6 +1168,18 @@
       ],
       "dynamicParams": [],
       "file": "apps/web/app/api/internal/quiescence-state/route.ts"
+    },
+    {
+      "routePath": "/api/internal/s5-rehearsal-admission",
+      "kind": "route",
+      "segments": [
+        "api",
+        "internal",
+        "s5-rehearsal-admission"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/internal/s5-rehearsal-admission/route.ts",
+      "exposure": "private-mesh"
     },
     {
       "routePath": "/api/internal/tasks/[taskId]",

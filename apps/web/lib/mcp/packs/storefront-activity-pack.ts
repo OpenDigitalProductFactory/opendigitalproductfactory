@@ -4,7 +4,7 @@
 // One consolidated, read-only door keeps the tool surface small while giving
 // operations coworkers the demand signal (what is selling, who is waiting).
 
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
+import type { RegisteredToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack } from "../tool-pack";
 
 const MAX_ROWS = 25;
@@ -12,7 +12,7 @@ const DEFAULT_ROWS = 10;
 /** Orders aggregated for the item rollup — bounded so one call stays cheap. */
 const ROLLUP_SCAN_CAP = 200;
 
-const definitions: ToolDefinition[] = [
+const definitions: RegisteredToolDefinition[] = [
   {
     name: "list_storefront_activity",
     description:
@@ -46,6 +46,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["kind"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_storefront",
     sideEffect: false,
   },

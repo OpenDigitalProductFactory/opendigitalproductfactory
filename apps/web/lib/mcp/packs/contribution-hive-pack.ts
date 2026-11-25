@@ -13,7 +13,7 @@
 
 import { prisma } from "@dpf/db";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
+import type { RegisteredToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
 import {
   contributeFindingToHiveDefinition,
@@ -30,11 +30,12 @@ import {
   reconcileHiveContributionDelivery,
 } from "@/lib/mcp/contribution-hive-delivery";
 
-const definitions: ToolDefinition[] = [
+const definitions: RegisteredToolDefinition[] = [
   {
     name: "assess_contribution",
     description: "Evaluate whether a shipped feature should be contributed to the Hive Mind community. Assesses vision alignment, community value, augmentation vs innovation, and proprietary sensitivity. Always presents the assessment to the user — contribution is their choice.",
     inputSchema: { type: "object", properties: {} },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: false,
@@ -50,6 +51,7 @@ const definitions: ToolDefinition[] = [
         include_migrations: { type: "boolean", description: "Include database migrations in the pack. Default: true." },
       },
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_platform",
     executionMode: "proposal",
     sideEffect: true,
@@ -88,6 +90,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["title", "description", "category"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: null,
     executionMode: "immediate",
     coworkerArtifact: true,
@@ -123,6 +126,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["skillId", "title", "description", "proposedContent"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: null,
     executionMode: "immediate",
     coworkerArtifact: true,
@@ -141,6 +145,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["toEmployeeId", "content", "feedbackType"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: null,
     executionMode: "immediate",
   },

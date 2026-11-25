@@ -40,6 +40,7 @@ type ToolDefinition = {
   sideEffect?: boolean;
   consequence?: "outward";
   discoveredPolicyGrants?: readonly string[];
+  workroomAccess: "outside-workroom";
 };
 
 type McpToolEntry = {
@@ -210,6 +211,9 @@ export function discoveredToolDefinition(policy: ResolvedDiscoveredToolPolicy): 
     // A side-effecting third-party call leaves the platform.
     ...(sideEffect ? { consequence: "outward" as const } : {}),
     discoveredPolicyGrants: policy.grants,
+    // The existing external-tool approval does not declare a room target or
+    // authorize external callbacks under an attempt-bound room credential.
+    workroomAccess: "outside-workroom",
   };
 }
 

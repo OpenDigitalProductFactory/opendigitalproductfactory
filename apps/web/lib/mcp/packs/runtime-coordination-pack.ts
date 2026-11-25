@@ -7,18 +7,19 @@
 // (and passes the same arguments the switch case did). Definitions are moved
 // verbatim from mcp-tools.ts; grants mirror agent-grants.ts TOOL_TO_GRANTS.
 
-import type { ToolDefinition } from "@/lib/mcp-tool-types";
+import type { RegisteredToolDefinition } from "@/lib/mcp-tool-types";
 import { runtimeCoordinationToolEnums } from "@/lib/runtime-coordination/mcp-handlers";
 import type { ToolPack } from "../tool-pack";
 
 const ENUMS = runtimeCoordinationToolEnums();
 
-const definitions: ToolDefinition[] = [
+const definitions: RegisteredToolDefinition[] = [
   {
     name: "verify_archetype_projection",
     title: "Verify archetype room lifecycle",
     description: "Verify the deployed archetype room lifecycle in a transaction-owned fixture on DEV/test only. Checks bindings, repeat, withdrawal, restoration and retained history, then rolls back all fixture data. No existing organization can be selected.",
     inputSchema: { type: "object", properties: {}, additionalProperties: false },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_platform",
     executionMode: "immediate",
     // Like isolated sandbox validation: observations only, no committed writes.
@@ -55,6 +56,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["targetId", "kind", "status"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_backlog",
     executionMode: "immediate",
     sideEffect: true,
@@ -69,6 +71,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["targetId"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_backlog",
     executionMode: "immediate",
     sideEffect: true,
@@ -83,6 +86,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["targetId"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_backlog",
     executionMode: "immediate",
     sideEffect: true,
@@ -121,6 +125,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["verificationId", "kind", "status"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_backlog",
     executionMode: "immediate",
     sideEffect: true,
@@ -138,6 +143,7 @@ const definitions: ToolDefinition[] = [
       },
       required: [],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: false,

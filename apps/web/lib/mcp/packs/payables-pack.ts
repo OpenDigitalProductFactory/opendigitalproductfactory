@@ -9,7 +9,7 @@
 import { BILL_STATUSES } from "@/lib/finance/ap-validation";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
+import type { RegisteredToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack } from "../tool-pack";
 
 const DEFAULT_LIMIT = 20;
@@ -26,7 +26,7 @@ const READ_ONLY = {
   openWorldHint: false,
 } as const;
 
-const definitions: ToolDefinition[] = [
+const definitions: RegisteredToolDefinition[] = [
   {
     name: "list_bills",
     description:
@@ -49,6 +49,7 @@ const definitions: ToolDefinition[] = [
       },
       required: [],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_finance",
     executionMode: "immediate",
     sideEffect: false,
@@ -71,6 +72,7 @@ const definitions: ToolDefinition[] = [
       },
       required: [],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_finance",
     executionMode: "immediate",
     sideEffect: false,

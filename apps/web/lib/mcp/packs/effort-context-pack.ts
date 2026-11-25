@@ -12,11 +12,11 @@
 // effort you are working on cannot exceed authority; it is a shared scratchpad,
 // not a privileged action.
 
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
+import type { RegisteredToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack } from "../tool-pack";
 import { EFFORT_ENTRY_KINDS, isKnownEffortEntryKind } from "@/lib/tak/effort-context";
 
-const definitions: ToolDefinition[] = [
+const definitions: RegisteredToolDefinition[] = [
   {
     name: "record_effort_context",
     description:
@@ -41,6 +41,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["effortKey", "kind", "content"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: null,
     sideEffect: true,
   },
@@ -55,6 +56,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["effortKey"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: null,
     sideEffect: false,
   },

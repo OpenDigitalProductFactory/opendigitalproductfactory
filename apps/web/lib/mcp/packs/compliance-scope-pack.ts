@@ -8,11 +8,11 @@
 // TOOL_TO_GRANTS (the gating source); the compliance-officer already holds
 // data_governance_validate.
 
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
+import type { RegisteredToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack } from "../tool-pack";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 
-const definitions: ToolDefinition[] = [
+const definitions: RegisteredToolDefinition[] = [
   {
     name: "record_compliance_scope",
     description:
@@ -51,6 +51,7 @@ const definitions: ToolDefinition[] = [
         },
       },
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_compliance",
     executionMode: "immediate",
     sideEffect: true,

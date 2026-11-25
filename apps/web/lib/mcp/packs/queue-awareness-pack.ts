@@ -8,10 +8,10 @@
 // pulls no heavy modules at registration. Grants mirror agent-grants.ts
 // TOOL_TO_GRANTS.
 
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
+import type { RegisteredToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack } from "../tool-pack";
 
-const definitions: ToolDefinition[] = [
+const definitions: RegisteredToolDefinition[] = [
   {
     name: "get_queue_status",
     description:
@@ -28,6 +28,7 @@ const definitions: ToolDefinition[] = [
       },
       required: [],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: false,
@@ -37,6 +38,7 @@ const definitions: ToolDefinition[] = [
     description:
       "List only the queues currently assessed at-risk — a deep backlog, low first-pass yield, missed SLA, or high abandonment — with the reasons. Use to decide where attention or capacity should go. Read-only.",
     inputSchema: { type: "object", properties: {}, required: [] },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: false,

@@ -28,7 +28,7 @@ import {
   type SemanticReviewOutcome,
 } from "@/lib/change-review/semantic-review-enforcement";
 import type { DeliberationArtifactType, StrategyProfile } from "@/lib/deliberation/external-review-activation";
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
+import type { RegisteredToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 import { isRecord } from "@/lib/shared/coerce";
 import { recordWorkCapsuleEvidence } from "@/lib/work-capsules/work-capsule-store";
@@ -41,7 +41,7 @@ const ARTIFACT_TYPES = [...REVIEW_ARTIFACT_TYPES];
 const RISKS = [...REVIEW_RISKS];
 const PROFILES = [...REVIEW_PROFILES];
 
-const definitions: ToolDefinition[] = [{
+const definitions: RegisteredToolDefinition[] = [{
   name: "review_semantic_change",
   description:
     "Independently review an immutable committed change before its first publication, record one fresh semantic-review receipt on the Work Capsule, and return whether the author should publish, repair, or escalate. " +
@@ -85,6 +85,7 @@ const definitions: ToolDefinition[] = [{
       "diffDigest",
     ],
   },
+  workroomAccess: "outside-workroom",
   requiredCapability: "view_platform",
   executionMode: "immediate",
   sideEffect: true,
@@ -115,6 +116,7 @@ const definitions: ToolDefinition[] = [{
     },
     required: ["capsuleId", "receiptId", "surface", "pullRequestNumber", "ciPassed", "merged"],
   },
+  workroomAccess: "outside-workroom",
   requiredCapability: "view_platform",
   executionMode: "immediate",
   sideEffect: true,
@@ -128,6 +130,7 @@ const definitions: ToolDefinition[] = [{
     remediationVerificationId: { type: "string", description: "Passed runtime health verification for settled execution and infrastructure remediation on this Workroom; required for eligibility refusal or an expired successor. Eligibility recovery also requires semanticReviewRecovery.eligibilityVerified=true." },
     expectedRequestDigest: { type: "string", description: "Exact predecessor immutable request digest; required together with remediationVerificationId." },
   }, required: ["taskRunId", "confirmed"], additionalProperties: false },
+  workroomAccess: "outside-workroom",
   requiredCapability: "view_platform", executionMode: "immediate", sideEffect: true,
   buildPhases: ["review", "ship"],
 }];

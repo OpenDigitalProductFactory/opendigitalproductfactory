@@ -7,7 +7,7 @@ import {
   isToolAllowedByGrants,
   TOOL_TO_GRANTS,
 } from "@/lib/tak/agent-grants";
-import type { ToolDefinition, ToolExecutionContext, ToolResult } from "@/lib/mcp-tool-types";
+import type { RegisteredToolDefinition, ToolDefinition, ToolExecutionContext, ToolResult } from "@/lib/mcp-tool-types";
 import { roomAuthorizesTool } from "@/lib/work-management/room-turn-authority";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
 
@@ -17,7 +17,7 @@ const MODE_VALUES: SurfaceMode[] = [
 
 const surfaceRegistry = () => import("@/lib/coworker/authorized-surface-registry");
 
-const definitions: ToolDefinition[] = [
+const definitions: RegisteredToolDefinition[] = [
   {
     name: "surface_list",
     description: "List relevant Authorized Surfaces available to the current human+coworker principal and route/workroom/task context. Use this instead of guessing what a page or silent workroom surface contains.",
@@ -25,6 +25,7 @@ const definitions: ToolDefinition[] = [
       mode: { type: "string", enum: MODE_VALUES },
       taskIntent: { type: "string" }, workroomType: { type: "string" }, resourceType: { type: "string" },
     }, required: [] },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_platform", sideEffect: false,
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   },
@@ -37,6 +38,7 @@ const definitions: ToolDefinition[] = [
       mode: { type: "string", enum: MODE_VALUES }, locale: { type: "string" }, timezone: { type: "string" },
       workspaceId: { type: "string" }, workroomId: { type: "string" }, resourceIds: { type: "array", items: { type: "string" } },
     }, required: [] },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_platform", sideEffect: false,
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: false, openWorldHint: false },
   },
@@ -47,6 +49,7 @@ const definitions: ToolDefinition[] = [
       sessionId: { type: "string" },
       sinceRevision: { type: "string", description: "Return a bounded semantic delta from this known revision when available." },
     }, required: ["sessionId"] },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_platform", sideEffect: false,
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: false, openWorldHint: false },
   },
@@ -58,6 +61,7 @@ const definitions: ToolDefinition[] = [
       limit: { type: "number", minimum: 1, maximum: 100 },
       cursor: { type: "string", description: "Opaque continuation returned by the preceding surface_query page." },
     }, required: ["sessionId"] },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_platform", sideEffect: false,
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: false, openWorldHint: false },
   },
@@ -68,6 +72,7 @@ const definitions: ToolDefinition[] = [
       sessionId: { type: "string" }, actionId: { type: "string" }, expectedRevision: { type: "string" },
       args: { type: "object" }, idempotencyKey: { type: "string" },
     }, required: ["sessionId", "actionId", "expectedRevision"] },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_platform", executionMode: "immediate", sideEffect: true,
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
   },
@@ -75,6 +80,7 @@ const definitions: ToolDefinition[] = [
     name: "surface_close",
     description: "Close a principal-bound Authorized Surface session and release its virtual client state.",
     inputSchema: { type: "object", properties: { sessionId: { type: "string" } }, required: ["sessionId"] },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_platform", sideEffect: false,
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   },

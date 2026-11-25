@@ -6,7 +6,7 @@
 // derived consumption, days of cover, suggested order) rather than making the
 // model stitch three calls together.
 
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
+import type { RegisteredToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack } from "../tool-pack";
 import {
   computeStockCoverage,
@@ -22,7 +22,7 @@ const MAX_ROWS = 30;
 /** Orders scanned to derive consumption — bounded so one call stays cheap. */
 const ORDER_SCAN_CAP = 500;
 
-const definitions: ToolDefinition[] = [
+const definitions: RegisteredToolDefinition[] = [
   {
     name: "list_stock_coverage",
     description:
@@ -48,6 +48,7 @@ const definitions: ToolDefinition[] = [
         },
       },
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_storefront",
     sideEffect: false,
   },

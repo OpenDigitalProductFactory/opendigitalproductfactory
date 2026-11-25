@@ -1,8 +1,8 @@
-import type { ToolDefinition } from "@/lib/mcp-tool-types";
+import type { RegisteredToolDefinition } from "@/lib/mcp-tool-types";
 import { DEFERRAL_INPUT_SCHEMA } from "@/lib/backlog/deferral-contract";
 import { BACKLOG_STATUS_VALUES } from "@/lib/explore/backlog";
 
-export const backlogStatusToolDefinition: ToolDefinition = {
+export const backlogStatusToolDefinition: RegisteredToolDefinition = {
   name: "update_backlog_item_status",
   description: "Move a backlog item between lifecycle statuses. Enforces the legal-transition table. A same-status deferred call reviews the active deferral instead of returning a no-op. status='deferred' requires deferral metadata; status='retired' is terminal removed demand and requires a reason. Agent callers setting status='done' must supply completionEvidence that cites fresh, server-resolved evidence proportional to documentation, verified-existing, implementation, or operational work. Setting status='triaging' on an already-triaged item is the retriage path. Moving an item to in-progress acquires its work claim; it does not start Build Studio.",
   inputSchema: {
@@ -50,6 +50,7 @@ export const backlogStatusToolDefinition: ToolDefinition = {
     },
     required: ["itemId", "status"],
   },
+  workroomAccess: "outside-workroom",
   requiredCapability: "manage_backlog",
   sideEffect: true,
 };

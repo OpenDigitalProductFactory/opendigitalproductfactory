@@ -13,7 +13,7 @@
 // three code-graph read tools shared one local result-shaping helper in
 // mcp-tools.ts (codeGraphReadToolResult); it moves here with them.
 
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
+import type { RegisteredToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
 
 /** Coerce an optional string param, trimming and nulling empties. */
@@ -82,7 +82,7 @@ async function codeGraphReadToolResult(
   };
 }
 
-const definitions: ToolDefinition[] = [
+const definitions: RegisteredToolDefinition[] = [
   {
     name: "search_specs_and_plans",
     description: "Search design specs (docs/superpowers/specs) and implementation plans (docs/superpowers/plans) by title and body, with optional itemId/epicId narrowing. Returns paths, titles, dates, snippets, and the backlog and epic references found in each match. Installs that ship without the docs/superpowers tree fail with spec_plan_corpus_unavailable instead of returning an empty result, so an empty result always means a real no-match. Read-only.",
@@ -97,6 +97,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["query"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_operations",
     executionMode: "immediate",
     sideEffect: false,
@@ -109,6 +110,7 @@ const definitions: ToolDefinition[] = [
       properties: {},
       required: [],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: false,
@@ -126,6 +128,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["query"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: false,
@@ -144,6 +147,7 @@ const definitions: ToolDefinition[] = [
       },
       required: [],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: false,
@@ -161,6 +165,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["filePath"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: false,
@@ -179,6 +184,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["featureDescription", "domainConcepts", "userScope"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: false,

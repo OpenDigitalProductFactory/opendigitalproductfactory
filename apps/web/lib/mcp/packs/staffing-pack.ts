@@ -11,14 +11,14 @@
 //
 // Handlers lazy-import Prisma so the pack stays a thin, tree-shakeable module.
 
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
+import type { RegisteredToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import {
   getStaffingCoverage as loadStaffingCoverage,
   type StaffingCoverageClient,
 } from "@/lib/workforce/staffing/staffing-coverage";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
 
-const definitions: ToolDefinition[] = [
+const definitions: RegisteredToolDefinition[] = [
   {
     name: "list_staffing_demand",
     description:
@@ -36,6 +36,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["organizationId"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_employee",
     executionMode: "immediate",
     sideEffect: false,
@@ -51,6 +52,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["organizationId"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_employee",
     executionMode: "immediate",
     sideEffect: false,

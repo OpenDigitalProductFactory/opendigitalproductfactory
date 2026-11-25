@@ -11,6 +11,7 @@ import { decryptSecret, encryptSecret } from "@/lib/govern/credential-crypto";
 import { isPatIssuanceClosed } from "@/lib/auth/oauth-policy";
 import { coworkerAuthorityAgentId } from "@/lib/coworker-identity";
 import { developmentTemplateGrantsToFollow } from "@/lib/mcp-token-scopes";
+import { S5_WORKROOM_TOKEN_KIND } from "./workroom-session-token";
 
 export type McpTokenScope = "read" | "write" | "admin";
 export type McpTokenCapability = "read" | "write";
@@ -304,6 +305,7 @@ export async function copyMcpApiTokenPlaintext(
   const row = await prisma.mcpApiToken.findUnique({
     where: { id: tokenId },
     select: {
+      kind: true,
       prefix: true,
       tokenSuffix: true,
       secretEnc: true,
@@ -311,7 +313,7 @@ export async function copyMcpApiTokenPlaintext(
       expiresAt: true,
     },
   });
-  if (!row) return { ok: false, error: "not_found" };
+  if (!row || row.kind === S5_WORKROOM_TOKEN_KIND) return { ok: false, error: "not_found" };
   if (row.revokedAt != null) return { ok: false, error: "revoked" };
   if (row.expiresAt != null && row.expiresAt.getTime() < Date.now()) {
     return { ok: false, error: "expired" };
@@ -341,6 +343,7 @@ export async function rotateMcpApiToken(
     select: {
       id: true,
       userId: true,
+      kind: true,
       agentId: true,
       name: true,
       capability: true,
@@ -350,7 +353,7 @@ export async function rotateMcpApiToken(
       revokedAt: true,
     },
   });
-  if (!existing || existing.userId !== input.userId) {
+  if (!existing || existing.userId !== input.userId || existing.kind === S5_WORKROOM_TOKEN_KIND) {
     return { ok: false, error: "not_found_or_not_yours" };
   }
   if (existing.revokedAt != null) {
@@ -430,9 +433,9 @@ export async function addScopesToMcpApiToken(
 ): Promise<AddMcpTokenScopesResult> {
   const existing = await prisma.mcpApiToken.findUnique({
     where: { id: tokenId },
-    select: { scopes: true, revokedAt: true, expiresAt: true },
+    select: { kind: true, scopes: true, revokedAt: true, expiresAt: true },
   });
-  if (!existing) return { ok: false, error: "not_found" };
+  if (!existing || existing.kind === S5_WORKROOM_TOKEN_KIND) return { ok: false, error: "not_found" };
   if (existing.revokedAt) return { ok: false, error: "revoked" };
   if (existing.expiresAt != null && existing.expiresAt.getTime() < Date.now()) {
     return { ok: false, error: "expired" };
@@ -493,7 +496,7 @@ export async function resolveMcpApiToken(
   }
   const hash = hashSecret(plaintext);
   const row = await prisma.mcpApiToken.findUnique({ where: { tokenHash: hash } });
-  if (!row) return null;
+  if (!row || row.kind === S5_WORKROOM_TOKEN_KIND) return null;
   if (row.revokedAt != null) return null;
   if (row.expiresAt != null && row.expiresAt.getTime() < Date.now()) return null;
 
@@ -536,7 +539,7 @@ export async function acknowledgeMcpTokenRefresh(
       expiresAt: true,
     },
   });
-  if (!row) return { ok: false, error: "invalid_token" };
+  if (!row || row.kind === S5_WORKROOM_TOKEN_KIND) return { ok: false, error: "invalid_token" };
   if (row.revokedAt != null) return { ok: false, error: "invalid_token" };
   if (row.expiresAt != null && row.expiresAt.getTime() < Date.now()) {
     return { ok: false, error: "invalid_token" };
