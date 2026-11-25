@@ -22,6 +22,7 @@
 #
 # Optional env:
 #   LOG_PATH                     where to append stdout/stderr (default: alongside DUMP_PATH)
+#   EXPECTED_DUMP_SHA256         exact receipt digest for a journaled paired restore
 #
 # Exit codes:
 #   0  success (pg_restore completed; warnings are normal during --clean)
@@ -41,15 +42,29 @@ POSTGRES_USER="${POSTGRES_USER:-dpf}"
 POSTGRES_DB="${POSTGRES_DB:-dpf}"
 DB_CONTAINER="${DPF_PRODUCTION_DB_CONTAINER:-dpf-postgres-1}"
 LOG_PATH="${LOG_PATH:-${DUMP_PATH}.restore-log.txt}"
+EXPECTED_DUMP_SHA256="${EXPECTED_DUMP_SHA256:-}"
 
 [ -n "$DUMP_PATH" ] || fail "DUMP_PATH not set" 2
 [ -r "$DUMP_PATH" ] || fail "dump not readable at $DUMP_PATH" 2
 command -v docker >/dev/null 2>&1 || fail "docker CLI not available in runner image" 2
 
+INPUT_DUMP="$DUMP_PATH"
+if [ -n "$EXPECTED_DUMP_SHA256" ]; then
+  case "$EXPECTED_DUMP_SHA256" in *[!0-9a-f]*) fail "invalid expected dump checksum" 2;; esac
+  [ "${#EXPECTED_DUMP_SHA256}" -eq 64 ] || fail "invalid expected dump checksum" 2
+  # Hash and restore from the same open file. Replacing DUMP_PATH after
+  # verification cannot substitute a different dump for this operation.
+  exec 3< "$DUMP_PATH"
+  INPUT_DUMP="/proc/self/fd/3"
+  [ -f "$INPUT_DUMP" ] || fail "paired restore dump is not a regular file" 2
+  ACTUAL_DUMP_SHA256="$(sha256sum < "$INPUT_DUMP")" || fail "could not read paired restore dump" 2
+  [ "${ACTUAL_DUMP_SHA256%% *}" = "$EXPECTED_DUMP_SHA256" ] || fail "paired restore dump checksum changed" 2
+fi
+
 STARTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 STARTED_EPOCH="$(date +%s)"
 
-SIZE_BYTES="$(wc -c < "$DUMP_PATH" | tr -d ' ')"
+SIZE_BYTES="$(wc -c < "$INPUT_DUMP" | tr -d ' ')"
 
 log "starting pg_restore container=$DB_CONTAINER user=$POSTGRES_USER db=$POSTGRES_DB dump=$DUMP_PATH size=$SIZE_BYTES"
 
@@ -68,15 +83,16 @@ if docker exec -i "$DB_CONTAINER" pg_restore \
     --no-privileges \
     -U "$POSTGRES_USER" \
     -d "$POSTGRES_DB" \
-    < "$DUMP_PATH" > "$LOG_PATH" 2>&1; then
+    < "$INPUT_DUMP" > "$LOG_PATH" 2>&1; then
   FINISHED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   FINISHED_EPOCH="$(date +%s)"
   DURATION_MS=$(( (FINISHED_EPOCH - STARTED_EPOCH) * 1000 ))
   log "ok startedAt=$STARTED_AT finishedAt=$FINISHED_AT duration_ms=$DURATION_MS"
   exit 0
+else
+  EXIT=$?
 fi
 
-EXIT=$?
 log "pg_restore exit=$EXIT — tail of log:"
 tail -n 20 "$LOG_PATH" >&2 || true
 fail "pg_restore failed (exit=$EXIT)" 3

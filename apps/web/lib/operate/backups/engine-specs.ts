@@ -37,6 +37,7 @@ import {
   type BackupPreflightResult,
 } from "./extension-preflight";
 import { RestoreIntegrityError } from "./managed-restore";
+import { captureUploadsCustody } from "./uploads-custody";
 
 /**
  * Union of every live engine's sidecar manifest shape. Postgres-only after
@@ -88,6 +89,14 @@ export interface BackupEngineSpec {
   buildEnv(ctx: BackupScriptEnvContext): NodeJS.ProcessEnv;
   /** Extra BackupRun fields written on success (postgres: pgVersion). */
   successRowExtras?(manifest: AnyBackupManifest): Record<string, unknown>;
+  /** Capture evidence before BackupRun is marked successful. An error fails the run. */
+  recordCaptureEvidence?(ctx: {
+    backupsRoot: string;
+    storagePath: string;
+    runId: string;
+    manifest: AnyBackupManifest;
+    env: NodeJS.ProcessEnv;
+  }): Promise<void>;
   /**
    * Optional pre-dump capability check. Runs before the backup script and,
    * when it returns `{ ok: false }`, short-circuits the run to a failed
@@ -235,6 +244,16 @@ export const UPLOADS_BACKUP_SPEC: BackupEngineSpec = {
       POSTGRES_USER: process.env.POSTGRES_USER ?? "dpf",
       POSTGRES_DB: process.env.POSTGRES_DB ?? "dpf",
     };
+  },
+  async recordCaptureEvidence({ backupsRoot, storagePath, runId, manifest, env }) {
+    if (manifest.target !== "uploads") throw new Error("Expected an uploads manifest");
+    await captureUploadsCustody(backupsRoot, {
+      storagePath,
+      runId,
+      archiveSha256: manifest.archiveSha256,
+      pairedPostgresRunId: env.PAIRED_POSTGRES_RUN_ID ?? "",
+      pairedPostgresSha256: env.PAIRED_POSTGRES_SHA256 ?? "",
+    });
   },
 };
 
