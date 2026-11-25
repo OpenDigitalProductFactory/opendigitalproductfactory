@@ -6,11 +6,15 @@
 import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { PrismaPg } from "@prisma/adapter-pg";
 import { Pool } from "pg";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { createDatabaseClient } from "@dpf/db";
+import { PrismaClient } from "../../../../packages/db/generated/client/client";
 import { CommandIdConflictError, ReplayedCommandRejection, commandPayloadBinding, runReceiptedCommand, type ReceiptDb } from "./command-receipts";
 import { createS5QuietProposalBroker, type S5ProposalCall } from "@/lib/workroom-runtime/s5-coordination-proposal.server";
+import { createS5CredentialLifecycle } from "@/lib/workroom-runtime/s5-credential-lifecycle.server";
+import { resolveS5ControlCredential } from "@/lib/auth/s5-room-credential.server";
+import type { S5AdmissionCeiling } from "@/lib/workroom-runtime/s5-admission.server";
 
 import { lockAllNonprodEnvironments, lockNonprodEnvironment } from "../nonprod/environment-lease-lock";
 
@@ -23,11 +27,14 @@ const DATABASE_URL = process.env.DPF_JOBS_TEST_DATABASE_URL?.trim() || canonical
 const SCHEMA = `dpf_receipt_test_${randomUUID().replaceAll("-", "")}`;
 const MIGRATION = join(__dirname, "../../../../packages/db/prisma/migrations/20261013090000_workroom_command_receipts/migration.sql");
 const ROOM_MESSAGE_MIGRATION = join(__dirname, "../../../../packages/db/prisma/migrations/20261112000000_mcp_room_resource_subscriptions/migration.sql");
-type RawTx = Pick<ReturnType<typeof createDatabaseClient>, "$queryRaw" | "$executeRaw">;
+const S5_CREDENTIAL_MIGRATION = join(__dirname, "../../../../packages/db/prisma/migrations/20261125143000_s5_room_credential_scope/migration.sql");
+type RawTx = Pick<PrismaClient, "$queryRaw" | "$executeRaw" | "mcpApiToken">;
+type TokenTx = Pick<RawTx, "mcpApiToken">;
 
 /** Real Prisma raw methods; the fixture's small activity model uses the same transaction. */
-function receiptDb(tx: RawTx): ReceiptDb {
+function receiptDb(tx: RawTx): ReceiptDb & TokenTx {
   return {
+    mcpApiToken: tx.mcpApiToken,
     $queryRaw: tx.$queryRaw.bind(tx),
     $executeRaw: tx.$executeRaw.bind(tx),
     workroomActivity: {
@@ -51,7 +58,7 @@ function receiptDb(tx: RawTx): ReceiptDb {
 
 describe.skipIf(!DATABASE_URL)("command receipts (real Prisma database)", () => {
   let pool: Pool;
-  let prisma: ReturnType<typeof createDatabaseClient>;
+  let prisma: PrismaClient;
 
   function db(): ReceiptDb {
     return {
@@ -64,9 +71,7 @@ describe.skipIf(!DATABASE_URL)("command receipts (real Prisma database)", () => 
     pool = new Pool({ connectionString: DATABASE_URL, max: 6, options: `-c search_path=${SCHEMA}` });
     // SCHEMA is generated locally from a UUID, never supplied by a caller.
     await pool.query(`CREATE SCHEMA "${SCHEMA}"`);
-    const connection = new URL(DATABASE_URL);
-    connection.searchParams.set("options", `-c search_path=${SCHEMA}`);
-    prisma = createDatabaseClient(connection.toString());
+    prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: DATABASE_URL, options: `-c search_path=${SCHEMA}` }, { schema: SCHEMA }) });
     await pool.query(`CREATE TABLE "WorkCapsule" (id TEXT PRIMARY KEY, "capsuleId" TEXT UNIQUE NOT NULL, counter INT NOT NULL DEFAULT 0)`);
     await pool.query(`CREATE TABLE "WorkCapsuleActivity" (id TEXT PRIMARY KEY, "workCapsuleId" TEXT NOT NULL REFERENCES "WorkCapsule"(id) ON DELETE CASCADE,
       kind TEXT NOT NULL, summary TEXT NOT NULL, payload JSONB NOT NULL DEFAULT '{}', "recordedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP)`);
@@ -175,6 +180,91 @@ describe.skipIf(!DATABASE_URL)("command receipts (real Prisma database)", () => 
       listener.removeAllListeners("notification");
       listener.release();
     }
+  });
+
+  it("atomically pins or fences the scoped credential, keeps siblings and rejects closure-before-mint", async () => {
+    await pool.query(`CREATE TABLE "McpApiToken" (id TEXT PRIMARY KEY, "userId" TEXT NOT NULL, "agentId" TEXT,
+      kind TEXT NOT NULL, "workroomRef" TEXT, "runRef" TEXT, name TEXT NOT NULL, "tokenHash" TEXT UNIQUE NOT NULL, prefix TEXT NOT NULL,
+      "tokenSuffix" TEXT, "secretEnc" TEXT, scopes TEXT[] NOT NULL DEFAULT '{}', "publicScopes" TEXT[] NOT NULL DEFAULT '{}',
+      capability TEXT NOT NULL, scope TEXT NOT NULL, resource TEXT, "authorityBindingId" TEXT,
+      "createdAt" TIMESTAMP(3) NOT NULL, "expiresAt" TIMESTAMP(3), "revokedAt" TIMESTAMP(3), "revokedReason" TEXT);
+      CREATE TABLE "FixtureAttempt" ("stageAttemptRef" TEXT PRIMARY KEY, "tokenId" TEXT, status TEXT NOT NULL DEFAULT 'active');
+      INSERT INTO "FixtureAttempt" ("stageAttemptRef") VALUES ('first'), ('sibling'), ('released-before-mint');
+      INSERT INTO "McpApiToken" (id,"userId",kind,name,"tokenHash",prefix,capability,scope,"createdAt")
+        VALUES ('legacy','fixture-user','workroom_session','legacy','fixture-legacy-hash','fixture','write','write',now());`);
+    const migration = readFileSync(S5_CREDENTIAL_MIGRATION, "utf8");
+    await pool.query(migration);
+    await pool.query(migration);
+    expect((await pool.query(`SELECT "workroomAuthorization" FROM "McpApiToken" WHERE id = 'legacy'`)).rows[0]).toEqual({ workroomAuthorization: null });
+
+    const now = new Date();
+    const receiver = { issuer: "fixture-install", audience: "fixture-control", hostRef: "fixture-host", resource: "https://fixture.invalid/s5" };
+    const first = { workroomId: "WC-1", sessionRef: "session-a", stageAttemptRef: "first", roomRowId: "row-1" };
+    const sibling = { ...first, sessionRef: "session-b", stageAttemptRef: "sibling" };
+    const early = { ...first, sessionRef: "session-c", stageAttemptRef: "released-before-mint" };
+    const mintLocked = signal<number>();
+    const finishMint = signal();
+    const releaseWaiting = signal<number>();
+    const lifecycle = createS5CredentialLifecycle({
+      db: db(), getTokenStore: (tx) => (tx as ReceiptDb & TokenTx).mcpApiToken,
+      now: () => now,
+      lockOwners: async (tx, command) => {
+        if (command.kind === "release" && command.input.stageAttemptRef === first.stageAttemptRef) {
+          const [row] = await tx.$queryRaw!`SELECT pg_backend_pid() AS pid` as Array<{ pid: number }>;
+          releaseWaiting.resolve(row!.pid);
+        }
+        return true;
+      },
+      checkAccess: async () => true,
+      readAttempt: async (tx, locator) => {
+        const rows = await tx.$queryRaw!`SELECT status, "tokenId" FROM "FixtureAttempt" WHERE "stageAttemptRef" = ${locator.stageAttemptRef}`;
+        const [state] = rows as Array<{ status: "active" | "released"; tokenId: string | null }>;
+        return state ? { ...locator, ...state, roomRowId: first.roomRowId, userId: "fixture-user", permitExpiresAt: new Date(now.getTime() + 60_000) } : null;
+      },
+      composeAdmission: async (tx, locator): Promise<S5AdmissionCeiling> => {
+        if (locator.stageAttemptRef === first.stageAttemptRef) {
+          const [row] = await tx.$queryRaw!`SELECT pg_backend_pid() AS pid` as Array<{ pid: number }>;
+          mintLocked.resolve(row!.pid);
+          await finishMint.promise;
+        }
+        return { kind: "composed", locator, issuer: receiver.issuer, agentId: "fixture-agent", stageKey: "working", caseKey: "fixture-case", activityKey: "coding",
+          job: { id: "fixture-job", version: "1" }, subject: { principalId: "PRN-FIXTURE", gaid: "gaid:priv:fixture:agent" },
+          authorityBindingId: "fixture-binding-row", bindingRef: "binding-ref", permitRef: "permit-ref", grantKeys: ["file_read"],
+          host: { receiverRef: receiver.audience, hostRef: receiver.hostRef, worktreeRef: "fixture-tree", mode: "bounded-coding" },
+          jsi: { kind: "not-applicable" }, operationKeys: ["read_project_file"] };
+      },
+      pinToken: async (tx, selected, tokenId) => await tx.$executeRaw!`UPDATE "FixtureAttempt" SET "tokenId" = ${tokenId}
+        WHERE "stageAttemptRef" = ${selected.stageAttemptRef} AND status = 'active' AND "tokenId" IS NULL` === 1,
+      closeAttempt: async (tx, selected) => await tx.$executeRaw!`UPDATE "FixtureAttempt" SET status = 'released'
+        WHERE "stageAttemptRef" = ${selected.stageAttemptRef} AND status = 'active'` === 1,
+    });
+    const mint = (id: string, target: typeof first) => lifecycle.issue({ ...target, commandId: id, receiver });
+    const release = (id: string, target: typeof first) => lifecycle.release({ ...target, commandId: id, reason: "attempt-released" });
+
+    const other = await mint("mint-sibling", sibling);
+    expect(other.kind).toBe("issued");
+    const issued = mint("mint-first", first);
+    const holder = await Promise.race([mintLocked.promise, issued.then(() => { throw new Error("Mint did not reach the room fence."); })]);
+    const closing = release("release-first", first);
+    try {
+      const waiter = await Promise.race([releaseWaiting.promise, closing.then(() => { throw new Error("Release did not reach the room fence."); })]);
+      await waitForBlockedBy(waiter, holder);
+    }
+    finally { finishMint.resolve(); }
+    const [credential, closed] = await Promise.all([issued, closing]);
+    expect(closed).toEqual({ kind: "released" });
+    if (credential.kind !== "issued" || other.kind !== "issued") throw new Error("Synthetic issuance failed.");
+    expect(await resolveS5ControlCredential(prisma, credential.plaintext, receiver, now)).toBeNull();
+    expect(await resolveS5ControlCredential(prisma, other.plaintext, receiver, now)).toMatchObject({ tokenId: other.tokenId });
+    expect(await mint("mint-first", first)).toEqual({ kind: "held" });
+    expect(await release("release-without-token", early)).toEqual({ kind: "released" });
+    expect(await mint("mint-too-late", early)).toEqual({ kind: "held" });
+    const records = (await pool.query(`SELECT "tokenHash", "secretEnc", "revokedAt" FROM "McpApiToken" WHERE "workroomRef" = 'WC-1'`)).rows;
+    expect(records).toHaveLength(2);
+    expect(records.filter(row => row.revokedAt !== null)).toHaveLength(1);
+    expect(records.every(row => row.secretEnc === null)).toBe(true);
+    expect(JSON.stringify(records)).not.toContain(credential.plaintext);
+    expect(JSON.stringify((await pool.query(`SELECT payload FROM "WorkCapsuleActivity"`)).rows)).not.toContain(credential.plaintext);
   });
 
   it("serialises a shared command id across different rooms and refuses the losing target", async () => {
