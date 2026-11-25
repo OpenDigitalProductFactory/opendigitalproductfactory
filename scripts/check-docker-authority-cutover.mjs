@@ -43,14 +43,14 @@ const RECIPE_LABEL = /^\s*LABEL\b[^\n]*com\.opendpf\.scope-writer\.recipe\s*=\s*
 
 export const DOCKER_AUTHORITY_REGISTRY = Object.freeze({
   "apps/web/lib/build/grok-device-login-core.ts": { class: "pending", count: 5, reason: "Writer-reachable raw Docker call; migrate to a typed actuator operation before the immutable recipe." },
-  "apps/web/lib/build/grok-dispatch.ts": { class: "pending", count: 1, reason: "Writer-reachable raw Docker call; migrate to a typed actuator operation before the immutable recipe." },
-  "apps/web/lib/build/ideate-dispatch.ts": { class: "pending", count: 1, reason: "Writer-reachable raw Docker call; migrate to a typed actuator operation before the immutable recipe." },
+  "apps/web/lib/build/grok-dispatch.ts": { class: "routed", count: 1, reason: "sandboxExec() runs it through execSandboxCommandLine: the private actuator execs into its observed canonical sandbox when mounted; any other Docker call is refused." },
+  "apps/web/lib/build/ideate-dispatch.ts": { class: "routed", count: 1, reason: "sandboxExec() runs it through execSandboxCommandLine: the private actuator execs into its observed canonical sandbox when mounted; any other Docker call is refused." },
   "apps/web/lib/build/sandbox/agent-cli-runtime.ts": { class: "routed", count: 2, reason: "spawnSandboxExec/execSandboxCommandLine: the private actuator execs into its observed canonical sandbox when mounted; any other Docker call is refused." },
   "apps/web/lib/build/sandbox/grok-governance-seed.ts": { class: "pending", count: 5, reason: "Writer-reachable raw Docker call; migrate to a typed actuator operation before the immutable recipe." },
-  "apps/web/lib/build/sandbox/sandbox-admin.ts": { class: "pending", count: 1, reason: "Writer-reachable raw Docker call; migrate to a typed actuator operation before the immutable recipe." },
+  "apps/web/lib/build/sandbox/sandbox-admin.ts": { class: "routed", count: 1, reason: "readActuatorSandbox when the actuator mount is present; only the observed sandbox is reported and docker inspect stays the mount-absent path." },
   "apps/web/lib/build/sandbox/sandbox-db.ts": { class: "pending", count: 6, reason: "Writer-reachable raw Docker call; migrate to a typed actuator operation before the immutable recipe." },
   "apps/web/lib/build/sandbox/sandbox-promotion.ts": { class: "pending", count: 4, reason: "Writer-reachable raw Docker call; migrate to a typed actuator operation before the immutable recipe." },
-  "apps/web/lib/build/sandbox/sandbox-recovery.ts": { class: "pending", count: 1, reason: "Writer-reachable raw Docker call; migrate to a typed actuator operation before the immutable recipe." },
+  "apps/web/lib/build/sandbox/sandbox-recovery.ts": { class: "routed", count: 1, reason: "runSandboxRecoveryCommand: exec through the actuator, start and restart through its catalog sandbox restart, anything else refused when the mount is present." },
   "apps/web/lib/build/sandbox/sandbox.ts": { class: "pending", count: 20, reason: "Writer-reachable raw Docker call; migrate to a typed actuator operation before the immutable recipe." },
   "apps/web/lib/coworker/service-converge-report.ts": { class: "message", count: 1, reason: "A literal matched against recorded admin_run_command parameters; it runs nothing (the executing tool is admin-pack)." },
   "apps/web/lib/documents/conversion/availability.ts": { class: "routed", count: 1, reason: "readActuatorDoctoolsHealth when the actuator mount is present." },

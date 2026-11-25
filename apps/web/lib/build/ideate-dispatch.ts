@@ -714,7 +714,7 @@ export async function dispatchIdeateResearch(params: {
     if (!execErr.stdout?.trim()) {
       try {
         const recovered = (await sandboxExec()(
-          `docker exec ${SANDBOX_CONTAINER} cat /tmp/ideate-output.json 2>/dev/null`,
+          `docker exec ${SANDBOX_CONTAINER} sh -c 'cat /tmp/ideate-output.json 2>/dev/null'`,
           { timeout: 5_000 },
         )).stdout.trim();
         if (recovered) {
