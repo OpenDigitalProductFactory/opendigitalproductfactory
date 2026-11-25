@@ -2874,6 +2874,20 @@
         "maintenance"
       ]
     },
+    "docs/architecture/workroom-bound-launch-contract-v1.md": {
+      "publicHref": "/architecture/workroom-bound-launch-contract-v1/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "s5-workroom-launch-contract-v1",
+        "launch-and-custody",
+        "jsi-decision",
+        "read-only-coordination-and-the-no-wake-proposal",
+        "provider-metering",
+        "verification-still-owed"
+      ]
+    },
     "docs/architecture/workroom-cycle-continuity.md": {
       "publicHref": "/architecture/workroom-cycle-continuity/",
       "portalHref": null,

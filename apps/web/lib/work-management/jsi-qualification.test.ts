@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto";
 import { canonicalJson } from "@dpf/integration-shared/canonical-json";
+import { hydrateS5JsiSelector, s5LaunchProjectionSchema } from "@dpf/validators/workroom/s5-launch";
 import { describe, expect, it, vi } from "vitest";
+import coordinationFixture from "../../../../packages/validators/src/workroom/s5-launch.v1.coordination.fixture.json";
 import {
   resolveS5JsiEligibility,
   type JsiAdmissionContext,
@@ -65,6 +67,31 @@ function sources() {
 }
 
 describe("S5 JSI exact-profile local conformance", () => {
+  it("round-trips the coordination projection through the production JSI resolver using synthetic sources", async () => {
+    const launch = s5LaunchProjectionSchema.parse(coordinationFixture.launch);
+    if (launch.jsi.kind !== "eligible") throw new Error("Expected the pilot's eligible-only launch");
+    const exact = hydrateS5JsiSelector({ subject: launch.subject, jsi: launch.jsi });
+    const { scheme, ...admission } = exact;
+    const deps = sources();
+    deps.readActivityPolicy.mockResolvedValue({ kind: "required", scheme });
+    deps.readCurrentCandidates.mockResolvedValue([{
+      ...record,
+      ...launch.jsi.qualification,
+      selector: exact,
+      ceiling: { ...record.ceiling, operationKeys: launch.permittedOperations },
+      expiresAt: launch.jsi.validUntil,
+      reviewDueAt: launch.jsi.validUntil,
+    }]);
+    deps.readVerifiedAssessment.mockResolvedValue({ ...evidence, selector: exact, validUntil: launch.jsi.validUntil });
+
+    expect(await resolveS5JsiEligibility(admission, deps, now)).toMatchObject({
+      kind: "eligible", selector: exact, qualification: launch.jsi.qualification, validUntil: launch.jsi.validUntil,
+    });
+    expect(deps.readCurrentCandidates).toHaveBeenCalledExactlyOnceWith(exact, expect.any(AbortSignal));
+    expect(await resolveS5JsiEligibility(admission, deps, new Date(launch.jsi.validUntil)))
+      .toEqual({ kind: "stale", reason: "expired" });
+  });
+
   it("uses the pinned UTF-8 digest of the versioned fixture profile", async () => {
     const material = { version: 1, fixture: "invoice-review", model: "fixture-model@1", skills: ["invoice-review@2"] };
     const digest = createHash("sha256").update(canonicalJson(material), "utf8").digest("hex");

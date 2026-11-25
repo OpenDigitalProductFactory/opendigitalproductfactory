@@ -79,6 +79,14 @@ paths = [
 ]
 
 [[allowlists]]
+targetRules = ["generic-api-key"]
+description = "The exact public S5 route-handoff activity slug in its synthetic v1 compatibility fixture is not a credential."
+condition = "AND"
+regexTarget = "secret"
+regexes = ['''^s5-route-handoff$''']
+paths = ['''^packages/validators/src/workroom/s5-launch\.v1\.coordination\.fixture\.json$''']
+
+[[allowlists]]
 description = "Test-only PKI fixtures for the federation membership-proof tests: a throwaway organization CA, a member leaf and a stranger leaf with their PKCS8 keys. Generated once with openssl, never used by any install (EP-ZERO-CONFIG-FEDERATION §5.6)."
 paths = [
   '''(^|/)apps/web/lib/federation/membership-fixtures\.ts$''',
