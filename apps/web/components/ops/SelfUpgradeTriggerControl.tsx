@@ -63,6 +63,7 @@ type Props = {
   quiescence?: QuiescenceActivity | null;
   jobEngine?: JobEngineHealth;
   targetBinding?: string | null;
+  confirmedReadyToSwapMaxMs?: number;
   confirmation?: {
     consequence: string;
     reversibility: string;
@@ -71,12 +72,14 @@ type Props = {
   } | null;
 };
 
-export function buildInstallConfirmation(confirmation: Props["confirmation"]) {
+export function buildInstallConfirmation(confirmation: Props["confirmation"], confirmedReadyToSwapMaxMs?: number) {
   return {
     title: "Install this platform update?",
     message: [
       confirmation?.consequence ?? "The portal restarts briefly while the new version is installed.",
-      confirmation?.duration ?? "This usually takes a few minutes.",
+      confirmedReadyToSwapMaxMs === undefined
+        ? confirmation?.duration ?? "This usually takes a few minutes."
+        : `The upgrade first waits for active work. Once that work clears, maintenance can last up to ${confirmedReadyToSwapMaxMs / 60_000} minutes for backups and the update.`,
       `Recovery: ${confirmation?.recovery ?? "DPF checks the new version and uses its recorded recovery path if activation cannot finish safely."}`,
       `Undo: ${confirmation?.reversibility ?? "The available recovery option depends on the retained platform history."}`,
     ].join(" "),
@@ -94,6 +97,7 @@ export default function SelfUpgradeTriggerControl({
   quiescence: initialQuiescence,
   jobEngine: initialJobEngine,
   targetBinding,
+  confirmedReadyToSwapMaxMs,
   confirmation,
 }: Props) {
   const router = useRouter();
@@ -191,7 +195,7 @@ export default function SelfUpgradeTriggerControl({
   }
 
   async function handleTrigger() {
-    const confirmed = await confirmDialog(buildInstallConfirmation(confirmation));
+    const confirmed = await confirmDialog(buildInstallConfirmation(confirmation, confirmedReadyToSwapMaxMs));
     if (!confirmed) return;
 
     setTriggerResult(null);
@@ -202,6 +206,7 @@ export default function SelfUpgradeTriggerControl({
       try {
         const result = await triggerSelfUpgrade({
           ...(targetBinding ? { targetBinding } : {}),
+          ...(confirmedReadyToSwapMaxMs !== undefined ? { confirmedReadyToSwapMaxMs } : {}),
         });
         setTriggerResult(result);
         setAdmissionUncertain(false);
@@ -519,7 +524,7 @@ export default function SelfUpgradeTriggerControl({
             ? `Admission response interrupted: ${triggerResult.reason} Checking the server record…`
             : triggerResult.reason === "deferred-to-window"
               ? `Queued for the maintenance window: ${triggerResult.message ?? ""}`
-              : `Not admitted: ${triggerResult.reason}`}
+              : triggerResult.message ?? `Not admitted: ${triggerResult.reason}`}
         </div>
       )}
     </div>

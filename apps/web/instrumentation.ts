@@ -251,7 +251,7 @@ export async function resetStuckQuiescenceLevelOnBoot(
     const { isLiveSelfUpgradeDrain } = await import("@/lib/self-upgrade/drain-wait");
     if (level !== "normal" && (await isLiveSelfUpgradeDrain(value?.runId ?? null))) return false;
     if (level !== "normal") {
-      await setQuiescenceLevel("normal", null);
+      await setQuiescenceLevel("normal", null, new Date(), value?.runId ?? undefined);
       logger.log(
         `[quiescence-reset] level was "${level}" on boot — reset to normal (post-swap self-heal)`,
       );

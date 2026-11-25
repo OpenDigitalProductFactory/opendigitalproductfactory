@@ -50,13 +50,13 @@ import {
   recordDrainProgress,
 } from "@/lib/self-upgrade/drain-wait";
 import { reassertDrainingLevel } from "@/lib/self-upgrade/drain-admission";
+import { enterReadyToSwap, type ReadyTransition } from "@/lib/self-upgrade/ready-to-swap-state";
+import { LEGACY_UNCONFIRMED_MAX_MS, readyToSwapBudgetMs } from "@/lib/self-upgrade/ready-to-swap-window";
 
 export const QUIESCENCE_RUN_FUNCTION_ID = "ops/quiescence-run";
 export const QUIESCENCE_START_EVENT = "ops/quiescence.start";
 export const QUIESCENCE_SWAP_COMPLETE_EVENT = "ops/quiescence.swap-complete";
 
-/** Margin over the promoter's own budget before the coordinator gives up on a swap. */
-export const SWAP_COMPLETE_MARGIN_MINUTES = 10;
 export const QUIESCENCE_CLEARED_EVENT = "platform.quiescence-cleared";
 
 // Wait-loop check cadence (BI-F9EE05E5). Between checks the coordinator sleeps
@@ -93,8 +93,7 @@ export const quiescenceRun = jobs.createFunction(
     triggers: [{ event: QUIESCENCE_START_EVENT }],
     // Coordinator timeout is enforced externally by the watchdog
     // (BI-QUIESCE-007) reading QuiescenceRun.lastHeartbeatAt. step.waitForEvent
-    // adds its own timeout on the swap-complete handshake (the promoter budget plus a margin); if the caller
-    // never signals, the function exits via the no-signal failure path.
+    // times out the swap-complete handshake at the persisted ready deadline.
   },
   async ({ event, step }) => {
     const runId = event.data.runId as string;
@@ -299,20 +298,38 @@ export const quiescenceRun = jobs.createFunction(
     // ─── Step 4d: ready-to-swap — await caller signal ────────────────────
 
     // The latest snapshot is already on finalSnapshot (persisted each check).
-    await step.run("enter-ready-to-swap", () => transitionState(runId, "ready-to-swap", { actualWaitMs }));
+    const ready = await step.run("enter-ready-to-swap", () => enterReadyToSwap(runId, triggerRefId, actualWaitMs)) as
+      ReadyTransition | { status: string; enteredStateAt: { "ready-to-swap"?: string } };
+    if ("kind" in ready && ready.kind === "aborted") {
+      await step.run("enter-aborted-before-ready", () => transitionState(runId, "aborted", {
+        outcome: "aborted-by-operator", completionSource: "caller", completedAt: new Date(),
+      }));
+      await step.run("clear-aborted-before-ready", () => setQuiescenceLevel("normal", null, new Date(), runId));
+      await step.run("emit-aborted-before-ready", () => emitCleared({ runId, outcome: "aborted", triggerRefId, reason: ready.operator }));
+      return { ok: false, outcome: "aborted", runId };
+    }
+    // An older deployment may already have checkpointed this step. Anchor
+    // legacy time to its original transition, never to a replay's wall clock.
+    const deadline = "kind" in ready ? ready.deadline : new Date(
+      Date.parse(ready.enteredStateAt["ready-to-swap"] ?? "") + (awaitOperator ? LEGACY_UNCONFIRMED_MAX_MS : readyToSwapBudgetMs("unrelated")),
+    ).toISOString();
+    if ("kind" in ready && ready.trigger === "self-upgrade") {
+      await step.run("broadcast-ready-deadline", async () => {
+        const { agentEventBus } = await import("@/lib/tak/agent-event-bus");
+        agentEventBus.broadcastSystem({
+          type: "system:quiescence", level: "draining", runId, swapEtaSeconds: null,
+          deferReason: null, deferSurface: null, outcome: "draining", readyToSwapDeadlineAt: deadline,
+        });
+      });
+    }
     // Wake the waiting self-upgrade job now rather than on its next poll.
     await step.run("announce-ready-to-swap", () =>
       jobs.send({ name: QUIESCENCE_READY_EVENT, data: { runId, triggerRefId } }),
     );
 
-    // BI-F9EE05E5: wait as long as the promoter may take (its own budget,
-    // 25 min by default) plus a margin. A fixed 10m failed the drain while a
-    // slow image build was still running (SUR-3B7203FD, 2026-09-30).
-    const { resolvePromoterTimeoutMs } = await import("@/lib/self-upgrade/promoter");
-    const swapWaitMinutes = Math.ceil(resolvePromoterTimeoutMs({}) / 60_000) + SWAP_COMPLETE_MARGIN_MINUTES;
     const swap = await step.waitForEvent("await-swap-complete", {
       event: QUIESCENCE_SWAP_COMPLETE_EVENT,
-      timeout: `${swapWaitMinutes}m`,
+      timeout: new Date(deadline),
       if: `async.data.runId == "${runId}"`,
     });
 
@@ -323,7 +340,7 @@ export const quiescenceRun = jobs.createFunction(
         transitionState(runId, "failed", {
           outcome: "failed",
           completionSource: "caller",
-          outcomeNotes: `swap-complete signal never received within ${swapWaitMinutes}m`,
+          outcomeNotes: `swap-complete signal never received by ${deadline}`,
           completedAt: new Date(),
         }),
       );
@@ -354,6 +371,7 @@ export const quiescenceRun = jobs.createFunction(
           deferReason: null,
           deferSurface: null,
           outcome: "swapping",
+          ...("kind" in ready && ready.trigger === "self-upgrade" ? { readyToSwapDeadlineAt: deadline } : {}),
         });
         return { broadcast: "swapping", runId };
       });

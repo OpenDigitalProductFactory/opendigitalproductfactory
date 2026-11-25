@@ -17,7 +17,7 @@
  * + bundleHash to window.__DPF_BOOT__. Mismatch → soft reload after 1s.
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   AlertCircle,
   CheckCircle2,
@@ -32,8 +32,8 @@ import { useSystemEvent } from "@/lib/hooks/system-events";
 
 type BannerState =
   | { kind: "hidden" }
-  | { kind: "preparing"; runId: string; swapEtaSeconds: number | null }
-  | { kind: "swapping"; runId: string }
+  | { kind: "preparing"; runId: string; swapEtaSeconds: number | null; deadline?: string }
+  | { kind: "swapping"; runId: string; deadline?: string }
   | { kind: "reconnecting"; runId: string }
   | { kind: "deferred"; reason: string | null; surface: string | null };
 
@@ -42,6 +42,7 @@ type SystemQuiescenceEvent = {
   level: "draining" | "swapping" | "cleared";
   runId: string;
   swapEtaSeconds: number | null;
+  readyToSwapDeadlineAt?: string;
   deferReason: string | null;
   deferSurface: string | null;
   outcome: "draining" | "swapping" | "succeeded" | "deferred" | "aborted" | "failed";
@@ -58,15 +59,20 @@ declare global {
 export function PlatformBanner(): React.ReactElement | null {
   const [state, setState] = useState<BannerState>({ kind: "hidden" });
   const [collapsed, setCollapsed] = useState(false);
+  const activeOwner = useRef<string | null>(null);
+  const eventRevision = useRef(0);
 
   // The shell-owned SystemEventProvider holds the one resilient system stream
   // for this tab. Banner, readiness, and live-operation consumers fan out from
   // it without consuming additional HTTP/1.1 connection slots.
   useSystemEvent("system:quiescence", (event: SystemQuiescenceEvent) => {
+      if (event.level === "cleared" && activeOwner.current && activeOwner.current !== event.runId) return;
+      const revision = ++eventRevision.current;
+      activeOwner.current = event.level === "cleared" ? null : event.runId;
       if (event.level === "draining") {
-        setState({ kind: "preparing", runId: event.runId, swapEtaSeconds: event.swapEtaSeconds });
+        setState({ kind: "preparing", runId: event.runId, swapEtaSeconds: event.swapEtaSeconds, deadline: event.readyToSwapDeadlineAt });
       } else if (event.level === "swapping") {
-        setState({ kind: "swapping", runId: event.runId });
+        setState({ kind: "swapping", runId: event.runId, deadline: event.readyToSwapDeadlineAt });
       } else if (event.level === "cleared") {
         if (event.outcome === "succeeded") {
           // Show reconnecting state, then check for bundle-hash mismatch.
@@ -80,10 +86,25 @@ export function PlatformBanner(): React.ReactElement | null {
             reason: event.deferReason ?? event.outcome,
             surface: event.deferSurface,
           });
-          setTimeout(() => setState({ kind: "hidden" }), 60_000);
+          setTimeout(() => { if (eventRevision.current === revision) setState({ kind: "hidden" }); }, 60_000);
         }
       }
   });
+
+  // A tab opened during recovery may have missed its stream event.
+  useEffect(() => {
+    const abort = new AbortController();
+    void fetch("/api/internal/quiescence-state?display=1", { cache: "no-store", signal: abort.signal })
+      .then(async (res) => res.ok ? await res.json() as { runId?: string; readyToSwapDeadlineAt?: string; swapStarted?: boolean } : null)
+      .then((display) => {
+        if (!display?.runId || !display.readyToSwapDeadlineAt || eventRevision.current !== 0 || abort.signal.aborted) return;
+        activeOwner.current = display.runId;
+        const identity = { runId: display.runId, deadline: display.readyToSwapDeadlineAt };
+        setState(display.swapStarted ? { kind: "swapping", ...identity } : { kind: "preparing", swapEtaSeconds: null, ...identity });
+      })
+      .catch(() => { /* The system stream remains authoritative. */ });
+    return () => abort.abort();
+  }, []);
 
   useEffect(() => {
     if (state.kind === "hidden") setCollapsed(false);
@@ -122,7 +143,9 @@ export function PlatformBanner(): React.ReactElement | null {
     >
       <div className="flex items-center gap-2">
         <Icon aria-hidden="true" className={`h-4 w-4 shrink-0 ${view.iconClassName}`} />
-        <span className="min-w-0 flex-1" style={{ overflowWrap: "anywhere" }}>{view.message}</span>
+        <span className="min-w-0 flex-1" style={{ overflowWrap: "anywhere" }}>
+          {view.message}{view.deadline && <> Finish by <time dateTime={view.deadline}>{formatDeadline(view.deadline)}</time>.</>}
+        </span>
         <button
           type="button"
           aria-expanded="true"
@@ -152,6 +175,7 @@ export function PlatformBanner(): React.ReactElement | null {
 type PlatformBannerView = {
   compactLabel: string;
   message: string;
+  deadline?: string;
   assertive: boolean;
   frameClassName: string;
   iconClassName: string;
@@ -169,8 +193,9 @@ function getPlatformBannerView(state: Exclude<BannerState, { kind: "hidden" }>):
   switch (state.kind) {
     case "preparing":
       return {
-        compactLabel: "Platform upgrade preparing",
-        message: `Platform upgrade preparing. Current work will finish before the update${
+        compactLabel: state.deadline ? "Recovery backups" : "Platform upgrade preparing",
+        deadline: state.deadline,
+        message: state.deadline ? "Preparing recovery backups and the update." : `Platform upgrade preparing. Current work will finish before the update${
           state.swapEtaSeconds != null ? `, ETA about ${Math.ceil(state.swapEtaSeconds / 60)} min` : ""
         }.`,
         assertive: false,
@@ -181,7 +206,8 @@ function getPlatformBannerView(state: Exclude<BannerState, { kind: "hidden" }>):
     case "swapping":
       return {
         compactLabel: "Platform upgrading",
-        message: "Platform upgrading. Please wait; this should take about 30 seconds.",
+        deadline: state.deadline,
+        message: state.deadline ? "Installing the platform update." : "Platform upgrading. Please wait.",
         assertive: true,
         frameClassName: warningFrame,
         iconClassName: "text-[var(--dpf-warning)]",
@@ -208,6 +234,12 @@ function getPlatformBannerView(state: Exclude<BannerState, { kind: "hidden" }>):
         icon: state.reason === "failed" ? AlertCircle : Info,
       };
   }
+}
+
+function formatDeadline(value: string): string {
+  return new Date(value).toLocaleString(undefined, {
+    month: "short", day: "numeric", hour: "numeric", minute: "2-digit", second: "2-digit", timeZoneName: "short",
+  });
 }
 
 /**

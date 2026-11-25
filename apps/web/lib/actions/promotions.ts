@@ -752,7 +752,7 @@ export async function getSelfUpgradeStatus() {
 
 export async function triggerSelfUpgrade(opts?: {
   dryRun?: boolean; force?: boolean;
-  targetBinding?: string;
+  targetBinding?: string; confirmedReadyToSwapMaxMs?: number;
 }) {
   const { userId, email } = await requireCapabilityContext("view_operations");
   // BI-2128872C: an agent-driven browser session is routine, never an override.
@@ -770,8 +770,6 @@ export async function triggerSelfUpgrade(opts?: {
     if (!support.enabled) {
       return { queued: false, reason: "disabled" } as const;
     }
-    // Manual triggers skip the routine window (the trigger records the bypass);
-    // force is only for an emergency drain override.
   }
   const triggeredBy = opts?.dryRun ? `manual:${userId}` : await operatorRunTrigger(`manual:${userId}`, config);
   const latestRun = await getLatestRun();
@@ -792,15 +790,17 @@ export async function triggerSelfUpgrade(opts?: {
   });
   if (!selection.ok) return { queued: false, reason: selection.error } as const;
   const target = selection.data;
-  // Attach the "What's in this update?" summary the operator just reviewed (if
-  // any) so the run records the changes it carried. Best effort — the upgrade
-  // proceeds whether or not a summary was generated.
+  const confirmedMax = opts?.dryRun ? undefined : opts?.confirmedReadyToSwapMaxMs;
+  if (confirmedMax !== undefined && !(await import("@/lib/self-upgrade/ready-to-swap-window")).currentUpgradeConfirmationMatches(confirmedMax)) {
+    return { queued: false, reason: "maintenance-limit-changed", message: "Refresh and review the new maintenance limit before installing." } as const;
+  }
   const impactSummaryId = await getCurrentImpactSummaryId();
   const admission = await admitSelfUpgrade({ triggeredBy, target, recoveryOfRunId: recoveryRun?.runId ?? null,
     requestedForce: opts?.force === true,
     dryRun: opts?.dryRun === true,
     routine: false,
     impactSummaryId,
+    confirmedReadyToSwapMaxMs: confirmedMax,
   });
   if (!admission.admitted) return { queued: false,
     reason: admission.disposition === "recovery_conflict" ? "recovery-conflict"

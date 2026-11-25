@@ -17,6 +17,7 @@
 
 import { promises as fs } from "node:fs";
 import path from "node:path";
+import { PAIRED_TRIAL_RESTORE_TIMEOUT_MS } from "./runner-budgets";
 
 import {
   postgresTrialRestoreDurationSeconds,
@@ -35,7 +36,6 @@ import { resolveManagedScriptPath, runManagedScript } from "./managed-script-pat
 const BACKUPS_ROOT = "/backups";
 const TRIAL_RESTORE_SCRIPT_NAME = "postgres-trial-restore.sh";
 const RUNNER_TIMEOUT_MS = 10 * 60 * 1000; // 10-minute hard cap
-const PAIRED_RUNNER_TIMEOUT_MS = 60 * 60 * 1000;
 const SHA = /^[0-9a-f]{64}$/;
 const RUN_ID = /^[A-Za-z0-9][A-Za-z0-9_-]{0,159}$/;
 const PG_RUN_STORAGE = /^postgres\/[A-Za-z0-9][A-Za-z0-9_.-]*$/;
@@ -96,7 +96,7 @@ async function defaultRunScript(
   // Routes through the shared /bin/sh chokepoint so the script need not carry
   // the executable bit (which git-on-Windows + the Docker COPY both strip).
   return runManagedScript(scriptPath, {
-    env, timeoutMs: env.DPF_PAIRED_TRIAL_UPLOADS_RUN_ID ? PAIRED_RUNNER_TIMEOUT_MS : RUNNER_TIMEOUT_MS,
+    env, timeoutMs: env.DPF_PAIRED_TRIAL_UPLOADS_RUN_ID ? PAIRED_TRIAL_RESTORE_TIMEOUT_MS : RUNNER_TIMEOUT_MS,
   });
 }
 

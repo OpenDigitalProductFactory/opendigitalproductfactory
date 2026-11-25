@@ -33,6 +33,12 @@ test("owns the checked-in root promoter manifest and schema", () => {
   assert.equal(classifySensitivePath("promoter-contract.schema.json")?.family, "contract");
 });
 
+test("coordinator, boot reset and canonical recovery runner budgets trigger acceptance", () => {
+  for (const path of ["apps/web/lib/queue/functions/quiescence-run.ts", "apps/web/instrumentation.ts", "apps/web/lib/operate/backups/runner-budgets.ts"]) {
+    assert.equal(classifySensitivePath(path)?.family, "selfUpgrade", path);
+  }
+});
+
 test("normalizes Windows separators and ignores unrelated paths", () => {
   assert.equal(classifySensitivePath("apps\\web\\lib\\self-upgrade\\runner.ts")?.family, "selfUpgrade");
   assert.equal(classifySensitivePath("apps/web/components/button.tsx"), null);

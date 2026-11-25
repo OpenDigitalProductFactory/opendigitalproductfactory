@@ -217,6 +217,10 @@ not as a fresh install problem.
 1. Do not reinstall and do not reset volumes. The recovery point taken before
    apply is the boundary between recoverable and data-lossy.
 2. Open the failed run in `/ops/self-upgrade` when the portal is available.
+   If the confirmed maintenance window expired before the swap, the upgrade
+   does not dispatch a new promoter or authorize a later attempt with the
+   expired capture. Preserve any partial artifacts for inspection and start a
+   fresh upgrade only after reviewing its maintenance limit.
    Retain the named host receipt and both backup directories before any
    runtime or storage changes. An older receipt may cover Postgres only.
    BI-EDE6D56A tracks the history-preservation proof required to enable

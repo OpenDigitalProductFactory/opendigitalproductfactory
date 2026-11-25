@@ -38,6 +38,7 @@ interface CreateRecoveryPointArgs {
   composeProject?: string;
   backupsRoot?: string;
   now?: () => Date;
+  checkAdmission?: () => Promise<Date>;
 }
 
 async function capture<T extends Target>(
@@ -64,7 +65,7 @@ export async function createSelfUpgradeRecoveryPoint(args: CreateRecoveryPointAr
   if (args.dryRun) return { ...identity, status: "skipped", members: [], pairedReceipt: null, reason: "dry-run" };
 
   const backupsRoot = args.backupsRoot ?? (await import("@/lib/operate/backups/managed-backup")).BACKUPS_ROOT;
-  const backupArgs = { trigger: RECOVERY_TRIGGER, composeProject: args.composeProject, backupsRoot };
+  const backupArgs = { trigger: RECOVERY_TRIGGER, composeProject: args.composeProject, backupsRoot, checkAdmission: args.checkAdmission };
   const failed = (members: Member<Target>[], reason?: string): SelfUpgradeRecoveryPoint => ({
     ...identity, status: "failed", members, pairedReceipt: null, ...(reason ? { reason } : {}),
   });
@@ -94,6 +95,7 @@ export async function createSelfUpgradeRecoveryPoint(args: CreateRecoveryPointAr
     const pairedReceipt = await readCapturedBackupPair({
       backupsRoot, postgresRunId: postgres.runId, uploadsRunId: uploads.runId,
     });
+    await args.checkAdmission?.();
     return await persistSelfUpgradeRecoveryPoint(backupsRoot, {
       ...identity, status: "ok", members: [postgres, uploads], pairedReceipt,
     });

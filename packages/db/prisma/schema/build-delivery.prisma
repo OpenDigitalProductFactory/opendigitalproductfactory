@@ -1204,6 +1204,10 @@ model QuiescenceRun {
   swapStartedAt   DateTime?
   swapCompletedAt DateTime?
   completedAt     DateTime?
+  // The reserved post-ready bound and its write-once absolute deadline.
+  // Null on historical rows, which never receive the extended allowance.
+  readyToSwapBudgetMs   Int?
+  readyToSwapDeadlineAt DateTime?
   // Coordinator function heartbeat — written every wait-loop tick (~5s).
   // Stuck-coordinator detection in taskrunWatchdog (BI-QUIESCE-007) keys on
   // this; mirrors the BI-4ab6be39 TaskRun.lastHeartbeatAt pattern.
@@ -1422,6 +1426,7 @@ model SelfUpgradeRun {
   dryRun                 Boolean                    @default(false)
   routine                Boolean                    @default(false)
   admissionFingerprint   String?
+  confirmedReadyToSwapMaxMs Int?
   dispatchStatus         SelfUpgradeDispatchStatus?
   dispatchAttemptCount   Int                        @default(0)
   dispatchLeaseToken     String?

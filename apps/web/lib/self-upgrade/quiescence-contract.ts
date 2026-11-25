@@ -109,3 +109,4 @@ export type BlockerSignal =
   | { class: "E"; registry: string; subscriberCount: number; sampleIds?: string[] }
   | { class: "F"; endpoint: string; observation: unknown }
   | { class: "G"; reason: string; mitigations: string[] };
+export const QUIESCENCE_CONFIG_KEY = "portal.quiescence";

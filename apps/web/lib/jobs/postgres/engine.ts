@@ -102,12 +102,14 @@ function createStepTools(args: {
     async waitForEvent<const TName extends string>(id: string, wait: JobWaitForEventOptions<TName>) {
       const stepKey = args.prefix + key(id);
       if (steps.has(stepKey)) return steps.get(stepKey) as JobReceivedEvent<TName> | null;
+      const expiresAt = wait.timeout instanceof Date ? wait.timeout : new Date(+now() + durationMs(wait.timeout));
+      if (!Number.isFinite(+expiresAt)) throw new Error(`step.waitForEvent(${JSON.stringify(id)}) received an invalid timeout.`);
       return halt({
         kind: "wait",
         stepKey,
         eventName: wait.event,
         matchExpr: wait.if ?? null,
-        expiresAt: new Date(now().getTime() + durationMs(wait.timeout)),
+        expiresAt,
       });
     },
   };

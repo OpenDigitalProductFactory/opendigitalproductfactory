@@ -15,6 +15,7 @@
  */
 
 import type { Counter, Gauge, Histogram } from "prom-client";
+import { POSTGRES_BACKUP_TIMEOUT_MS, UPLOADS_BACKUP_TIMEOUT_MS } from "./runner-budgets";
 
 import {
   postgresBackupDurationSeconds,
@@ -186,7 +187,7 @@ export const POSTGRES_BACKUP_SPEC: BackupEngineSpec = {
   schedule: POSTGRES_BACKUP_SCHEDULE,
   subdir: "postgres",
   scriptName: "backup-postgres.sh",
-  timeoutMs: 30 * 60 * 1000, // 30-minute hard cap
+  timeoutMs: POSTGRES_BACKUP_TIMEOUT_MS,
   traceTag: "[backup-trace]",
   failureMarker: "[backup-trace] failed:",
   failureStrip: /^.*\[backup-trace\]\s*failed:\s*/,
@@ -225,7 +226,7 @@ export const UPLOADS_BACKUP_SPEC: BackupEngineSpec = {
   schedule: UPLOADS_BACKUP_SCHEDULE,
   subdir: "uploads",
   scriptName: "backup-uploads.sh",
-  timeoutMs: 60 * 60 * 1000, // 60-minute hard cap; the store can outgrow the dump
+  timeoutMs: UPLOADS_BACKUP_TIMEOUT_MS,
   traceTag: "[uploads-backup-trace]",
   failureMarker: "BACKUP_UPLOADS_FAILED:",
   failureStrip: /^.*BACKUP_UPLOADS_FAILED:\s*/,

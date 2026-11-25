@@ -22,21 +22,34 @@ import { NextResponse } from "next/server";
 import { getQuiescenceConfig } from "@/lib/self-upgrade/quiescence";
 import { getDeployedSha } from "@/lib/self-upgrade/completion";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
+import { prisma } from "@dpf/db";
 
 export const runtime = "nodejs";
 // Always evaluate at request time — quiescence state changes during the
 // runtime and stale caching here would invalidate the entire protocol.
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(request?: Request) {
   try {
     const config = await getQuiescenceConfig();
     const sha = await getDeployedSha();
+    // Ordinary edge admission lookups keep their existing single cached read.
+    const display = config.runId && config.level !== "normal" && request
+      && new URL(request.url).searchParams.get("display") === "1"
+      ? await prisma.quiescenceRun.findUnique({
+        where: { runId: config.runId, trigger: "self-upgrade", status: { in: ["ready-to-swap", "swapping"] }, abortRequestedAt: null },
+        select: { readyToSwapDeadlineAt: true, swapStartedAt: true },
+      })
+      : null;
     return NextResponse.json(
       {
         level: config.level,
         runId: config.runId,
         enteredAt: config.enteredAt,
+        ...(display?.readyToSwapDeadlineAt ? {
+          readyToSwapDeadlineAt: display.readyToSwapDeadlineAt.toISOString(),
+          swapStarted: !!display.swapStartedAt,
+        } : {}),
         version: process.env.PORTAL_VERSION ?? "unknown",
         bundleHash: sha ?? "unknown",
       },

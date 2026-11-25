@@ -50,7 +50,7 @@ const mocks = vi.hoisted(() => ({
   signalSwapStarting: vi.fn(),
   signalSwapComplete: vi.fn(),
   failQuiescenceSwap: vi.fn(),
-  guardAdmissionClosedForSwap: vi.fn(async (..._a: unknown[]): ReturnType<typeof import("@/lib/self-upgrade/drain-admission").guardAdmissionClosedForSwap> => ok({ reasserted: false })),
+  guardAdmissionClosedForSwap: vi.fn(async (..._a: unknown[]): ReturnType<typeof import("@/lib/self-upgrade/drain-admission").guardAdmissionClosedForSwap> => ok({ deadline: new Date("2026-11-25T20:00:00.000Z") })),
   captureActiveSessionBlockers: vi.fn().mockResolvedValue({ surfaces: [] }),
   resolveAutoUpgradeWindow: vi.fn().mockReturnValue({ kind: "operating-hours" }),
   getActiveSelfUpgradeBlackout: vi.fn().mockResolvedValue(null),
@@ -138,7 +138,7 @@ vi.mock("@/lib/self-upgrade/promoter", async (importOriginal) => ({
   // Keep the real pure exports (constants like PROMOTER_ALREADY_RUNNING_EXIT_CODE
   // that the orchestrator imports statically) and mock only the spawn-heavy fns.
   ...(await importOriginal<typeof import("@/lib/self-upgrade/promoter")>()),
-  runPromoter: (p: { phase?: string }) => (p.phase === "build" ? (mocks.runPrebuild(p) ?? Promise.resolve({ exitCode: 0, stdout: "", stderr: "" })) : mocks.runPromoter(p)),
+  runPromoter: (p: { phase?: string }, assertAdmission?: () => Promise<void>) => (p.phase === "build" ? (mocks.runPrebuild(p) ?? Promise.resolve({ exitCode: 0, stdout: "", stderr: "" })) : mocks.runPromoter(p, assertAdmission)),
   isPromoterAvailable: mocks.isPromoterAvailable,
   ensurePromoterImage: mocks.ensurePromoterImage,
   buildCandidatePromoterImage: mocks.buildCandidatePromoterImage,
@@ -337,7 +337,7 @@ describe("success path", () => {
           channelDigest: `sha256:${"b".repeat(64)}`, platformManifestDigest: `sha256:${"c".repeat(64)}`,
           configDigest: targetConfigDigest, platformOs: "linux", platformArchitecture: "amd64",
         },
-      }));
+      }), expect.any(Function));
     } finally {
       vi.unstubAllEnvs();
     }
@@ -403,6 +403,7 @@ describe("success path", () => {
     expect(mocks.createSelfUpgradeRecoveryPoint).toHaveBeenCalledWith({
       runId: "SUR-AAAABBBB",
       dryRun: undefined,
+      checkAdmission: expect.any(Function),
     });
     expect(mocks.recordRunRecoveryPoint).toHaveBeenCalledWith(
       "SUR-AAAABBBB",
@@ -475,7 +476,7 @@ describe("success path", () => {
     mocks.guardAdmissionClosedForSwap.mockResolvedValueOnce(err("admission reopened; work started: build-studio.phase.plan"));
     const result = await runSelfUpgrade({ triggeredBy: "ops" });
     expect(result).toMatchObject({ ok: false, status: "failed", reason: "admission-reopened-before-swap" });
-    expect(mocks.guardAdmissionClosedForSwap).toHaveBeenCalledWith("QR-2026-05-24-test1234", { forced: undefined });
+    expect(mocks.guardAdmissionClosedForSwap).toHaveBeenCalledWith("QR-2026-05-24-test1234", { selfUpgradeRunId: expect.any(String) });
     expect(mocks.runPromoter).not.toHaveBeenCalled();
     expect(mocks.failQuiescenceSwap).toHaveBeenCalledWith("QR-2026-05-24-test1234", expect.stringContaining("admission reopened"));
   });
@@ -505,7 +506,7 @@ describe("success path", () => {
         healthUrl: "http://localhost:3000/api/health",
         promoterImage: `sha256:${"d".repeat(64)}`,
         stateDirHostPath: "/Users/me/.dpf",
-      }),
+      }), expect.any(Function),
     );
     vi.unstubAllEnvs();
   });
@@ -1220,15 +1221,14 @@ describe("skip-before-drain guards", () => {
   });
 
   it("skips with up-to-date (no drain) when the built stamp already matches the deployed SHA", async () => {
-    // Built identity equals the running runtime identity → nothing to swap.
     mocks.getDeployedSha.mockResolvedValue("abc1234deadbeef");
     setupSourceReady("abc1234deadbeef");
-
     const result = await runSelfUpgrade({ triggeredBy: "scheduled", scheduled: true });
-
     expect(result).toMatchObject({ skipped: true, reason: "up-to-date" });
     expect(mocks.startQuiescence).not.toHaveBeenCalled();
-    expect(mocks.createRun).not.toHaveBeenCalled();
+    expect(mocks.createRun).toHaveBeenCalledOnce();
+    expect(mocks.createRun.mock.invocationCallOrder[0]).toBeLessThan(mocks.prepareUpgradeSource.mock.invocationCallOrder[0]);
+    expect(mocks.skipRun).toHaveBeenCalledWith("SUR-GUARD", "up-to-date: abc1234deadbeef");
     expect(mocks.recordCooldown).not.toHaveBeenCalled();
   });
 

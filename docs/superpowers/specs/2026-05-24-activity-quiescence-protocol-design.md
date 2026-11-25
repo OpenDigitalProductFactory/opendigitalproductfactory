@@ -245,7 +245,7 @@ Per-state contract:
 | `pending` | Row created, Inngest function dispatched but not started | yes |
 | `preparing` | Initial snapshot captured; about to flip level | yes |
 | `draining` | `PlatformConfig.portal.quiescence.level = "draining"`; all stop-accept primitives (§6) active; waiting for §6.X checkpoints | yes — banner shown |
-| `ready-to-swap` | `hardBlockers === 0`; coordinator paused awaiting `signalSwapStarting` from caller. Level remains `draining` so new work stays refused until the caller explicitly accepts the swap window. | yes |
+| `ready-to-swap` | Blockers cleared or explicitly forced. Level remains `draining`. The run commits a write-once deadline and the coordinator awaits the caller's outcome until that instant. | yes |
 | `swapping` | `PlatformConfig.portal.quiescence.level = "swapping"`; Proxy rejects everything except edge, health, and the internal quiescence state route; caller has persisted target version/hash and is applying the swap. Completion may be reported by the caller or by post-boot reconciliation if the old process dies. | yes |
 | `completed` | Swap succeeded; level back to `normal`; durable and UI cleared events emitted | terminal |
 | `deferred` | Hard blocker exceeded budget; level back to `normal`; new run may be scheduled | terminal — operator sees defer reason |
@@ -367,7 +367,9 @@ export const quiescenceRun = inngest.createFunction(
 
 Note `triggerRefId` is included on every `platform.quiescence-cleared` payload (deferred, aborted, failed, succeeded). Callers that `step.waitForEvent` on the cleared event use `if: async.data.triggerRefId == "..."` to filter when multiple non-self-upgrade callers (e.g., concurrent manual + sandbox-recovery) might emit in close sequence. Without this, a sibling caller's terminal event could wake the wrong waiter.
 
-`signalSwapStarting()` is deliberately separate from `signalSwapComplete()`. The caller MUST persist `swapping` before running `runPromoter`; otherwise the UI and Proxy only learn about the swap after it has already happened. Because `scripts/promote.sh` can recreate the portal container, `signalSwapComplete()` is best-effort from the old process. The durable fallback is `reconcileQuiescenceOnBoot()` in the new process: after `/api/health` is live and `platform.version` / bundle hash match the stored target, it emits `ops/quiescence.swap-complete` with `source: "boot-reconciler"`.
+`signalSwapStarting()` is deliberately separate from `signalSwapComplete()`. An upgrade checks the exact closed admission owner and remaining promoter time before recording its launch boundary and again before dispatch. The caller publishes the installing phase with the same deadline. Because `scripts/promote.sh` can recreate the portal container, `signalSwapComplete()` is best-effort from the old process. The durable fallback is `reconcileQuiescenceOnBoot()` in the new process. Matching the running target completes the handshake. A live hold on the old target is preserved only to its stored deadline.
+
+**Recovery-aware deadline (BI-3C3CCC59, DI-F59EB9FDF9A8).** The upgrade request records the server-computed maximum that the operator saw before confirming. Readiness commits the absolute timestamp on the owned `QuiescenceRun` and does not renew it on replay. The paired capture bound uses the actual Postgres and upload runner caps, then adds the configured promoter budget and the existing handoff margin. The pre-ready wait and its operator controls are separate. A request without the new confirmation receives no extended allowance. The volume-deletion mode adds its paired trial bound, but its exact-scope authorization and host handoff are owned by BI-56077D27. Other triggers keep the prior coordinator window.
 
 Three properties this preserves:
 

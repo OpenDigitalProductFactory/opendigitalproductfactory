@@ -127,6 +127,13 @@ MCP writes. Delivery agents can still read quiescence status and release an
 owned nonproduction lease, then retry evidence publication after the portal
 returns to normal.
 
+Before you confirm **Install**, the dialog shows the current maximum for
+recovery backups and installation after active work clears. This is separate
+from waiting for active work. Once recovery starts, the maintenance banner
+shows the deadline for that attempt. If the required maximum grows after you
+review it, refresh the upgrade page and confirm the new estimate. A request
+without a confirmed maximum cannot receive the longer window.
+
 ### When work is still running
 
 An upgrade no longer gives up because work is in progress. When you press

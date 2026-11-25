@@ -293,6 +293,8 @@ jobs:
       - name: Start the portal
         env:
           DPF_REUSED_BUILD: ${{ steps.materialize-build.outputs.reused }}
+          DPF_HOST_INSTALL_PATH_IN_CONTAINER: ${{ runner.temp }}/dpf-ux-upgrade-deadline/fixture-host
+          DPF_PROMOTER_TIMEOUT_MS: "1500000"
           # Measurement-runtime boot (BI-232BA634): render-relevant boot syncs
           # are awaited before the portal serves, and the fire-and-forget
           # self-heal reconcilers/watchdogs that mutate operational state
@@ -386,6 +388,13 @@ jobs:
         env:
           DPF_APPROVAL_SCENARIO_CI: "1"
         run: pnpm --filter web exec tsx --tsconfig tsconfig.json scripts/approval-disclosure-verification.ts
+
+      - name: Verify self-upgrade maintenance deadline without dispatching an upgrade
+        if: ${{ inputs.update_baseline != true && inputs.scenario != 'foreground-recovery' }}
+        env:
+          DPF_UPGRADE_DEADLINE_SCENARIO_CI: "1"
+          DPF_PROMOTER_TIMEOUT_MS: "1500000"
+        run: pnpm --filter web exec tsx --tsconfig tsconfig.json scripts/upgrade-deadline-verification.ts
 
       - name: Verify provider recovery controls and synthetic Responses
         if: ${{ inputs.update_baseline != true && inputs.scenario != 'foreground-recovery' }}

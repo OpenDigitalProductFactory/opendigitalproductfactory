@@ -25,6 +25,9 @@ const world = vi.hoisted(() => ({
   waits: [] as { id: string; event: string; timeout: unknown; if?: string }[],
   onControlWait: null as null | ((n: number) => ControlEvent),
   swapEvent: { name: "ops/quiescence.swap-complete", data: { runId: "QR-1", outcome: "succeeded" } } as ControlEvent,
+  confirmedWindowMs: null as number | null,
+  readyDeadline: null as string | null,
+  onSwapWait: null as null | (() => ControlEvent),
 }));
 
 const sendMock = vi.hoisted(() => vi.fn(async () => ({ ids: [] })));
@@ -37,6 +40,15 @@ vi.mock("@/lib/jobs", () => ({
 }));
 
 vi.mock("@/lib/tak/agent-event-bus", () => ({ agentEventBus: { broadcastSystem: vi.fn() } }));
+vi.mock("@/lib/self-upgrade/ready-to-swap-state", () => ({
+  enterReadyToSwap: vi.fn(async () => {
+    world.status = "ready-to-swap";
+    world.transitions.push(world.status);
+    world.order.push("state:ready-to-swap");
+    world.readyDeadline ??= new Date(Date.now() + (world.confirmedWindowMs ?? 35 * 60_000)).toISOString();
+    return { kind: "ready", trigger: world.confirmedWindowMs ? "self-upgrade" : "manual", deadline: world.readyDeadline };
+  }),
+}));
 
 vi.mock("@/lib/self-upgrade/quiescence", () => ({
   captureActiveSessionBlockers: vi.fn(async (opts?: unknown) => {
@@ -126,7 +138,7 @@ const step = {
   waitForEvent: async (id: string, opts: { event: string; timeout: unknown; if?: string }) => {
     world.stepIds.push(id);
     world.waits.push({ id, event: opts.event, timeout: opts.timeout, if: opts.if });
-    if (opts.event === "ops/quiescence.swap-complete") return world.swapEvent;
+    if (opts.event === "ops/quiescence.swap-complete") return world.onSwapWait ? world.onSwapWait() : world.swapEvent;
     controlWaits += 1;
     world.order.push("wait");
     const scripted = world.onControlWait?.(controlWaits) ?? null;
@@ -157,6 +169,9 @@ beforeEach(async () => {
     progressWrites: 0,
     waits: [],
     onControlWait: null,
+    onSwapWait: null,
+    confirmedWindowMs: null,
+    readyDeadline: null,
     swapEvent: { name: "ops/quiescence.swap-complete", data: { runId: "QR-1", outcome: "succeeded" } },
   });
   controlWaits = 0;
@@ -397,6 +412,27 @@ describe("quiescence coordinator — an upgrade waits for work (BI-F9EE05E5)", (
     expect(sendMock).toHaveBeenCalledWith(
       expect.objectContaining({ name: "ops/quiescence.ready-to-swap", data: expect.objectContaining({ runId: "QR-1" }) }),
     );
+  });
+
+  it("allows a 90-minute capture under the confirmed ceiling and gives the job engine an absolute deadline", async () => {
+    world.surfaces = [];
+    world.confirmedWindowMs = 125 * MIN;
+    world.onSwapWait = () => {
+      vi.setSystemTime(Date.now() + 90 * MIN);
+      return world.swapEvent;
+    };
+    expect(await runCoordinator(UPGRADE)).toMatchObject({ ok: true, outcome: "succeeded" });
+    expect(world.waits.find((w) => w.event === "ops/quiescence.swap-complete")?.timeout).toEqual(new Date(+T0 + 125 * MIN));
+  });
+
+  it("ends a dead caller once the persisted deadline arrives without using the replay time", async () => {
+    world.surfaces = [];
+    world.confirmedWindowMs = 125 * MIN;
+    world.readyDeadline = new Date(+T0 - 15 * MIN).toISOString();
+    world.swapEvent = null;
+    expect(await runCoordinator(UPGRADE)).toMatchObject({ ok: false, reason: "no-signal" });
+    expect(world.waits.find((w) => w.event === "ops/quiescence.swap-complete")?.timeout).toEqual(new Date(+T0 - 15 * MIN));
+    expect(world.levels.at(-1)).toBe("normal");
   });
 
   it("other triggers keep the bounded drain: flip at start, defer at the budget", async () => {

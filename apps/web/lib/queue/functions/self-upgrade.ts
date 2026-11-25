@@ -41,6 +41,8 @@ import { DEFAULT_DRAIN_WAIT_BUDGET_MS } from "@/lib/self-upgrade/drain-wait";
 import { finishSelfUpgrade, type SelfUpgradeSwapContext } from "./self-upgrade-swap";
 import { runSelfUpgradeInSteps, type SelfUpgradeBegin, type SelfUpgradePhases } from "./self-upgrade-steps";
 import { rejectDuplicateSelfUpgradeDelivery } from "@/lib/self-upgrade/delivery-admission";
+import { resolveConfirmedUpgradeWindow } from "@/lib/self-upgrade/ready-to-swap-window";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 import { evaluateScheduledGate, recordScheduledDecline } from "@/lib/self-upgrade/scheduled-gate";
 import {
   SELF_UPGRADE_CRON,
@@ -89,6 +91,7 @@ export async function runSelfUpgrade(
 export async function beginSelfUpgrade(params: SelfUpgradeRunEventData): Promise<SelfUpgradeBegin> {
   const done = (result: Record<string, unknown>): SelfUpgradeBegin => ({ done: result });
   const duplicate = await rejectDuplicateSelfUpgradeDelivery(params.runId);
+  let ownedRunId = params.runId;
   if (duplicate) return done(duplicate);
   const config = await getSelfUpgradeConfig();
   const now = new Date();
@@ -99,7 +102,7 @@ export async function beginSelfUpgrade(params: SelfUpgradeRunEventData): Promise
     persistedReason = reason,
     extra: Record<string, unknown> = {},
   ): Promise<SelfUpgradeBegin> {
-    if (params.runId) await skipRun(params.runId, persistedReason);
+    if (ownedRunId) await skipRun(ownedRunId, persistedReason);
     // BI-3CA18934: the scheduled cron carries no runId, so without this a
     // declined unattended tick left NO trace at all — no row, no reason — and
     // the only evidence was the absence of a run, which reads like a broken
@@ -110,7 +113,7 @@ export async function beginSelfUpgrade(params: SelfUpgradeRunEventData): Promise
     return done({
       skipped: true,
       reason,
-      ...(params.runId ? { runId: params.runId } : {}),
+      ...(ownedRunId ? { runId: ownedRunId } : {}),
       ...extra,
     });
   }
@@ -118,7 +121,7 @@ export async function beginSelfUpgrade(params: SelfUpgradeRunEventData): Promise
   // An upgrade can now wait hours for work. A scheduled fire during one exits
   // here, before any costly check: no drain, no cooldown (BI-F9EE05E5).
   const activeRunOf = (r: Awaited<ReturnType<typeof getLatestRun>>) =>
-    r && ["running", "queued", "pending"].includes(r.status) && r.runId !== params.runId ? r : null;
+    r && ["running", "queued", "pending"].includes(r.status) && r.runId !== ownedRunId ? r : null;
   const activeAtStart = params.scheduled ? activeRunOf(await getLatestRun()) : null;
   if (activeAtStart) {
     return await skipAttempt("active-run", `active-run: ${activeAtStart.runId}`, { activeRunId: activeAtStart.runId });
@@ -345,6 +348,13 @@ export async function beginSelfUpgrade(params: SelfUpgradeRunEventData): Promise
   } else if (upgradeStrategy === "release") {
     builtStamp = upstreamSha!;
   } else {
+    if (params.scheduled && !ownedRunId) {
+      ownedRunId = (await createRun({
+        triggeredBy: params.triggeredBy,
+        fromVersion: deployedSha ?? undefined,
+        toVersion: upstreamSha ?? undefined,
+      })).runId;
+    }
     const prep = await prepareUpgradeSource(
       {
         sourceMode: config.sourceMode,
@@ -360,8 +370,8 @@ export async function beginSelfUpgrade(params: SelfUpgradeRunEventData): Promise
       // Conflict / no-target / prep-error: record for audit, do NOT drain or
       // swap. A merge conflict defers (operator resolves in the Upgrade Center);
       // the current build keeps running.
-      const failedRun = params.runId
-        ? await updateRunPlan(params.runId, {
+      const failedRun = ownedRunId
+        ? await updateRunPlan(ownedRunId, {
             fromVersion: deployedSha ?? undefined,
             toVersion: upstreamSha ?? undefined,
           })
@@ -410,8 +420,8 @@ export async function beginSelfUpgrade(params: SelfUpgradeRunEventData): Promise
     }
   }
 
-  const run = params.runId
-    ? await updateRunPlan(params.runId, {
+  const run = ownedRunId
+    ? await updateRunPlan(ownedRunId, {
         fromVersion: deployedSha ?? undefined,
         // targetSha column carries the upstream lineage marker (what the build
         // contains), falling back to the built stamp in local mode.
@@ -519,9 +529,18 @@ export async function beginSelfUpgrade(params: SelfUpgradeRunEventData): Promise
   let quiescenceRunId: string | null = null;
   let awaitReady: (() => Promise<QuiescenceOutcome>) | undefined;
   if (!params.dryRun) {
+    try {
+      resolveConfirmedUpgradeWindow(run.confirmedReadyToSwapMaxMs);
+    } catch (error) {
+      const reason = getErrorMessage(error);
+      await failRun(run.runId, reason);
+      await emitFailure(run.runId);
+      return done({ ok: false, status: "failed", runId: run.runId, reason: "maintenance-limit-changed", excerpt: reason });
+    }
     const started = await startQuiescence({
       trigger: "self-upgrade",
       triggerRefId: run.runId,
+      ...(run.confirmedReadyToSwapMaxMs != null ? { confirmedReadyToSwapMaxMs: run.confirmedReadyToSwapMaxMs } : {}),
       budgetMs: params.budgetMs ?? config.drainWaitBudgetMs ?? DEFAULT_DRAIN_WAIT_BUDGET_MS,
       shipForce: params.force,
       // Stamp the QuiescenceRun with the real target identity so the drain is

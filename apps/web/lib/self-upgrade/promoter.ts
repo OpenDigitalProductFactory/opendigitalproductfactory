@@ -763,13 +763,14 @@ import {
   runProcessWithBudget,
 } from "@/lib/shared/run-process-with-budget";
 
-export async function runPromoter(params: PromoterParams): Promise<PromoterResult> {
-  const { command, args } = await buildCompatiblePromoterCommand(params, buildPromoterCommand, createPromoterDockerRunner(params));
-  // Idempotency guard (SUR-E2BF265E). The container name is deterministic
-  // (`dpf-promoter-<runId>`), so a concurrent or retried dispatch of the SAME
-  // run reaching here would issue a second `docker run --name <name>` and hit
-  // "The container name is already in use" — recorded by the orchestrator as a
-  // build FAILURE even though the first promoter is still healthily building.
+export async function runPromoter(params: PromoterParams, assertAdmission?: () => Promise<void>): Promise<PromoterResult> {
+  const docker = createPromoterDockerRunner(params);
+  const { command, args } = await buildCompatiblePromoterCommand(params, buildPromoterCommand, async (args) => {
+    // A registry pull is also a new host effect. Recheck after any artifact inspection.
+    if (args[0] === "pull") await assertAdmission?.();
+    return docker(args);
+  });
+  // A retry must not replace or erroneously fail an already running promoter (SUR-E2BF265E).
   const name = params.containerName;
   if (name) {
     const action = decidePromoterLaunch(await inspectPromoterContainerState(name));
@@ -781,16 +782,13 @@ export async function runPromoter(params: PromoterParams): Promise<PromoterResul
       };
     }
     if (action === "reclaim") {
-      // A prior promoter for this run exists but is no longer running — a
-      // crash/daemon-restart corpse `--rm` never cleaned. Remove it so the fresh
-      // launch below doesn't collide on the name.
+      // A stopped container may have survived --rm after a daemon restart.
+      await assertAdmission?.();
       await forceRemovePromoterContainer(name);
     }
   }
-  // Hard wall-clock bound. Without it a stalled `docker build` (SUR-756751D1: an
-  // `apk add` fetch that crawled for 52 min) never closes, so `await runPromoter`
-  // blocks the orchestrator until the 30-min DB watchdog — and the orphaned
-  // container keeps building, risking a late unexpected swap.
+  // Cap the process and remove an overrun so it cannot swap after the window (SUR-756751D1).
+  await assertAdmission?.();
   return runProcessWithBudget(command, args, {
     timeoutMs: resolvePromoterTimeoutMs(params),
     containerName: params.containerName,
