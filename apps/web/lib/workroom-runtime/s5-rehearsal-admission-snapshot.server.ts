@@ -4,12 +4,12 @@ import { s5RehearsalQualificationRef, s5SyntheticTarget } from "./s5-rehearsal-q
 
 const ref = z.string().min(1).max(256).regex(/^\S+$/u);
 const instant = z.int().nonnegative();
-const exactAttempt = z.strictObject({ workroomId: ref, sessionRef: ref, stageKey: ref, stageAttemptRef: ref });
-const controlIdentity = z.strictObject({ issuer: ref, receiverRef: ref, hostRef: ref, resource: ref });
+export const s5ExactRehearsalAttempt = z.strictObject({ workroomId: ref, sessionRef: ref, stageKey: ref, stageAttemptRef: ref });
+export const s5RehearsalControlIdentity = z.strictObject({ issuer: ref, receiverRef: ref, hostRef: ref, resource: ref });
 const qualification = s5RehearsalQualificationRef.extend({ validUntil: instant });
-const snapshotShape = z.strictObject({
-  ...exactAttempt.shape,
-  ...controlIdentity.shape,
+export const s5RehearsalAdmissionSnapshot = z.strictObject({
+  ...s5ExactRehearsalAttempt.shape,
+  ...s5RehearsalControlIdentity.shape,
   profile: z.literal("synthetic-rehearsal"),
   mode: z.literal("read-only-coordination"),
   originRef: ref,
@@ -20,17 +20,17 @@ const snapshotShape = z.strictObject({
   expiresAt: instant,
   syntheticTarget: s5SyntheticTarget,
 });
-const exactEvidence = z.strictObject({ active: z.literal(true), pinned: snapshotShape, current: snapshotShape });
+const exactEvidence = z.strictObject({ active: z.literal(true), pinned: s5RehearsalAdmissionSnapshot, current: s5RehearsalAdmissionSnapshot });
 
-type ExactRehearsalAttempt = z.infer<typeof exactAttempt>;
-type RehearsalControlIdentity = z.infer<typeof controlIdentity>;
-export type S5RehearsalAdmissionSnapshot = z.infer<typeof snapshotShape>;
+type ExactRehearsalAttempt = z.infer<typeof s5ExactRehearsalAttempt>;
+type RehearsalControlIdentity = z.infer<typeof s5RehearsalControlIdentity>;
+export type S5RehearsalAdmissionSnapshot = z.infer<typeof s5RehearsalAdmissionSnapshot>;
 type ReadResult = { kind: "observed"; snapshot: S5RehearsalAdmissionSnapshot } | { kind: "held" };
 
 export type S5RehearsalAdmissionReadPorts = {
   /** Independently authenticate the exact registered Control connection. No generic bearer fallback. */
   authenticate: (request: Request) => Promise<RehearsalControlIdentity | null>;
-  /** Read-only canonical admission owner boundary, not registered yet. In one
+  /** Read-only canonical admission owner boundary. In one
    * consistent read return the original persisted pin plus independently read
    * current facts. `active` must come from the owning attempt, and qualification
    * from current S5 rehearsal eligibility and its owner approval, never from
@@ -49,16 +49,16 @@ function separateFreshness(snapshot: S5RehearsalAdmissionSnapshot) {
   return { validUntil, pinned: { ...binding, qualification: qualificationRef } };
 }
 
-/** Internal, unregistered read-only handler. Its output cannot set Control's
+/** Internal read-only handler. Its output cannot set Control's
  * independently pinned Store actor/subject, carry a floor, repair a binding,
  * create custody, or authorize a start. This is not a published v1/v1.1 wire. */
 export function createS5RehearsalAdmissionReader(ports: S5RehearsalAdmissionReadPorts) {
   const now = ports.now ?? (() => new Date());
   return async (request: Request, lookup: unknown): Promise<ReadResult> => {
     try {
-      const attempt = exactAttempt.safeParse(lookup);
+      const attempt = s5ExactRehearsalAttempt.safeParse(lookup);
       if (!attempt.success) return { kind: "held" };
-      const receiver = controlIdentity.safeParse(await ports.authenticate(request));
+      const receiver = s5RehearsalControlIdentity.safeParse(await ports.authenticate(request));
       if (!receiver.success) return { kind: "held" };
       const evidence = exactEvidence.safeParse(await ports.readEvidence(receiver.data, attempt.data));
       if (!evidence.success) return { kind: "held" };
