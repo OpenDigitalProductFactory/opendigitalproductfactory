@@ -5,21 +5,22 @@ import { signMaintenanceEpoch } from "../../../../scripts/lib/maintenance-epoch-
 vi.mock("@dpf/db", () => ({ prisma: {} }));
 import { attachMaintenanceEpochEvidence } from "./maintenance-epoch-evidence";
 import { buildPromoterCommand } from "./promoter";
+import { makePairedRecoveryPointFixture } from "./recovery-point.test-fixtures";
 
 const secret = "a".repeat(64);
 const now = new Date("2026-10-16T01:03:00.000Z");
 const recoveryPoint = { schemaVersion: 1, status: "ok", trigger: "pre-upgrade-recovery", selfUpgradeRunId: "SUR-EXAMPLE",
   createdAt: "2026-10-16T00:58:00.000Z", members: [{ target: "postgres", runId: "BACKUP-EXAMPLE", status: "ok" }] };
 const digest = createHash("sha256").update(canonicalJson(recoveryPoint)).digest("hex");
-const payload = () => ({ schemaVersion: 1, runId: "SUR-EXAMPLE", targetSha: "a".repeat(40),
-  promoterDigest: `sha256:${"b".repeat(64)}`, recoveryPointDigest: digest, project: "dpf", daemonId: "daemon-example",
+const payload = (recoveryPointDigest = digest) => ({ schemaVersion: 1, runId: "SUR-EXAMPLE", targetSha: "a".repeat(40),
+  promoterDigest: `sha256:${"b".repeat(64)}`, recoveryPointDigest, project: "dpf", daemonId: "daemon-example",
   capturedAt: "2026-10-16T01:00:00.000Z", completedAt: "2026-10-16T01:02:00.000Z",
   before: { portal: { id: "1".repeat(64), startedAt: "2026-10-15T00:00:00.000Z" }, sandbox: { id: "2".repeat(64), startedAt: "2026-10-15T00:00:00.000Z" } },
   after: { portal: { id: "3".repeat(64), startedAt: "2026-10-16T01:01:00.000Z" }, sandbox: { id: "4".repeat(64), startedAt: "2026-10-16T01:01:00.000Z" } },
   retiredContainerIds: ["1".repeat(64), "2".repeat(64)], inventoryDigest: "d".repeat(64) });
-function run() { return { runId: "SUR-EXAMPLE", status: "succeeded", targetSha: "a".repeat(40), deployedSha: "a".repeat(40),
+function run(point: typeof recoveryPoint | ReturnType<typeof makePairedRecoveryPointFixture> = recoveryPoint) { return { runId: "SUR-EXAMPLE", status: "succeeded", targetSha: "a".repeat(40), deployedSha: "a".repeat(40),
   startedAt: new Date("2026-10-16T00:59:00.000Z"), updatedAt: now,
-  completionEvidence: { recoveryPoint, unrelated: "preserve", readiness: { result: "ready", mode: "enforced", targetSha: "a".repeat(40), imageDigest: `sha256:${"b".repeat(64)}` } } }; }
+  completionEvidence: { recoveryPoint: point, unrelated: "preserve", readiness: { result: "ready", mode: "enforced", targetSha: "a".repeat(40), imageDigest: `sha256:${"b".repeat(64)}` } } }; }
 let row: ReturnType<typeof run>;
 const updateMany = vi.fn();
 const db = { selfUpgradeRun: { findUnique: vi.fn(async () => row), updateMany } };
@@ -42,6 +43,30 @@ describe("server-only maintenance epoch import", () => {
     expect(mutation.data.completionEvidence.unrelated).toBe("preserve");
     expect(mutation.data.completionEvidence.maintenanceEpochRetirement).toEqual(signMaintenanceEpoch(payload(), secret));
     expect(JSON.stringify(mutation)).not.toMatch(/executionSettled|retryAllowed|terminalWriterWait/);
+  });
+  it("attaches a complete v2 pair only under its original signed point digest", async () => {
+    const point = makePairedRecoveryPointFixture(recoveryPoint.selfUpgradeRunId, recoveryPoint.createdAt);
+    row = run(point);
+    const signed = signMaintenanceEpoch(payload(createHash("sha256").update(canonicalJson(point)).digest("hex")), secret);
+    const opts = { ...options(), readEnvelope: async () => JSON.stringify(signed) };
+    expect(await attachMaintenanceEpochEvidence(opts)).toEqual({ status: "attached", runId: point.selfUpgradeRunId });
+    expect(updateMany).toHaveBeenCalledOnce();
+
+    updateMany.mockClear();
+    point.pairedReceipt.uploads.manifestSha256 = "7".repeat(64);
+    expect(await attachMaintenanceEpochEvidence(opts)).toEqual({ status: "unavailable" });
+    expect(updateMany).not.toHaveBeenCalled();
+  });
+  it.each(["member mismatch", "wrong upgrade", "malformed timestamp"])("refuses v2 %s even when its wrapper has a valid signature", async (fault) => {
+    const point = makePairedRecoveryPointFixture(recoveryPoint.selfUpgradeRunId, recoveryPoint.createdAt);
+    if (fault === "member mismatch") point.members[1]!.runId = "OTHER-UPLOADS";
+    if (fault === "wrong upgrade") point.selfUpgradeRunId = "SUR-OTHER";
+    if (fault === "malformed timestamp") point.createdAt = "unknown";
+    row = run(point);
+    const signed = signMaintenanceEpoch(payload(createHash("sha256").update(canonicalJson(point)).digest("hex")), secret);
+    expect(await attachMaintenanceEpochEvidence({ ...options(), readEnvelope: async () => JSON.stringify(signed) }))
+      .toEqual({ status: "unavailable" });
+    expect(updateMany).not.toHaveBeenCalled();
   });
   it("does not overwrite evidence after a CAS race", async () => {
     updateMany.mockResolvedValue({ count: 0 });

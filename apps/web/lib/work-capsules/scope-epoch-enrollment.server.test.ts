@@ -6,6 +6,7 @@ import { canonicalJson } from "@dpf/integration-shared/canonical-json";
 import { signMaintenanceEpoch } from "../../../../scripts/lib/maintenance-epoch-receipt.mjs";
 import { attestScopeWriterProcess } from "./scope-epoch-writer-probe.mjs";
 import { runProcessWithBudget } from "@/lib/shared/run-process-with-budget";
+import { makePairedRecoveryPointFixture } from "@/lib/self-upgrade/recovery-point.test-fixtures";
 vi.mock("@dpf/db", () => ({ prisma: {} }));
 vi.mock("node:fs/promises", { spy: true });
 vi.mock("node:os", { spy: true });
@@ -19,16 +20,16 @@ const before = { portal: { id: "1".repeat(64), startedAt: "2026-10-15T00:00:00Z"
 const after = { portal: { id: "3".repeat(64), startedAt: "2026-10-16T01:01:00Z" }, sandbox: { id: "4".repeat(64), startedAt: "2026-10-16T01:01:00Z" } };
 const recovery = { schemaVersion: 1, status: "ok", trigger: "pre-upgrade-recovery", selfUpgradeRunId: "SUR-TEST",
   createdAt: "2026-10-16T00:58:00Z", members: [{ target: "postgres", runId: "BACKUP-TEST", status: "ok" }] };
-function fixture() {
+function fixture(point: typeof recovery | ReturnType<typeof makePairedRecoveryPointFixture> = recovery) {
   const writerPath = (name: string) => `/app/${name.replace(/^apps\/web\//, "apps/web-src/")}`;
   const proof = { schemaVersion: 1, version: 1, sourceSha: source, sourceContentHash: "b".repeat(64),
     contractSha256: hash("fixture contract"), writers: Object.fromEntries(SCOPE_EPOCH_WRITER_PATHS.map(name => [name, hash(writerPath(name))])) };
   const receipt = signMaintenanceEpoch({ schemaVersion: 1, runId: "SUR-TEST", targetSha: source,
-    promoterDigest: `sha256:${"d".repeat(64)}`, recoveryPointDigest: hash(canonicalJson(recovery)), project: "dpf", daemonId: "daemon-test",
+    promoterDigest: `sha256:${"d".repeat(64)}`, recoveryPointDigest: hash(canonicalJson(point)), project: "dpf", daemonId: "daemon-test",
     capturedAt: "2026-10-16T01:00:00Z", completedAt: "2026-10-16T01:02:00Z", before, after,
     retiredContainerIds: [before.portal.id, before.sandbox.id], inventoryDigest: "e".repeat(64) }, secret);
   const run = { runId: "SUR-TEST", status: "succeeded", targetSha: source, deployedSha: source, startedAt: new Date("2026-10-16T00:59:00Z"),
-    completionEvidence: { recoveryPoint: recovery, readiness: { result: "ready", mode: "enforced", targetSha: source, imageDigest: `sha256:${"d".repeat(64)}` }, maintenanceEpochRetirement: receipt } };
+    completionEvidence: { recoveryPoint: point, readiness: { result: "ready", mode: "enforced", targetSha: source, imageDigest: `sha256:${"d".repeat(64)}` }, maintenanceEpochRetirement: receipt } };
   const state = { activeActuator: false, oldPresent: false, project: "dpf", daemon: "daemon-test", imported: true };
   const commands: string[][] = [];
   const ports: ScopeEpochEnrollmentPorts = {
@@ -150,6 +151,23 @@ describe("canonical scope epoch enrollment", () => {
       expect.stringContaining("runtime-capability-transition"), expect.stringContaining("self-upgrade-admission")]);
     expect(f.commands).toHaveLength(observations);
     expect(f.commands.find(args => args[0] === "run")).toEqual(expect.arrayContaining(["--read-only", "--network", "none", "--pull", "never", image]));
+  });
+  it("joins the unchanged cohort proof to a complete signed v2 recovery point", async () => {
+    const point = makePairedRecoveryPointFixture(recovery.selfUpgradeRunId, recovery.createdAt);
+    const f = fixture(point);
+    const proof = await assertScopeEpochEnrollmentReady(f.ports);
+    await proof.assertCurrent(f.tx as never);
+    expect(f.locks).toEqual([expect.stringContaining('LOCK TABLE "RuntimeCapabilityTransition"'),
+      expect.stringContaining("runtime-capability-transition"), expect.stringContaining("self-upgrade-admission")]);
+  });
+  it("holds enrollment when the v2 projections name a different uploads run", async () => {
+    const point = makePairedRecoveryPointFixture(recovery.selfUpgradeRunId, recovery.createdAt);
+    point.members[1]!.runId = "OTHER-UPLOADS";
+    const f = fixture(point);
+    await expect(assertScopeEpochEnrollmentReady(f.ports)).rejects.toMatchObject({
+      reason: { kind: "matching-canonical-run-unproven" },
+    });
+    expect(f.locks).toHaveLength(0);
   });
   it.each([
     ["active-actuator", "canonical-actuator-present", "wait for it to finish"],

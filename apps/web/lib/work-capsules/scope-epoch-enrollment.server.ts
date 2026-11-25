@@ -8,6 +8,7 @@ import { isRecord } from "@/lib/shared/coerce";
 import { runProcessWithBudget } from "@/lib/shared/run-process-with-budget";
 import { attachMaintenanceEpochEvidence } from "@/lib/self-upgrade/maintenance-epoch-evidence";
 import { lockCanonicalRuntimeAdmission } from "@/lib/platform-runtime/work-admission";
+import { readSuccessfulMaintenanceRecoveryPoint } from "@/lib/self-upgrade/recovery-eligibility";
 import { verifyMaintenanceEpoch, readAttestedMaintenanceRetirement, observeMaintenanceEnvironments, assertNoCanonicalActuators, hasContinuousMaintenanceStarts } from "../../../../scripts/lib/maintenance-epoch-receipt.mjs";
 import { hasPrivateActuatorMount, readScopeWriterObservation, readScopeWriterRetirement } from "../../../../scripts/lib/scope-writer-observation.mjs";
 import type { ToolResult } from "@/lib/mcp-tool-types";
@@ -150,11 +151,10 @@ async function authenticatedRetirement(ports: ScopeEpochEnrollmentPorts, sourceS
   if (imported.status === "raced") refuse("retirement-attachment-raced");
   if (imported.status !== "attached" && imported.status !== "replayed") refuse("final-retirement-unavailable");
   const run = await probe("read-upgrade-run", () => ports.readRun(imported.runId));
-  const evidence = record(run?.completionEvidence), recovery = record(evidence?.recoveryPoint), readiness = record(evidence?.readiness);
+  const evidence = record(run?.completionEvidence), readiness = record(evidence?.readiness);
+  const recovery = run ? readSuccessfulMaintenanceRecoveryPoint(evidence?.recoveryPoint, run.runId) : null;
   if (!run || run.status !== "succeeded" || run.targetSha !== sourceSha || run.deployedSha !== sourceSha || !run.startedAt
-    || recovery?.schemaVersion !== 1 || recovery.status !== "ok" || recovery.trigger !== "pre-upgrade-recovery"
-    || recovery.selfUpgradeRunId !== run.runId || typeof recovery.createdAt !== "string" || !Array.isArray(recovery.members)
-    || !recovery.members.length || recovery.members.some(member => !isRecord(member) || member.target !== "postgres" || member.status !== "ok" || typeof member.runId !== "string" || !member.runId.trim())
+    || !recovery
     || readiness?.result !== "ready" || readiness.mode !== "enforced" || readiness.targetSha !== sourceSha || typeof readiness.imageDigest !== "string") refuse("matching-canonical-run-unproven");
   const envelope = evidence!.maintenanceEpochRetirement;
   const expected = { runId: run.runId, targetSha: sourceSha, promoterDigest: readiness.imageDigest,
