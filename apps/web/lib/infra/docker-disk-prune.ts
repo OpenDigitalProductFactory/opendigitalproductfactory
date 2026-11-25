@@ -5,6 +5,7 @@
 // prune; the actuator runs pruneDockerDiskAtDaemon with its own daemon access.
 // A refused or failed actuator call is reported, never retried locally.
 
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 import { planStaleImageReaping } from "./docker-image-retention";
 
 export type DiskPruneExec = (command: string) => Promise<{ stdout: string }>;
@@ -83,7 +84,7 @@ export async function pruneDockerDiskAtDaemon(execAsync: DiskPruneExec): Promise
     }
     outcome.promoter = { found: parsed.length, removed: removed.length, failed: failed.length };
   } catch (err) {
-    outcome.promoter = { error: err instanceof Error ? err.message : String(err) };
+    outcome.promoter = { error: getErrorMessage(err) };
   }
 
   // Per-branch local-integration images. `docker image prune` below removes
@@ -128,7 +129,7 @@ export async function pruneDockerDiskAtDaemon(execAsync: DiskPruneExec): Promise
       failed: failed.length,
     };
   } catch (err) {
-    outcome.staleBranchImages = { error: err instanceof Error ? err.message : String(err) };
+    outcome.staleBranchImages = { error: getErrorMessage(err) };
   }
 
   // Dangling images and build cache.
@@ -137,7 +138,7 @@ export async function pruneDockerDiskAtDaemon(execAsync: DiskPruneExec): Promise
     await execAsync("docker builder prune -f --keep-storage 20gb");
     outcome.danglingAndCache = "pruned";
   } catch (err) {
-    outcome.danglingAndCache = { error: err instanceof Error ? err.message : String(err) };
+    outcome.danglingAndCache = { error: getErrorMessage(err) };
   }
 
   return { prunedDockerDisk: true, ...outcome };
