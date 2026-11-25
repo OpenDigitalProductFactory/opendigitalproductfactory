@@ -30,9 +30,19 @@ const FALLBACK_REPO_NAME = "opendigitalproductfactory";
 const DEFAULT_MAX_PAGES = 10;
 const DEFAULT_PER_PAGE = 100;
 
+export type PullRequestCustodySource = {
+  baseBranch: string;
+  baseSha: string;
+  headRepositoryFullName: string | null;
+  authorLogin: string | null;
+  authorType: string | null;
+};
+
 export type SnapshotRowPayload = {
   sourceKey: string;
   payload: unknown;
+  /** Present only in a fresh open scan. Null means the target identity is unproven. */
+  custodySource?: PullRequestCustodySource | null;
 };
 
 export type GithubReaderResult =
@@ -54,6 +64,8 @@ export type GithubReaderDeps = {
   fetchImpl?: typeof fetch;
   /** One operation timestamp, injected so every page in a sync is comparable. */
   now?: () => Date;
+  /** A custody sweep needs a complete open population. The inventory uses the recent window. */
+  population?: "recent" | "open";
 };
 
 /** Resolved repo coordinates `{owner}/{repo}`. */
@@ -105,10 +117,11 @@ export async function readGithubPullRequests(
   }
 
   const repo = await resolveRepoIdentity(prisma);
-  const previousEtag = await loadEtag(prisma);
+  const population = deps.population ?? "recent";
+  const previousEtag = population === "recent" ? await loadEtag(prisma) : null;
 
   try {
-    const result = await fetchPullRequests(fetchImpl, repo, token, previousEtag, observedAt);
+    const result = await fetchPullRequests(fetchImpl, repo, token, previousEtag, observedAt, population);
     if (result.kind === "not-modified") {
       return {
         ok: true,
@@ -120,7 +133,7 @@ export async function readGithubPullRequests(
     }
     if (result.kind === "rows") {
       // Persist new etag if one was returned.
-      if (result.etag) {
+      if (population === "recent" && result.etag) {
         await persistEtag(prisma, result.etag);
       }
       return {
@@ -337,14 +350,19 @@ async function fetchPullRequests(
   token: string,
   ifNoneMatch: string | null,
   observedAt: string,
+  population: NonNullable<GithubReaderDeps["population"]>,
 ): Promise<FetchOutcome> {
   const rows: SnapshotRowPayload[] = [];
+  const openNumbers = new Set<number>();
+  // Oldest first gives a stable order when a PR is updated during the sweep.
+  // The result never supplies closure evidence for a PR absent from the list.
+  const ordering = population === "open" ? "state=open&sort=created&direction=asc" : "state=all&sort=updated&direction=desc";
   let etag: string | null = null;
   let rateLimitRemaining: number | undefined;
   let rateLimitResetAt: Date | null | undefined;
 
   for (let page = 1; page <= DEFAULT_MAX_PAGES; page++) {
-    const url = `https://api.github.com/repos/${repo.owner}/${repo.name}/pulls?state=all&sort=updated&direction=desc&per_page=${DEFAULT_PER_PAGE}&page=${page}`;
+    const url = `https://api.github.com/repos/${repo.owner}/${repo.name}/pulls?${ordering}&per_page=${DEFAULT_PER_PAGE}&page=${page}`;
     const headers: Record<string, string> = {
       Authorization: `Bearer ${token}`,
       Accept: "application/vnd.github+json",
@@ -365,7 +383,7 @@ async function fetchPullRequests(
       rateLimitResetAt = reset;
     });
 
-    if (res.status === 304 && page === 1) {
+    if (res.status === 304 && page === 1 && population === "recent") {
       return { kind: "not-modified", rateLimitRemaining, rateLimitResetAt };
     }
 
@@ -391,12 +409,23 @@ async function fetchPullRequests(
     const json = (await res.json()) as RawPullRequest[];
     for (const pr of json) {
       const parsed = parsePullRequest(pr, repo, observedAt);
+      if (population === "open") {
+        if (!parsed || parsed.state !== "open" || openNumbers.has(parsed.number)) {
+          return { kind: "error", error: "GitHub PR list could not verify the open population: inconsistent page" };
+        }
+        openNumbers.add(parsed.number);
+      }
       if (parsed) {
-        rows.push({ sourceKey: String(parsed.number), payload: parsed });
+        rows.push({ sourceKey: String(parsed.number), payload: parsed,
+          ...(population === "open" ? { custodySource: readCustodySource(pr, repo) } : {}),
+        });
       }
     }
     if (json.length < DEFAULT_PER_PAGE) {
       break;
+    }
+    if (population === "open" && page === DEFAULT_MAX_PAGES) {
+      return { kind: "error", error: "GitHub PR list reached its page limit before confirming the open population" };
     }
   }
 
@@ -421,12 +450,20 @@ function captureRateLimit(
   setter(Number.isNaN(remaining as number) ? undefined : remaining, reset);
 }
 
+type RawPullRequestRef = {
+  ref?: string;
+  sha?: string;
+  repo?: { full_name?: string } | null;
+};
+
 type RawPullRequest = {
   number?: number;
   url?: string;
   html_url?: string;
   title?: string;
-  head?: { ref?: string; sha?: string };
+  head?: RawPullRequestRef;
+  base?: RawPullRequestRef;
+  user?: { login?: string; type?: string } | null;
   state?: string;
   draft?: boolean;
   mergeable_state?: string;
@@ -434,6 +471,22 @@ type RawPullRequest = {
   merged_at?: string | null;
   updated_at?: string;
 };
+
+function readCustodySource(pr: RawPullRequest, repo: RepoIdentity): PullRequestCustodySource | null {
+  const base = pr.base;
+  if (typeof base?.repo?.full_name !== "string"
+    || base.repo.full_name.toLowerCase() !== `${repo.owner}/${repo.name}`.toLowerCase()
+    || typeof base.ref !== "string" || !base.ref
+    || typeof base.sha !== "string" || !/^[a-f0-9]{40}$/i.test(base.sha)) return null;
+  const headRepository = pr.head?.repo?.full_name;
+  return {
+    baseBranch: base.ref,
+    baseSha: base.sha,
+    headRepositoryFullName: typeof headRepository === "string" && /^[^/\s]+\/[^/\s]+$/.test(headRepository) ? headRepository : null,
+    authorLogin: typeof pr.user?.login === "string" ? pr.user.login : null,
+    authorType: typeof pr.user?.type === "string" ? pr.user.type : null,
+  };
+}
 
 function parsePullRequest(
   pr: RawPullRequest,

@@ -3,9 +3,80 @@ import { jobs } from "@/lib/jobs";
 import { gateAtEntry } from "../quiescence-gates";
 import { selectPrDeliveryRooms } from "./build-pr-delivery-selection";
 import type { BuildPrDeliveryStateV1 } from "@/lib/build/build-pr-delivery-state";
+import type { GithubPrObservation } from "@/lib/build/github-pr-readiness";
 import type { PrRepairPacket } from "@/lib/build/pr-follow-through";
+import { isEligiblePrCustodyRoom, readPrCustodyRecord } from "@/lib/build/pr-ci-repair";
+import { isRecord } from "@/lib/shared/coerce";
 
 export const BUILD_PR_DELIVERY_RECONCILE_CRON = "2,7,12,17,22,27,32,37,42,47,52,57 * * * *";
+
+const PR_DELIVERY_CLOSEOUT_ACTOR = {
+  userId: "system:build-pr-delivery-reconcile",
+  agentId: "build-pr-delivery-reconcile",
+  principalId: null,
+} as const;
+
+export type PrTerminalCloseoutPlan =
+  | {
+      kind: "close";
+      targetStatus: "archived" | "abandoned";
+      outcome: "delivered" | "undelivered";
+      reason: string;
+      headSha: string;
+    }
+  | { kind: "retain"; reason: string };
+
+/**
+ * Provider-confirmed terminal settlement policy for PR-only custody rooms
+ * (BI-C3EBDCEC FLOW-PR-3 / CONTRACT-PR-CLOSE). Never infers delivery from
+ * branch title, mergeability, or failed provider reads; preserves rooms that
+ * still carry a FeatureBuild, backlog item, task run, or unmerged worktree.
+ */
+export function planPrTerminalCloseout(input: {
+  capsule: {
+    capsuleId: string;
+    featureBuildId: string | null;
+    backlogItemId?: string | null;
+    taskRunId?: string | null;
+    worktreePath?: string | null;
+    pullRequestNumber: number | null;
+    pullRequestUrl: string | null;
+    workspaceState: unknown;
+  };
+  observation: Pick<GithubPrObservation, "number" | "url" | "state" | "merged" | "headSha">;
+}): PrTerminalCloseoutPlan {
+  const { capsule, observation } = input;
+  const custody = readPrCustodyRecord(capsule.workspaceState);
+  if (!custody) return { kind: "retain", reason: "not-pr-custody-room" };
+  const headSha = observation.headSha.trim();
+  if (!headSha || observation.number !== capsule.pullRequestNumber || observation.url !== capsule.pullRequestUrl) {
+    return { kind: "retain", reason: "provider-identity-mismatch" };
+  }
+  const hasGovernedWork = Boolean(capsule.featureBuildId || capsule.backlogItemId || capsule.taskRunId);
+  if (observation.merged || observation.state === "MERGED") {
+    if (hasGovernedWork) return { kind: "retain", reason: "governed-work-linked" };
+    return {
+      kind: "close",
+      targetStatus: "archived",
+      outcome: "delivered",
+      headSha,
+      reason: `Provider confirmed PR #${observation.number} merged at head ${headSha.slice(0, 12)}; archived PR-only custody room as delivered.`,
+    };
+  }
+  if (observation.state === "CLOSED") {
+    if (hasGovernedWork || capsule.worktreePath) {
+      return { kind: "retain", reason: "outstanding-owned-work" };
+    }
+    return {
+      kind: "close",
+      targetStatus: "abandoned",
+      outcome: "undelivered",
+      headSha,
+      reason: `Provider confirmed PR #${observation.number} closed unmerged at head ${headSha.slice(0, 12)}; ended PR-only custody as undelivered with evidence preserved.`,
+    };
+  }
+  return { kind: "retain", reason: "pull-request-open" };
+}
 
 /**
  * PR follow-through is a Workroom duty (BI-88341B5D): every non-terminal room
@@ -19,17 +90,24 @@ export const BUILD_PR_DELIVERY_RECONCILE_CRON = "2,7,12,17,22,27,32,37,42,47,52,
  * stale and must not be actuated. One move is the room's own doing and is
  * followed (BI-ECA50241): after this reconciler had GitHub update the branch
  * from the room's head, the PR head is GitHub's merge commit. Refusing that
- * froze the room in "updating" forever.
+ * froze the room in "updating" forever. Dispatched PR repairs and PR-only
+ * custody rooms without a local checkout likewise follow new commits on their
+ * exact bound PR (BI-C3EBDCEC).
  */
 export function observesRoomHead(
   roomHeadSha: string | null | undefined,
   observedHeadSha: string,
-  state: Pick<BuildPrDeliveryStateV1, "status" | "lastObservedHeadSha"> | null | undefined,
+  state: (Pick<BuildPrDeliveryStateV1, "status" | "lastObservedHeadSha"> & {
+    followThrough?: Pick<BuildPrDeliveryStateV1["followThrough"], "hold" | "judgedHeadSha"> | null;
+  }) | null | undefined,
+  options?: { followPrHead?: boolean },
 ): boolean {
   if (!roomHeadSha) return true;
   const room = roomHeadSha.toLowerCase();
   if (observedHeadSha.toLowerCase() === room) return true;
-  return state?.status === "updating" && state.lastObservedHeadSha?.toLowerCase() === room;
+  if (options?.followPrHead) return true;
+  if (state?.status === "updating" && state.lastObservedHeadSha?.toLowerCase() === room) return true;
+  return state?.followThrough?.hold === "repairing" && state.followThrough.judgedHeadSha?.toLowerCase() === room;
 }
 
 export async function runBuildPrDeliveryReconcile(): Promise<{
@@ -190,9 +268,12 @@ export async function runBuildPrDeliveryReconcile(): Promise<{
           }
         }
       }
+      const custody = readPrCustodyRecord(capsule.workspaceState);
+      const prCustodyEligible = isEligiblePrCustodyRoom(capsule);
+      const followPrHead = Boolean(custody && !capsule.featureBuildId && !capsule.worktreePath);
       let observation = await observeGithubPullRequest({ owner, repo, prNumber, token });
       observed += 1;
-      if (!observesRoomHead(capsule.headSha, observation.headSha, existing)) continue;
+      if (!observesRoomHead(capsule.headSha, observation.headSha, existing, { followPrHead })) continue;
       let readiness = projectGithubPrReadiness(observation);
       // BI-0EDCF2EC: a stopped room the selector handed back is looked at again.
       // A stop whose cause still holds only records that it looked.
@@ -233,10 +314,18 @@ export async function runBuildPrDeliveryReconcile(): Promise<{
         readiness = refresh.readiness;
         if (refresh.observeAgain) {
           observation = await observeGithubPullRequest({ owner, repo, prNumber, token });
-          if (!observesRoomHead(capsule.headSha, observation.headSha, existing)) continue;
+          if (!observesRoomHead(capsule.headSha, observation.headSha, existing, { followPrHead })) continue;
           readiness = projectGithubPrReadiness(observation);
         }
       }
+      const closeoutPlan = planPrTerminalCloseout({ capsule, observation });
+      const prOnlyCloseout = closeoutPlan.kind === "close" && closeoutPlan.outcome === "undelivered";
+      const accountableOwnerPrincipalId =
+        custody?.accountableOwnerPrincipalId
+        ?? capsule.leaseHolderPrincipalId
+        ?? capsule.requestedByPrincipalId
+        ?? capsule.createdByPrincipalId
+        ?? null;
       const outcome = await executeBuildPrDeliveryAction({
         state,
         observation,
@@ -246,11 +335,13 @@ export async function runBuildPrDeliveryReconcile(): Promise<{
         owner,
         repo,
         actuationAllowed,
-        // BI-085A37EC (WWMD DI-8172B1A35993, design §8): a Build Studio build
-        // repairs through its own bounded loop and pushes a fast-forward
-        // follow-up commit, so its room dispatches unless it is quiet or
-        // advise-only. Other rooms keep their posture and have no dispatcher.
-        repairAuthority: capsule.featureBuildId && posture.authority !== "record" ? "dispatch" : posture.authority,
+        prOnlyCustody: prOnlyCloseout,
+        // BI-085A37EC / BI-C3EBDCEC: Build Studio builds and eligible PR-only
+        // Build Studio custody rooms dispatch bounded CI repair unless the room
+        // is quiet or advise-only. Observe-only and other rooms keep their posture.
+        repairAuthority: (capsule.featureBuildId || prCustodyEligible) && posture.authority !== "record"
+          ? "dispatch"
+          : posture.authority,
         ...(capsule.featureBuildId
           ? {
               dispatchRepair: async (packet: PrRepairPacket) => {
@@ -263,17 +354,53 @@ export async function runBuildPrDeliveryReconcile(): Promise<{
                 return dispatchBuildPrCiRepair({ buildId, packet, github: { owner, repo, token } });
               },
             }
-          : {}),
+          : prCustodyEligible && accountableOwnerPrincipalId && capsule.headBranch
+            ? {
+                dispatchRepair: async (packet: PrRepairPacket) => {
+                  const { dispatchWorkroomPrCiRepair } = await import("@/lib/build/pr-ci-repair");
+                  return dispatchWorkroomPrCiRepair({
+                    capsuleId: capsule.capsuleId,
+                    owner,
+                    repo,
+                    prNumber,
+                    prUrl,
+                    baseBranch: capsule.baseBranch ?? custody?.baseBranch ?? "main",
+                    headBranch: capsule.headBranch!,
+                    accountableOwnerPrincipalId,
+                    authorLogin: custody?.authorLogin ?? null,
+                    authorType: custody?.authorType ?? null,
+                    packet,
+                    github: { owner, repo, token },
+                  });
+                },
+              }
+            : {}),
       });
       if (outcome.actuated) actuated += 1;
 
+      const nextWorkspaceState = writeBuildPrDeliveryState(
+        closeoutPlan.kind === "close"
+          ? {
+              ...(isRecord(capsule.workspaceState) ? capsule.workspaceState : {}),
+              prCloseout: {
+                outcome: closeoutPlan.outcome,
+                targetStatus: closeoutPlan.targetStatus,
+                repository,
+                prNumber,
+                prUrl,
+                headSha: closeoutPlan.headSha,
+                providerState: observation.merged ? "MERGED" : observation.state,
+                preservedEvidence: true,
+                closedAt: new Date().toISOString(),
+              },
+            }
+          : capsule.workspaceState,
+        outcome.state,
+      );
       const saved = await prisma.workroom.updateMany({
         where: { id: capsule.id, updatedAt: capsule.updatedAt },
         data: {
-          workspaceState: writeBuildPrDeliveryState(
-            capsule.workspaceState,
-            outcome.state,
-          ) as unknown as import("@dpf/db").Prisma.InputJsonValue,
+          workspaceState: nextWorkspaceState as unknown as import("@dpf/db").Prisma.InputJsonValue,
           // Never erase a room's recorded head on an observation that lacked one.
           ...(outcome.state.lastObservedHeadSha ? { headSha: outcome.state.lastObservedHeadSha } : {}),
         },
@@ -281,6 +408,36 @@ export async function runBuildPrDeliveryReconcile(): Promise<{
       if (saved.count === 0) {
         compareAndSwapLost += 1;
         continue;
+      }
+
+      if (closeoutPlan.kind === "close") {
+        const { updateWorkCapsuleStatus } = await import("@/lib/work-capsules/work-capsule-store");
+        await updateWorkCapsuleStatus({
+          db: prisma as never,
+          capsuleId: capsule.capsuleId,
+          status: closeoutPlan.targetStatus,
+          reason: closeoutPlan.reason,
+          actor: PR_DELIVERY_CLOSEOUT_ACTOR,
+        });
+        await prisma.workroomActivity.create({
+          data: {
+            workCapsuleId: capsule.id,
+            kind: "evidence",
+            summary: closeoutPlan.reason,
+            payload: {
+              event: "workroom-pr-custody-closed",
+              outcome: closeoutPlan.outcome,
+              targetStatus: closeoutPlan.targetStatus,
+              repository,
+              prNumber,
+              prUrl,
+              headSha: closeoutPlan.headSha,
+              providerState: observation.merged ? "MERGED" : observation.state,
+              preservedEvidence: true,
+            } as import("@dpf/db").Prisma.InputJsonValue,
+          },
+        });
+        actuated += 1;
       }
 
       if (resumedFrom) {

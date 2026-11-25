@@ -11,7 +11,18 @@ import {
   PR_FOLLOW_UP_UNCHANGED,
   PR_FOLLOW_UP_UNCHANGED_PREFIX,
 } from "./pr-ci-repair-markers";
-import { dispatchBuildPrCiRepair, failingLogExcerpt, jobIdFromRunUrl, type PrCiRepairDeps } from "./pr-ci-repair";
+import {
+  buildWorkroomPrRepairPrompt,
+  dispatchBuildPrCiRepair,
+  dispatchWorkroomPrCiRepair,
+  failingLogExcerpt,
+  isDependencyBotAuthor,
+  isEligiblePrCustodyRoom,
+  jobIdFromRunUrl,
+  type PrCiRepairDeps,
+  type WorkroomPrCiRepairDeps,
+  type WorkroomPrRepairRoomIdentity,
+} from "./pr-ci-repair";
 import { pendingPrFollowUpHead, resolvePrFollowUpSource } from "./pr-ci-follow-up";
 
 const HEAD = "29f7612a3a3f443fed43e3aa8b0e784b2e152021";
@@ -202,4 +213,220 @@ describe("resolvePrFollowUpSource", () => {
 
 it("names the unchanged-repair sentinel the publisher throws", () => {
   expect(PR_FOLLOW_UP_UNCHANGED).toMatch(/changed nothing/);
+});
+
+describe("BI-C3EBDCEC VERIFY-PR-2: PR-only Build Studio custody repair dispatch", () => {
+  function custodyRoom(overrides: Partial<WorkroomPrRepairRoomIdentity> = {}): WorkroomPrRepairRoomIdentity {
+    return {
+      id: "room-7184",
+      capsuleId: "WC-PR7184",
+      status: "ready",
+      archivedAt: null,
+      executorKind: "build-studio",
+      featureBuildId: null,
+      repositoryFullName: "o/r",
+      baseBranch: "main",
+      headBranch: "dependabot/npm_and_yarn/minor-and-patch-d73a48238d",
+      headSha: HEAD,
+      pullRequestNumber: 7184,
+      pullRequestUrl: "https://github.com/o/r/pull/7184",
+      workspaceState: {
+        prCustody: {
+          mode: "build-studio-custody",
+          recoveryReason: null,
+          repositoryFullName: "o/r",
+          prNumber: 7184,
+          prUrl: "https://github.com/o/r/pull/7184",
+          headRepositoryFullName: "o/r",
+          headRef: "dependabot/npm_and_yarn/minor-and-patch-d73a48238d",
+          baseBranch: "main",
+          headSha: HEAD,
+          isDraft: false,
+          authorLogin: "dependabot[bot]",
+          authorType: "Bot",
+          accountableOwnerPrincipalId: "prin-owner",
+          standingRoomCapsuleId: "WC-STANDING",
+        },
+      },
+      ...overrides,
+    };
+  }
+
+  function workroomDeps(overrides: Partial<WorkroomPrCiRepairDeps> = {}): WorkroomPrCiRepairDeps {
+    return {
+      readRoomIdentity: vi.fn().mockResolvedValue(custodyRoom()),
+      readJobLog: vi.fn().mockResolvedValue(
+        "FAIL SBOM Divergence Guard — duplicate @babel/runtime@7.29.15 alongside 7.29.14\nFAIL Derived Artifact Registry — regenerate disposition matrix\n",
+      ),
+      resolveActor: vi.fn().mockResolvedValue({ userId: "u-owner", agentId: PR_CI_REPAIR_TOOL, principalId: "prin-owner" }),
+      isSessionLive: vi.fn().mockReturnValue(false),
+      selectProviderAccount: vi.fn().mockResolvedValue({ provider: "codex", connectionId: "conn-codex" }),
+      startSession: vi.fn().mockResolvedValue({ success: true, message: "started" }),
+      sendTurn: vi.fn().mockResolvedValue({ success: true, message: "sent" }),
+      recordActivity: vi.fn().mockResolvedValue(undefined),
+      ...overrides,
+    };
+  }
+
+  function policyGuardPacket(overrides: Partial<PrRepairPacket> = {}): PrRepairPacket {
+    return packet({
+      failingChecks: [
+        {
+          name: "Policy Guards (source)",
+          conclusion: "FAILURE",
+          class: "defect",
+          runUrl: "https://github.com/o/r/actions/runs/99/job/9901",
+          workflowRunId: 99,
+        },
+      ],
+      constraints: [
+        "Push a new DCO-signed commit to the same branch; final main-plus-PR integration belongs to required GitHub checks and the protected merge queue.",
+        "Never merge, force-push, dismiss a check or edit required-check configuration.",
+      ],
+      ...overrides,
+    });
+  }
+
+  it("checks explicit same-repo Build Studio custody eligibility without granting authority from branch names", () => {
+    expect(isEligiblePrCustodyRoom(custodyRoom())).toBe(true);
+    expect(isEligiblePrCustodyRoom(custodyRoom({ featureBuildId: "fb-1" }))).toBe(false);
+    expect(isEligiblePrCustodyRoom(custodyRoom({ executorKind: "human" }))).toBe(false);
+    expect(isEligiblePrCustodyRoom(custodyRoom({
+      workspaceState: {
+        prCustody: { ...(custodyRoom().workspaceState as { prCustody: Record<string, unknown> }).prCustody, mode: "observe-only", recoveryReason: "fork-pull-request" },
+      },
+    }))).toBe(false);
+    expect(isEligiblePrCustodyRoom(custodyRoom({
+      workspaceState: {
+        prCustody: { ...(custodyRoom().workspaceState as { prCustody: Record<string, unknown> }).prCustody, headRepositoryFullName: "fork/r" },
+      },
+    }))).toBe(false);
+    expect(isDependencyBotAuthor({ authorLogin: "dependabot[bot]", authorType: "Bot" })).toBe(true);
+    expect(isDependencyBotAuthor({ authorLogin: "octocat", authorType: "User" })).toBe(false);
+  });
+
+  it("dispatches a bounded dependency-bot repair with lockfile dedup and SBOM budget policy boundaries", async () => {
+    const d = workroomDeps();
+    const res = await dispatchWorkroomPrCiRepair({
+      capsuleId: "WC-PR7184",
+      owner: "o",
+      repo: "r",
+      prNumber: 7184,
+      prUrl: "https://github.com/o/r/pull/7184",
+      baseBranch: "main",
+      headBranch: "dependabot/npm_and_yarn/minor-and-patch-d73a48238d",
+      accountableOwnerPrincipalId: "prin-owner",
+      authorLogin: "dependabot[bot]",
+      authorType: "Bot",
+      packet: policyGuardPacket(),
+    }, d);
+
+    expect(res).toBe("dispatched");
+    expect(d.readJobLog).toHaveBeenCalledWith(9901);
+    expect(d.startSession).toHaveBeenCalledTimes(1);
+    const startArg = vi.mocked(d.startSession).mock.calls[0]![0];
+    expect(startArg.provider).toBe("codex");
+    expect(startArg.connectionId).toBe("conn-codex");
+    expect(startArg.prompt).toContain("Policy Guards (source)");
+    expect(startArg.prompt).toContain("SBOM Divergence Guard");
+    expect(startArg.prompt).toContain("Deduplicate pnpm-lock.yaml cleanly");
+    expect(startArg.prompt).toContain("SBOM budget increase");
+    expect(startArg.prompt).toContain("git commit -s");
+    expect(startArg.prompt).toContain(HEAD);
+    expect(d.recordActivity).toHaveBeenCalledWith(expect.objectContaining({
+      roomId: "room-7184",
+      summary: expect.stringContaining(`[dispatched head=${HEAD}]`),
+    }));
+  });
+
+  it("refuses dispatch when the PR head moved (stale callback cannot publish)", async () => {
+    const d = workroomDeps({
+      readRoomIdentity: vi.fn().mockResolvedValue(custodyRoom({ headSha: "f".repeat(40) })),
+    });
+    const res = await dispatchWorkroomPrCiRepair({
+      capsuleId: "WC-PR7184",
+      owner: "o",
+      repo: "r",
+      prNumber: 7184,
+      prUrl: "https://github.com/o/r/pull/7184",
+      baseBranch: "main",
+      headBranch: "dependabot/npm_and_yarn/minor-and-patch-d73a48238d",
+      accountableOwnerPrincipalId: "prin-owner",
+      packet: policyGuardPacket(),
+    }, d);
+
+    expect(res).toBe("unavailable");
+    expect(d.startSession).not.toHaveBeenCalled();
+    expect(d.sendTurn).not.toHaveBeenCalled();
+  });
+
+  it("reuses a live supervised runtime session via sendTurn instead of opening a second session", async () => {
+    const d = workroomDeps({ isSessionLive: vi.fn().mockReturnValue(true) });
+    const res = await dispatchWorkroomPrCiRepair({
+      capsuleId: "WC-PR7184",
+      owner: "o",
+      repo: "r",
+      prNumber: 7184,
+      prUrl: "https://github.com/o/r/pull/7184",
+      baseBranch: "main",
+      headBranch: "dependabot/npm_and_yarn/minor-and-patch-d73a48238d",
+      accountableOwnerPrincipalId: "prin-owner",
+      packet: policyGuardPacket(),
+    }, d);
+
+    expect(res).toBe("dispatched");
+    expect(d.sendTurn).toHaveBeenCalledTimes(1);
+    expect(d.startSession).not.toHaveBeenCalled();
+  });
+
+  it("returns unavailable honestly when no runtime account or owner actor is available", async () => {
+    const noAccount = workroomDeps({ selectProviderAccount: vi.fn().mockResolvedValue(null) });
+    await expect(dispatchWorkroomPrCiRepair({
+      capsuleId: "WC-PR7184",
+      owner: "o",
+      repo: "r",
+      prNumber: 7184,
+      prUrl: "https://github.com/o/r/pull/7184",
+      baseBranch: "main",
+      headBranch: "dependabot/npm_and_yarn/minor-and-patch-d73a48238d",
+      accountableOwnerPrincipalId: "prin-owner",
+      packet: policyGuardPacket(),
+    }, noAccount)).resolves.toBe("unavailable");
+    expect(noAccount.recordActivity).toHaveBeenCalledWith(expect.objectContaining({
+      payload: expect.objectContaining({ reason: "runtime-account-unavailable" }),
+    }));
+
+    const noActor = workroomDeps({ resolveActor: vi.fn().mockResolvedValue(null) });
+    await expect(dispatchWorkroomPrCiRepair({
+      capsuleId: "WC-PR7184",
+      owner: "o",
+      repo: "r",
+      prNumber: 7184,
+      prUrl: "https://github.com/o/r/pull/7184",
+      baseBranch: "main",
+      headBranch: "dependabot/npm_and_yarn/minor-and-patch-d73a48238d",
+      accountableOwnerPrincipalId: "prin-owner",
+      packet: policyGuardPacket(),
+    }, noActor)).resolves.toBe("unavailable");
+    expect(noActor.recordActivity).toHaveBeenCalledWith(expect.objectContaining({
+      payload: expect.objectContaining({ reason: "accountable-owner-unavailable" }),
+    }));
+  });
+
+  it("omits dependency-bot rules for non-bot PRs while keeping core publication constraints", () => {
+    const prompt = buildWorkroomPrRepairPrompt({
+      capsuleId: "WC-1",
+      repository: "o/r",
+      prNumber: 12,
+      prUrl: "https://github.com/o/r/pull/12",
+      baseBranch: "main",
+      headBranch: "feat/example",
+      packet: policyGuardPacket(),
+      findings: [{ checkName: "Typecheck", conclusion: "FAILURE", runUrl: null, excerpt: "error TS2322" }],
+      dependencyBot: false,
+    });
+    expect(prompt).toContain("error TS2322");
+    expect(prompt).toContain("git commit -s");
+    expect(prompt).not.toContain("Dependency-bot intent preservation");
+  });
 });

@@ -30,7 +30,12 @@ const mocks = vi.hoisted(() => ({
   notificationCreate: vi.fn(),
   notificationUpdateMany: vi.fn(),
   bindObservations: vi.fn(),
+  readPullRequests: vi.fn(),
   applyObserved: vi.fn(),
+}));
+
+vi.mock("@/lib/contributor-change-lanes/github-rest-reader", () => ({
+  readGithubPullRequests: mocks.readPullRequests,
 }));
 
 vi.mock("@/lib/backlog/pr-submit-awaiting-acceptance", () => ({
@@ -84,7 +89,9 @@ import {
 const FIXED_NOW = new Date("2026-05-26T20:00:00.000Z");
 
 describe("inventory binding checkpoint", () => {
-  it("uses the persisted sync identity without repeating provider reads", async () => {
+  it("runs a fresh open scan in the binding step without repeating the recent inventory read", async () => {
+    const scan = { ok: true, rows: [], unchanged: false };
+    mocks.readPullRequests.mockResolvedValue(scan);
     mocks.bindObservations.mockResolvedValue({ bound: 1 });
     const run = vi.fn(async (name: string, callback: () => Promise<unknown>) =>
       name === "run-sync-cron" ? { syncRunId: "persisted-run", status: "completed" } : callback());
@@ -92,7 +99,18 @@ describe("inventory binding checkpoint", () => {
       syncRunId: "persisted-run", workroomBindings: { bound: 1 },
     });
     expect(run.mock.calls.map(([name]) => name)).toEqual(["run-sync-cron", "bind-workroom-pr-observations"]);
-    expect(mocks.bindObservations).toHaveBeenCalledWith("persisted-run");
+    expect(mocks.readPullRequests).toHaveBeenCalledExactlyOnceWith({ population: "open" });
+    expect(mocks.bindObservations).toHaveBeenCalledWith("persisted-run", expect.any(Date), scan, { reconcileCustody: true });
+  });
+
+  it("still runs the binding step with unknown coverage if the open scan throws", async () => {
+    mocks.readPullRequests.mockRejectedValue(new Error("provider unavailable"));
+    const run = vi.fn(async (name: string, callback: () => Promise<unknown>) =>
+      name === "run-sync-cron" ? { syncRunId: "persisted-run", status: "completed" } : callback());
+    await syncAndBind({ run }, "run-sync-cron", { triggeredBy: "cron" });
+    expect(mocks.bindObservations).toHaveBeenCalledWith("persisted-run", expect.any(Date), {
+      ok: false, state: "error", error: "provider unavailable",
+    }, { reconcileCustody: true });
   });
 });
 

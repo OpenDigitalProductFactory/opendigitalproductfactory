@@ -25,6 +25,7 @@
 
 import { createHash } from "node:crypto";
 import { cron } from "@/lib/jobs/triggers";
+import type { GithubReaderResult } from "@/lib/contributor-change-lanes/github-rest-reader";
 
 import {
   CONTRIBUTOR_INVENTORY_JOB_ID,
@@ -728,7 +729,11 @@ export async function syncAndBind(step: Pick<Parameters<typeof gateAtEntry>[0], 
   const sync = await step.run(stepId, () => runContributorInventorySync(options)) as RunSyncResult;
   const bindings = await step.run("bind-workroom-pr-observations", async () => {
     const { reconcileInventoryPullRequestBindings } = await import("@/lib/work-capsules/pull-request-binding-runtime");
-    return reconcileInventoryPullRequestBindings(sync.syncRunId);
+    const { readGithubPullRequests } = await import("@/lib/contributor-change-lanes/github-rest-reader");
+    const openScan = await readGithubPullRequests({ population: "open" }).catch((error): GithubReaderResult => ({
+      ok: false, state: "error", error: error instanceof Error ? error.message : String(error),
+    }));
+    return reconcileInventoryPullRequestBindings(sync.syncRunId, new Date(), openScan, { reconcileCustody: true });
   });
   return { ...sync, workroomBindings: bindings };
 }
