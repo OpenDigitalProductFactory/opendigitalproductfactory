@@ -17,9 +17,10 @@
 import type { SelfUpgradeConfig } from "./config";
 import type { PromoterLaunchOwner } from "./promoter-launch";
 import type { PromoterParams, PromoterResult } from "./promoter";
-import { PROMOTER_ALREADY_RUNNING_EXIT_CODE } from "./promoter-exit-codes";
+import { PROMOTER_ADMISSION_LOST_EXIT_CODE, PROMOTER_ALREADY_RUNNING_EXIT_CODE, PromoterAdmissionLostError } from "./promoter-exit-codes";
 import { resolvePromoterTimeoutMs } from "./promoter-timeout";
 import { isRecord } from "@/lib/shared/coerce";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 export type PromoterInstallBinding = {
   project: string;
@@ -245,7 +246,7 @@ export async function launchPromoterAtActuator(value: unknown, deps: {
   readiness?: (params: PromoterParams) => Promise<PromoterResult>;
   readRunStatus?: (runId: string) => Promise<string | null>;
   /** BI-3C3CCC59: the swap's drain fence for an admitted owner, re-checked at the effect boundary. */
-  swapFence?: (owner: Extract<PromoterLaunchOwner, { kind: "self-upgrade" }>, params: PromoterParams) => (() => Promise<void>) | undefined;
+  swapFence?: (owner: Extract<PromoterLaunchOwner, { kind: "self-upgrade" }>, params: PromoterParams) => () => Promise<void>;
 }): Promise<PromoterResult> {
   if (Buffer.byteLength(JSON.stringify(value ?? null)) > MAX_REQUEST_BYTES || !isRecord(value) || !isRecord(value.owner)
     || !isRecord(value.params)) refuse();
@@ -257,7 +258,9 @@ export async function launchPromoterAtActuator(value: unknown, deps: {
     if (admitted.stage === "swap") {
       // launchDurablePromoter re-reads the run under the admission lock.
       params = { ...admitted.params, launchOwner: admitted.owner };
-      fence = deps.swapFence?.(admitted.owner, params);
+      // The fence is the actuator's own, never the portal's option.
+      if (!deps.swapFence) refuse();
+      fence = deps.swapFence!(admitted.owner, params);
     } else {
       if (!deps.readRunStatus || await deps.readRunStatus(admitted.owner.runId) !== "running") refuse();
       if (admitted.stage === "readiness") {
@@ -270,8 +273,45 @@ export async function launchPromoterAtActuator(value: unknown, deps: {
   } else {
     params = await admitRuntimeTransitionLaunch(request, deps.binding, await deps.hostContexts(request.params), deps.activeTransitionIds);
   }
-  const result = await deps.run(params, fence);
+  // A fence failure of any kind refuses the launch and is reported as such.
+  let lost: string | null = null;
+  const guarded = fence && (async () => {
+    try { await fence(); } catch (error) { lost = getErrorMessage(error); throw error; }
+  });
+  let result: PromoterResult;
+  try {
+    result = await deps.run(params, guarded);
+  } catch (error) {
+    if (lost !== null) return { exitCode: PROMOTER_ADMISSION_LOST_EXIT_CODE, stdout: "", stderr: tail(lost) };
+    throw error;
+  }
   return { exitCode: result.exitCode, stdout: tail(result.stdout), stderr: tail(result.stderr) };
+}
+
+/**
+ * BI-3C3CCC59 at the actuator boundary. The actuator derives the swap's drain
+ * itself: exactly one live self-upgrade drain must name the run, any drain the
+ * portal names must be that one, and the drain's admission guard must still
+ * hold. Called immediately before reclaim and dispatch.
+ */
+export function createSwapFence(deps: {
+  liveDrainIds: (selfUpgradeRunId: string) => Promise<string[]>;
+  guard: (quiescenceRunId: string, opts: { selfUpgradeRunId: string; minimumRemainingMs: number }) => Promise<{ ok: true } | { ok: false; error: string }>;
+  minimumRemainingMs: (params: PromoterParams) => number;
+}) {
+  return (owner: Extract<PromoterLaunchOwner, { kind: "self-upgrade" }>, params: PromoterParams) => async () => {
+    const drains = await deps.liveDrainIds(owner.runId);
+    if (drains.length !== 1) {
+      throw new PromoterAdmissionLostError(drains.length === 0
+        ? `no live drain names upgrade run ${owner.runId}` : `${drains.length} live drains name upgrade run ${owner.runId}`);
+    }
+    const quiescenceRunId = drains[0]!;
+    if (owner.quiescenceRunId !== undefined && owner.quiescenceRunId !== quiescenceRunId) {
+      throw new PromoterAdmissionLostError(`the named drain ${owner.quiescenceRunId} is not the live drain of upgrade run ${owner.runId}`);
+    }
+    const guard = await deps.guard(quiescenceRunId, { selfUpgradeRunId: owner.runId, minimumRemainingMs: deps.minimumRemainingMs(params) });
+    if (!guard.ok) throw new PromoterAdmissionLostError(guard.error);
+  };
 }
 
 /** Portal side. A lost or refused reply keeps the owner pending: the launch is
@@ -318,8 +358,10 @@ export async function launchThroughPrivateActuator(params: PromoterParams,
   // BI-3C3CCC59: the caller's drain fence holds before the request; the
   // actuator re-checks it from the database before reclaim and dispatch.
   await assertAdmission?.();
-  return requestPromoterLaunchThroughActuator(params, owner,
+  const result = await requestPromoterLaunchThroughActuator(params, owner,
     send ?? ((body, timeoutMs) => observation.launchActuatorPromoter(body, { timeoutMs })));
+  if (owner.kind === "self-upgrade" && result.exitCode === PROMOTER_ADMISSION_LOST_EXIT_CODE) throw new PromoterAdmissionLostError(result.stderr);
+  return result;
 }
 
 /** Readiness runs in a promoter container keyed by its run's name. The

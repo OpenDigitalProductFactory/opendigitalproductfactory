@@ -10,7 +10,7 @@
 import type { PromoterParams, VerifiedReleaseIdentity } from "@/lib/self-upgrade/promoter";
 import { createHash } from "node:crypto";
 import { canonicalJson } from "@dpf/integration-shared/canonical-json";
-import { PROMOTER_ALREADY_RUNNING_EXIT_CODE } from "@/lib/self-upgrade/promoter-exit-codes";
+import { PROMOTER_ALREADY_RUNNING_EXIT_CODE, PromoterAdmissionLostError } from "@/lib/self-upgrade/promoter-exit-codes";
 import {
   loadInstallStateSigningContext,
   refreshMigrationHandoffAfterDrain,
@@ -242,7 +242,8 @@ export async function finishSelfUpgrade(ctx: SelfUpgradeSwapContext): Promise<Re
     }
     result = await runPromoter(promoterParams, assertDispatchAdmission);
   } catch (err) {
-    if (err instanceof SwapAdmissionLostError) return admissionFailure(err.message);
+    // The actuator's own drain fence refused the launch (BI-3C3CCC59): no host effect.
+    if (err instanceof SwapAdmissionLostError || err instanceof PromoterAdmissionLostError) return admissionFailure(err.message);
     // The promoter failed to even spawn (e.g. docker missing). Without this
     // catch the rejection would leave the run stuck "running" — blocking every
     // future trigger.

@@ -19,3 +19,14 @@
  * the first promoter was past Step 40/119 when the run flipped to `failed`).
  */
 export const PROMOTER_ALREADY_RUNNING_EXIT_CODE = 188;
+
+/**
+ * BI-3C3CCC59 / BI-224F56F1: the private actuator refused a self-upgrade swap
+ * because its drain fence no longer held. No host effect happened. Distinct
+ * from PROMOTER_ALREADY_RUNNING_EXIT_CODE so the run settles at once with the
+ * real reason instead of waiting as "already running".
+ */
+export const PROMOTER_ADMISSION_LOST_EXIT_CODE = 189;
+
+/** Thrown portal-side when the actuator reports PROMOTER_ADMISSION_LOST_EXIT_CODE. */
+export class PromoterAdmissionLostError extends Error {}

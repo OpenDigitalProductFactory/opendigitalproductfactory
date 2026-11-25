@@ -109,6 +109,8 @@ export async function runAdmittedPromoter(
     }
     reference = inspected.stdout.trim();
   }
+  // The reference is pinned to a local sha256 image ID above, so building the
+  // command cannot pull. Keep the pin: an unpinned build would pull unfenced.
   const pinned = { ...params, promoterImage: reference };
   const argv = (await build(pinned)).args;
   // BI-3C3CCC59: the swap's drain fence, immediately before reclaim and

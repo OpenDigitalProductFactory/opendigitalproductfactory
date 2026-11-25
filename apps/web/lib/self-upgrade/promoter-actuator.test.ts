@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   admitRuntimeTransitionLaunch,
   admitSelfUpgradeLaunch,
+  createSwapFence,
   launchPromoterAtActuator,
   launchThroughPrivateActuator,
   readPromoterInstallBinding,
@@ -12,7 +13,7 @@ import {
 } from "./promoter-actuator";
 import type { PromoterParams } from "./promoter";
 import type { SelfUpgradeConfig } from "./config";
-import { PROMOTER_ALREADY_RUNNING_EXIT_CODE } from "./promoter-exit-codes";
+import { PROMOTER_ADMISSION_LOST_EXIT_CODE, PROMOTER_ALREADY_RUNNING_EXIT_CODE, PromoterAdmissionLostError } from "./promoter-exit-codes";
 
 const runId = "SUR-ABC123";
 const binding: PromoterInstallBinding = {
@@ -116,6 +117,7 @@ describe("launchPromoterAtActuator", () => {
     const launches: Array<{ params: PromoterParams }> = [];
     const result = await launchPromoterAtActuator(request(), {
       binding, readConfig: async () => config, hostContexts: async () => [], activeTransitionIds: async () => [],
+      swapFence: createSwapFence({ liveDrainIds: async () => ["QR-LIVE"], guard: async () => ({ ok: true as const }), minimumRemainingMs: () => 0 }),
       run: async (launched) => { launches.push({ params: launched }); return { exitCode: 0, stdout: "x".repeat(300 * 1024), stderr: "" }; },
     });
     expect(result.exitCode).toBe(0);
@@ -327,23 +329,52 @@ describe("prebuild and readiness routing", () => {
 });
 
 describe("the swap's drain fence at the actuator boundary (BI-3C3CCC59)", () => {
-  const swap = (owner: Record<string, unknown>) => ({ owner: { kind: "self-upgrade", runId, ...owner }, params: params() });
-  const deps = (fenceCalls: string[], order: string[]) => ({
-    binding, readConfig: async () => config, hostContexts: async () => [], activeTransitionIds: async () => [],
-    swapFence: (owner: { runId: string; quiescenceRunId?: string }) => owner.quiescenceRunId
-      ? async () => { fenceCalls.push(`${owner.quiescenceRunId}:${owner.runId}`); order.push("fence"); } : undefined,
-    run: async (_params: PromoterParams, assertAdmission?: () => Promise<void>) => {
-      await assertAdmission?.();
-      order.push("launch");
-      return { exitCode: 0, stdout: "", stderr: "" };
-    },
+  const swap = (owner: Record<string, unknown> = {}) => ({ owner: { kind: "self-upgrade", runId, ...owner }, params: params() });
+  function harness(drains: string[], guardError: string | null = null) {
+    const guarded: string[] = [], dispatched: string[] = [];
+    const deps = {
+      binding, readConfig: async () => config, hostContexts: async () => [], activeTransitionIds: async () => [],
+      swapFence: createSwapFence({
+        liveDrainIds: async () => drains,
+        guard: async (quiescenceRunId: string, opts: { selfUpgradeRunId: string }) => {
+          guarded.push(`${quiescenceRunId}:${opts.selfUpgradeRunId}`);
+          return guardError ? { ok: false as const, error: guardError } : { ok: true as const };
+        },
+        minimumRemainingMs: () => 60_000,
+      }),
+      run: async (_params: PromoterParams, assertAdmission?: () => Promise<void>) => {
+        await assertAdmission?.();
+        dispatched.push("launch");
+        return { exitCode: 0, stdout: "", stderr: "" };
+      },
+    };
+    return { deps, guarded, dispatched };
+  }
+
+  it("fences a swap on the drain the actuator derives, even when the portal names none", async () => {
+    const h = harness(["QR-LIVE"]);
+    await expect(launchPromoterAtActuator(swap(), h.deps)).resolves.toMatchObject({ exitCode: 0 });
+    expect(h.guarded).toEqual([`QR-LIVE:${runId}`]);
+    expect(h.dispatched).toEqual(["launch"]);
   });
 
-  it("re-checks the named drain before the launch and keeps it on the admitted owner", async () => {
-    const fenceCalls: string[] = [], order: string[] = [];
-    await launchPromoterAtActuator(swap({ quiescenceRunId: "QR-2026-11-25-abcd" }), deps(fenceCalls, order));
-    expect(fenceCalls).toEqual([`QR-2026-11-25-abcd:${runId}`]);
-    expect(order).toEqual(["fence", "launch"]);
+  it.each([
+    ["a named drain that is not the live one", ["QR-LIVE"], { quiescenceRunId: "QR-OTHER" }, null, /not the live drain/],
+    ["no live drain", [], {}, null, /no live drain/],
+    ["two live drains", ["QR-A", "QR-B"], {}, null, /2 live drains/],
+    ["a reopened drain", ["QR-LIVE"], {}, "the drain already ended (aborted)", /the drain already ended/],
+  ])("refuses %s with an admission-lost result and dispatches nothing", async (_label, drains, owner, guardError, reason) => {
+    const h = harness(drains as string[], guardError as string | null);
+    const result = await launchPromoterAtActuator(swap(owner as Record<string, unknown>), h.deps);
+    expect(result.exitCode).toBe(PROMOTER_ADMISSION_LOST_EXIT_CODE);
+    expect(result.stderr).toMatch(reason as RegExp);
+    expect(h.dispatched).toHaveLength(0);
+  });
+
+  it("refuses a swap outright when the actuator has no fence of its own", async () => {
+    const { swapFence: _fence, ...deps } = harness(["QR-LIVE"]).deps;
+    void _fence;
+    await expect(launchPromoterAtActuator(swap(), deps)).rejects.toThrow();
   });
 
   it("names a drain only on the swap stage and only in the quiescence run format", () => {
@@ -355,14 +386,21 @@ describe("the swap's drain fence at the actuator boundary (BI-3C3CCC59)", () => 
     }
   });
 
+  it("settles end to end: the portal throws admission-lost with the actuator's reason", async () => {
+    const h = harness(["QR-LIVE"], "the drain already ended (aborted)");
+    const launch = { ...params(), launchOwner: { kind: "self-upgrade", runId, quiescenceRunId: "QR-LIVE" } } as unknown as PromoterParams;
+    const rejection = launchThroughPrivateActuator(launch, async () => true, async (body) => launchPromoterAtActuator(body, h.deps));
+    await expect(rejection).rejects.toBeInstanceOf(PromoterAdmissionLostError);
+    await expect(launchThroughPrivateActuator(launch, async () => true, async (body) => launchPromoterAtActuator(body, h.deps)))
+      .rejects.toThrow("the drain already ended (aborted)");
+    expect(h.dispatched).toHaveLength(0);
+  });
+
   it("holds the portal-side fence before the request and sends nothing when it fails", async () => {
     const sent: unknown[] = [];
     const launch = { ...params(), launchOwner: { kind: "self-upgrade", runId, quiescenceRunId: "QR-1" } } as unknown as PromoterParams;
     await expect(launchThroughPrivateActuator(launch, async () => true, async (body) => { sent.push(body); return { exitCode: 0, stdout: "", stderr: "" }; },
       async () => { throw new Error("admission-reopened-before-swap"); })).rejects.toThrow("admission-reopened-before-swap");
     expect(sent).toHaveLength(0);
-    await launchThroughPrivateActuator(launch, async () => true, async (body) => { sent.push(body); return { exitCode: 0, stdout: "", stderr: "" }; },
-      async () => undefined);
-    expect(sent).toEqual([expect.objectContaining({ owner: { kind: "self-upgrade", runId, quiescenceRunId: "QR-1" } })]);
   });
 });

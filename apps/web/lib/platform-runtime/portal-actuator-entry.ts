@@ -56,10 +56,11 @@ async function main() {
     launchPromoter: async body => {
       // Call runPromoterAtDaemon: inside the actuator the private socket is
       // mounted too, so runPromoter would route back to itself.
-      const [{ launchPromoterAtActuator, readPromoterInstallBinding }, { getSelfUpgradeConfig }, promoter,
-        { runtimeTransitionHostContext }, { activeRuntimeTransitionIds }, { readFile }] = await Promise.all([
+      const [{ createSwapFence, launchPromoterAtActuator, readPromoterInstallBinding }, { getSelfUpgradeConfig }, promoter,
+        { runtimeTransitionHostContext }, { activeRuntimeTransitionIds }, { readFile }, { resolvePromoterTimeoutMs }] = await Promise.all([
         import("../self-upgrade/promoter-actuator"), import("../self-upgrade/config"), import("../self-upgrade/promoter"),
         import("./runtime-transition-host-context"), import("./runtime-capability-executor"), import("node:fs/promises"),
+        import("../self-upgrade/promoter-timeout"),
       ]);
       const context = (host?: Record<string, unknown>) => { try { return [runtimeTransitionHostContext(host, process.env)]; } catch { return []; } };
       return launchPromoterAtActuator(body, {
@@ -81,18 +82,16 @@ async function main() {
         },
         activeTransitionIds: activeRuntimeTransitionIds,
         run: promoter.runPromoterAtDaemon,
-        // BI-3C3CCC59: re-check the named drain from the database before reclaim and dispatch.
-        swapFence: (owner, params) => {
-          const quiescenceRunId = owner.quiescenceRunId;
-          if (!quiescenceRunId) return undefined;
-          return async () => {
-            const [{ guardAdmissionClosedForSwap }, { resolvePromoterTimeoutMs }] = await Promise.all([
-              import("../self-upgrade/drain-admission"), import("../self-upgrade/promoter-timeout")]);
-            const guard = await guardAdmissionClosedForSwap(quiescenceRunId,
-              { selfUpgradeRunId: owner.runId, minimumRemainingMs: resolvePromoterTimeoutMs(params) });
-            if (!guard.ok) throw new Error(`admission-reopened-before-swap: ${guard.error}`);
-          };
-        },
+        // BI-3C3CCC59: the actuator derives the swap's drain itself and re-checks it before reclaim and dispatch.
+        swapFence: createSwapFence({
+          liveDrainIds: async selfUpgradeRunId => {
+            const [{ prisma }, { TERMINAL_QUIESCENCE_STATUSES }] = await Promise.all([import("@dpf/db"), import("../self-upgrade/quiescence-contract")]);
+            return (await prisma.quiescenceRun.findMany({ where: { trigger: "self-upgrade", triggerRefId: selfUpgradeRunId,
+              status: { notIn: [...TERMINAL_QUIESCENCE_STATUSES] } }, select: { runId: true } })).map(row => row.runId);
+          },
+          guard: async (quiescenceRunId, opts) => (await import("../self-upgrade/drain-admission")).guardAdmissionClosedForSwap(quiescenceRunId, opts),
+          minimumRemainingMs: resolvePromoterTimeoutMs,
+        }),
         readRunStatus: async runId => {
           const { prisma } = await import("@dpf/db");
           return (await prisma.selfUpgradeRun.findUnique({ where: { runId }, select: { status: true } }))?.status ?? null;
