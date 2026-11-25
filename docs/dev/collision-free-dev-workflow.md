@@ -15,7 +15,9 @@ The root clone at the canonical path (`~/dpf`) is **shared release state**. It
 is intentionally not an isolated development workspace:
 
 1. **The self-upgrade loop owns canonical source refs.**
-   `apps/web/lib/self-upgrade/prepare-source.ts` fetches upstream and prepares
+   `apps/web/lib/self-upgrade/prepare-source.ts` (implemented once in
+   `scripts/lib/upgrade-source/prepare-source.mjs`, so the authorized source
+   writer in the promoter image runs the same logic) fetches upstream and prepares
    `dpf/install` in the isolated `.upgrade-workspace/` clone. When the install
    has no local content delta, it advances to the exact canonical upstream SHA;
    when private/local content exists, it creates an honest `--no-ff` merge.
