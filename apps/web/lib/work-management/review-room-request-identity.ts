@@ -2,7 +2,7 @@ import type { PrismaClient } from "@dpf/db";
 import { isSemanticReviewRequestRoleBinding } from "@/lib/change-review/semantic-review-request";
 import { CHANGE_REVIEW_RECEIPT_SCHEMA_VERSION, LEGACY_CHANGE_REVIEW_RECEIPT_SCHEMA_VERSION } from "@/lib/change-review/semantic-change-review";
 import { parseInitiativeReviewBinding, immutableArtifactIdentity } from "@/lib/mcp-task-review-contract";
-import { INITIATIVE_READINESS_LANES } from "@/lib/tak/initiative-readiness-tool-grants";
+import { readinessLaneForGate } from "@/lib/tak/initiative-readiness-tool-grants";
 import type { ReviewerRoomCandidate } from "./review-room-candidates";
 
 export type RequestIdentity = {
@@ -69,7 +69,7 @@ export async function loadRequestIdentities(db: Partial<Pick<PrismaClient, "$que
 export function initiativeRoomIdentity(row: ReviewerRoomCandidate, now: Date) {
   const binding = parseInitiativeReviewBinding(row.initiativeBinding);
   const room = binding?.workroomRef;
-  const lane = binding ? INITIATIVE_READINESS_LANES[binding.writerToolName] : null;
+  const lane = binding ? readinessLaneForGate(binding.writerToolName, binding.gate) : null;
   const artifact = binding ? immutableArtifactIdentity(binding.artifactRef) : null;
   const qualified = !!binding && !!room && !!lane?.independent
     && lane.gates.some(gate => gate === binding.gate)

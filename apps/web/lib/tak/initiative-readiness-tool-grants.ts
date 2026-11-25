@@ -63,6 +63,13 @@ export function readinessLaneForRole(role: string): { toolName: string; lane: In
   return null;
 }
 
+/** Disposition separates duties without changing the same writer's author-side research. */
+export function readinessLaneForGate(toolName: string, gate: string): InitiativeReadinessLane | undefined {
+  const lane = INITIATIVE_READINESS_LANES[toolName];
+  return lane && toolName === "record_initiative_evidence" && gate === "dependency-disposition"
+    ? { ...lane, independent: true } : lane;
+}
+
 /**
  * The exact immutable identity a dispatched reviewer is bound to. Shaped to
  * satisfy `parseInitiativeReviewBinding` so a server-issued route is executable
@@ -219,6 +226,8 @@ export type GrantHolderRow = {
 
 export type ReviewerRouteDb = {
   agentToolGrant?: { findMany(args: unknown): Promise<GrantHolderRow[]> };
+  backlogItem?: { findUnique?(args: { where: { itemId: string }; select: { claimedByAgentId: true } })
+    : Promise<{ claimedByAgentId: string | null } | null> };
 };
 
 /**
@@ -320,7 +329,8 @@ export async function resolveInitiativeReviewerRecovery(input: {
     const route = readinessLaneForRole(entry.accountableRole);
     const gate = route ? recoveryGate(entry, route.lane) : null;
     if (route && gate) {
-      requested.push({ entry, role: entry.accountableRole, route, gate });
+      requested.push({ entry, role: entry.accountableRole, route: gate === "dependency-disposition"
+        ? { ...route, lane: readinessLaneForGate(route.toolName, gate) ?? route.lane } : route, gate });
       continue;
     }
     unroutable.push({
@@ -356,6 +366,9 @@ export async function resolveInitiativeReviewerRecovery(input: {
 
   const reviewerRoutes: InitiativeReviewerRecovery["reviewerRoutes"] = [];
   const escalations: InitiativeReviewerRecovery["escalations"] = [];
+  const claimant = distinct.some(({ gate, route }) => gate === "dependency-disposition" && route.lane.independent)
+    ? await input.db.backlogItem?.findUnique?.({ where: { itemId: input.decision.subject.id }, select: { claimedByAgentId: true } }).catch(() => null)
+    : null;
   for (const entry of distinct) {
     if (isAuthorResearchLane(input.decision, entry.entry)) {
       escalations.push({
@@ -371,10 +384,17 @@ export async function resolveInitiativeReviewerRecovery(input: {
     const requiredGrants = bindable
       ? [entry.route.lane.grant, IMMUTABLE_READER_GRANT]
       : [entry.route.lane.grant];
+    const independentDisposition = entry.gate === "dependency-disposition" && entry.route.lane.independent;
+    if (independentDisposition && !claimant) {
+      escalations.push({ accountableRole: entry.role, toolName: entry.route.toolName, grant: entry.route.lane.grant,
+        reason: "no-eligible-reviewer", nextAction: "Verify the item's current claim before selecting an independent dependency disposer." });
+      continue;
+    }
     let candidates = deterministicRows.filter((row) =>
       row.grantKey === entry.route.lane.grant
       && requiredGrants.every((grant) => grantsByAgent.get(row.agent.agentId)?.has(grant))
-      && (!entry.route.lane.independent || row.agent.agentId !== input.currentAgentId));
+      && (!entry.route.lane.independent || row.agent.agentId !== input.currentAgentId)
+      && (!independentDisposition || row.agent.agentId !== claimant?.claimedByAgentId));
     if (input.isReviewerEligible) {
       const eligibility = await Promise.all(candidates.map(async (row) => ({ row, allowed: await input.isReviewerEligible!(row.agent.agentId) })));
       candidates = eligibility.filter((entry) => entry.allowed).map((entry) => entry.row);
@@ -736,7 +756,7 @@ function requestCoworkerPacket(args: {
       // it, so it must not share a key with the same head's pre-baseline packet. The
       // TaskRun id derives from the key, so a shared key made the refreshed packet
       // an idempotency conflict and the review unobtainable at that head.
-      : args.independent && args.expectedCurrentBaselineId
+      : args.independent && (args.expectedCurrentBaselineId || args.gate === "dependency-disposition")
         ? `${base.requestKey}:baseline:${createHash("sha256").update(canonicalJson({
           binding, targetAgent: args.targetAgentId, objective,
         })).digest("hex")}`

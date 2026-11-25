@@ -10,7 +10,7 @@ import {
   resolveBuildStudioDispatchContext,
   type BuildStudioDispatchResolution,
 } from "./build-studio-dispatch-context";
-import { designPhaseReviewDecision } from "./design-phase-recovery";
+import { preDeliveryReviewDecision } from "./design-phase-recovery";
 import { currentBaseline, parseBaselinePayloads } from "./baseline-head";
 import type { InitiativeReadinessDecision } from "./types";
 
@@ -119,9 +119,9 @@ export const DEFAULT_BUILD_STUDIO_OWED_ROUTES_PORTS: BuildStudioOwedRoutesPorts 
 };
 
 /**
- * The independent design-phase reviews a Build Studio build in plan owes right
+ * The independent pre-delivery reviews a Build Studio build in plan owes right
  * now, as server-issued `request_coworker` packets bound to its design revision.
- * Empty when the implementation decision is allowed or owes no design review;
+ * Empty when the implementation decision is allowed or owes no pre-delivery review;
  * a typed reason when the room cannot be resolved into a dispatch context.
  */
 export async function buildStudioOwedRoutes(args: {
@@ -134,7 +134,7 @@ export async function buildStudioOwedRoutes(args: {
   const decision = await ports.loadImplementationDecision(args.itemId, args.authorAgentId);
   if (!decision) return { routed: false, reason: "implementation-decision-unavailable" };
   if (decision.verdict === "allowed") return { routed: true, routes: [] };
-  const designPhase = designPhaseReviewDecision(decision);
+  const designPhase = preDeliveryReviewDecision(decision);
   if (!designPhase) return { routed: true, routes: [] };
   const dispatch = await ports.resolveDispatch(args.capsuleId);
   if (!dispatch.available) return { routed: false, reason: dispatch.reason };
