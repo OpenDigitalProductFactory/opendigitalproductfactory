@@ -94,20 +94,20 @@ export async function createAuthorizationDecisionLog(input: {
   routeContext?: string | null;
   decision: "allow" | "deny" | "require_approval";
   rationale: Prisma.InputJsonValue;
-}): Promise<void> {
+}, db: Pick<Prisma.TransactionClient, "authorityBinding" | "authorizationDecisionLog"> = prisma): Promise<void> {
   const agentIdentityRef = input.agentContextRef
     ? (await getAgentGaidMap([input.agentContextRef])).get(input.agentContextRef) ?? input.agentContextRef
     : null;
   const authorityBindingId = input.authorityBindingRef
     ? (
-        await prisma.authorityBinding.findUnique({
+        await db.authorityBinding.findUnique({
           where: { bindingId: input.authorityBindingRef },
           select: { id: true },
         })
       )?.id ?? null
     : null;
 
-  await prisma.authorizationDecisionLog.create({
+  await db.authorizationDecisionLog.create({
     data: {
       decisionId: crypto.randomUUID(),
       actorType: input.actorType,
