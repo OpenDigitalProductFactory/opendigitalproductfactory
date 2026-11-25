@@ -18,6 +18,8 @@ const digest = (bytes: Buffer | string) => createHash("sha256").update(bytes).di
 const brands = new WeakSet<object>();
 let retained: { pid: number; hostname: string; proof: ReassessmentRuntimeCompatibility } | null = null;
 const defaultRunDocker: ReassessmentContractPorts["runDocker"] = async args => {
+  // BI-224F56F1: the qualified portal has no Docker; the actuator passes its own runner.
+  if (await usesPrivateActuator()) refuseReassessmentWithDetail("portal-docker-unavailable");
   const nameIndex = args.indexOf("--name"), containerName = nameIndex < 0 ? undefined : args[nameIndex + 1];
   const result = await runProcessWithBudget("docker", args, { timeoutMs: 60_000, maxStdoutBytes: 8192, containerName });
   if (result.outputLimitExceeded) refuseReassessmentWithDetail("docker-output-oversized");
