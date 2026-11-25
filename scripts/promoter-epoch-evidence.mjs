@@ -553,7 +553,7 @@ export async function readScopeWriterObserverBinding({ stateDir, secret, now = n
 export async function serveScopeWriterObserver(env, { fencePreviews, observeCiCapacity, reconcileSubstrate, sweepPromoters,
   doctools, openRuntimeSession }) {
   const { createScopeWriterObserver, observeActuatorProjectServices, observeActuatorProjectContainers, observeActuatorPortalImage,
-    observeActuatorSandbox, publishActuatorSocket } =
+    observeActuatorSandbox, publishActuatorSocket, restartActuatorProjectService } =
     await import('./lib/scope-writer-observation.mjs');
   const stateDir = '/dpf-state';
   const project = env.PROMOTE_COMPOSE_PROJECT;
@@ -581,6 +581,7 @@ export async function serveScopeWriterObserver(env, { fencePreviews, observeCiCa
     },
     observeServices: () => observeActuatorProjectServices(project),
     observeProjectContainers: () => observeActuatorProjectContainers(project),
+    restartService: service => restartActuatorProjectService(project, service),
     observePortalImage: () => observeActuatorPortalImage(project),
     observeSandbox,
     readReassessmentProof: async () => {

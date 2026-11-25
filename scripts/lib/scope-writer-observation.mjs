@@ -4,7 +4,7 @@ import { EventEmitter, once } from 'node:events';
 import { chmod, chown, lstat, readFile, rename } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { StringDecoder } from 'node:string_decoder';
-import { dockerSocketGet } from './docker-socket.mjs';
+import { dockerSocketGet, dockerSocketRestart } from './docker-socket.mjs';
 
 export const SCOPE_WRITER_OBSERVER_SOCKET = '/run/dpf-actuator/scope-observer.sock';
 const cohortPath = '/v1/scope-writer/cohort';
@@ -19,6 +19,7 @@ const serviceLogsPath = '/v1/runtime/service-logs';
 const fencePreviewsPath = '/v1/runtime/fence-ended-previews';
 const reconcileSubstratePath = '/v1/runtime/reconcile-substrate';
 const sweepPromotersPath = '/v1/runtime/sweep-promoters';
+const restartServicePath = '/v1/runtime/restart-service';
 const doctoolsPath = '/v1/runtime/doctools/';
 const doctoolsHealthPath = '/v1/runtime/doctools-health';
 const runtimeSessionPath = '/v1/runtime/workroom-session';
@@ -28,6 +29,8 @@ const pendingStreamLimit = 1024 * 1024;
 const responseLimit = 8192;
 const serviceLogResponseLimit = 180 * 1024;
 export const ACTUATOR_SERVICE_LOG_NAMES = Object.freeze(['portal', 'sandbox', 'postgres', 'portal-init', 'browser-use']);
+/** The governed admin_restart_service catalog (BI-01EA3EBE); Postgres is the only data service. */
+export const ACTUATOR_RESTARTABLE_SERVICES = Object.freeze(['portal', 'sandbox', 'postgres']);
 const unavailable = () => new Error('scope_writer_observation_unavailable');
 
 export function hasPrivateActuatorMount(mountinfo) {
@@ -64,7 +67,7 @@ async function readBoundedStream(stream, bytes) {
  * The observer derives scope from host-owned state, never from the request. */
 export function createScopeWriterObserver({ observe, observeServices, observeCiCapacity, readRetirement, fencePreviews,
   reconcileSubstrate, readServiceLogs, observeProjectContainers, observePortalImage, observeSandbox, sweepPromoters,
-  doctools, openRuntimeSession, readReassessmentProof }) {
+  doctools, openRuntimeSession, readReassessmentProof, restartService }) {
   const operations = new Map([
     [`GET ${cohortPath}`, observe], [`GET ${projectServicesPath}`, observeServices],
     [`GET ${ciCapacityPath}`, observeCiCapacity],
@@ -108,7 +111,11 @@ export function createScopeWriterObserver({ observe, observeServices, observeCiC
     const log = requestedLog && readServiceLogs && ACTUATOR_SERVICE_LOG_NAMES.includes(requestedLog[1]) && Number(requestedLog[2]) <= 500
       ? () => requestedLog[3] ? readServiceLogs(requestedLog[1], Number(requestedLog[2]), true)
         : readServiceLogs(requestedLog[1], Number(requestedLog[2])) : null;
-    const call = log ?? operations.get(`${req.method} ${req.url}`);
+    const requestedRestart = req.method === 'POST' && req.url?.startsWith(`${restartServicePath}?`)
+      ? /^service=([a-z]+)$/.exec(req.url.slice(restartServicePath.length + 1)) : null;
+    const restart = requestedRestart && restartService && ACTUATOR_RESTARTABLE_SERVICES.includes(requestedRestart[1])
+      ? () => restartService(requestedRestart[1]) : null;
+    const call = log ?? restart ?? operations.get(`${req.method} ${req.url}`);
     if (!call || req.headers['transfer-encoding'] !== undefined
       || (req.headers['content-length'] !== undefined && req.headers['content-length'] !== '0')) {
       res.writeHead(404).end();
@@ -360,6 +367,11 @@ export function reconcileActuatorPromoters({ socketPath = SCOPE_WRITER_OBSERVER_
   return requestActuator(sweepPromotersPath, socketPath, { method: 'POST', timeoutMs: 45_000 });
 }
 
+export function restartActuatorService(service, { socketPath = SCOPE_WRITER_OBSERVER_SOCKET } = {}) {
+  if (!ACTUATOR_RESTARTABLE_SERVICES.includes(service)) return Promise.reject(unavailable());
+  return requestActuator(`${restartServicePath}?service=${service}`, socketPath, { method: 'POST', timeoutMs: 60_000 });
+}
+
 export function readActuatorProjectContainers({ socketPath = SCOPE_WRITER_OBSERVER_SOCKET } = {}) {
   return requestActuator(projectContainersPath, socketPath, { timeoutMs: 6_000, maxBytes: serviceLogResponseLimit });
 }
@@ -478,6 +490,19 @@ export async function observeActuatorProjectContainers(project, get = dockerSock
     return { ID: item.Id, Name: name.slice(1), Service: item.Labels['com.docker.compose.service'], State: item.State, Status: item.Status };
   });
   return { containers };
+}
+
+/** The installation binding selects the project; the request names only a
+ * catalog service. Exactly one owned, non-one-off container may match. */
+export async function restartActuatorProjectService(project, service, get = dockerSocketGet, restart = dockerSocketRestart) {
+  if (!ACTUATOR_RESTARTABLE_SERVICES.includes(service)) throw unavailable();
+  const matches = (await ownProjectContainers(project, get)).filter(item => item.Labels['com.docker.compose.service'] === service);
+  const target = matches[0];
+  const name = Array.isArray(target?.Names) ? target.Names[0] : null;
+  if (matches.length !== 1 || !/^[a-f0-9]{64}$/.test(target.Id ?? '')
+    || !/^\/[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}$/.test(name ?? '')) throw unavailable();
+  await restart(target.Id);
+  return { service, container: name.slice(1) };
 }
 
 /** Only the installation binding selects the project. Daemon metadata is

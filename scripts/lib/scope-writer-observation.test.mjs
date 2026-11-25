@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { once } from 'node:events';
+import { EventEmitter, once } from 'node:events';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { request } from 'node:http';
 import { tmpdir } from 'node:os';
@@ -289,3 +289,59 @@ it('serves only the actuator-owned current reassessment proof', unixOnly, async 
       assert.equal(calls, 1);
     });
 });
+
+it('restarts only a catalog service named by a fixed query, never a caller-supplied container', unixOnly, async () => {
+  const { createScopeWriterObserver, restartActuatorService } = await load();
+  const calls = [];
+  await withServer(observe => createScopeWriterObserver({ observe, restartService: async service => {
+    calls.push(service);
+    return { service, container: `owned-${service}-1` };
+  } }), async () => ({}), async socketPath => {
+    assert.deepEqual(await restartActuatorService('sandbox', { socketPath }), { service: 'sandbox', container: 'owned-sandbox-1' });
+    for (const query of ['service=peer', 'service=portal-init', 'service=sandbox&container=peer', 'container=abc']) {
+      assert.equal(await call(socketPath, { method: 'POST', path: `/v1/runtime/restart-service?${query}` }), 404);
+    }
+    assert.equal(await call(socketPath, { method: 'GET', path: '/v1/runtime/restart-service?service=sandbox' }), 404);
+    await assert.rejects(restartActuatorService('peer', { socketPath }));
+    assert.deepEqual(calls, ['sandbox']);
+  });
+});
+
+it('resolves exactly one owned project container before restarting it by full ID', async () => {
+  const { restartActuatorProjectService } = await load();
+  const owner = { 'com.docker.compose.project': 'owned', 'com.docker.compose.service': 'postgres' };
+  const postgres = { Id: 'b'.repeat(64), Names: ['/owned-postgres-1'], State: 'exited', Status: 'Exited (1)', Labels: owner };
+  const restarted = [];
+  const restart = async id => { restarted.push(id); };
+  const peers = [postgres, { ...postgres, Id: 'c'.repeat(64), Labels: { ...owner, 'com.docker.compose.project': 'peer' } },
+    { ...postgres, Id: 'd'.repeat(64), Labels: { ...owner, 'com.docker.compose.oneoff': 'True' } }];
+  assert.deepEqual(await restartActuatorProjectService('owned', 'postgres', async () => peers, restart),
+    { service: 'postgres', container: 'owned-postgres-1' });
+  assert.deepEqual(restarted, [postgres.Id]);
+  await assert.rejects(restartActuatorProjectService('owned', 'postgres', async () => [postgres, { ...postgres, Id: 'e'.repeat(64) }], restart));
+  await assert.rejects(restartActuatorProjectService('owned', 'postgres', async () => [], restart));
+  await assert.rejects(restartActuatorProjectService('owned', 'redis', async () => peers, restart));
+  await assert.rejects(restartActuatorProjectService('owned', 'postgres', async () => [{ ...postgres, Id: 'short' }], restart));
+  assert.deepEqual(restarted, [postgres.Id]);
+});
+
+it('accepts only an exact container ID for a bounded daemon restart', async () => {
+  const { boundedDockerSocketRestart } = await import('./docker-socket.mjs');
+  const paths = [];
+  const factory = (options, onResponse) => {
+    paths.push(`${options.method} ${options.path}`);
+    const response = new EventEmitter();
+    response.statusCode = 204;
+    queueMicrotask(() => { onResponse(response); response.emit('end'); });
+    const req = new EventEmitter();
+    req.setTimeout = () => {}; req.end = () => {}; req.destroy = () => {};
+    return req;
+  };
+  await boundedDockerSocketRestart('a'.repeat(64), factory);
+  assert.deepEqual(paths, [`POST /containers/${'a'.repeat(64)}/restart?t=10`]);
+  for (const bad of ['dpf-postgres-1', 'a'.repeat(12), `${'a'.repeat(64)}/../x`]) {
+    await assert.rejects(boundedDockerSocketRestart(bad, factory), /docker_engine_restart_identity_invalid/);
+  }
+  assert.equal(paths.length, 1);
+});
+

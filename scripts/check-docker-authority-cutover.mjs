@@ -59,7 +59,7 @@ export const DOCKER_AUTHORITY_REGISTRY = Object.freeze({
   "apps/web/lib/mcp/packs/sandbox-pack.ts": { class: "pending", count: 4, reason: "Writer-reachable raw Docker call; migrate to a typed actuator operation before the immutable recipe." },
   "apps/web/lib/nonprod/local-ci-capacity-broker.ts": { class: "routed", count: 1, reason: "readActuatorCiCapacity when the actuator mount is present; *AtDaemon runs in the actuator." },
   "apps/web/lib/operate/backups/extension-preflight.ts": { class: "pending", count: 2, reason: "Writer-reachable raw Docker call; migrate to a typed actuator operation before the immutable recipe." },
-  "apps/web/lib/operate/service-restart.ts": { class: "pending", count: 3, reason: "Writer-reachable raw Docker call; migrate to a typed actuator operation before the immutable recipe." },
+  "apps/web/lib/operate/service-restart.ts": { class: "routed", count: 3, reason: "restartActuatorService when the actuator mount is present; a refusal never falls back to shell Docker." },
   "apps/web/lib/platform-runtime/runtime-capability-executor.ts": { class: "pending", count: 1, reason: "Writer-reachable raw Docker call; migrate to a typed actuator operation before the immutable recipe." },
   "apps/web/lib/queue/functions/infra-prune.ts": { class: "pending", count: 4, reason: "Writer-reachable raw Docker call; migrate to a typed actuator operation before the immutable recipe." },
   "apps/web/lib/queue/functions/substrate-reconciler.ts": { class: "routed", count: 4, reason: "reconcileActuatorSubstrate when the actuator mount is present; the daemon path is the actuator's own owner." },

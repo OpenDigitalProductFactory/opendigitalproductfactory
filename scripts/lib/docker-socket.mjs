@@ -47,7 +47,7 @@ function boundedDockerRequest(path, method, requestFactory, timeoutMs, maxBytes,
             return;
           }
           if (stopping) {
-            if (status !== 204 && status !== 304) { fail("docker_engine_stop_response_unverified"); return; }
+            if (status !== 204 && status !== 304) { fail("docker_engine_no_content_response_unverified"); return; }
             settled = true; clearTimeout(deadline); resolve(undefined); return;
           }
           try {
@@ -81,6 +81,18 @@ export function boundedDockerSocketStop(containerId, requestFactory, timeoutMs =
     return Promise.reject(new Error("docker_engine_stop_identity_invalid"));
   }
   return boundedDockerRequest(`/containers/${containerId}/stop?t=5`, "POST", requestFactory, timeoutMs, maxBytes, true);
+}
+
+/** Fixed operation only; the caller must already have resolved one owned ID. */
+export function boundedDockerSocketRestart(containerId, requestFactory, timeoutMs = 45_000, maxBytes = 1024) {
+  if (typeof containerId !== "string" || !/^[a-f0-9]{64}$/.test(containerId)) {
+    return Promise.reject(new Error("docker_engine_restart_identity_invalid"));
+  }
+  return boundedDockerRequest(`/containers/${containerId}/restart?t=10`, "POST", requestFactory, timeoutMs, maxBytes, true);
+}
+
+export function dockerSocketRestart(containerId) {
+  return boundedDockerSocketRestart(containerId, request);
 }
 
 export function dockerSocketStop(containerId) {
