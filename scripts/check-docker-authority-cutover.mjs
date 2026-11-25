@@ -55,7 +55,7 @@ export const DOCKER_AUTHORITY_REGISTRY = Object.freeze({
   "apps/web/lib/coworker/service-converge-report.ts": { class: "message", count: 1, reason: "A literal matched against recorded admin_run_command parameters; it runs nothing (the executing tool is admin-pack)." },
   "apps/web/lib/documents/conversion/availability.ts": { class: "routed", count: 1, reason: "readActuatorDoctoolsHealth when the actuator mount is present." },
   "apps/web/lib/documents/conversion/command.ts": { class: "routed", count: 1, reason: "Builds converter argv shared by the actuator and the mount-absent fallback; spawns nothing itself." },
-  "apps/web/lib/platform-runtime/portal-actuator-entry.ts": { class: "actuator", count: 8, reason: "The private actuator launches the authorized source writer, the candidate promoter stage, the fixed converter image operations, the candidate reassessment probe and a build's sandbox database steps after their launchers admit the request, and pins the installed promoter image (DI-250233FBDD9B, DI-B3171A8F09DC)." },
+  "apps/web/lib/platform-runtime/portal-actuator-entry.ts": { class: "actuator", count: 7, reason: "The private actuator launches the authorized source writer, the candidate promoter stage, the fixed converter image operations, the candidate reassessment probe and a build's sandbox database steps after their launchers admit the request, and pins the installed promoter image (DI-250233FBDD9B, DI-B3171A8F09DC)." },
   "apps/web/lib/documents/conversion/doctools-actuator.ts": { class: "actuator", count: 3, reason: "Runs only inside the private actuator (imported by portal-actuator-entry.ts)." },
   "apps/web/lib/documents/generation/render.ts": { class: "routed", count: 1, reason: "runActuatorDoctools when the actuator mount is present." },
   "apps/web/lib/edge-node/remote-provisioning.ts": { class: "message", count: 2, reason: "Script text executed on a remote edge host, never by the portal." },
@@ -116,7 +116,12 @@ const PATTERNS = [
   /\bsocketPath\s*:/,
   /\b(?:bounded)?[dD]ockerSocket(?:Get|Stop)\s*\(/,
   new RegExp(String.raw`["']${DOCKER_EXE}["']\s*,\s*(?:\[|\.{3}|[A-Za-z_$][\w$.]*\s*[,()])`),
-  new RegExp(String.raw`^\s*["']${DOCKER_EXE}["'],\s*$`),
+  // The literal executable as a call's first argument, whatever the argv
+  // expression after it (bracket access, a call, a spread): the executable
+  // alone decides, so no argv shape escapes.
+  new RegExp(String.raw`[\w$]\s*\(\s*["'\`]${DOCKER_EXE}["'\`]\s*,`),
+  // The same call split across lines: the literal opens its line.
+  new RegExp(String.raw`^\s*["'\`]${DOCKER_EXE}["'\`]\s*,`),
   new RegExp(String.raw`\bcommand:\s*["']${DOCKER_EXE}["']`),
   /[`"'](?:\/[\w.-]+)*\/?docker\s+(?:exec|run|compose|inspect|ps|rm|rmi|image|images|start|stop|restart|logs|info|cp|create|buildx|builder|network|volume|pull|push|build|kill|container|system|tag|save|load|commit|wait|update|top|stats|port|attach|events|version|context|manifest|login|history|pause|unpause)\b/,
 ];

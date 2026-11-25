@@ -195,7 +195,7 @@ async function main() {
     },
     // A build's sandbox database steps, admitted on its in-use sandbox slot.
     sandboxDb: async (body, observeSandbox, resolveService) => {
-      const [{ createSandboxDbOperator }, { runProcessWithBudget }, { spawn }] = await Promise.all([
+      const [{ createSandboxDbOperator, stagedRestorePipe }, { runProcessWithBudget }, { spawn }] = await Promise.all([
         import("../build/sandbox/sandbox-db-actuator"), import("../shared/run-process-with-budget"), import("node:child_process"),
       ]);
       return createSandboxDbOperator({
@@ -206,24 +206,8 @@ async function main() {
         observeSandbox,
         resolveService,
         run: args => runProcessWithBudget("docker", args, { timeoutMs: 30_000, maxStdoutBytes: 4096 }),
-        pipe: (from, to) => new Promise(resolve => {
-          const source = spawn("docker", from, { stdio: ["ignore", "pipe", "pipe"] });
-          const sink = spawn("docker", to, { stdio: ["pipe", "ignore", "pipe"] });
-          let stderr = "", sourceCode: number | null | undefined, sinkCode: number | null | undefined;
-          const timer = setTimeout(() => { source.kill("SIGTERM"); sink.kill("SIGTERM"); }, 10 * 60_000);
-          const settle = () => {
-            if (sourceCode === undefined || sinkCode === undefined) return;
-            clearTimeout(timer);
-            resolve({ exitCode: sourceCode === 0 && sinkCode === 0 ? 0 : 1, stderr: stderr.slice(-4096) });
-          };
-          source.stdout.pipe(sink.stdin);
-          sink.stdin.on("error", () => source.kill("SIGTERM"));
-          for (const child of [source, sink]) child.stderr.on("data", (chunk: Buffer) => { stderr = (stderr + chunk.toString("utf8")).slice(-8192); });
-          source.once("error", () => { sourceCode = 1; settle(); });
-          sink.once("error", () => { sinkCode = 1; settle(); });
-          source.once("close", code => { sourceCode ??= code; settle(); });
-          sink.once("close", code => { sinkCode ??= code; settle(); });
-        }),
+        // Staged: COMMIT only after a clean dump (sandbox-db-actuator.ts).
+        pipe: (from, to) => stagedRestorePipe((args, stdio) => spawn("docker", args, { stdio }), from, to),
       })(body);
     },
     doctools: createDoctoolsActuator(project),

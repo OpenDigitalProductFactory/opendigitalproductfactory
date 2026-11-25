@@ -38,11 +38,56 @@ export function createSandboxDbOperator(deps: {
       return { ok: result.exitCode === 0, detail: result.stdout.slice(-512) };
     }
     const production = await deps.resolveService("postgres");
-    const result = await deps.pipe(["exec", production, "pg_dump", "--data-only", "-U", "dpf", "dpf"],
-      // A failed statement stops psql non-zero and rolls the whole seed back.
-      ["exec", "-i", sandboxDb, "psql", "-v", "ON_ERROR_STOP=1", "--single-transaction", "-U", "dpf", "dpf"]);
+    // --no-blobs: the dump then carries no transaction control of its own, so
+    // the one transaction stagedRestorePipe opens is the only one.
+    const result = await deps.pipe(["exec", production, "pg_dump", "--data-only", "--no-blobs", "-U", "dpf", "dpf"],
+      // A failed statement stops psql non-zero; the pipe commits only after a clean dump.
+      ["exec", "-i", sandboxDb, "psql", "-v", "ON_ERROR_STOP=1", "-U", "dpf", "dpf"]);
     return { ok: result.exitCode === 0, detail: result.stderr.slice(-1024) };
   };
+}
+
+type PipeChild = {
+  stdin: NodeJS.WritableStream & { on(event: "error", listener: () => void): unknown } | null;
+  stdout: NodeJS.ReadableStream | null;
+  stderr: NodeJS.ReadableStream | null;
+  kill: (signal?: NodeJS.Signals) => boolean;
+  once(event: "close", listener: (code: number | null) => void): unknown;
+  once(event: "error", listener: () => void): unknown;
+};
+
+/** Pipes a dump into psql inside one explicit transaction. COMMIT is sent
+ * only after the dump exits cleanly. A dump that dies between complete
+ * statements ends psql's input with the transaction still open, so the
+ * server rolls the partial seed back. */
+export function stagedRestorePipe(spawnDocker: (args: string[], stdio: ["ignore" | "pipe", "pipe" | "ignore", "pipe"]) => PipeChild,
+  from: string[], to: string[], timeoutMs = 10 * 60_000): Promise<{ exitCode: number; stderr: string }> {
+  return new Promise(resolve => {
+    const source = spawnDocker(from, ["ignore", "pipe", "pipe"]);
+    const sink = spawnDocker(to, ["pipe", "ignore", "pipe"]);
+    let stderr = "", sourceCode: number | null | undefined, sinkCode: number | null | undefined;
+    const timer = setTimeout(() => { source.kill("SIGTERM"); sink.kill("SIGTERM"); }, timeoutMs);
+    const settle = () => {
+      if (sourceCode === undefined || sinkCode === undefined) return;
+      clearTimeout(timer);
+      resolve({ exitCode: sourceCode === 0 && sinkCode === 0 ? 0 : 1, stderr: stderr.slice(-4096) });
+    };
+    let inputDone = false;
+    const finishInput = () => {
+      if (inputDone) return;
+      inputDone = true;
+      if (sourceCode === 0) sink.stdin?.end("\nCOMMIT;\n");
+      else sink.stdin?.end();
+    };
+    sink.stdin?.on("error", () => source.kill("SIGTERM"));
+    sink.stdin?.write("BEGIN;\n");
+    source.stdout?.pipe(sink.stdin as NodeJS.WritableStream, { end: false });
+    for (const child of [source, sink]) child.stderr?.on("data", (chunk: Buffer) => { stderr = (stderr + chunk.toString("utf8")).slice(-8192); });
+    source.once("error", () => { sourceCode = 1; finishInput(); settle(); });
+    sink.once("error", () => { sinkCode = 1; settle(); });
+    source.once("close", code => { sourceCode ??= code; finishInput(); settle(); });
+    sink.once("close", code => { sinkCode ??= code; settle(); });
+  });
 }
 
 type ActuatorSend = (body: unknown, timeoutMs: number) => Promise<unknown>;

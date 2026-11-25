@@ -37,6 +37,10 @@ const USER = /^(?:root|node|[0-9]{1,6}(?::[0-9]{1,6})?)$/;
 const ARG_LIMIT = 64 * 1024;
 const refuse = () => new Error("sandbox_exec_admission_refused");
 const plain = (value: string) => !value.includes("\0");
+/** Docker's env-file reader scans lines of at most 64 KiB in bytes: the whole
+ * `NAME=value` line, newline included, measured as UTF-8. */
+const envLine = (name: string, text: string) => `${name}=${text}\n`;
+const envLineFits = (name: string, text: string) => Buffer.byteLength(envLine(name, text), "utf8") <= ARG_LIMIT;
 
 /** A request the actuator will run, or a refusal. Exact keys only. */
 export function readSandboxExecOwner(value: unknown): SandboxExecOwner {
@@ -46,7 +50,7 @@ export function readSandboxExecOwner(value: unknown): SandboxExecOwner {
     || (value.command[0] as string).length === 0
     || !isRecord(value.env) || Object.keys(value.env).length > 32
     || !Object.entries(value.env).every(([name, text]) => ENV_NAME.test(name) && !RESERVED_ENV.test(name)
-      && typeof text === "string" && text.length <= ARG_LIMIT && plain(text) && !/[\r\n]/.test(text))
+      && typeof text === "string" && envLineFits(name, text) && plain(text) && !/[\r\n]/.test(text))
     || !(value.workdir === null || (typeof value.workdir === "string" && WORKDIR.test(value.workdir)
       && !value.workdir.split("/").some(part => part === "..")))
     || !(value.user === null || (typeof value.user === "string" && USER.test(value.user)))
@@ -69,12 +73,20 @@ export function buildSandboxExecArgs(owner: SandboxExecOwner, containerId: strin
 
 type EnvFile = { path: string; remove: () => Promise<void> };
 
-/** A 0600 env file in a fresh 0700 directory, removed when the exec ends. */
-async function writePrivateEnvFile(env: Record<string, string>): Promise<EnvFile> {
+/** A 0600 env file in a fresh 0700 directory, removed when the exec ends.
+ * A failed write removes the directory and any partial file before it throws. */
+export async function writePrivateEnvFile(env: Record<string, string>,
+  fs: { writeFile: typeof writeFile } = { writeFile }): Promise<EnvFile> {
   const dir = await mkdtemp(join(tmpdir(), "dpf-sandbox-exec-"));
   const path = join(dir, "env");
-  await writeFile(path, Object.entries(env).map(([name, text]) => `${name}=${text}\n`).join(""), { mode: 0o600, flag: "wx" });
-  return { path, remove: () => rm(dir, { recursive: true, force: true }) };
+  const remove = () => rm(dir, { recursive: true, force: true });
+  try {
+    await fs.writeFile(path, Object.entries(env).map(([name, text]) => envLine(name, text)).join(""), { mode: 0o600, flag: "wx" });
+  } catch (error) {
+    await remove().catch(() => undefined);
+    throw error;
+  }
+  return { path, remove };
 }
 
 /** The Docker client's own environment: fixed, never the caller's. */
@@ -87,7 +99,7 @@ export function createSandboxExecActuator(deps: { spawn?: typeof spawn; writeEnv
     const owner = readSandboxExecOwner(value);
     const sandbox = await observeSandbox();
     if (!sandbox.running || !/^[a-f0-9]{64}$/.test(sandbox.containerId)) throw refuse();
-    const envFile = Object.keys(owner.env).length > 0 ? await (deps.writeEnvFile ?? writePrivateEnvFile)(owner.env) : null;
+    const envFile = Object.keys(owner.env).length > 0 ? await (deps.writeEnvFile ?? (env => writePrivateEnvFile(env)))(owner.env) : null;
     const cleanup = () => { void envFile?.remove().catch(() => undefined); };
     let child: ReturnType<typeof spawn>;
     try {

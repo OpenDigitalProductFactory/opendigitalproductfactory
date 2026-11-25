@@ -46,6 +46,19 @@ test("detects the Docker executable by absolute path and argv built by a call", 
   assert.deepEqual(findRawDockerLines(source), [1, 2, 3, 4, 5, 6]);
 });
 
+test("detects the literal executable in a call whatever the argv expression", () => {
+  const source = [
+    'spawn("docker", argv["exec"]);',
+    "run('/usr/bin/docker', parts[0], {});",
+    'execFile(`docker`, build(owner)[1]);',
+    'spawnSync("docker", flag ? a : b);',
+    "const child = spawn(",
+    '  "docker", argv[0],',
+    ");",
+  ].join("\n");
+  assert.deepEqual(findRawDockerLines(source), [1, 2, 3, 4, 6]);
+});
+
 test("ignores comments, substring checks and non-call literals", () => {
   const source = [
     "// spawn(\"docker\", [\"ps\"]) is what we used to do",

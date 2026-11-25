@@ -1,6 +1,8 @@
+import { EventEmitter } from "node:events";
+import { PassThrough } from "node:stream";
 import { describe, expect, it } from "vitest";
 
-import { createSandboxDbOperator, sandboxDbThroughActuator } from "./sandbox-db-actuator";
+import { createSandboxDbOperator, sandboxDbThroughActuator, stagedRestorePipe } from "./sandbox-db-actuator";
 
 const buildId = "FB-12345678";
 const ids = { postgres: "a".repeat(64), "sandbox-postgres": "b".repeat(64) } as const;
@@ -24,8 +26,8 @@ describe("createSandboxDbOperator", () => {
     await expect(h.operate({ owner: { kind: "build", buildId }, operation: "ready" })).resolves.toEqual({ ok: true, detail: "accepting connections" });
     expect(h.runs).toEqual([["exec", ids["sandbox-postgres"], "pg_isready", "-U", "dpf"]]);
     await expect(h.operate({ owner: { kind: "build", buildId }, operation: "seed" })).resolves.toMatchObject({ ok: true });
-    expect(h.pipes).toEqual([[["exec", ids.postgres, "pg_dump", "--data-only", "-U", "dpf", "dpf"],
-      ["exec", "-i", ids["sandbox-postgres"], "psql", "-v", "ON_ERROR_STOP=1", "--single-transaction", "-U", "dpf", "dpf"]]]);
+    expect(h.pipes).toEqual([[["exec", ids.postgres, "pg_dump", "--data-only", "--no-blobs", "-U", "dpf", "dpf"],
+      ["exec", "-i", ids["sandbox-postgres"], "psql", "-v", "ON_ERROR_STOP=1", "-U", "dpf", "dpf"]]]);
   });
 
   it("reports a seed whose SQL fails as not ok, with the error detail", async () => {
@@ -67,5 +69,43 @@ describe("sandboxDbThroughActuator", () => {
       .resolves.toEqual({ ok: true, detail: "" });
     await expect(sandboxDbThroughActuator(buildId, "ready", async () => true, async () => { throw new Error("lost"); })).resolves.toMatchObject({ ok: false });
     expect(bodies).toEqual([{ owner: { kind: "build", buildId }, operation: "seed" }]);
+  });
+});
+
+describe("stagedRestorePipe", () => {
+  // A dump that writes the given SQL and exits with dumpCode; a psql that
+  // records its input and exits 0 at EOF, as psql does with an open transaction.
+  async function restore(sql: string, dumpCode: number) {
+    let received = "";
+    const spawnDocker = (args: string[]) => {
+      const child = Object.assign(new EventEmitter(), {
+        stdin: new PassThrough(), stdout: new PassThrough(), stderr: new PassThrough(), kill: () => true,
+      });
+      if (args.includes("pg_dump")) {
+        setImmediate(() => {
+          child.stdout.end(sql);
+          child.stdout.once("end", () => setImmediate(() => child.emit("close", dumpCode)));
+        });
+      } else {
+        child.stdin.on("data", (chunk: Buffer) => { received += chunk.toString("utf8"); });
+        child.stdin.once("finish", () => setImmediate(() => child.emit("close", 0)));
+      }
+      return child as never;
+    };
+    const result = await stagedRestorePipe(spawnDocker, ["exec", "pg", "pg_dump"], ["exec", "-i", "sb", "psql"]);
+    return { result, received };
+  }
+
+  it("commits only after the dump exits cleanly", async () => {
+    const { result, received } = await restore('INSERT INTO "A" VALUES (1);\n', 0);
+    expect(result.exitCode).toBe(0);
+    expect(received).toBe('BEGIN;\nINSERT INTO "A" VALUES (1);\n\nCOMMIT;\n');
+  });
+
+  it("never commits a dump that fails after emitting valid SQL, and reports failure", async () => {
+    const { result, received } = await restore('INSERT INTO "A" VALUES (1);\nINSERT INTO "B" VALUES (2);\n', 1);
+    expect(result.exitCode).toBe(1);
+    expect(received).toBe('BEGIN;\nINSERT INTO "A" VALUES (1);\nINSERT INTO "B" VALUES (2);\n');
+    expect(received).not.toContain("COMMIT");
   });
 });

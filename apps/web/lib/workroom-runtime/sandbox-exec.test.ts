@@ -1,8 +1,10 @@
 import { EventEmitter } from "node:events";
+import { existsSync } from "node:fs";
+import { dirname } from "node:path";
 import { PassThrough } from "node:stream";
 import { describe, expect, it } from "vitest";
 
-import { buildSandboxExecArgs, createSandboxExecActuator, readSandboxExecOwner, type SandboxExecOwner } from "./sandbox-exec-actuator";
+import { buildSandboxExecArgs, createSandboxExecActuator, readSandboxExecOwner, writePrivateEnvFile, type SandboxExecOwner } from "./sandbox-exec-actuator";
 import { execSandbox, sandboxExecOwnerFor, spawnSandboxExec, type SandboxExecSession } from "./sandbox-exec";
 
 const owner = (overrides: Partial<SandboxExecOwner> = {}): SandboxExecOwner => ({
@@ -46,6 +48,15 @@ describe("readSandboxExecOwner", () => {
       { ...owner(), interactive: "yes" },
       owner({ detach: true, interactive: true }),
     ]) expect(() => readSandboxExecOwner(bad)).toThrow("sandbox_exec_admission_refused");
+  });
+
+  it("limits each env-file line to 64 KiB in UTF-8 bytes, name, delimiter and newline included", () => {
+    const limit = 64 * 1024;
+    const fits = "x".repeat(limit - "TOKEN=\n".length);
+    expect(readSandboxExecOwner(owner({ env: { TOKEN: fits } })).env.TOKEN).toBe(fits);
+    expect(() => readSandboxExecOwner(owner({ env: { TOKEN: `${fits}x` } }))).toThrow("sandbox_exec_admission_refused");
+    // 30,000 code units but 90,000 bytes: within a code-unit cap, over Docker's byte limit.
+    expect(() => readSandboxExecOwner(owner({ env: { TOKEN: "\u20ac".repeat(30_000) } }))).toThrow("sandbox_exec_admission_refused");
   });
 
   it("builds a fixed argv: observed container, values only in a private env file, never privileged", () => {
@@ -99,6 +110,19 @@ describe("createSandboxExecActuator environment", () => {
     }) as never;
     await createSandboxExecActuator({ spawn, writeEnvFile: async () => { throw new Error("unexpected"); } })(owner(), async () => ({ containerId: sandboxId, running: true }));
     expect(spawned[0]).not.toContain("--env-file");
+  });
+
+  it("removes the directory and a partial file when the production writer fails mid-write", async () => {
+    let partial = "";
+    const failing = (async (path: string, _data: string, options: { mode: number; flag: string }) => {
+      const { writeFile } = await import("node:fs/promises");
+      partial = path;
+      await writeFile(path, "TOKEN=sec", options);
+      throw Object.assign(new Error("ENOSPC: no space left on device"), { code: "ENOSPC" });
+    }) as never;
+    await expect(writePrivateEnvFile({ TOKEN: "secret" }, { writeFile: failing })).rejects.toThrow("ENOSPC");
+    expect(partial).toMatch(/dpf-sandbox-exec-[^/]+\/env$/);
+    expect(existsSync(dirname(partial))).toBe(false);
   });
 });
 
