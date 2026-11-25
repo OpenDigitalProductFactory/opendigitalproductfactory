@@ -65,6 +65,21 @@ test("promoter image contains the install-state validator at its import-resolved
   assert.ok(staged.has("scripts/rotate-runtime-transition-secret.mjs"));
 });
 
+test("paired teardown proof assets ride the script closure without making N-1 builds unable to start", async () => {
+  const [staged, contract] = await Promise.all([
+    readPromoterBuildContextSources(root),
+    readFile(join(root, "promoter-contract.json"), "utf8").then(JSON.parse),
+  ]);
+  for (const asset of [
+    "governed-teardown-recovery.mjs", "restore-uploads.mjs", "backup-uploads.mjs",
+    "lib/paired-recovery-contract.generated.cjs",
+  ]) {
+    assert.ok(staged.includes(`scripts/${asset}`), `${asset} is missing from the paired guard closure`);
+    await access(join(root, "scripts", asset));
+    assert.ok(!contract.requiredFiles.includes(`/promoter/${asset}`), `N-1 lacks the optional paired guard asset ${asset}`);
+  }
+});
+
 test("Dockerfile.promoter never enumerates individual script files", async () => {
   // The build context is staged by the DEPLOYED (N-1) portal from a list baked
   // into ITS image, while this Dockerfile is candidate-owned. A per-file COPY
@@ -326,4 +341,27 @@ test("key initialization runs from only the historical deployed staging set", as
   }
   const result = spawnSync(process.execPath, [join(stage, "scripts/rotate-runtime-transition-secret.mjs"), "--initialize", "--state-dir", join(stage, "state")], { encoding: "utf8" });
   assert.equal(result.status, 0, result.stderr);
+});
+
+test("the installed capability command sees the current closure and refuses N-1's partial closure", async (t) => {
+  const { mkdtemp, mkdir, copyFile, rm } = await import("node:fs/promises");
+  const { tmpdir } = await import("node:os");
+  const { spawnSync } = await import("node:child_process");
+  const released = JSON.parse(await readFile(join(root, N_MINUS_ONE_CLOSURE_FILE), "utf8"));
+  const current = await readPromoterBuildContextSources(root);
+  for (const [closure, expected] of [[released.deployedClosure, false], [current, true]]) {
+    const stage = await mkdtemp(join(tmpdir(), "dpf-paired-promoter-"));
+    t.after(() => rm(stage, { recursive: true, force: true }));
+    for (const file of closure.filter((name) => name.startsWith("scripts/"))) {
+      // scripts/ is flattened into /promoter by Dockerfile.promoter.
+      const destination = join(stage, file.slice("scripts/".length));
+      await mkdir(dirname(destination), { recursive: true });
+      await copyFile(join(root, file), destination);
+    }
+    const result = spawnSync(process.execPath, [join(stage, "governed-teardown.mjs"), "--capabilities"], {
+      encoding: "utf8", env: {},
+    });
+    assert.equal(result.status, 0, result.stderr);
+    assert.deepEqual(JSON.parse(result.stdout), { schemaVersion: 1, pairedVolumeTeardown: expected });
+  }
 });

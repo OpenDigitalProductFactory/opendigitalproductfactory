@@ -63,6 +63,17 @@ export function matchesAnyGlob(filePath, globs) {
 
 export const DERIVED_ARTIFACTS = [
   {
+    id: "paired-recovery-contract",
+    description: "Shared paired-recovery parser staged in the promoter's bounded script context",
+    sourceGlobs: [
+      "packages/integration-shared/src/paired-recovery-contract.cjs",
+      "scripts/gen-paired-recovery-contract.mjs",
+    ],
+    artifactPaths: ["scripts/lib/paired-recovery-contract.generated.cjs"],
+    generate: ["node", "scripts/gen-paired-recovery-contract.mjs"],
+    check: ["node", "scripts/gen-paired-recovery-contract.mjs", "--check"],
+  },
+  {
     id: "judgment-guard-runtime",
     description: "Verified scoped-judgment artifact -> dependency-free Node20 golden guard distribution",
     sourceGlobs: [

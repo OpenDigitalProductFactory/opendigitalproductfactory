@@ -564,6 +564,10 @@ COPY Dockerfile.promoter /promoter/Dockerfile.promoter
 COPY promoter-contract.json /promoter/promoter-contract.json
 COPY scripts/promote.sh /promoter/scripts/promote.sh
 COPY scripts/governed-teardown.mjs /promoter/scripts/governed-teardown.mjs
+COPY scripts/governed-teardown-recovery.mjs /promoter/scripts/governed-teardown-recovery.mjs
+COPY scripts/restore-uploads.mjs /promoter/scripts/restore-uploads.mjs
+COPY scripts/backup-uploads.mjs /promoter/scripts/backup-uploads.mjs
+COPY scripts/lib/paired-recovery-contract.generated.cjs /promoter/scripts/lib/paired-recovery-contract.generated.cjs
 COPY scripts/salvage-sweep.mjs /promoter/scripts/salvage-sweep.mjs
 COPY scripts/lib/git.mjs /promoter/scripts/lib/git.mjs
 COPY Dockerfile /promoter/Dockerfile
