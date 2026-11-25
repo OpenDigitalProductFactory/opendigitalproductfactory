@@ -1,9 +1,13 @@
-import { describe, expect, it } from "vitest";
+import { createHash } from "node:crypto";
+import { describe, expect, it, vi } from "vitest";
 import type { S5AdmissionCeiling } from "@/lib/workroom-runtime/s5-admission.server";
 import {
   captureS5CredentialCeiling,
   narrowS5CredentialForCurrentAdmission,
   readS5CredentialCeiling,
+  prepareS5ControlCredential,
+  resolveS5ControlCredential,
+  revokeS5ControlCredential,
   S5_WORKROOM_TOKEN_KIND,
   type S5CredentialCarrier,
 } from "./s5-room-credential.server";
@@ -31,6 +35,64 @@ function row(): S5CredentialCarrier {
 }
 
 describe("S5 credential ceiling", () => {
+  it("builds a hash-only record for the exact Control audience and absolute admission deadline", () => {
+    const prepared = prepareS5ControlCredential({ admission, receiver, userId: "user-a", now, expiresAt: after });
+    expect(prepared?.plaintext).toMatch(/^dpfroom_[\w-]{32}$/u);
+    const { data, plaintext } = prepared!;
+    expect(data).toMatchObject({ kind: S5_WORKROOM_TOKEN_KIND, resource: receiver.resource, userId: "user-a", agentId: admission.agentId,
+      workroomRef: locator.workroomId, runRef: locator.sessionRef, scope: "read", capability: "read", authorityBindingId: admission.authorityBindingId,
+      tokenHash: createHash("sha256").update(plaintext).digest("hex"), expiresAt: after });
+    expect(data.workroomAuthorization).toEqual(captureS5CredentialCeiling(admission));
+    expect(data).not.toHaveProperty("secretEnc");
+    expect(JSON.stringify(data)).not.toContain(plaintext);
+    expect(prepareS5ControlCredential({ admission, receiver: { ...receiver, audience: "other" }, userId: "user-a", now, expiresAt: after })).toBeNull();
+    expect(prepareS5ControlCredential({ admission, receiver, userId: "user-a", now, expiresAt: now })).toBeNull();
+  });
+
+  it("limits qualified credentials to the live qualification's earlier expiry", () => {
+    const validUntil = now.getTime() + 1_000;
+    const qualified: S5AdmissionCeiling = { ...admission, jsi: { kind: "eligible", validUntil,
+      qualification: { id: "qualification-a", version: 1, statusRevision: 1 },
+      selector: { installationId: receiver.issuer, organizationId: "org-a", subject, job: admission.job, activityKey: admission.activityKey,
+        scope: { workflow: "fixture", archetype: "fixture", jurisdiction: "US", dataClass: "synthetic", riskClass: "low" },
+        profileFingerprint: `sha256:${"a".repeat(64)}`, scheme: { id: "scheme-a", version: "1" } },
+      ceiling: { operationKeys: [...admission.operationKeys], excludedOperationKeys: [], oversight: "continuous-supervision" } } };
+    const prepared = prepareS5ControlCredential({ admission: qualified, receiver, userId: "user-a", now, expiresAt: after });
+    expect(prepared?.data.expiresAt).toEqual(new Date(validUntil));
+  });
+
+  it("reads by hash through the scoped carrier only and never refreshes the bearer", async () => {
+    const prepared = prepareS5ControlCredential({ admission, receiver, userId: "user-a", now, expiresAt: after })!;
+    const findUnique = vi.fn().mockResolvedValue({ ...row(), id: "token-a", userId: "user-a" });
+    const update = vi.fn();
+    const db = { mcpApiToken: { findUnique, update } };
+    const read = () => resolveS5ControlCredential(db, prepared.plaintext, receiver, now);
+    expect(await read()).toMatchObject({ tokenId: "token-a", userId: "user-a", ceiling: { projection: locator } });
+    expect(findUnique.mock.calls[0]?.[0]).toMatchObject({ where: { tokenHash: prepared.data.tokenHash } });
+    expect(findUnique.mock.calls[0]?.[0]?.select).not.toHaveProperty("secretEnc");
+    findUnique.mockResolvedValue({ ...row(), id: "token-a", userId: "user-a", kind: "workroom_session" });
+    expect(await read()).toBeNull();
+    findUnique.mockClear();
+    expect(await resolveS5ControlCredential(db, "dpfmcp_invalid", receiver, now)).toBeNull();
+    expect(findUnique).not.toHaveBeenCalled();
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it("fences only the original token, room, session and attempt", async () => {
+    const updateMany = vi.fn().mockResolvedValue({ count: 1 });
+    const tx = { mcpApiToken: { updateMany } };
+    await expect(revokeS5ControlCredential(tx, { tokenId: "token-a", ...locator, now, reason: "attempt-released" })).resolves.toBe(1);
+    expect(updateMany).toHaveBeenCalledExactlyOnceWith({
+      where: { id: "token-a", kind: S5_WORKROOM_TOKEN_KIND, workroomRef: locator.workroomId, runRef: locator.sessionRef, revokedAt: null,
+        AND: [{ workroomAuthorization: { path: ["stageAttemptRef"], equals: locator.stageAttemptRef } },
+          { workroomAuthorization: { path: ["schemaVersion"], equals: "s5-room-credential.v1" } }] },
+      data: { revokedAt: now, revokedReason: "attempt-released" },
+    });
+    updateMany.mockClear();
+    await expect(revokeS5ControlCredential(tx, { tokenId: "", ...locator, now, reason: "attempt-released" })).rejects.toThrow();
+    expect(updateMany).not.toHaveBeenCalled();
+  });
+
   it("accepts only the exact private v1 ceiling scoped to the authenticated Control receiver", () => {
     const value = readS5CredentialCeiling(row(), receiver, now);
     expect(value).toMatchObject({ projection: { ...locator, subject, stageKey: "development", operationKeys: admission.operationKeys },

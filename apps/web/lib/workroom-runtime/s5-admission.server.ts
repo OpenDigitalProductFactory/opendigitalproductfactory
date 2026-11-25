@@ -89,6 +89,7 @@ const key = (value: unknown): value is string => typeof value === "string" && va
 const validKeys = (value: unknown): value is readonly string[] => Array.isArray(value) && value.length <= 128
   && value.every(key) && new Set(value).size === value.length;
 const COORDINATION_ACTIVITY = "s5-route-handoff";
+export const isS5CoordinationActivity = (name: string): boolean => name === COORDINATION_ACTIVITY;
 // This runtime ceiling is narrower than the generic room-operation class.
 const proposalOnlyOperations: ReadonlySet<string> = new Set(["get_workroom", "read_room_messages", "post_room_message"]);
 export const isS5CoordinationOperation = (name: string): boolean => proposalOnlyOperations.has(name);
