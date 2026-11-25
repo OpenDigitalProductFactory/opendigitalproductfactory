@@ -62,6 +62,8 @@
 !scripts/lib/entry-module.mjs
 # BI-224F56F1: authorized source writer and its shared upgrade-source modules.
 !scripts/source-writer.mjs
+!scripts/promoter-candidate-build.mjs
+!scripts/lib/promoter-build-context-sources.mjs
 !scripts/lib/upgrade-source/prepare-source.mjs
 !scripts/lib/upgrade-source/transient-network.mjs
 !scripts/lib/upgrade-source/lfs-materialization.mjs

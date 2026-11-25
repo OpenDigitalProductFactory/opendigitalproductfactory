@@ -67,6 +67,9 @@ export const PROMOTER_BUILD_CONTEXT_SOURCES: readonly string[] = [
   "scripts/capability-service-catalog.generated.json",
   // BI-224F56F1: the authorized source writer and its shared upgrade-source modules.
   "scripts/source-writer.mjs",
+  // BI-224F56F1 (DI-B3171A8F09DC): the candidate stage builds the next promoter here.
+  "scripts/promoter-candidate-build.mjs",
+  "scripts/lib/promoter-build-context-sources.mjs",
   "scripts/lib/upgrade-source/prepare-source.mjs",
   "scripts/lib/upgrade-source/transient-network.mjs",
   "scripts/lib/upgrade-source/lfs-materialization.mjs",

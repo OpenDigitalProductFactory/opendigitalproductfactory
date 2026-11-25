@@ -611,6 +611,8 @@ COPY scripts/lib/script-argv.mjs /promoter/scripts/lib/script-argv.mjs
 COPY scripts/lib/git.mjs /promoter/scripts/lib/git.mjs
 COPY scripts/lib/capability-state-hash.mjs /promoter/scripts/lib/capability-state-hash.mjs
 COPY scripts/source-writer.mjs /promoter/scripts/source-writer.mjs
+COPY scripts/promoter-candidate-build.mjs /promoter/scripts/promoter-candidate-build.mjs
+COPY scripts/lib/promoter-build-context-sources.mjs /promoter/scripts/lib/promoter-build-context-sources.mjs
 COPY scripts/lib/upgrade-source/prepare-source.mjs /promoter/scripts/lib/upgrade-source/prepare-source.mjs
 COPY scripts/lib/upgrade-source/transient-network.mjs /promoter/scripts/lib/upgrade-source/transient-network.mjs
 COPY scripts/lib/upgrade-source/lfs-materialization.mjs /promoter/scripts/lib/upgrade-source/lfs-materialization.mjs
