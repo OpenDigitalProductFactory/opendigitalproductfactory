@@ -164,6 +164,37 @@ describe("principle_decide MCP tool", () => {
     expect(data.reasoning).toContain("refactor");
   });
 
+  it("keeps commandment-only scores for diagnosis but holds the verdict when recall is unavailable (BI-428A53FB)", async () => {
+    mockPrisma.organization.findFirst.mockResolvedValueOnce({ id: "org_a" });
+    listPrinciplesByTier.mockResolvedValueOnce([
+      principlePgRow("arch", { principleDimensionVector: { schema_grounding: 1 } }),
+    ]);
+    searchWikiPages.mockRejectedValue(new Error("recall unavailable"));
+    isEmbeddingAvailable.mockResolvedValue(false);
+
+    const res = await executeTool(
+      "principle_decide",
+      {
+        context: "Should we take the quick patch or refactor?",
+        options: [
+          { id: "patch", description: "Quick patch", features: { schema_grounding: 0.1 } },
+          { id: "refactor", description: "Refactor", features: { schema_grounding: 0.9 } },
+        ],
+        callingPopulation: "external_coding_agent",
+      },
+      "user_test",
+    );
+
+    expect(searchWikiPages).toHaveBeenCalledTimes(2);
+    expect(res.success).toBe(true);
+    expect(res.message).toMatch(/^NO RECOMMENDATION/);
+    expect(res.data).toMatchObject({
+      appliedPrincipleCount: 1,
+      recommendation: { optionId: "refactor" },
+      signalQuality: { retrievalDegraded: true, usable: false, autonomyEligible: false },
+    });
+  });
+
   // BI-A9E9ADCB (RC3): a core/contextual principle carrying an explicit
   // principleWeight override must be honored (the code path previously passed
   // undefined and silently used the tier default). This exercises that override
