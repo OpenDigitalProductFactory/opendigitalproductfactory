@@ -42,6 +42,9 @@ export function createSandboxDbOperator(deps: {
     // the one transaction stagedRestorePipe opens is the only one.
     const result = await deps.pipe(["exec", production, "pg_dump", "--data-only", "--no-blobs", "-U", "dpf", "dpf"],
       // A failed statement stops psql non-zero; the pipe commits only after a clean dump.
+      // setval is not transactional, so a failed seed can leave sequences
+      // advanced; ok:false fails the build's db step, which never checkpoints,
+      // and the next attempt reseeds in full (build-pipeline.test.ts).
       ["exec", "-i", sandboxDb, "psql", "-v", "ON_ERROR_STOP=1", "-U", "dpf", "dpf"]);
     return { ok: result.exitCode === 0, detail: result.stderr.slice(-1024) };
   };

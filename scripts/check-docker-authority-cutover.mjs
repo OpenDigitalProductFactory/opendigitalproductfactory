@@ -115,16 +115,19 @@ const DOCKER_EXE = String.raw`(?:\/[\w.-]+)*\/?docker`;
 const PATTERNS = [
   /\bsocketPath\s*:/,
   /\b(?:bounded)?[dD]ockerSocket(?:Get|Stop)\s*\(/,
-  new RegExp(String.raw`["']${DOCKER_EXE}["']\s*,\s*(?:\[|\.{3}|[A-Za-z_$][\w$.]*\s*[,()])`),
-  // The literal executable as a call's first argument, whatever the argv
-  // expression after it (bracket access, a call, a spread): the executable
-  // alone decides, so no argv shape escapes.
-  new RegExp(String.raw`[\w$]\s*\(\s*["'\`]${DOCKER_EXE}["'\`]\s*,`),
-  // The same call split across lines: the literal opens its line.
-  new RegExp(String.raw`^\s*["'\`]${DOCKER_EXE}["'\`]\s*,`),
   new RegExp(String.raw`\bcommand:\s*["']${DOCKER_EXE}["']`),
   /[`"'](?:\/[\w.-]+)*\/?docker\s+(?:exec|run|compose|inspect|ps|rm|rmi|image|images|start|stop|restart|logs|info|cp|create|buildx|builder|network|volume|pull|push|build|kill|container|system|tag|save|load|commit|wait|update|top|stats|port|attach|events|version|context|manifest|login|history|pause|unpause)\b/,
 ];
+
+// Process launchers: child_process and execa, plus the local wrappers that take
+// an executable first (runProcessWithBudget, injected run/runCommand seams).
+const LAUNCHERS = ["spawn", "spawnSync", "execFile", "execFileSync", "execFileAsync", "exec", "execSync", "execa",
+  "runProcessWithBudget", "run", "runCommand"];
+// A launcher called with the literal executable as its first argument, matched
+// over the whole source so line breaks, a missing comma or any argv expression
+// cannot hide it, while a plain array such as ["docker", "podman"] never matches.
+// A parenthesised callee, `(deps.spawn ?? spawn)("docker", …)`, is a launch too.
+const DOCKER_CALL = new RegExp(String.raw`(?:(?<![\w$])(?:[\w$]+\.)*(?:${LAUNCHERS.join("|")})|\))\s*\(\s*["'\`]${DOCKER_EXE}["'\`]`, "gs");
 
 function stripComments(source) {
   return source
@@ -134,8 +137,11 @@ function stripComments(source) {
 
 /** 1-based line numbers holding a literal raw Docker call shape. */
 export function findRawDockerLines(source) {
-  return stripComments(source).split("\n")
-    .flatMap((line, index) => (PATTERNS.some((pattern) => pattern.test(line)) ? [index + 1] : []));
+  const code = stripComments(source);
+  const lines = new Set(code.split("\n")
+    .flatMap((line, index) => (PATTERNS.some((pattern) => pattern.test(line)) ? [index + 1] : [])));
+  for (const match of code.matchAll(DOCKER_CALL)) lines.add(code.slice(0, match.index).split("\n").length);
+  return [...lines].sort((a, b) => a - b);
 }
 
 /** 1-based lines writing to a host source checkout, in files that name one. */

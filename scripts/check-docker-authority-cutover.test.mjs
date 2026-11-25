@@ -24,12 +24,14 @@ test("detects socket, CLI argv and shell-string Docker calls", () => {
     'spawn("docker", ["ps"]);',
     'runProcessWithBudget("docker", args, {});',
     'await exec(`docker exec ${id} ls`);',
+    "await runProcessWithBudget(",
     '  "docker",',
+    "  args);",
     'const spec = { command: "docker" };',
     'await run("docker images dpf-promoter");',
     'await run("docker builder prune -f");',
   ].join("\n");
-  assert.deepEqual(findRawDockerLines(source), [1, 2, 3, 4, 5, 6, 7, 8, 9]);
+  assert.deepEqual(findRawDockerLines(source), [1, 2, 3, 4, 5, 6, 9, 10, 11]);
 });
 
 test("detects the Docker executable by absolute path and argv built by a call", () => {
@@ -39,24 +41,29 @@ test("detects the Docker executable by absolute path and argv built by a call", 
     'spawn("/usr/bin/docker", ["--host", "unix:///var/run/docker.sock", "exec", id]);',
     'const spec = { command: "/usr/bin/docker" };',
     'await exec(`/usr/bin/docker exec ${id} ls`);',
-    'spawn("docker", options.args);',
+    'deps.spawn("docker", options.args);',
     'const label = "/usr/bin/dockerd-rootless";',
     'if (name.endsWith("/docker")) return;',
   ].join("\n");
   assert.deepEqual(findRawDockerLines(source), [1, 2, 3, 4, 5, 6]);
 });
 
-test("detects the literal executable in a call whatever the argv expression", () => {
+test("detects a launcher called with the literal executable whatever follows it", () => {
   const source = [
     'spawn("docker", argv["exec"]);',
-    "run('/usr/bin/docker', parts[0], {});",
+    "execFile('/usr/bin/docker', parts[0], {});",
     'execFile(`docker`, build(owner)[1]);',
     'spawnSync("docker", flag ? a : b);',
-    "const child = spawn(",
-    '  "docker", argv[0],',
+    'execFile("docker");',
+    'const child = spawn("docker"',
+    '  , args);',
+    "const other = child_process.execFileSync(",
+    '  "docker",',
+    "  argv[0],",
     ");",
+    'const real = (deps.spawn ?? spawn)("docker", args, options);',
   ].join("\n");
-  assert.deepEqual(findRawDockerLines(source), [1, 2, 3, 4, 6]);
+  assert.deepEqual(findRawDockerLines(source), [1, 2, 3, 4, 5, 6, 8, 12]);
 });
 
 test("ignores comments, substring checks and non-call literals", () => {
@@ -66,6 +73,11 @@ test("ignores comments, substring checks and non-call literals", () => {
     'if (name.includes("docker")) return;',
     'const modes = ["native", "docker", "transitioning"];',
     'soft(read, {}, "docker");',
+    "const runtimes = [",
+    '  "docker",',
+    '  "podman",',
+    "];",
+    'const tools = ["docker", "podman"];',
   ].join("\n");
   assert.deepEqual(findRawDockerLines(source), []);
 });
