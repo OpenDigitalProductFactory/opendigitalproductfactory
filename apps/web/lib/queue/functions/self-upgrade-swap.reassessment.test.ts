@@ -22,7 +22,7 @@ const context = (quiescenceRunId: string | null, force = false): SelfUpgradeSwap
   promoter: { hostInstallPath: "/host", canonicalInstallPath: "/host", composeProject: "actual-project", healthUrl: "http://health" },
   preflight: { runId: "SUR-COMPAT", targetSha: "a".repeat(40), sourcePath: "/source", hostInstallPath: "/host", canonicalInstallPath: "/host", composeFiles: [], healthUrl: "http://health" },
 });
-beforeEach(() => { vi.clearAllMocks(); mocks.failRun.mockReset().mockResolvedValue({ runId: "SUR-COMPAT", status: "failed" }); mocks.compatibility.mockReset().mockResolvedValue({ ok: true, proof: {} }); mocks.runPromoter.mockResolvedValue({ exitCode: 0, stdout: "", stderr: "" }); mocks.guard.mockResolvedValue({ ok: true, data: { deadline: new Date("2026-11-25T20:00:00.000Z") } }); });
+beforeEach(() => { vi.clearAllMocks(); mocks.failRun.mockReset().mockResolvedValue({ runId: "SUR-COMPAT", status: "failed" }); mocks.compatibility.mockReset().mockResolvedValue({ ok: true, proof: {} }); mocks.runPromoter.mockResolvedValue({ exitCode: 0, stdout: "", stderr: "" }); mocks.guard.mockResolvedValue({ ok: true, data: { deadline: new Date(Date.now() + 60_000) } }); });
 
 describe("unconditional final reassessment compatibility", () => {
   it.each([["QR-1", false], ["QR-1", true], [null, false], [null, true]] as const)("refuses incompatible bytes with quiescence=%s force=%s and unchanged handoff/no migration", async (qr, force) => {

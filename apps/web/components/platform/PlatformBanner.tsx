@@ -29,6 +29,8 @@ import {
   X,
 } from "lucide-react";
 import { useSystemEvent } from "@/lib/hooks/system-events";
+import { useT } from "@/lib/i18n/use-t";
+import { useMessagesContext } from "@/lib/i18n/messages-context";
 
 type BannerState =
   | { kind: "hidden" }
@@ -57,6 +59,8 @@ declare global {
 }
 
 export function PlatformBanner(): React.ReactElement | null {
+  const t = useT("shell");
+  const { locale, formatLocale } = useMessagesContext();
   const [state, setState] = useState<BannerState>({ kind: "hidden" });
   const [collapsed, setCollapsed] = useState(false);
   const activeOwner = useRef<string | null>(null);
@@ -112,7 +116,7 @@ export function PlatformBanner(): React.ReactElement | null {
 
   if (state.kind === "hidden") return null;
 
-  const view = getPlatformBannerView(state);
+  const view = getPlatformBannerView(state, t);
   const Icon = view.icon;
 
   if (collapsed) {
@@ -144,7 +148,7 @@ export function PlatformBanner(): React.ReactElement | null {
       <div className="flex items-center gap-2">
         <Icon aria-hidden="true" className={`h-4 w-4 shrink-0 ${view.iconClassName}`} />
         <span className="min-w-0 flex-1" style={{ overflowWrap: "anywhere" }}>
-          {view.message}{view.deadline && <> Finish by <time dateTime={view.deadline}>{formatDeadline(view.deadline)}</time>.</>}
+          {view.message}{view.deadline && <>{" "}{t("platformMaintenance.finishBy")}{" "}<time dateTime={view.deadline}>{formatDeadline(view.deadline, formatLocale ?? locale)}</time>.</>}
         </span>
         <button
           type="button"
@@ -182,7 +186,7 @@ type PlatformBannerView = {
   icon: typeof Clock;
 };
 
-function getPlatformBannerView(state: Exclude<BannerState, { kind: "hidden" }>): PlatformBannerView {
+function getPlatformBannerView(state: Exclude<BannerState, { kind: "hidden" }>, t: ReturnType<typeof useT<"shell">>): PlatformBannerView {
   const warningFrame =
     "border-[color-mix(in_srgb,var(--dpf-warning)_34%,var(--dpf-border))] bg-[color-mix(in_srgb,var(--dpf-warning)_12%,var(--dpf-surface-1))]";
   const infoFrame =
@@ -193,9 +197,9 @@ function getPlatformBannerView(state: Exclude<BannerState, { kind: "hidden" }>):
   switch (state.kind) {
     case "preparing":
       return {
-        compactLabel: state.deadline ? "Recovery backups" : "Platform upgrade preparing",
+        compactLabel: state.deadline ? t("platformMaintenance.recoveryCompact") : "Platform upgrade preparing",
         deadline: state.deadline,
-        message: state.deadline ? "Preparing recovery backups and the update." : `Platform upgrade preparing. Current work will finish before the update${
+        message: state.deadline ? t("platformMaintenance.preparingRecovery") : `Platform upgrade preparing. Current work will finish before the update${
           state.swapEtaSeconds != null ? `, ETA about ${Math.ceil(state.swapEtaSeconds / 60)} min` : ""
         }.`,
         assertive: false,
@@ -207,7 +211,7 @@ function getPlatformBannerView(state: Exclude<BannerState, { kind: "hidden" }>):
       return {
         compactLabel: "Platform upgrading",
         deadline: state.deadline,
-        message: state.deadline ? "Installing the platform update." : "Platform upgrading. Please wait.",
+        message: t(state.deadline ? "platformMaintenance.installing" : "platformMaintenance.waiting"),
         assertive: true,
         frameClassName: warningFrame,
         iconClassName: "text-[var(--dpf-warning)]",
@@ -236,8 +240,8 @@ function getPlatformBannerView(state: Exclude<BannerState, { kind: "hidden" }>):
   }
 }
 
-function formatDeadline(value: string): string {
-  return new Date(value).toLocaleString(undefined, {
+function formatDeadline(value: string, locale: string): string {
+  return new Date(value).toLocaleString(locale, {
     month: "short", day: "numeric", hour: "numeric", minute: "2-digit", second: "2-digit", timeZoneName: "short",
   });
 }

@@ -50,7 +50,7 @@ const mocks = vi.hoisted(() => ({
   signalSwapStarting: vi.fn(),
   signalSwapComplete: vi.fn(),
   failQuiescenceSwap: vi.fn(),
-  guardAdmissionClosedForSwap: vi.fn(async (..._a: unknown[]): ReturnType<typeof import("@/lib/self-upgrade/drain-admission").guardAdmissionClosedForSwap> => ok({ deadline: new Date("2026-11-25T20:00:00.000Z") })),
+  guardAdmissionClosedForSwap: vi.fn(async (..._a: unknown[]): ReturnType<typeof import("@/lib/self-upgrade/drain-admission").guardAdmissionClosedForSwap> => ok({ deadline: new Date(Date.now() + 60_000) })),
   captureActiveSessionBlockers: vi.fn().mockResolvedValue({ surfaces: [] }),
   resolveAutoUpgradeWindow: vi.fn().mockReturnValue({ kind: "operating-hours" }),
   getActiveSelfUpgradeBlackout: vi.fn().mockResolvedValue(null),

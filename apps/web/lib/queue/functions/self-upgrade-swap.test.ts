@@ -23,7 +23,7 @@ const mocks = vi.hoisted(() => ({
   failQuiescenceSwap: vi.fn(),
   signalSwapStarting: vi.fn(),
   signalSwapComplete: vi.fn(),
-  guardAdmissionClosedForSwap: vi.fn(async (): Promise<ActionResult<{ deadline: Date }>> => ok({ deadline: new Date("2026-11-25T20:00:00.000Z") })),
+  guardAdmissionClosedForSwap: vi.fn(async (): Promise<ActionResult<{ deadline: Date }>> => ok({ deadline: new Date(Date.now() + 60_000) })),
   runPromoter: vi.fn(),
   getDeployedSha: vi.fn(),
   readQuiescenceOutcome: vi.fn(),
@@ -159,7 +159,7 @@ describe("finishSelfUpgrade on a retried step (BI-0E216B0E)", () => {
     mocks.getDeployedSha.mockResolvedValue("oldsha");
     mocks.loadInstallStateSigningContext.mockResolvedValue({ ok: true, runtimeTransitionSecret: "s", hostIdentity: {} });
     mocks.createSelfUpgradeRecoveryPoint.mockResolvedValue({ status: "ok" });
-    mocks.guardAdmissionClosedForSwap.mockResolvedValueOnce(ok({ deadline: new Date("2026-11-25T20:00:00.000Z") }));
+    mocks.guardAdmissionClosedForSwap.mockResolvedValueOnce(ok({ deadline: new Date(Date.now() + 60_000) }));
     mocks.guardAdmissionClosedForSwap.mockResolvedValue(err("the upgrade no longer owns closed admission"));
     mocks.failRun.mockResolvedValue({ status: "failed", runId: ctx.runId });
     const result = await finishSelfUpgrade(ctx);
@@ -194,7 +194,7 @@ describe("finishSelfUpgrade on a retried step (BI-0E216B0E)", () => {
     mocks.loadInstallStateSigningContext.mockResolvedValue({ ok: true, runtimeTransitionSecret: "s", hostIdentity: {} });
     mocks.createSelfUpgradeRecoveryPoint.mockResolvedValue({ status: "ok" });
     mocks.refreshMigrationHandoffAfterDrain.mockResolvedValue({ ok: true, data: { refreshed: false } });
-    mocks.guardAdmissionClosedForSwap.mockResolvedValue(ok({ deadline: new Date("2026-11-25T20:00:00.000Z") }));
+    mocks.guardAdmissionClosedForSwap.mockResolvedValue(ok({ deadline: new Date(Date.now() + 60_000) }));
     mocks.failRun.mockResolvedValue({ status: "failed", runId: ctx.runId });
     const spawn = vi.fn();
     mocks.runPromoter.mockImplementationOnce(async (_params, assertAdmission) => {
@@ -218,7 +218,7 @@ describe("durable swap replay after process replacement", () => {
     mocks.loadInstallStateSigningContext.mockResolvedValue({ ok: true, runtimeTransitionSecret: "s", hostIdentity: {} });
     mocks.createSelfUpgradeRecoveryPoint.mockResolvedValue({ status: "ok" });
     mocks.refreshMigrationHandoffAfterDrain.mockResolvedValue({ ok: true, data: { refreshed: false } });
-    mocks.guardAdmissionClosedForSwap.mockResolvedValue(ok({ deadline: new Date("2026-11-25T20:00:00.000Z") }));
+    mocks.guardAdmissionClosedForSwap.mockResolvedValue(ok({ deadline: new Date(Date.now() + 60_000) }));
     mocks.readQuiescenceOutcome.mockResolvedValue({ ok: true, outcome: "ready-to-swap" });
     let entered!: () => void;
     const swapping = new Promise<void>((resolve) => { entered = resolve; });
