@@ -468,6 +468,7 @@ export async function claimGovernedBacklogWorkspace(args: {
   const currentDesignObservation = await (args.dependencies?.prepareCurrentDesign ?? prepareCurrentDesignObservation)({
     itemId: args.input.backlogItemId, db: args.db as never,
     claimSource: args.input,
+    allowArchivedBootstrap: workIntent === "implementation" && args.input.force !== true,
   });
   const transact = args.db.$transaction
     ? <T>(fn: (tx: CapsuleDb) => Promise<T>) => args.db.$transaction!(fn)

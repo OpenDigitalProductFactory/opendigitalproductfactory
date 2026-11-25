@@ -4,7 +4,8 @@ import { NO_MARKED_OBJECTIVE_STATEMENTS, parseInitiativeScopeManifest } from "./
 import type { CurrentDesignEvidence } from "./judged-design-artifact";
 import { prepareCurrentArtifactObservation } from "./current-artifact-observation";
 import { prepareCurrentResearchObservation, type CurrentResearchPorts } from "./current-research-artifact";
-import type { InitiativeArtifactRef } from "./receipt-schema";
+import { isInitiativeArtifactRef, type InitiativeArtifactRef } from "./receipt-schema";
+import { validInitiativeGateReceipt } from "./receipt-validation";
 import { isFullSourceCommitSha } from "@/lib/work-capsules/work-capsule-branch-identity";
 import { changesFromProviderCompare, commitRangeDigest, type CommitRange } from "./repo-commit-range";
 
@@ -29,6 +30,7 @@ type BoundDesign = {
   baselineId: string; baselineDigest: string;
   artifactRef: Extract<InitiativeArtifactRef, { kind: "repo-blob-at-commit" }>;
   room: { capsuleId: string; repositoryFullName: string; baseSha: string; headSha: string; headBranch: string };
+  archivedBootstrap?: { headSha: string; approvalReceiptId: string };
 };
 type CurrentDesignBinding = BoundDesign
   | { kind: "not-applicable"; mayInheritResearch?: true }
@@ -39,7 +41,8 @@ type ClaimSource = {
   baseSha?: string | null; headSha?: string | null;
 };
 
-async function loadCurrentDesignBinding(itemId: string, db: CurrentDesignDb, claimSource?: ClaimSource): Promise<CurrentDesignBinding> {
+async function loadCurrentDesignBinding(itemId: string, db: CurrentDesignDb, claimSource?: ClaimSource,
+  allowArchivedBootstrap = false): Promise<CurrentDesignBinding> {
   const item = await db.backlogItem.findFirst({ where: { OR: [{ itemId }, { id: itemId }] },
     select: { id: true, itemId: true, body: true } });
   if (!item) return { kind: "unavailable" };
@@ -67,28 +70,80 @@ async function loadCurrentDesignBinding(itemId: string, db: CurrentDesignDb, cla
         baseSha: claimSource.baseSha, headSha: claimSource.headSha } : {}) }, take: 2,
     select: { capsuleId: true, repositoryFullName: true, baseSha: true, headSha: true, headBranch: true },
   });
+  const artifactRef = baseline.current.artifactRef;
+  const design = { kind: "bound" as const, itemRowId: item.id, itemId: item.itemId, selection: item.body ?? "",
+    baselineId: baseline.current.baselineId, baselineDigest: baseline.current.artifactDigest, artifactRef };
+  const approvalReceiptId = baseline.current.approvalReceiptId;
+  // Only a new implementation claim at its immutable base can use the retired
+  // design carrier. Normal selected-room reads and existing claim bindings stay strict.
+  if (rooms.length === 0 && allowArchivedBootstrap && claimSource && !claimSource.workroomId
+    && isFullSourceCommitSha(claimSource.headSha) && claimSource.baseSha === claimSource.headSha
+    && claimSource.repositoryFullName === artifactRef.repositoryFullName && approvalReceiptId) {
+    return bindArchivedDesign(db, design, claimSource.headBranch, claimSource.headSha, approvalReceiptId);
+  }
   const room = rooms.length === 1 ? rooms[0] : null;
   if (!room?.repositoryFullName || !room.baseSha || !room.headSha || !room.headBranch
     || !/^[a-f0-9]{40}$/i.test(room.baseSha) || !/^[a-f0-9]{40}$/i.test(room.headSha)
     || room.repositoryFullName !== baseline.current.artifactRef.repositoryFullName) return { kind: "unavailable" };
-  return { kind: "bound", itemRowId: item.id, itemId: item.itemId, selection: item.body ?? "",
-    baselineId: baseline.current.baselineId, baselineDigest: baseline.current.artifactDigest,
-    artifactRef: baseline.current.artifactRef,
+  return { ...design,
     room: { capsuleId: room.capsuleId, repositoryFullName: room.repositoryFullName, baseSha: room.baseSha,
       headSha: room.headSha, headBranch: room.headBranch } };
+}
+
+async function bindArchivedDesign(db: CurrentDesignDb, design: Omit<BoundDesign, "room">,
+  claimBranch: string, headSha: string, approvalReceiptId: string): Promise<CurrentDesignBinding> {
+  const unavailable = { kind: "unavailable" } as const;
+  const { artifactRef, baselineDigest, itemRowId, itemId } = design;
+  if (!isFullSourceCommitSha(artifactRef.commitSha) || !isFullSourceCommitSha(artifactRef.providerBlobId)
+    || !canonicalDesignPath(artifactRef.path) || !/^sha256:[a-f0-9]{64}$/.test(baselineDigest)) return unavailable;
+  const declaredPaths = declaredDesignPaths(design.selection);
+  if (declaredPaths.some(path => !canonicalDesignPath(path))
+    || (declaredPaths.length > 0 && !declaredPaths.includes(artifactRef.path))) return unavailable;
+  const rooms = await db.workroom.findMany({ where: { backlogItemId: { in: [itemRowId, itemId] } }, take: 2,
+    select: { capsuleId: true, repositoryFullName: true, baseSha: true, headSha: true, headBranch: true,
+      status: true, archivedAt: true } });
+  const room = rooms.length === 1 ? rooms[0] : null;
+  if (!room || (room.status !== "archived" && !(room.status === "complete" && room.archivedAt))
+    || room.repositoryFullName !== artifactRef.repositoryFullName || !room.headBranch || room.headBranch === claimBranch
+    || !isFullSourceCommitSha(room.baseSha) || !isFullSourceCommitSha(room.headSha)) return unavailable;
+  const [approval] = await db.backlogItemActivity.findMany({
+    where: { backlogItemId: itemRowId, kind: "initiative_gate_receipt", gateKey: "spec_approval" },
+    orderBy: [{ recordedAt: "desc" }, { id: "desc" }], take: 1,
+    select: { id: true, payload: true },
+  });
+  if (!approval || approval.id !== approvalReceiptId || !validInitiativeGateReceipt(approval.payload, {
+    receiptId: approvalReceiptId, gate: "spec-approval", subject: { kind: "backlog-item", id: itemId },
+  })) return unavailable;
+  const payload = approval.payload as Record<string, unknown>;
+  const ref = payload.artifactRef;
+  if (payload.decision !== "pass" || payload.artifactDigest !== baselineDigest || !isInitiativeArtifactRef(ref)
+    || ref.kind !== "repo-blob-at-commit" || ref.repositoryFullName !== artifactRef.repositoryFullName
+    || ref.path !== artifactRef.path || ref.commitSha !== artifactRef.commitSha
+    || ref.providerBlobId !== artifactRef.providerBlobId) return unavailable;
+  return { ...design, room: { capsuleId: room.capsuleId, repositoryFullName: room.repositoryFullName,
+    headBranch: room.headBranch, baseSha: room.baseSha, headSha: room.headSha }, archivedBootstrap: { headSha, approvalReceiptId } };
 }
 
 export async function readCurrentDesignArtifact(binding: BoundDesign, ports?: {
   discoverArtifact?: typeof discoverCanonicalDesignArtifact;
   readBlob?: typeof import("./repository-artifact").readRepositoryProviderBlob;
 }): Promise<CurrentDesignEvidence> {
+  const readRepositoryProviderBlob = ports?.readBlob ?? (await import("./repository-artifact")).readRepositoryProviderBlob;
+  if (binding.archivedBootstrap) {
+    const { repositoryFullName, path, providerBlobId } = binding.artifactRef;
+    const bytes = await readRepositoryProviderBlob({ repositoryFullName, path, expectedBlobId: providerBlobId,
+      commitSha: binding.archivedBootstrap.headSha });
+    if (!bytes.ok || bytes.blobId !== providerBlobId) return { state: "unavailable" };
+    const digest = `sha256:${createHash("sha256").update(bytes.data).digest("hex")}`;
+    return digest === binding.baselineDigest ? { state: "verified", digest, ...missingObjectiveError(bytes.data) }
+      : { state: "unavailable" };
+  }
   const discovered = await (ports?.discoverArtifact ?? discoverCanonicalDesignArtifact)({ ...binding.room,
     backlogBody: binding.selection, subjectItemId: binding.itemId });
   // Source-only follow-up commits need not touch their already approved design.
   // Never use this fallback to override an explicit or ambiguous selection.
   if (!discovered.resolved && (discovered.code !== "no-canonical-design"
     || /docs\/superpowers\/specs\//.test(binding.selection))) return { state: "unavailable" };
-  const readRepositoryProviderBlob = ports?.readBlob ?? (await import("./repository-artifact")).readRepositoryProviderBlob;
   const bytes = await readRepositoryProviderBlob({ repositoryFullName: binding.room.repositoryFullName,
     commitSha: binding.room.headSha, path: discovered.resolved ? discovered.artifact.path : binding.artifactRef.path,
     expectedBlobId: discovered.resolved ? discovered.artifact.providerBlobId : null });
@@ -119,8 +174,10 @@ export async function prepareCurrentDesignObservation(args: {
   itemId: string; db?: CurrentDesignDb;
   /** Actual governed claim input; the reader verifies its persisted subject/room binding. */
   claimSource?: ClaimSource;
+  /** Set by the governed implementation claim, never by a source read or request argument. */
+  allowArchivedBootstrap?: boolean;
   ports?: Partial<{
-    loadBinding: (itemId: string, db: CurrentDesignDb, claimSource?: ClaimSource) => Promise<CurrentDesignBinding>;
+    loadBinding: typeof loadCurrentDesignBinding;
     readCurrentArtifact: (binding: BoundDesign) => Promise<CurrentDesignEvidence>;
     lockBinding: (binding: BoundDesign, db: CurrentDesignDb) => Promise<void>;
     research: CurrentResearchPorts;
@@ -132,10 +189,11 @@ export async function prepareCurrentDesignObservation(args: {
   const claimSource = args.claimSource ? { ...(args.claimSource.workroomId ? { workroomId: args.claimSource.workroomId } : {}), repositoryFullName: args.claimSource.repositoryFullName,
     headBranch: args.claimSource.headBranch, baseSha: args.claimSource.baseSha, headSha: args.claimSource.headSha } : undefined;
   const read = args.ports?.readCurrentArtifact ?? readCurrentDesignArtifact;
+  const allowArchivedBootstrap = args.allowArchivedBootstrap === true;
   const unavailable = { state: "unavailable" } as const;
   let mayInheritResearch = false;
   const design = await prepareCurrentArtifactObservation<CurrentDesignBinding, CurrentDesignEvidence>({
-    db, load: currentDb => load(args.itemId, currentDb as CurrentDesignDb, claimSource), read,
+    db, load: currentDb => load(args.itemId, currentDb as CurrentDesignDb, claimSource, allowArchivedBootstrap), read,
     unbound: binding => {
       mayInheritResearch = binding.kind === "not-applicable" && binding.mayInheritResearch === true;
       return { state: binding.kind };
@@ -173,6 +231,11 @@ export type CanonicalArtifactDiscoveryResult =
   };
 
 const SPEC_PREFIX = "docs/superpowers/specs/";
+const canonicalDesignPath = (path: string) => /^docs\/superpowers\/specs\/(?:[A-Za-z0-9_-]+\/)*[A-Za-z0-9_-][A-Za-z0-9._-]*\.md$/.test(path);
+function declaredDesignPaths(body: string): string[] {
+  return [...new Set((body.match(/docs\/superpowers\/specs\/[^\s`<>"')]+\.md(?:#[A-Za-z0-9_-]+)?/g) ?? [])
+    .map(path => path.split("#")[0]!))];
+}
 
 /**
  * GitHub pages the compare file list. A design branch that changed more files
@@ -306,11 +369,8 @@ async function discoverCanonicalDesignArtifactWithFetch(
 ): Promise<CanonicalArtifactDiscoveryResult> {
   // An explicit reference is the item's scope choice, not evidence of approval.
   // Verify its bytes at the recorded head even when this branch did not edit it.
-  const references = [...new Set((args.backlogBody ?? "")
-    .match(/docs\/superpowers\/specs\/[^\s`<>"')]+\.md(?:#[A-Za-z0-9_-]+)?/g) ?? [])]
-    .map((path) => path.split("#")[0]!);
-  const paths = [...new Set(references)];
-  if (paths.some((path) => !/^docs\/superpowers\/specs\/(?:[A-Za-z0-9_-]+\/)*[A-Za-z0-9_-][A-Za-z0-9._-]*\.md$/.test(path))) {
+  const paths = declaredDesignPaths(args.backlogBody ?? "");
+  if (paths.some(path => !canonicalDesignPath(path))) {
     return { resolved: false, code: "no-canonical-design",
       nextAction: "The item references an invalid canonical design path. Use a repository-relative file under docs/superpowers/specs/ without traversal segments." };
   }
