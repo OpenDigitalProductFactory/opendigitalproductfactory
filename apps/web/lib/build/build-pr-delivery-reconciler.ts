@@ -39,6 +39,8 @@ export type BuildPrDeliveryAction =
 export function decideBuildPrDeliveryAction(input: {
   state: BuildPrDeliveryStateV1;
   readiness: GithubPrReadiness;
+  /** True when an eligible PR-only custody room has no outstanding owned work and can close as undelivered. */
+  prOnlyCustody?: boolean;
 }): BuildPrDeliveryAction {
   const { state, readiness } = input;
   switch (readiness.kind) {
@@ -50,12 +52,19 @@ export function decideBuildPrDeliveryAction(input: {
         reason: "merged-awaiting-governed-release",
       };
     case "closed":
-      return {
-        kind: "escalate",
-        status: "closed",
-        headSha: readiness.headSha,
-        reason: "pull-request-closed-unmerged",
-      };
+      return input.prOnlyCustody
+        ? {
+            kind: "wait",
+            status: "closed",
+            headSha: readiness.headSha,
+            reason: "pull-request-closed-unmerged-closeout",
+          }
+        : {
+            kind: "escalate",
+            status: "closed",
+            headSha: readiness.headSha,
+            reason: "pull-request-closed-unmerged",
+          };
     case "conflict":
       return {
         kind: "escalate",
@@ -216,13 +225,19 @@ export async function executeBuildPrDeliveryAction(input: {
   repairAuthority?: PrRepairAuthority;
   /** The governed repair dispatcher. Absent means no repair worker is wired, so the packet is staged. */
   dispatchRepair?: DispatchPrRepair;
+  /** True when an eligible PR-only custody room can close cleanly as undelivered on provider closure. */
+  prOnlyCustody?: boolean;
 }): Promise<{
   state: BuildPrDeliveryStateV1;
   action: BuildPrDeliveryAction;
   actuated: boolean;
   followThrough: PrFollowThroughDecision;
 }> {
-  const action = decideBuildPrDeliveryAction({ state: input.state, readiness: input.readiness });
+  const action = decideBuildPrDeliveryAction({
+    state: input.state,
+    readiness: input.readiness,
+    prOnlyCustody: input.prOnlyCustody,
+  });
   const now = (input.now ?? new Date()).toISOString();
   const mayActuate = input.mode === "enforce" && input.actuationAllowed !== false;
   const effects = await applyFollowThroughEffects({
@@ -310,6 +325,7 @@ export async function executeBuildPrDeliveryAction(input: {
   }
   await enablePullRequestAutoMerge({
     nodeId: input.observation.nodeId,
+    expectedHeadOid: action.headSha,
     token: input.token,
     fetchImpl: input.fetchImpl,
   });

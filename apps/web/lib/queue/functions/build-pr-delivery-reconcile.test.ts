@@ -13,6 +13,8 @@ const mocks = vi.hoisted(() => ({
   verdict: vi.fn(),
   publish: vi.fn(),
   dispatch: vi.fn(),
+  dispatchWorkroom: vi.fn(),
+  updateWorkCapsuleStatus: vi.fn(),
   buildLookup: vi.fn(),
   playbookMode: vi.fn(() => "off" as "off" | "shadow" | "enforce"),
   eligibility: vi.fn(),
@@ -50,9 +52,19 @@ vi.mock("@/lib/jobs/triggers", () => ({ cron: () => ({}) }));
 vi.mock("../quiescence-gates", () => ({ gateAtEntry: vi.fn() }));
 vi.mock("@/lib/change-review/failure-readiness-publication", () => ({ checkWorkroomFailureReadiness: mocks.verdict }));
 vi.mock("@/lib/change-review/failure-readiness-status", () => ({ publishFailureReadinessStatus: mocks.publish }));
-vi.mock("@/lib/build/pr-ci-repair", () => ({ dispatchBuildPrCiRepair: mocks.dispatch }));
+vi.mock("@/lib/build/pr-ci-repair", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/build/pr-ci-repair")>();
+  return {
+    ...actual,
+    dispatchBuildPrCiRepair: mocks.dispatch,
+    dispatchWorkroomPrCiRepair: mocks.dispatchWorkroom,
+  };
+});
+vi.mock("@/lib/work-capsules/work-capsule-store", () => ({
+  updateWorkCapsuleStatus: mocks.updateWorkCapsuleStatus,
+}));
 
-import { observesRoomHead, runBuildPrDeliveryReconcile } from "./build-pr-delivery-reconcile";
+import { observesRoomHead, planPrTerminalCloseout, runBuildPrDeliveryReconcile } from "./build-pr-delivery-reconcile";
 import { createBuildPrDeliveryState, writeBuildPrDeliveryState } from "@/lib/build/build-pr-delivery-state";
 
 function room(overrides: Record<string, unknown>) {
@@ -627,5 +639,133 @@ describe("observesRoomHead", () => {
     expect(observesRoomHead(head, other, { status: "checking", lastObservedHeadSha: head })).toBe(false);
     expect(observesRoomHead(head, other, { status: "updating", lastObservedHeadSha: other })).toBe(false);
     expect(observesRoomHead(head, other, { status: "updating", lastObservedHeadSha: head })).toBe(true);
+    expect(observesRoomHead(head, other, {
+      status: "checking",
+      lastObservedHeadSha: head,
+      followThrough: { hold: "repairing", judgedHeadSha: head },
+    })).toBe(true);
+    expect(observesRoomHead(head, other, null, { followPrHead: true })).toBe(true);
+  });
+});
+
+describe("BI-C3EBDCEC VERIFY-PR-2 & VERIFY-PR-3: PR-only custody repair and terminal closeout", () => {
+  const PR_URL = "https://github.com/o/r/pull/7184";
+  const BRANCH = "dependabot/npm_and_yarn/minor-and-patch-d73a48238d";
+  const prCustody = (overrides: Record<string, unknown> = {}) => ({
+    prCustody: {
+      mode: "build-studio-custody", recoveryReason: null, repositoryFullName: "o/r", prNumber: 7184, prUrl: PR_URL,
+      headRepositoryFullName: "o/r", headRef: BRANCH, baseBranch: "main", headSha: "sha1", isDraft: false,
+      authorLogin: "dependabot[bot]", authorType: "Bot", accountableOwnerPrincipalId: "prin-owner", standingRoomCapsuleId: "WC-STAND",
+      ...overrides,
+    },
+  });
+  const custodyRoom = (overrides: Record<string, unknown> = {}) => room({
+    id: "pr-only-7184", capsuleId: "WC-PR7184", status: "ready", featureBuildId: null, backlogItemId: null,
+    taskRunId: null, worktreePath: null, executorKind: "build-studio", baseBranch: "main", headBranch: BRANCH,
+    headSha: "sha1", pullRequestNumber: 7184, pullRequestUrl: PR_URL, leaseHolderPrincipalId: "prin-owner",
+    workspaceState: prCustody(), ...overrides,
+  });
+  const redPolicyGuards = (headSha = "sha1") => ({
+    ...observation([{
+      name: "Policy Guards (source)", status: "COMPLETED", conclusion: "FAILURE",
+      workflowRunId: 88, detailsUrl: "https://github.com/o/r/actions/runs/88/job/8801",
+    }]),
+    number: 7184, url: PR_URL, headSha,
+  });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    process.env.DPF_BUILD_PR_DELIVERY_RECONCILER_MODE = "enforce";
+    mocks.updateMany.mockResolvedValue({ count: 1 });
+    mocks.jobUpsert.mockResolvedValue({ id: "pr-job", runCursor: null, enabled: true });
+    mocks.jobUpdateMany.mockResolvedValue({ count: 1 });
+    mocks.activityCreate.mockResolvedValue({});
+    mocks.createIssue.mockResolvedValue({ reportId: "PIR-1" });
+    mocks.postureDefault.mockResolvedValue(null);
+    mocks.verdict.mockResolvedValue({ mayPublish: true, reason: "reviewed" });
+    mocks.publish.mockResolvedValue(undefined);
+    mocks.dispatchWorkroom.mockResolvedValue("dispatched");
+    mocks.updateWorkCapsuleStatus.mockResolvedValue({});
+    vi.stubGlobal("fetch", mocks.fetch);
+  });
+  afterEach(() => { delete process.env.DPF_BUILD_PR_DELIVERY_RECONCILER_MODE; vi.unstubAllGlobals(); });
+
+  it("dispatches bounded repair for an eligible PR-only Build Studio custody room without a FeatureBuild", async () => {
+    mocks.findMany.mockResolvedValue([custodyRoom()]);
+    mocks.observe.mockResolvedValue(redPolicyGuards());
+    const result = await runBuildPrDeliveryReconcile();
+    expect(result.actuated).toBe(1);
+    expect(mocks.dispatchWorkroom).toHaveBeenCalledWith(expect.objectContaining({
+      capsuleId: "WC-PR7184", prNumber: 7184, headBranch: BRANCH, authorLogin: "dependabot[bot]", accountableOwnerPrincipalId: "prin-owner",
+    }));
+    expect(mocks.dispatch).not.toHaveBeenCalled();
+    expect(mocks.createIssue).not.toHaveBeenCalled();
+    const write = mocks.updateMany.mock.calls[0]?.[0];
+    expect(write.data.workspaceState.prDelivery.followThrough).toMatchObject({ hold: "repairing" });
+    expect(write.data.workspaceState.prDelivery.followThrough.attempts.attempts["post-push-ci-failure"]).toBe(1);
+  });
+
+  it("keeps observe-only PR custody rooms (forks/drafts) non-actuating and never dispatches repair", async () => {
+    mocks.findMany.mockResolvedValue([custodyRoom({
+      executorKind: "human",
+      scopeClaims: [{ workroomPosture: { proactivityLevel: "balanced", actionBoundary: "advise" }, recordedAt: "2026-11-24T00:00:00Z" }],
+      workspaceState: prCustody({ mode: "observe-only", recoveryReason: "fork-pull-request", headRepositoryFullName: "fork/r" }),
+    })]);
+    mocks.observe.mockResolvedValue(redPolicyGuards());
+    expect((await runBuildPrDeliveryReconcile()).actuated).toBe(0);
+    expect(mocks.dispatchWorkroom).not.toHaveBeenCalled();
+    expect(mocks.fetch).not.toHaveBeenCalled();
+  });
+
+  it("follows a newly pushed repair head and arms the protected merge queue once green", async () => {
+    mocks.fetch.mockResolvedValue({ ok: true, status: 200, json: async () => ({ data: { enablePullRequestAutoMerge: { pullRequest: { number: 7184 } } } }) });
+    const repairing = createBuildPrDeliveryState({ repository: "o/r", prNumber: 7184, prUrl: PR_URL });
+    repairing.followThrough.hold = "repairing";
+    repairing.followThrough.judgedHeadSha = "sha1";
+    mocks.findMany.mockResolvedValue([custodyRoom({ workspaceState: writeBuildPrDeliveryState(prCustody(), repairing) })]);
+    mocks.observe.mockResolvedValue({
+      ...observation([{ name: "Merge Readiness", status: "COMPLETED", conclusion: "SUCCESS", required: true }], "CLEAN"),
+      number: 7184, url: PR_URL, headSha: "sha2-repaired",
+    });
+    expect((await runBuildPrDeliveryReconcile()).actuated).toBe(1);
+    expect(String(mocks.fetch.mock.calls[0]?.[1]?.body)).toContain('"expectedHeadOid":"sha2-repaired"');
+    const write = mocks.updateMany.mock.calls[0]?.[0];
+    expect(write.data).toMatchObject({ headSha: "sha2-repaired" });
+    expect(write.data.workspaceState.prDelivery).toMatchObject({ status: "queued" });
+    expect(write.data.workspaceState.prDelivery.followThrough.hold).toBeNull();
+  });
+
+  it("archives a PR-only custody room as delivered when provider confirms merge", async () => {
+    mocks.findMany.mockResolvedValue([custodyRoom()]);
+    mocks.observe.mockResolvedValue({ ...observation([], "CLEAN"), number: 7184, url: PR_URL, state: "MERGED", merged: true, headSha: "sha2-merged" });
+    expect((await runBuildPrDeliveryReconcile()).actuated).toBe(1);
+    expect(mocks.updateWorkCapsuleStatus).toHaveBeenCalledWith(expect.objectContaining({ capsuleId: "WC-PR7184", status: "archived", reason: expect.stringContaining("merged") }));
+    expect(mocks.updateMany.mock.calls[0]?.[0].data.workspaceState.prCloseout).toMatchObject({ outcome: "delivered", targetStatus: "archived", prNumber: 7184, headSha: "sha2-merged" });
+    expect(mocks.createIssue).not.toHaveBeenCalled();
+  });
+
+  it("closes an eligible PR-only custody room as undelivered on closed-unmerged without escalating", async () => {
+    mocks.findMany.mockResolvedValue([custodyRoom()]);
+    mocks.observe.mockResolvedValue({ ...observation([], "CLEAN"), number: 7184, url: PR_URL, state: "CLOSED", merged: false, headSha: "sha1" });
+    expect((await runBuildPrDeliveryReconcile()).escalated).toBe(0);
+    expect(mocks.updateWorkCapsuleStatus).toHaveBeenCalledWith(expect.objectContaining({ capsuleId: "WC-PR7184", status: "abandoned", reason: expect.stringContaining("undelivered") }));
+    expect(mocks.updateMany.mock.calls[0]?.[0].data.workspaceState.prCloseout).toMatchObject({ outcome: "undelivered", targetStatus: "abandoned", prNumber: 7184, preservedEvidence: true });
+    expect(mocks.createIssue).not.toHaveBeenCalled();
+  });
+
+  it("retains and escalates a closed-unmerged PR room that has outstanding local worktree or backlog work", async () => {
+    mocks.findMany.mockResolvedValue([custodyRoom({ worktreePath: "/worktrees/outstanding", backlogItemId: "bi-1" })]);
+    mocks.observe.mockResolvedValue({ ...observation([], "CLEAN"), number: 7184, url: PR_URL, state: "CLOSED", merged: false, headSha: "sha1" });
+    expect((await runBuildPrDeliveryReconcile()).escalated).toBe(1);
+    expect(mocks.updateWorkCapsuleStatus).not.toHaveBeenCalled();
+    expect(mocks.createIssue).toHaveBeenCalledTimes(1);
+  });
+
+  it("never closes custody on mismatched or non-terminal provider observations", () => {
+    const c = custodyRoom();
+    expect(planPrTerminalCloseout({ capsule: c, observation: { number: 7199, url: "https://github.com/o/r/pull/7199", state: "MERGED", merged: true, headSha: "sha2" } }))
+      .toEqual({ kind: "retain", reason: "provider-identity-mismatch" });
+    expect(planPrTerminalCloseout({ capsule: c, observation: { number: 7184, url: PR_URL, state: "OPEN", merged: false, headSha: "sha1" } }))
+      .toEqual({ kind: "retain", reason: "pull-request-open" });
   });
 });

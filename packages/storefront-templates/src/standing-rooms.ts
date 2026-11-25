@@ -200,7 +200,7 @@ const SOFTWARE_DELIVERY_SUB_ROOMS: readonly StandingRoomDefinition[] = [
     portfolioRole: "manufactureAndDeliver",
     shapeKey: "pull-request-flow-watch",
     parentKey: CONTRIBUTION_FLOW,
-    purpose: "Say which proposed changes are stuck, and why; a person still merges.",
+    purpose: "Give every open pull request an accountable owner, repair eligible failing checks within bounds, advance ready changes to the protected merge queue, and settle closed custody.",
   },
   {
     key: "issue-triage",

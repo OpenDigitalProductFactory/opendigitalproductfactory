@@ -13,7 +13,9 @@
 //     path that does not fit ustar fails the run; the format never widens.
 //   - files.ndjson: one {"root","path","sha256","sizeBytes"} per line, sorted
 //     by (root, path) in byte order, LF-terminated, no blank lines.
-//   - Symlinks and hard links in any root fail the run.
+//   - Symlinks, hard links, and names that are not UTF-8 fail the run.
+//   - Limits shared with DPF2 intake: 16 MiB manifest, 1 GiB files list with
+//     at most 64 KiB per line before LF, and 1 TiB archive including framing.
 //   - The run starts after the paired dump finished. Writers write a file
 //     before its row, so every blob row in the dump has its file, except rows
 //     deleted between dump and copy; those are recorded in
@@ -30,12 +32,12 @@
 //   DPF_PRODUCTION_DB_CONTAINER, POSTGRES_USER, POSTGRES_DB
 //                              live database for the deletion check (as backup-postgres.sh)
 //
-// Exit codes: 0 ok, 2 bad input, 3 refusal (link, unfit path, live row without
-// file), 4 write failure. Failures print "BACKUP_UPLOADS_FAILED: <reason>" to stderr.
+// Exit codes: 0 ok, 2 bad input, 3 refusal (unsupported input, size bound, live
+// row without file), 4 write failure. Failures print "BACKUP_UPLOADS_FAILED: <reason>" to stderr.
 
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
-import { closeSync, createReadStream, fsyncSync, lstatSync, mkdirSync, openSync, readdirSync, readFileSync, rmSync, writeFileSync, writeSync, existsSync } from "node:fs";
+import { closeSync, constants, createReadStream, existsSync, fstatSync, fsyncSync, lstatSync, mkdirSync, openSync, readdirSync, readSync, rmSync, writeFileSync, writeSync } from "node:fs";
 import { join, relative, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -49,6 +51,13 @@ export const BLOB_TABLES = Object.freeze([
 const TRANSIENT_RE = /^\..+\.\d+\.[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(tmp|delete)$/;
 const BLOCK = 512;
 const MAX_USTAR_SIZE = 0o77777777777;
+const ARCHIVE_END = BLOCK * 2;
+export const UPLOAD_BACKUP_LIMITS = Object.freeze({
+  manifestBytes: 16 * 1024 ** 2,
+  ndjsonLineBytes: 64 * 1024,
+  ndjsonBytes: 1024 ** 3,
+  archiveBytes: 1024 ** 4,
+});
 
 export class RefusalError extends Error {
   constructor(message) {
@@ -145,7 +154,12 @@ export function listRoot(root, { lstat = lstatSync, readdir = readdirSync, onSki
   if (rootStat.isSymbolicLink()) throw new RefusalError(`root ${root.name} is a symlink: ${root.path}`);
   if (!rootStat.isDirectory()) throw new RefusalError(`root ${root.name} is not a directory: ${root.path}`);
   const walk = (dir) => {
-    for (const entry of readdir(dir)) {
+    for (const raw of readdir(dir, { encoding: "buffer" })) {
+      const entry = raw.toString("utf8");
+      if (!Buffer.from(entry, "utf8").equals(raw)) {
+        const parent = relative(root.path, dir);
+        throw new RefusalError(`non-UTF-8 filename in ${root.name}${parent ? `/${parent}` : ""}: bytes 0x${raw.toString("hex")}`);
+      }
       const abs = join(dir, entry);
       const st = lstat(abs);
       if (st.isSymbolicLink()) throw new RefusalError(`symlink in ${root.name}: ${relative(root.path, abs)}`);
@@ -229,39 +243,103 @@ function sha256File(path) {
   });
 }
 
-/** Write uploads.tar and files.ndjson. Reads each file once; refuses a file that changed size. */
-export function writeArchive({ entries, tarPath, ndjsonPath, readFile = readFileSync }) {
-  const fd = openSync(tarPath, "wx", 0o600);
-  const tarHash = createHash("sha256");
-  const lines = [];
-  let totalBytes = 0;
-  const put = (buf) => {
-    writeSync(fd, buf);
-    tarHash.update(buf);
-  };
-  try {
-    for (const e of entries) {
-      const content = readFile(e.abs);
-      if (content.length !== e.size) throw new RefusalError(`file changed size during backup: ${e.root}/${e.path}`);
-      const sha256 = createHash("sha256").update(content).digest("hex");
-      put(ustarHeader(`${e.root}/${e.path}`, content.length));
-      put(content);
-      const pad = (BLOCK - (content.length % BLOCK)) % BLOCK;
-      if (pad) put(Buffer.alloc(pad, 0));
-      lines.push(JSON.stringify({ root: e.root, path: e.path, sha256, sizeBytes: content.length }));
-      totalBytes += content.length;
+function filesLine({ root, path, size }, sha256) {
+  return JSON.stringify({ root, path, sha256, sizeBytes: size });
+}
+
+function padding(size) {
+  return (BLOCK - (size % BLOCK)) % BLOCK;
+}
+
+function checkArchiveBounds(entries, limits) {
+  let tarBytes = ARCHIVE_END;
+  let listBytes = 0;
+  // Every hex SHA-256 takes exactly this many UTF-8 bytes in the JSON line.
+  const placeholderHash = "0".repeat(64);
+  for (const entry of entries) {
+    const lineBytes = Buffer.byteLength(filesLine(entry, placeholderHash));
+    const member = `${entry.root}/${entry.path}`;
+    if (lineBytes > limits.ndjsonLineBytes) {
+      throw new RefusalError(`files.ndjson line for ${member} exceeds 64 KiB`);
     }
-    put(Buffer.alloc(BLOCK * 2, 0));
-    fsyncSync(fd);
-  } finally {
-    closeSync(fd);
+    listBytes += lineBytes + 1; // LF is outside the line but inside the file.
+    if (listBytes > limits.ndjsonBytes) {
+      throw new RefusalError(`files.ndjson exceeds 1 GiB at ${member}`);
+    }
+    if (entry.size > MAX_USTAR_SIZE) throw new RefusalError(`file larger than ustar allows: ${member}`);
+    tarBytes += BLOCK + entry.size + padding(entry.size);
+    if (tarBytes > limits.archiveBytes) throw new RefusalError(`uploads.tar exceeds 1 TiB at ${member}`);
+    splitUstarName(member);
   }
-  const ndjson = lines.length ? lines.join("\n") + "\n" : "";
-  writeFileSync(ndjsonPath, ndjson, { mode: 0o600, flag: "wx" });
+}
+
+function writeHashed(fd, hash, bytes) {
+  let offset = 0;
+  while (offset < bytes.length) {
+    const written = writeSync(fd, bytes, offset, bytes.length - offset);
+    if (written === 0) throw new Error("short upload backup write");
+    offset += written;
+  }
+  hash.update(bytes);
+}
+
+function copyMember(entry, member, chunk, put) {
+  const input = openSync(entry.abs, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+  const hash = createHash("sha256");
+  try {
+    const stat = fstatSync(input);
+    if (!stat.isFile() || stat.nlink > 1) throw new RefusalError(`not a plain regular file: ${member}`);
+    const changed = () => new RefusalError(`file changed size during backup: ${member}`);
+    if (stat.size !== entry.size) throw changed();
+    put(ustarHeader(member, entry.size));
+    let remaining = entry.size;
+    while (remaining > 0) {
+      const size = readSync(input, chunk, 0, Math.min(remaining, chunk.length), null);
+      if (size === 0) throw changed();
+      const bytes = chunk.subarray(0, size);
+      put(bytes);
+      hash.update(bytes);
+      remaining -= size;
+    }
+    if (readSync(input, chunk, 0, 1, null) !== 0) throw changed();
+    const pad = padding(entry.size);
+    if (pad) put(Buffer.alloc(pad));
+    return hash.digest("hex");
+  } finally {
+    closeSync(input);
+  }
+}
+
+/** Check framing before I/O, then stream each payload and the files list. */
+export function writeArchive({ entries, tarPath, ndjsonPath, limits }) {
+  checkArchiveBounds(entries, { ...UPLOAD_BACKUP_LIMITS, ...limits });
+  const tarHash = createHash("sha256");
+  const listHash = createHash("sha256");
+  const chunk = Buffer.allocUnsafe(1024 ** 2);
+  let totalBytes = 0;
+  const tarFd = openSync(tarPath, "wx", 0o600);
+  const put = (bytes) => writeHashed(tarFd, tarHash, bytes);
+  try {
+    const listFd = openSync(ndjsonPath, "wx", 0o600);
+    try {
+      for (const entry of entries) {
+        const sha256 = copyMember(entry, `${entry.root}/${entry.path}`, chunk, put);
+        writeHashed(listFd, listHash, Buffer.from(filesLine(entry, sha256) + "\n", "utf8"));
+        totalBytes += entry.size;
+      }
+      put(Buffer.alloc(ARCHIVE_END));
+      fsyncSync(tarFd);
+      fsyncSync(listFd);
+    } finally {
+      closeSync(listFd);
+    }
+  } finally {
+    closeSync(tarFd);
+  }
   return {
     archiveSha256: tarHash.digest("hex"),
-    filesManifestSha256: createHash("sha256").update(ndjson).digest("hex"),
-    fileCount: lines.length,
+    filesManifestSha256: listHash.digest("hex"),
+    fileCount: entries.length,
     totalBytes,
   };
 }
@@ -284,6 +362,14 @@ export function buildManifest(fields) {
     durationMs: fields.durationMs,
     archiveFormat: ARCHIVE_FORMAT,
   };
+}
+
+export function serializeManifest(manifest) {
+  const text = JSON.stringify(manifest, null, 2) + "\n";
+  if (Buffer.byteLength(text) > UPLOAD_BACKUP_LIMITS.manifestBytes) {
+    throw new RefusalError("manifest.json exceeds 16 MiB");
+  }
+  return text;
 }
 
 function liveRowExistsViaDocker({ container, user, db }) {
@@ -354,7 +440,7 @@ async function main() {
       finishedAt: finishedAt.toISOString(),
       durationMs: finishedAt.getTime() - startedAt.getTime(),
     });
-    writeFileSync(join(targetDir, "manifest.json"), JSON.stringify(manifest, null, 2) + "\n", { mode: 0o600, flag: "wx" });
+    writeFileSync(join(targetDir, "manifest.json"), serializeManifest(manifest), { mode: 0o600, flag: "wx" });
     log(`manifest written files=${result.fileCount} bytes=${result.totalBytes} sha256=${result.archiveSha256}`);
     log("ok");
     flushLog();
