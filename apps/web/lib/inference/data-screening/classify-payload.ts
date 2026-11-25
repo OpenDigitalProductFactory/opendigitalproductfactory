@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { localNativeContinuationFingerprint } from "@/lib/routing/local-native-continuation";
-import { SOURCE_CONTACT_EXEMPTION_PATTERN } from "./source-contact-evidence";
+import { SOURCE_CONTACT_EXEMPTION_PATTERN, SYNTHETIC_REVIEW_RECIPIENT_PATTERN } from "./source-contact-evidence";
 
 import type { ContentBlock } from "@/lib/routing/chat-message-types";
 import type {
@@ -34,6 +34,7 @@ type ClassRule = {
    * match on the genuine one (BI-EBE25715).
    */
   textExemptionPattern?: RegExp;
+  reviewSourceTextExemptionPattern?: RegExp;
   /**
    * BI-CD13D818 — this rule is built from vocabulary that is ALSO ordinary
    * English outside its protected domain ("performance", "benefits", "manager",
@@ -155,6 +156,7 @@ const CLASS_RULES: readonly ClassRule[] = [
     // trailer/identifier position. A bare address anywhere else still matches,
     // so a real customer email pasted into a message is unaffected.
     textExemptionPattern: SOURCE_CONTACT_EXEMPTION_PATTERN,
+    reviewSourceTextExemptionPattern: SYNTHETIC_REVIEW_RECIPIENT_PATTERN,
   },
   {
     dataClass: "customer-records",
@@ -346,12 +348,16 @@ export function classifyInferencePayload(
 ): InferencePayloadClassification {
   const probes = collectTextProbes(input);
   const matches: InferencePayloadMatch[] = [];
+  const publicSourceReview = input.taskType === "build-review" && isPublicSourceProvenance(input.sourceCodeProvenance);
 
   for (const probe of probes) {
     for (const rule of CLASS_RULES) {
-      const probeText = rule.textExemptionPattern
+      let probeText = rule.textExemptionPattern
         ? stripExemptSpans(probe.text, rule.textExemptionPattern)
         : probe.text;
+      if (publicSourceReview && rule.reviewSourceTextExemptionPattern && /^messages\[\d+\]\.content$/.test(probe.path)) {
+        probeText = stripExemptSpans(probeText, rule.reviewSourceTextExemptionPattern);
+      }
       if (
         rule.pathPattern?.test(normalizeProbePath(probe.path)) ||
         rule.textPattern?.test(probeText)

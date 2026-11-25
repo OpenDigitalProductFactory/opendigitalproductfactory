@@ -30,7 +30,7 @@ const RESERVED_PLACEHOLDER_EMAIL_PATTERN = new RegExp(
 
 // Exact reserved review mailbox in the source fixture's quoted recipient
 // property. A bare address, customer-context field, or lookalike is not covered.
-const SYNTHETIC_REVIEW_RECIPIENT_PATTERN = new RegExp(
+export const SYNTHETIC_REVIEW_RECIPIENT_PATTERN = new RegExp(
   `(?<!${CUSTOMER_CONTEXT})(?<=\\brecipient\\s*:\\s*")review@example\\.test(?=")`, "i");
 
 // Explicit unquoted resource quantities, deterministic test seeds and versioned
@@ -42,7 +42,6 @@ export const SOURCE_CONTACT_EXEMPTION_PATTERN = new RegExp([
   GIT_AUTHORSHIP_EMAIL_PATTERN.source,
   SYNTHETIC_GIT_EMAIL_ARGUMENT_PATTERN.source,
   RESERVED_PLACEHOLDER_EMAIL_PATTERN.source,
-  SYNTHETIC_REVIEW_RECIPIENT_PATTERN.source,
   /(?:^|[\n{,])[\t +\-]*["']?(?:memoryBytes|admissionReserveBytes|observedHighWaterBytes|safetyMarginBytes|seed)["']?[\t ]*:[\t ]*\d+(?=[\t ]*(?:[,}\r\n]|$))/.source,
   /\bpatches\/[A-Z0-9._+\-]+@\d+\.\d+\.\d+(?:-[A-Z0-9.\-]+)?\.patch(?![A-Z0-9._@+%/\-])/.source,
 ].join("|"), "im");

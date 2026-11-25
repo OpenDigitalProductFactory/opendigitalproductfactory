@@ -16,7 +16,11 @@ screening replay reproduced the restriction, then allowed external eligibility
 for a recognized fixture while a person-shaped contact still held the route.
 
 Recognize the exact value as non-contact only in its quoted source
-`recipient` field. Do not expand the placeholder role list, accept other
+`recipient` field in direct message text from a build review carrying the
+existing verified public-repository classification. This does not attest
+that an unpublished diff has been served by the public forge. The same
+text in an ordinary turn or a review without that repository classification
+still counts as contact evidence. Do not expand the placeholder role list, accept other
 domains, match a bare address, or override explicit local-only policy. Preserve
 customer-context, person-shaped, lookalike and adjacent-contact negatives. The
 existing classifier remains authoritative for every other value. The inbox

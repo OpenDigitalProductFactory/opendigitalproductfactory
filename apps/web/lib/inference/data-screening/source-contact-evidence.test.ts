@@ -179,8 +179,22 @@ describe("review fixture mailbox contact screening", () => {
     expect(result.routeContext.residencyPolicy).not.toBe("local_only");
   });
 
+  const sourceCodeProvenance = { repository: "OpenDigitalProductFactory/opendigitalproductfactory", visibility: "public" } as const;
+  const reviewContacts = (content: string) => classifyInferencePayload({
+    systemPrompt: "", messages: [{ role: "user", content }], taskType: "build-review", sourceCodeProvenance,
+  }).matches.filter((match) => match.reason === "contact-detail");
+
+  it("keeps the same quoted text classified outside qualified source review", () => {
+    const content = `recipient: "${reviewRecipient}"`;
+    expect(contacts(content)).toHaveLength(1);
+    for (const context of [{ taskType: "build-review" }, { sourceCodeProvenance }]) {
+      expect(classifyInferencePayload({ ...context, systemPrompt: "", messages: [{ role: "user", content }] })
+        .matches.filter((match) => match.reason === "contact-detail")).toHaveLength(1);
+    }
+  });
+
   it("keeps the exception exact and preserves adjacent contact evidence", () => {
-    expect(contacts(`recipient: "${reviewRecipient}"`)).toHaveLength(0);
+    expect(reviewContacts(`recipient: "${reviewRecipient}"`)).toHaveLength(0);
     for (const text of [
       reviewRecipient,
       `Customer recipient: "${reviewRecipient}"`,
@@ -190,7 +204,7 @@ describe("review fixture mailbox contact screening", () => {
       `recipient: "${address("review", "other.test")}"`,
       `recipient: "${realRecipient}"`,
       `recipient: "${reviewRecipient}" and actual contact ${personShaped}`,
-    ]) expect(contacts(text)).toHaveLength(1);
+    ]) expect(reviewContacts(text)).toHaveLength(1);
   });
 
   it("never overrides an explicit local-only route", () => {
