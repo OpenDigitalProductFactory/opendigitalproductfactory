@@ -37,6 +37,7 @@ import crypto from "node:crypto";
 import { summarizeScriptFailure, type PrismaLike } from "./managed-backup";
 import { resolveManagedScriptPath, runManagedScript } from "./managed-script-path";
 import type { RestoreEngineSpec } from "./engine-specs";
+import { listUnfinishedRestoreJournals } from "./paired-restore-journal";
 
 const BACKUPS_ROOT = "/backups";
 
@@ -213,6 +214,13 @@ export async function runManagedRestore(
           spec.messages.checksumMismatch(source.sha256, actual),
         );
       }
+    }
+
+    // A previous paired restore may have lost its process and database audit,
+    // so the in-memory mutex alone cannot admit a standalone restore here.
+    const journalRoot = await fs.realpath(backupsRoot);
+    if ((await listUnfinishedRestoreJournals(journalRoot)).length) {
+      throw new RestoreIntegrityError("Resolve the unfinished paired restore before starting a standalone restore.");
     }
 
     // ── 2. Pre-restore safety backup ──────────────────────────────────────
