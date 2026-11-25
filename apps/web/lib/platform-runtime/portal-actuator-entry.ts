@@ -18,6 +18,7 @@ async function main() {
       doctools: ReturnType<typeof createDoctoolsActuator>;
       openRuntimeSession: ReturnType<typeof createSandboxSessionActuator>;
       pruneDockerDisk: () => Promise<unknown>;
+      launchPromoter: (body: unknown) => Promise<unknown>;
     }): Promise<void>;
   };
   let previewPass: ReturnType<typeof fenceEndedPreviewRuntimesAtDaemon> | undefined;
@@ -48,6 +49,19 @@ async function main() {
         return pruneDockerDiskAtDaemon(async command => ({ stdout: String((await run(command)).stdout ?? "") }));
       })().finally(() => { prunePass = undefined; });
       return prunePass;
+    },
+    launchPromoter: async body => {
+      // Call the admitted launch directly: inside the actuator the private
+      // socket is mounted too, so runPromoter would route back to itself.
+      const [{ launchPromoterAtActuator, readPromoterInstallBinding }, { getSelfUpgradeConfig }, { runAdmittedPromoter }, promoter] = await Promise.all([
+        import("../self-upgrade/promoter-actuator"), import("../self-upgrade/config"),
+        import("../self-upgrade/promoter-launch"), import("../self-upgrade/promoter"),
+      ]);
+      return launchPromoterAtActuator(body, {
+        binding: readPromoterInstallBinding(process.env),
+        readConfig: getSelfUpgradeConfig,
+        launch: (params, owner) => runAdmittedPromoter(params, owner, params.promoterImage ?? "", promoter.buildAdmittedPromoterCommand),
+      });
     },
     doctools: createDoctoolsActuator(project),
     openRuntimeSession: createSandboxSessionActuator(),

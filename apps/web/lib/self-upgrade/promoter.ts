@@ -764,13 +764,14 @@ import {
   runProcessWithBudget,
 } from "@/lib/shared/run-process-with-budget";
 
+/** The one fixed serializer for a promoter launch; shared with the actuator. */
+export const buildAdmittedPromoterCommand = (input: PromoterParams) => buildCompatiblePromoterCommand(input, buildPromoterCommand, createPromoterDockerRunner(input));
 export async function runPromoter(params: PromoterParams): Promise<PromoterResult> {
-  const build = (input: PromoterParams) => buildCompatiblePromoterCommand(input, buildPromoterCommand, createPromoterDockerRunner(input));
   if (params.launchOwner && !params.runtimeTransitionAuthorityOperation && !params.dryRun && params.phase !== "build") {
-    const { runAdmittedPromoter } = await import("./promoter-launch");
-    return runAdmittedPromoter(params, params.launchOwner, params.promoterImage || DEFAULT_PROMOTER_IMAGE, build);
+    return await (await import("./promoter-actuator")).launchThroughPrivateActuator(params) // BI-224F56F1: no socket in the immutable portal
+      ?? (await import("./promoter-launch")).runAdmittedPromoter(params, params.launchOwner, params.promoterImage || DEFAULT_PROMOTER_IMAGE, buildAdmittedPromoterCommand);
   }
-  const { command, args } = await build(params);
+  const { command, args } = await buildAdmittedPromoterCommand(params);
   // Idempotency guard (SUR-E2BF265E). The container name is deterministic
   // (`dpf-promoter-<runId>`), so a concurrent or retried dispatch of the SAME
   // run reaching here would issue a second `docker run --name <name>` and hit

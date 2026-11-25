@@ -205,6 +205,19 @@ describe('scope writer actuator observations', () => {
     assert.match(overlay, /"source":"\/install\/source","target":"\/host-dpf","read_only":true/);
     assert.equal(overlay.split('/var/run/docker.sock').length - 1, 2);
     assert.doesNotMatch(overlay, /private-test-value/);
+    const bound = structuredClone(base);
+    Object.assign(bound.services.portal.environment, { DPF_HOST_INSTALL_PATH: '/install/source',
+      DPF_STATE_DIR_HOST: '/install/$state', DPF_SELF_UPGRADE_COMPOSE_FILES: 'docker-compose.yml' });
+    const boundOverlay = imageEvidence.renderScopeWriterComposeOverride(bound, { project: 'fixture', image: launchImage });
+    const actuatorSection = boundOverlay.slice(boundOverlay.indexOf('  portal-actuator:'));
+    assert.match(actuatorSection, /DPF_HOST_INSTALL_PATH: "\/install\/source"/);
+    assert.match(actuatorSection, /DPF_STATE_DIR_HOST: "\/install\/\$\$state"/);
+    assert.match(actuatorSection, /DPF_SELF_UPGRADE_COMPOSE_FILES: "docker-compose.yml"/);
+    assert.doesNotMatch(actuatorSection, /PROMOTE_SOURCE/);
+    const injected = structuredClone(bound);
+    injected.services.portal.environment.DPF_HOST_INSTALL_PATH = '/install/source"\n    privileged: true';
+    assert.throws(() => imageEvidence.renderScopeWriterComposeOverride(injected, { project: 'fixture', image: launchImage }),
+      /scope_writer_compose_unproven/);
     const refused = structuredClone(base);
     refused.services.portal.volumes.push({ type: 'bind', source: '/untrusted', target: '/app' });
     assert.throws(() => imageEvidence.renderScopeWriterComposeOverride(refused, { project: 'fixture', image: launchImage }),
@@ -238,6 +251,10 @@ describe('scope writer actuator observations', () => {
     };
     const expected = { project: 'fixture', image: launchImage, actuatorImage };
     assert.doesNotThrow(() => imageEvidence.verifyPortalWriterCompose(recipe, expected));
+    const boundRecipe = structuredClone(recipe);
+    boundRecipe.services.portal.environment = { DPF_HOST_INSTALL_PATH: '/install/source' };
+    boundRecipe.services['portal-actuator'].environment.DPF_HOST_INSTALL_PATH = '/install/source';
+    assert.doesNotThrow(() => imageEvidence.verifyPortalWriterCompose(boundRecipe, expected));
     for (const change of [
       value => { value.services.portal.command = ['sh']; },
       value => { value.services.portal.volumes[0].read_only = false; },
@@ -250,6 +267,9 @@ describe('scope writer actuator observations', () => {
       value => { value.services['portal-actuator'].environment.DPF_DOCKER_BIN = '/tmp/docker'; },
       value => { value.services['portal-actuator'].environment.DATABASE_URL = 'postgresql://peer/db'; },
       value => { value.volumes.portal_actuator.driver_opts = { type: 'none', device: '/tmp' }; },
+      value => { value.services['portal-actuator'].environment.DPF_HOST_INSTALL_PATH = '/elsewhere'; },
+      value => { value.services.portal.environment = { DPF_STATE_DIR_HOST: '/install/state' };
+        value.services['portal-actuator'].environment.DPF_STATE_DIR_HOST = '/other/state'; },
     ]) {
       const changed = structuredClone(recipe);
       change(changed);

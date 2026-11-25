@@ -21,6 +21,9 @@ const reconcileSubstratePath = '/v1/runtime/reconcile-substrate';
 const sweepPromotersPath = '/v1/runtime/sweep-promoters';
 const restartServicePath = '/v1/runtime/restart-service';
 const pruneDockerDiskPath = '/v1/runtime/prune-docker-disk';
+const promoterLaunchPath = '/v1/runtime/promoter-launch';
+const promoterLaunchRequestLimit = 256 * 1024;
+const promoterLaunchResponseLimit = 600 * 1024;
 const doctoolsPath = '/v1/runtime/doctools/';
 const doctoolsHealthPath = '/v1/runtime/doctools-health';
 const runtimeSessionPath = '/v1/runtime/workroom-session';
@@ -68,7 +71,7 @@ async function readBoundedStream(stream, bytes) {
  * The observer derives scope from host-owned state, never from the request. */
 export function createScopeWriterObserver({ observe, observeServices, observeCiCapacity, readRetirement, fencePreviews,
   reconcileSubstrate, readServiceLogs, observeProjectContainers, observePortalImage, observeSandbox, sweepPromoters,
-  doctools, openRuntimeSession, readReassessmentProof, restartService, pruneDockerDisk }) {
+  doctools, openRuntimeSession, readReassessmentProof, restartService, pruneDockerDisk, launchPromoter }) {
   const operations = new Map([
     [`GET ${cohortPath}`, observe], [`GET ${projectServicesPath}`, observeServices],
     [`GET ${ciCapacityPath}`, observeCiCapacity],
@@ -82,6 +85,7 @@ export function createScopeWriterObserver({ observe, observeServices, observeCiC
     [`POST ${pruneDockerDiskPath}`, pruneDockerDisk],
   ]);
   let doctoolsInFlight = 0;
+  let promoterLaunchesInFlight = 0;
   const server = createServer({ headersTimeout: 2_000, requestTimeout: 2_000, maxHeaderSize: 1024 }, async (req, res) => {
     res.setHeader('Connection', 'close');
     const document = req.method === 'POST' ? parseDoctoolsPath(req.url) : null;
@@ -106,6 +110,25 @@ export function createScopeWriterObserver({ observe, observeServices, observeCiC
         await sent;
       } catch { if (!res.destroyed) res.writeHead(503).end(); }
       finally { clearTimeout(deadline); doctoolsInFlight--; }
+      return;
+    }
+    if (req.method === 'POST' && req.url === promoterLaunchPath && launchPromoter) {
+      const length = Number(req.headers['content-length']);
+      if (req.headers['content-type'] !== 'application/json') return res.writeHead(415).end();
+      if (req.headers['transfer-encoding'] !== undefined || !Number.isSafeInteger(length) || length < 2
+        || length > promoterLaunchRequestLimit) return res.writeHead(413).end();
+      if (promoterLaunchesInFlight >= 2) return res.writeHead(503).end();
+      promoterLaunchesInFlight++;
+      try {
+        let body;
+        try { body = JSON.parse((await readBoundedStream(req, length)).toString('utf8')); } catch { return res.writeHead(400).end(); }
+        if (!body || typeof body !== 'object' || Array.isArray(body)) return res.writeHead(400).end();
+        const reply = JSON.stringify(await launchPromoter(body));
+        if (res.destroyed) return;
+        if (!reply || Buffer.byteLength(reply) > promoterLaunchResponseLimit) throw unavailable();
+        res.writeHead(200, { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(reply) }).end(reply);
+      } catch { if (!res.destroyed) res.writeHead(503).end(); }
+      finally { promoterLaunchesInFlight--; }
       return;
     }
     const requestedLog = req.method === 'GET' && req.url?.startsWith(`${serviceLogsPath}?`)
@@ -307,10 +330,12 @@ async function verifyActuatorSocket(socketPath) {
 }
 
 /** Close the connection on refused, stalled, oversized or malformed output. */
-async function requestActuator(path, socketPath, { method = 'GET', timeoutMs = 2_500, maxBytes = responseLimit } = {}) {
+async function requestActuator(path, socketPath, { method = 'GET', timeoutMs = 2_500, maxBytes = responseLimit, body } = {}) {
   await verifyActuatorSocket(socketPath);
+  const payload = body === undefined ? undefined : Buffer.from(JSON.stringify(body));
   return new Promise((resolve, reject) => {
-    const req = request({ socketPath, method, path, agent: false, signal: AbortSignal.timeout(timeoutMs) }, res => {
+    const headers = payload ? { 'Content-Type': 'application/json', 'Content-Length': payload.length } : undefined;
+    const req = request({ socketPath, method, path, agent: false, signal: AbortSignal.timeout(timeoutMs), headers }, res => {
       const fail = () => { reject(unavailable()); res.destroy(); };
       if (res.statusCode !== 200 || res.headers['content-type'] !== 'application/json') return fail();
       const chunks = [];
@@ -331,7 +356,7 @@ async function requestActuator(path, socketPath, { method = 'GET', timeoutMs = 2
       });
     });
     req.on('error', () => reject(unavailable()));
-    req.end();
+    req.end(payload);
   });
 }
 
@@ -377,6 +402,16 @@ export function restartActuatorService(service, { socketPath = SCOPE_WRITER_OBSE
 /** Weekly disk reclamation; the actuator alone selects what is removed. */
 export function pruneActuatorDockerDisk({ socketPath = SCOPE_WRITER_OBSERVER_SOCKET } = {}) {
   return requestActuator(pruneDockerDiskPath, socketPath, { method: 'POST', timeoutMs: 15 * 60_000 });
+}
+
+/** The actuator re-derives every host-facing field and re-reads the owner
+ * before launch; a lost reply leaves the owner to settle the action. */
+export function launchActuatorPromoter(body, { socketPath = SCOPE_WRITER_OBSERVER_SOCKET, timeoutMs }) {
+  const size = Buffer.byteLength(JSON.stringify(body ?? null));
+  if (!body || typeof body !== 'object' || size > promoterLaunchRequestLimit || !Number.isSafeInteger(timeoutMs) || timeoutMs < 1) {
+    return Promise.reject(unavailable());
+  }
+  return requestActuator(promoterLaunchPath, socketPath, { method: 'POST', timeoutMs, maxBytes: promoterLaunchResponseLimit, body });
 }
 
 export function readActuatorProjectContainers({ socketPath = SCOPE_WRITER_OBSERVER_SOCKET } = {}) {

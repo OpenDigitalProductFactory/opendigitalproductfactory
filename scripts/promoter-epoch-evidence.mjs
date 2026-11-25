@@ -164,7 +164,13 @@ const actuatorSecretOptions = [
   'DATABASE_URL', 'DPF_SECRET_PROVIDER', 'DPF_ONEPASSWORD_CONNECT_HOST', 'DPF_ONEPASSWORD_CONNECT_TOKEN_FILE',
   'DPF_ONEPASSWORD_CONNECT_TOKEN', 'DPF_ONEPASSWORD_VAULT_ID', 'DPF_ONEPASSWORD_ITEM_ID', 'DPF_SECRET_PROVIDER_TIMEOUT_MS',
 ];
-const actuatorEnvKeys = new Set([...actuatorSecretOptions, 'PROMOTE_COMPOSE_PROJECT', 'TSX_TSCONFIG_PATH',
+// Install binding for admitted promoter launches (BI-224F56F1): host paths and
+// Compose inputs copied from the portal's resolved interpolation at render time,
+// so the actuator derives launch targets from the install, never the caller.
+const actuatorBindingKeys = ['DPF_HOST_INSTALL_PATH', 'PROMOTE_SOURCE', 'DPF_STATE_DIR_HOST', 'DPF_BACKUPS_HOST_PATH',
+  'PROMOTE_BACKUP_PATH', 'PROMOTE_HEALTH_URL', 'DPF_SELF_UPGRADE_COMPOSE_FILES'];
+const bindingValue = /^[A-Za-z0-9 _./:@$+-]{1,1024}$/;
+const actuatorEnvKeys = new Set([...actuatorSecretOptions, ...actuatorBindingKeys, 'PROMOTE_COMPOSE_PROJECT', 'TSX_TSCONFIG_PATH',
   'TSX_DISABLE_CACHE', 'DPF_RUNTIME_SECRET_NAMES']);
 
 /** Render mounts and fixed launch fields only. Keep credentials on the
@@ -197,6 +203,12 @@ export function renderScopeWriterComposeOverride(recipe, { project, image }) {
     { ...mounts.get(stateMount) },
     { type: 'bind', source: dockerSocketMount, target: dockerSocketMount, bind: { create_host_path: false } },
   ];
+  const bindingLines = actuatorBindingKeys.flatMap(key => {
+    const value = portal.environment?.[key];
+    if (value === undefined || value === null || value === '') return [];
+    if (typeof value !== 'string' || !bindingValue.test(value)) refuse();
+    return [`      ${key}: ${JSON.stringify(value.replaceAll('$', '$$$$'))}`];
+  });
   const secretDefaults = { DATABASE_URL: 'postgresql://dpf:dpf_dev@postgres:5432/dpf', DPF_SECRET_PROVIDER: 'environment' };
   const secretLine = key => '      ' + key + ': "' + '$' + '{' + key + ':-' + (secretDefaults[key] ?? '') + '}"';
   return [
@@ -215,7 +227,7 @@ export function renderScopeWriterComposeOverride(recipe, { project, image }) {
     '    entrypoint: ["/usr/local/bin/node", "/usr/local/bin/runtime-secret-bootstrap.mjs", "--", "/usr/local/bin/node", "--import", "/app/packages/db/node_modules/tsx/dist/loader.mjs"]',
     '    command: ["/app/apps/web-src/lib/platform-runtime/portal-actuator-entry.ts"]',
     '    volumes: ' + encodeMounts(actorMounts),
-    '    environment:', ...actuatorSecretOptions.map(secretLine), `      PROMOTE_COMPOSE_PROJECT: "${project}"`,
+    '    environment:', ...actuatorSecretOptions.map(secretLine), ...bindingLines, `      PROMOTE_COMPOSE_PROJECT: "${project}"`,
     '      TSX_TSCONFIG_PATH: /app/apps/web-src/tsconfig.json', '      TSX_DISABLE_CACHE: "1"', '      DPF_RUNTIME_SECRET_NAMES: DATABASE_URL',
     'volumes:', '  portal_actuator:', '',
   ].join('\n');
@@ -260,6 +272,7 @@ export function verifyPortalWriterCompose(recipe, { project, image, actuatorImag
       || actuator.environment.DPF_RUNTIME_SECRET_NAMES !== 'DATABASE_URL'
       || Object.keys(actuator.environment).some(key => !actuatorEnvKeys.has(key))
       || actuatorSecretOptions.some(key => (actuator.environment[key] ?? '') !== (portal.environment?.[key] ?? ''))
+      || actuatorBindingKeys.some(key => (actuator.environment[key] ?? '') !== (portal.environment?.[key] ?? ''))
       || (actuator.ports !== undefined && !isEmptyList(actuator.ports))
       || !exactArguments(Object.keys(actuator.networks ?? {}), ['default'])
       || volume?.name !== `${project}_portal_actuator` || volume.external || volume.driver_opts
@@ -551,7 +564,7 @@ export async function readScopeWriterObserverBinding({ stateDir, secret, now = n
  *   openRuntimeSession: (owner: unknown, resolveSandbox: () => Promise<unknown>) => Promise<unknown> }} owners
  */
 export async function serveScopeWriterObserver(env, { fencePreviews, observeCiCapacity, reconcileSubstrate, sweepPromoters,
-  doctools, openRuntimeSession, pruneDockerDisk }) {
+  doctools, openRuntimeSession, pruneDockerDisk, launchPromoter }) {
   const { createScopeWriterObserver, observeActuatorProjectServices, observeActuatorProjectContainers, observeActuatorPortalImage,
     observeActuatorSandbox, publishActuatorSocket, restartActuatorProjectService } =
     await import('./lib/scope-writer-observation.mjs');
@@ -617,6 +630,7 @@ export async function serveScopeWriterObserver(env, { fencePreviews, observeCiCa
     reconcileSubstrate,
     sweepPromoters,
     pruneDockerDisk,
+    launchPromoter,
     doctools,
   });
   process.umask(0o117);

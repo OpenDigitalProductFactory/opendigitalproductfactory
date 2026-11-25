@@ -359,3 +359,26 @@ it('runs the fixed Docker disk prune only as a parameterless actuator operation'
       assert.equal(runs, 1);
     });
 });
+
+it('carries one bounded JSON promoter launch request to its owner and nothing else', unixOnly, async () => {
+  const { createScopeWriterObserver, launchActuatorPromoter } = await load();
+  const received = [];
+  await withServer(observe => createScopeWriterObserver({ observe, launchPromoter: async body => {
+    received.push(body);
+    return { exitCode: 0, stdout: 'promoted', stderr: '' };
+  } }), async () => ({}), async socketPath => {
+    const body = { owner: { kind: 'self-upgrade', runId: 'SUR-1' }, params: { targetSha: 'a'.repeat(40) } };
+    assert.deepEqual(await launchActuatorPromoter(body, { socketPath, timeoutMs: 2_000 }), { exitCode: 0, stdout: 'promoted', stderr: '' });
+    const json = { 'Content-Type': 'application/json' };
+    assert.equal(await call(socketPath, { method: 'POST', path: '/v1/runtime/promoter-launch?run=peer',
+      headers: { ...json, 'Content-Length': 2 } }, '{}'), 404);
+    assert.equal(await call(socketPath, { method: 'POST', path: '/v1/runtime/promoter-launch',
+      headers: { 'Content-Type': 'text/plain', 'Content-Length': 2 } }, '{}'), 415);
+    assert.equal(await call(socketPath, { method: 'POST', path: '/v1/runtime/promoter-launch',
+      headers: { ...json, 'Content-Length': 300 * 1024 } }, '{'), 413);
+    assert.equal(await call(socketPath, { method: 'POST', path: '/v1/runtime/promoter-launch',
+      headers: { ...json, 'Content-Length': 5 } }, 'nope!'), 400);
+    assert.equal(await call(socketPath, { method: 'GET', path: '/v1/runtime/promoter-launch' }), 404);
+    assert.deepEqual(received, [body]);
+  });
+});
