@@ -399,3 +399,19 @@ it('carries one bounded JSON source writer request to its owner only', unixOnly,
     assert.deepEqual(received, [body]);
   });
 });
+
+it('carries one bounded candidate stage request to its owner only', unixOnly, async () => {
+  const { createScopeWriterObserver, buildActuatorPromoterCandidate } = await load();
+  const received = [];
+  const artifact = { digest: `sha256:${'c'.repeat(64)}`, sourceSha: 'a'.repeat(40) };
+  await withServer(observe => createScopeWriterObserver({ observe, promoterCandidate: async body => {
+    received.push(body);
+    return artifact;
+  } }), async () => ({}), async socketPath => {
+    const body = { owner: { kind: 'self-upgrade', runId: 'SUR-CAND1' }, input: { targetSha: 'a'.repeat(40) } };
+    assert.deepEqual(await buildActuatorPromoterCandidate(body, { socketPath, timeoutMs: 2_000 }), artifact);
+    await assert.rejects(buildActuatorPromoterCandidate({ pad: 'x'.repeat(2048) }, { socketPath, timeoutMs: 2_000 }));
+    assert.equal(await call(socketPath, { method: 'GET', path: '/v1/runtime/promoter-candidate' }), 404);
+    assert.deepEqual(received, [body]);
+  });
+});

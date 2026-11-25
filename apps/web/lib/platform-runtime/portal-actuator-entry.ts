@@ -20,6 +20,7 @@ async function main() {
       pruneDockerDisk: () => Promise<unknown>;
       launchPromoter: (body: unknown) => Promise<unknown>;
       sourceWriter: (body: unknown) => Promise<unknown>;
+      promoterCandidate: (body: unknown) => Promise<unknown>;
     }): Promise<void>;
   };
   let previewPass: ReturnType<typeof fenceEndedPreviewRuntimesAtDaemon> | undefined;
@@ -126,6 +127,28 @@ async function main() {
         });
       })();
       return (await sourceWriterLauncher)(body);
+    },
+    promoterCandidate: async body => {
+      const [{ createCandidateLauncher }, { readPromoterInstallBinding }, { getSelfUpgradeConfig }, { runProcessWithBudget },
+        { resolvePromoterArtifact }] = await Promise.all([
+        import("../self-upgrade/promoter-candidate-actuator"), import("../self-upgrade/promoter-actuator"),
+        import("../self-upgrade/config"), import("../shared/run-process-with-budget"), import("../self-upgrade/promoter"),
+      ]);
+      return createCandidateLauncher({
+        binding: readPromoterInstallBinding(process.env),
+        readConfig: getSelfUpgradeConfig,
+        readRun: async runId => {
+          const { prisma } = await import("@dpf/db");
+          return prisma.selfUpgradeRun.findUnique({ where: { runId }, select: { status: true, deployedSha: true } });
+        },
+        inspectImageId: async reference => {
+          const inspected = await runProcessWithBudget("docker", ["image", "inspect", "--format", "{{.Id}}", reference],
+            { timeoutMs: 10_000, maxStdoutBytes: 1024 }).catch(() => null);
+          return inspected?.exitCode === 0 ? inspected.stdout.trim() : null;
+        },
+        run: (args, options) => runProcessWithBudget("docker", args, options),
+        resolve: params => resolvePromoterArtifact(params),
+      })(body);
     },
     doctools: createDoctoolsActuator(project),
     openRuntimeSession: createSandboxSessionActuator(),

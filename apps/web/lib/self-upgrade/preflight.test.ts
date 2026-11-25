@@ -6,6 +6,8 @@ import { INSTALL_STATE_ENVELOPE_TTL_MS, refreshMigrationHandoffAfterDrain, resol
 
 const fsMocks = vi.hoisted(() => ({ readFile: vi.fn() }));
 vi.mock("node:fs/promises", () => ({ readFile: fsMocks.readFile }));
+const candidateStage = vi.hoisted(() => ({ candidateThroughPrivateActuator: vi.fn(async (..._args: unknown[]): Promise<unknown> => null) }));
+vi.mock("./promoter-candidate-actuator", () => candidateStage);
 
 describe("reassessment candidate compatibility", () => {
   const configDigest = `sha256:${"d".repeat(64)}`;
@@ -234,6 +236,17 @@ describe("candidate signed install-state handoff", () => {
       const result = await runCandidatePreflight(params({ candidatePromoterReference: undefined, release: undefined, runtime: async () => runtime as never, prePullDoctools }) as never);
       expect(result.ok).toBe(true);
       expect(prePullDoctools).not.toHaveBeenCalled();
+    });
+
+    it("takes a source candidate from the actuator's admitted stage and builds nothing locally (BI-224F56F1)", async () => {
+      const runtime = { ...readyRuntime(), buildCandidatePromoterImage: vi.fn(async () => "candidate") };
+      candidateStage.candidateThroughPrivateActuator.mockResolvedValueOnce(artifact);
+      const result = await runCandidatePreflight(params({ candidatePromoterReference: undefined, release: undefined, runtime: async () => runtime as never, prePullDoctools: vi.fn() }) as never);
+      expect(result.ok).toBe(true);
+      expect(candidateStage.candidateThroughPrivateActuator).toHaveBeenCalledWith({ runId: "SUR-doctools", targetSha: "b".repeat(40) });
+      expect(runtime.buildCandidatePromoterImage).not.toHaveBeenCalled();
+      expect(runtime.resolvePromoterArtifact).not.toHaveBeenCalled();
+      expect(runtime.runPromoterReadiness).toHaveBeenCalledWith(expect.objectContaining({ promoterImage: `sha256:${"d".repeat(64)}` }));
     });
 
     it("on a customizable install's source upgrade, pre-pulls the release the TARGET descends from, first (BI-4E18BC28)", async () => {

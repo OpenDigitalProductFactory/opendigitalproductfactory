@@ -23,6 +23,7 @@ const restartServicePath = '/v1/runtime/restart-service';
 const pruneDockerDiskPath = '/v1/runtime/prune-docker-disk';
 const promoterLaunchPath = '/v1/runtime/promoter-launch';
 const sourceWriterPath = '/v1/runtime/source-writer';
+const promoterCandidatePath = '/v1/runtime/promoter-candidate';
 const promoterLaunchRequestLimit = 256 * 1024;
 const promoterLaunchResponseLimit = 600 * 1024;
 const doctoolsPath = '/v1/runtime/doctools/';
@@ -72,7 +73,7 @@ async function readBoundedStream(stream, bytes) {
  * The observer derives scope from host-owned state, never from the request. */
 export function createScopeWriterObserver({ observe, observeServices, observeCiCapacity, readRetirement, fencePreviews,
   reconcileSubstrate, readServiceLogs, observeProjectContainers, observePortalImage, observeSandbox, sweepPromoters,
-  doctools, openRuntimeSession, readReassessmentProof, restartService, pruneDockerDisk, launchPromoter, sourceWriter }) {
+  doctools, openRuntimeSession, readReassessmentProof, restartService, pruneDockerDisk, launchPromoter, sourceWriter, promoterCandidate }) {
   const operations = new Map([
     [`GET ${cohortPath}`, observe], [`GET ${projectServicesPath}`, observeServices],
     [`GET ${ciCapacityPath}`, observeCiCapacity],
@@ -86,7 +87,8 @@ export function createScopeWriterObserver({ observe, observeServices, observeCiC
     [`POST ${pruneDockerDiskPath}`, pruneDockerDisk],
   ]);
   let doctoolsInFlight = 0;
-  const jsonRoutes = new Map([[promoterLaunchPath, launchPromoter], [sourceWriterPath, sourceWriter]].filter(([, owner]) => owner));
+  const jsonRoutes = new Map([[promoterLaunchPath, launchPromoter], [sourceWriterPath, sourceWriter], [promoterCandidatePath, promoterCandidate]]
+    .filter(([, owner]) => owner));
   let jsonActionsInFlight = 0;
   const server = createServer({ headersTimeout: 2_000, requestTimeout: 2_000, maxHeaderSize: 1024 }, async (req, res) => {
     res.setHeader('Connection', 'close');
@@ -427,6 +429,15 @@ export function runActuatorSourceWriter(body, { socketPath = SCOPE_WRITER_OBSERV
     return Promise.reject(unavailable());
   }
   return requestActuator(sourceWriterPath, socketPath, { method: 'POST', timeoutMs, maxBytes: 64 * 1024, body });
+}
+
+/** The admitted candidate stage of a running self-upgrade run (BI-224F56F1, DI-B3171A8F09DC). */
+export function buildActuatorPromoterCandidate(body, { socketPath = SCOPE_WRITER_OBSERVER_SOCKET, timeoutMs }) {
+  const size = Buffer.byteLength(JSON.stringify(body ?? null));
+  if (!body || typeof body !== 'object' || size > 1024 || !Number.isSafeInteger(timeoutMs) || timeoutMs < 1) {
+    return Promise.reject(unavailable());
+  }
+  return requestActuator(promoterCandidatePath, socketPath, { method: 'POST', timeoutMs, maxBytes: 16 * 1024, body });
 }
 
 export function readActuatorProjectContainers({ socketPath = SCOPE_WRITER_OBSERVER_SOCKET } = {}) {
