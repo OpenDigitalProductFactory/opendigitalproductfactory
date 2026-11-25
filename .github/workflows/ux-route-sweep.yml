@@ -236,10 +236,18 @@ jobs:
         uses: actions/download-artifact@v8
         with:
           name: web-production-build-${{ github.run_id }}-${{ github.run_attempt }}
+          # Use the same REST artifact scope as the rendezvous. The runner's
+          # internal backend resolved a newly uploaded name, then failed to
+          # download its ID (BI-A9D01317). Keep the exact run and attempt.
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ github.run_id }}
           path: ${{ runner.temp }}/web-production-build
 
       - name: Verify and materialize exact-tree production build
         id: materialize-build
+        # `conclusion` can be success after a failed soft download. Only a
+        # successful raw outcome should reach the exact-tree receipt checks.
         if: steps.await-build.outputs.found == 'true' && steps.download-build.outcome == 'success'
         run: >-
           node scripts/ci-build-artifact.mjs consume
@@ -248,7 +256,16 @@ jobs:
 
       - name: Build the portal
         if: steps.materialize-build.outputs.reused != 'true'
-        run: pnpm --filter web build
+        # Match the canonical Production Build's profile and inner deadline.
+        timeout-minutes: 15
+        env:
+          DPF_TURBOPACK_BUILD_CACHE: '0'
+          ARTIFACT_FOUND: ${{ steps.await-build.outputs.found }}
+          DOWNLOAD_OUTCOME: ${{ steps.download-build.outcome }}
+          MATERIALIZE_OUTCOME: ${{ steps.materialize-build.outcome }}
+        run: |
+          echo "[ux-build-fallback] run=$GITHUB_RUN_ID attempt=$GITHUB_RUN_ATTEMPT event=$GITHUB_EVENT_NAME sha=$GITHUB_SHA artifact_found=${ARTIFACT_FOUND:-not-requested} download=${DOWNLOAD_OUTCOME:-not-run} materialize=${MATERIALIZE_OUTCOME:-not-run} turbopack_cache=0 timeout=15m command=pnpm --filter web build"
+          pnpm --filter web build
 
       # Poll with curl rather than adding a wait-on dependency just for this job
       # (the New Dependency Gate exists to stop exactly that kind of drive-by).
