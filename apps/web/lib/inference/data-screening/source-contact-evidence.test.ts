@@ -160,3 +160,45 @@ describe("placeholder accounts on reserved domains are not customer contacts (BI
     expect(result.routeContext.residencyPolicy).not.toBe("local_only");
   });
 });
+
+describe("review fixture mailbox contact screening", () => {
+  const address = (local: string, domain = "example.test") => `${local}@${domain}`;
+  const reviewRecipient = address("review");
+  const realRecipient = address("review", "mail.company.com");
+  const personShaped = address("jane.doe");
+
+  it("leaves the exact inbox approval fixture eligible for permitted external review", () => {
+    const result = screenInferencePayload({
+      systemPrompt: "Review the committed source change.",
+      messages: [{ role: "user", content: `const approval = { payment: { amount: 125, currency: "USD", recipient: "${reviewRecipient}" } };` }],
+      taskType: "build-review",
+      routeContext: { sensitivity: "development", allowedProviders: ["openai", "local"] },
+      sourceCodeProvenance: { repository: "OpenDigitalProductFactory/opendigitalproductfactory", visibility: "public" },
+    });
+    expect(result.receipt.classifiedDataClasses).not.toContain("customer-records");
+    expect(result.routeContext.residencyPolicy).not.toBe("local_only");
+  });
+
+  it("keeps the exception exact and preserves adjacent contact evidence", () => {
+    expect(contacts(`recipient: "${reviewRecipient}"`)).toHaveLength(0);
+    for (const text of [
+      reviewRecipient,
+      `Customer recipient: "${reviewRecipient}"`,
+      `Customer contact: ${reviewRecipient}`,
+      `recipient: "${reviewRecipient}.evil.test"`,
+      `recipient: "${address("review1")}"`,
+      `recipient: "${address("review", "other.test")}"`,
+      `recipient: "${realRecipient}"`,
+      `recipient: "${reviewRecipient}" and actual contact ${personShaped}`,
+    ]) expect(contacts(text)).toHaveLength(1);
+  });
+
+  it("never overrides an explicit local-only route", () => {
+    const result = screenInferencePayload({
+      systemPrompt: "",
+      messages: [{ role: "user", content: `const recipient = "${reviewRecipient}";` }],
+      routeContext: { sensitivity: "internal", residencyPolicy: "local_only" },
+    });
+    expect(result.routeContext.residencyPolicy).toBe("local_only");
+  });
+});

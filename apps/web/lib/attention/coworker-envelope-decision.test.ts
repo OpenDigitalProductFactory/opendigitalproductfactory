@@ -75,13 +75,12 @@ describe("primary decision disclosure", () => {
     expect(primary.unresolved).toBe(true);
   });
 
-  it("does not resolve a known operation with unrecognized consequential arguments", () => {
+  it("retains consequential fields even when a registered operation is named", () => {
     const decision = summarizeCoworkerEnvelopeDecision({ ...RESEARCH, toolName: "merge_backlog_items", proposedParameters: {
       canonicalItemId: "BI-KEEP", duplicateItemId: "BI-DUP", payment: { amount: 125, currency: "USD", recipient: "review@example.test" }, access: false,
     } });
     const primary = envelopePrimaryDecision(decision);
-    expect(primary.title).toBe("Review this coworker request?");
-    expect(primary.unresolved).toBe(true);
+    expect(primary.title).toBe("Combine these duplicate work requests?");
     expect(primary.facts).toEqual(expect.arrayContaining([
       { label: "Amount", value: "125" }, { label: "Currency", value: "USD" },
       { label: "Recipient", value: "review@example.test" }, { label: "Access", value: "false" },
@@ -428,5 +427,14 @@ describe("room admission with a data access raise", () => {
       recommenderAgentId: "AGT-EXT-CLAUDE", authorizerUserId: "owner", consequence: "authority",
     });
     expect(decision.kind).not.toBe("admission");
+  });
+});
+
+it("names a proposed merge without resolving an unknown effect", () => {
+  const request = { canonicalItemId: "BI-KEEP", duplicateItemId: "BI-DUP", access: false };
+  const decision = summarizeCoworkerEnvelopeDecision({ ...RESEARCH, toolName: "merge_backlog_items", proposedParameters: request, consequence: "irreversible" });
+  expect(envelopePrimaryDecision(decision)).toMatchObject({
+    title: "Combine these duplicate work requests?", unresolved: true,
+    facts: expect.arrayContaining([{ label: "Access", value: "false" }]),
   });
 });

@@ -579,7 +579,13 @@ export function envelopePrimaryDecision(decision: EnvelopeDecisionSummary, local
   }
   const releaseReservation = exact && decision.toolName === "release_nonprod_environment_lease"
     && !!stringParam(params, "leaseId");
-  let title = copy.unresolvedTitle;
+  // Name the requested operation without inferring its effects from unknown arguments.
+  const mergeSource = stringParam(params, "duplicateItemId");
+  const mergeTarget = stringParam(params, "canonicalItemId");
+  const namesUnresolvedMerge = exact && decision.toolName === "merge_backlog_items"
+    && mergeSource && mergeTarget && mergeSource !== mergeTarget
+    && (params.reconcileOnly === undefined || params.reconcileOnly === false);
+  let title = namesUnresolvedMerge ? copy.mergeWorkTitle : copy.unresolvedTitle;
   let description = copy.unresolvedDescription;
   let consequence = decision.consequence.startsWith("None declared.") ? copy.effectUnknown : decision.consequence;
   let recommendation = copy.unresolvedRecommendation;

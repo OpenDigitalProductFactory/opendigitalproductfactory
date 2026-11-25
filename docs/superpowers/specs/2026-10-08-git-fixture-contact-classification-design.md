@@ -6,6 +6,29 @@ status: active
 
 Backlog: BI-E84B9600. Workroom: WC-CEDC6987. Delivery shape: small fix.
 
+## Amendment 2026-11-25: exact inbox review recipient (BI-B499CCB3)
+
+The preserved inbox candidate at 34a78a515fca52da8c89e4c9bae1161d2d06e1f0
+was screened as customer records because an existing payment fixture used the
+local part `review` at the reserved domain `example.test`. The governed
+review had no eligible endpoint and dispatched no provider. An in-memory
+screening replay reproduced the restriction, then allowed external eligibility
+for a recognized fixture while a person-shaped contact still held the route.
+
+Recognize the exact value as non-contact only in its quoted source
+`recipient` field. Do not expand the placeholder role list, accept other
+domains, match a bare address, or override explicit local-only policy. Preserve
+customer-context, person-shaped, lookalike and adjacent-contact negatives. The
+existing classifier remains authoritative for every other value. The inbox
+still marks unknown merge effects unresolved, while retaining the established
+requested-operation label.
+
+Run the classifier and routing regressions, then preflight the full current
+diff before the exact-tree check and independent review. Compare eligible
+against true local-only on the same screening path. This adds no provider,
+grant or automatic reclassification. General review eligibility preflight and
+a real-workflow tokenization trial remain separate deliverables.
+
 ## Existing architecture and observed defect
 
 This extends [vertical sensitive policy packs](2026-07-27-vertical-sensitive-policy-packs-design.md)
