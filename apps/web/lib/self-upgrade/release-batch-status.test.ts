@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
   getLatestSucceededRun: vi.fn(),
   defaultGitRunner: vi.fn(),
   readSelfUpgradeSupport: vi.fn(),
+  refreshUpstreamThroughWriter: vi.fn(async (..._a: unknown[]): Promise<unknown> => null),
 }));
 
 vi.mock("./config", () => ({
@@ -16,6 +17,7 @@ vi.mock("./run-store", () => ({
 vi.mock("./prepare-source", () => ({
   defaultGitRunner: mocks.defaultGitRunner,
 }));
+vi.mock("./source-writer-actuator", () => ({ refreshUpstreamThroughWriter: mocks.refreshUpstreamThroughWriter }));
 vi.mock("./support", () => ({
   readSelfUpgradeSupport: mocks.readSelfUpgradeSupport,
 }));
@@ -106,6 +108,13 @@ describe("resolveReleaseBatchStatus", () => {
       (c[0] as string[]).includes("fetch"),
     );
     expect(calledFetch).toBe(true);
+  });
+
+  it("freshens through the authorized source writer, not a local fetch, in the qualified portal", async () => {
+    mocks.refreshUpstreamThroughWriter.mockResolvedValueOnce({ ok: true, upstreamSha: "b".repeat(40) });
+    await resolveReleaseBatchStatus({ config: CONFIG, fresh: true });
+    expect(mocks.refreshUpstreamThroughWriter).toHaveBeenCalledWith({ remote: "origin", branch: "main" });
+    expect(mocks.defaultGitRunner.mock.calls.some((c) => (c[0] as string[]).includes("fetch"))).toBe(false);
   });
 
   it("does not fetch when fresh is falsy", async () => {

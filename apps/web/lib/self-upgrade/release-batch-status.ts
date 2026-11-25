@@ -109,7 +109,12 @@ export async function resolveReleaseBatchStatus(
     if (opts.fresh) {
       // Best-effort freshen so a just-merged PR is visible to the tally.
       try {
-        await gitRun(buildFetchCommand({ hostSourcePath, remote, branch }).slice(1));
+        // BI-224F56F1: the qualified portal reads a read-only checkout; the
+        // authorized source writer refreshes it instead.
+        const { refreshUpstreamThroughWriter } = await import("./source-writer-actuator");
+        if (!(await refreshUpstreamThroughWriter({ remote, branch }))) {
+          await gitRun(buildFetchCommand({ hostSourcePath, remote, branch }).slice(1));
+        }
       } catch {
         // Stale refs degrade the tally, never the request.
       }

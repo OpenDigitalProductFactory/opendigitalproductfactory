@@ -255,8 +255,13 @@ async function resolveTargetShaUncached(
       }
       if (localSha !== remoteSha) {
         try {
-          const [, ...fetchArgs] = buildFetchCommand(at);
-          await execFile("git", fetchArgs);
+          // BI-224F56F1: in the qualified portal the checkout is read-only and
+          // the authorized source writer refreshes it.
+          const { refreshUpstreamThroughWriter } = await import("./source-writer-actuator");
+          if (!(await refreshUpstreamThroughWriter({ remote: at.remote, branch: at.branch }))) {
+            const [, ...fetchArgs] = buildFetchCommand(at);
+            await execFile("git", fetchArgs);
+          }
         } catch (err) {
           console.info("self-upgrade.target-fetch-skipped", {
             channel,

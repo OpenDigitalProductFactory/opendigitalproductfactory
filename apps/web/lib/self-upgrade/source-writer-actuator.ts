@@ -134,3 +134,12 @@ export async function sourceWriterThroughPrivateActuator<R extends SourceWriterR
     ? { ok: false, reason: "prep-error", message: "The authorized source writer did not confirm the operation." }
     : { ok: false, reason: "no-target" }) as never;
 }
+
+/** Portal side, for every reader that freshens the install checkout's
+ * upstream ref: one bounded writer refresh shared by all of them. Null when
+ * the actuator is not mounted, so the caller keeps its local fetch. */
+export function refreshUpstreamThroughWriter(input: RefreshUpstreamHeadInput,
+  available?: () => Promise<boolean>, send?: ActuatorSend): Promise<RefreshUpstreamHeadResult | null> {
+  return sourceWriterThroughPrivateActuator({ owner: { kind: "upstream-refresh" }, operation: "refresh-upstream-head", input },
+    available, send);
+}

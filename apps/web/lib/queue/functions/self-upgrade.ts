@@ -9,7 +9,7 @@ import { resolveWorkerReleaseTarget } from "@/lib/self-upgrade/worker-release-ta
 import { countPendingUpstreamCommits, evaluateReleaseBatch } from "@/lib/self-upgrade/release-batch";
 import { prepareUpgradeSource, defaultGitRunner } from "@/lib/self-upgrade/prepare-source";
 import type { PrepareSourceResult } from "@/lib/self-upgrade/prepare-source";
-import { sourceWriterThroughPrivateActuator } from "@/lib/self-upgrade/source-writer-actuator";
+import { refreshUpstreamThroughWriter, sourceWriterThroughPrivateActuator } from "@/lib/self-upgrade/source-writer-actuator";
 import { usesPrivateActuator } from "../../../../../scripts/lib/scope-writer-observation.mjs";
 import {
   runCandidatePreflight,
@@ -301,8 +301,7 @@ export async function beginSelfUpgrade(params: SelfUpgradeRunEventData): Promise
   } else if (config.sourceMode === "upstream") {
     // BI-224F56F1: the qualified portal cannot write the install checkout; the
     // authorized source writer runs the bounded upstream refresh instead.
-    const refreshed = await sourceWriterThroughPrivateActuator({ owner: { kind: "upstream-refresh" },
-      operation: "refresh-upstream-head", input: { remote, branch } });
+    const refreshed = await refreshUpstreamThroughWriter({ remote, branch });
     if (refreshed) {
       upstreamSha = refreshed.ok ? refreshed.upstreamSha : null;
     } else {

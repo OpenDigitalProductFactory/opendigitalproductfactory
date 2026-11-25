@@ -1,5 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+const writer = vi.hoisted(() => ({ refreshUpstreamThroughWriter: vi.fn(async (..._a: unknown[]): Promise<unknown> => null) }));
+vi.mock("./source-writer-actuator", () => writer);
+
 import {
   buildRemoteHeadCommand,
   buildFetchCommand,
@@ -206,6 +209,16 @@ describe("resolveTargetSha (BI-4746F2A9: the target is the REMOTE head)", () => 
     expect(execFile).toHaveBeenCalledWith("git", lsArgs);
     expect(execFile).toHaveBeenCalledWith("git", revParseArgs);
     expect(execFile).toHaveBeenCalledWith("git", fetchArgs);
+  });
+
+  it("freshens a behind ref through the authorized source writer in the qualified portal", async () => {
+    writer.refreshUpstreamThroughWriter.mockResolvedValueOnce({ ok: true, upstreamSha: remoteSha });
+    const execFile = fakeGit({ lsRemote: `${remoteSha}\trefs/heads/release\n`, local: `${localSha}\n` });
+
+    await expect(resolveTargetSha("stable", at, { execFile })).resolves.toBe(remoteSha);
+
+    expect(writer.refreshUpstreamThroughWriter).toHaveBeenCalledWith({ remote: "upstream", branch: "release" });
+    expect(execFile).not.toHaveBeenCalledWith("git", fetchArgs);
   });
 
   it("does not fetch when the local ref already matches the remote", async () => {

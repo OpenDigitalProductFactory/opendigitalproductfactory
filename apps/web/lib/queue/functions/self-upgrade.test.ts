@@ -133,7 +133,7 @@ vi.mock("@/lib/self-upgrade/run-store", () => ({
   getLatestSucceededRun: mocks.getLatestSucceededRun,
   getRun: mocks.getRun,
 }));
-vi.mock("@/lib/self-upgrade/delivery-admission", () => ({ rejectDuplicateSelfUpgradeDelivery: vi.fn().mockResolvedValue(null) })); vi.mock("@/lib/self-upgrade/source-writer-actuator", () => ({ sourceWriterThroughPrivateActuator: mocks.sourceWriterThroughPrivateActuator })); vi.mock("../../../../../scripts/lib/scope-writer-observation.mjs", async (importOriginal) => ({ ...(await importOriginal<object>()), usesPrivateActuator: mocks.usesPrivateActuator }));
+vi.mock("@/lib/self-upgrade/delivery-admission", () => ({ rejectDuplicateSelfUpgradeDelivery: vi.fn().mockResolvedValue(null) })); vi.mock("@/lib/self-upgrade/source-writer-actuator", () => ({ sourceWriterThroughPrivateActuator: mocks.sourceWriterThroughPrivateActuator, refreshUpstreamThroughWriter: (input: unknown) => mocks.sourceWriterThroughPrivateActuator({ owner: { kind: "upstream-refresh" }, operation: "refresh-upstream-head", input }) })); vi.mock("../../../../../scripts/lib/scope-writer-observation.mjs", async (importOriginal) => ({ ...(await importOriginal<object>()), usesPrivateActuator: mocks.usesPrivateActuator }));
 vi.mock("@/lib/self-upgrade/promoter", async (importOriginal) => ({
   // Keep the real pure exports (constants like PROMOTER_ALREADY_RUNNING_EXIT_CODE
   // that the orchestrator imports statically) and mock only the spawn-heavy fns.

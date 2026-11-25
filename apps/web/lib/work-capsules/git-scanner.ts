@@ -122,6 +122,8 @@ export type TrunkRefreshResult =
   | { status: "refreshed" }
   | { status: "failed"; error: string };
 
+const INSTALL_CHECKOUT_MOUNT = "/host-dpf";
+
 /**
  * Bring `origin/main` in a local clone up to date (BI-DC2758DE, founder decision
  * on DI-B26D16D64C62: a scheduled refresh plus one before completion).
@@ -144,6 +146,13 @@ export async function refreshTrunkRef(
   const remote = options.remote ?? "origin";
   const branch = options.branch ?? "main";
   try {
+    // BI-224F56F1: the qualified portal mounts the install checkout read-only;
+    // the authorized source writer refreshes its upstream ref instead.
+    if (repoRoot === INSTALL_CHECKOUT_MOUNT) {
+      const { refreshUpstreamThroughWriter } = await import("@/lib/self-upgrade/source-writer-actuator");
+      const refreshed = await refreshUpstreamThroughWriter({ remote, branch });
+      if (refreshed) return refreshed.ok ? { status: "refreshed" } : { status: "failed", error: "The authorized source writer did not refresh the trunk." };
+    }
     const owner = await lazyFsPromises().stat(repoRoot);
     const runningAsRoot = typeof process.getuid === "function" && process.getuid() === 0;
     const asOwner = runningAsRoot && owner.uid !== 0 ? { uid: owner.uid, gid: owner.gid } : {};

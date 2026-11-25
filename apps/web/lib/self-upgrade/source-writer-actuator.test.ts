@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildSourceWriterArgs,
   createSourceWriterLauncher,
+  refreshUpstreamThroughWriter,
   sourceWriterThroughPrivateActuator,
 } from "./source-writer-actuator";
 import type { SelfUpgradeConfig } from "./config";
@@ -128,6 +129,12 @@ describe("sourceWriterThroughPrivateActuator", () => {
     await expect(sourceWriterThroughPrivateActuator(refresh() as never, async () => true, send)).resolves.toEqual({ ok: true, upstreamSha: "b".repeat(40) });
     expect(bodies).toEqual([refresh()]);
     await expect(sourceWriterThroughPrivateActuator(refresh() as never, async () => false, send)).resolves.toBeNull();
+  });
+
+  it("asks for the shared upstream refresh on behalf of any reader", async () => {
+    const bodies: unknown[] = [];
+    await refreshUpstreamThroughWriter({ remote: "origin", branch: "main" }, async () => true, async (body) => { bodies.push(body); return { ok: true, upstreamSha: "b".repeat(40) }; });
+    expect(bodies).toEqual([refresh()]);
   });
 
   it("reports an unavailable writer as a governed prep error", async () => {
