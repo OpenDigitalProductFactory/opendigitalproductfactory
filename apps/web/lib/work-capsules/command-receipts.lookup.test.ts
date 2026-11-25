@@ -66,6 +66,39 @@ describe("bound command outcome lookup has no mutation callback", () => {
     expect(f.read).not.toHaveBeenCalled();
     expect(f.create).not.toHaveBeenCalled();
   });
+
+  it("checks current result access under the exact room lock before loading a historical result", async () => {
+    const f = fixture();
+    const beforeReceiptRead = vi.fn(async (tx, rowId) => {
+      expect(tx).toBe(f.tx);
+      expect(rowId).toBe("original-room-row");
+      expect(f.tx.$queryRaw).toHaveBeenCalled();
+      expect(f.read).not.toHaveBeenCalled();
+      return true;
+    });
+    await expect(lookup({ ...f.args, beforeReceiptRead })).resolves.toEqual({ kind: "settled", result });
+    expect(beforeReceiptRead).toHaveBeenCalledOnce();
+    expect(f.create).not.toHaveBeenCalled();
+  });
+
+  it("denies stale result authority without reading whether a receipt exists", async () => {
+    const f = fixture();
+    const beforeReceiptRead = vi.fn().mockResolvedValue(false);
+    await expect(lookup({ ...f.args, beforeReceiptRead })).rejects.toBeInstanceOf(receipts.CommandReceiptUnavailableError);
+    expect(f.read).not.toHaveBeenCalled();
+    expect(f.create).not.toHaveBeenCalled();
+  });
+
+  it("performs the same result check before a submit can replay an old receipt", async () => {
+    const f = fixture();
+    const args = f.args as unknown as Parameters<typeof receipts.runReceiptedCommand>[0];
+    const run = vi.fn();
+    const beforeReceiptRead = vi.fn().mockResolvedValue(false);
+    await expect(receipts.runReceiptedCommand({ ...args, beforeReceiptRead, run })).rejects.toBeInstanceOf(receipts.CommandReceiptUnavailableError);
+    expect(f.read).not.toHaveBeenCalled();
+    expect(f.create).not.toHaveBeenCalled();
+    expect(run).not.toHaveBeenCalled();
+  });
 });
 
 describe("lifecycle reconciliation shares the real lookup transaction", () => {

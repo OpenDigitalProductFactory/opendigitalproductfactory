@@ -5,9 +5,9 @@
 // than a place handlers accumulate. The pack imports the definition and the
 // handler and stays a list.
 
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
+import type { RegisteredToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 
-export const contributeFindingToHiveDefinition: ToolDefinition =
+export const contributeFindingToHiveDefinition: RegisteredToolDefinition =
 {
     name: "contribute_finding_to_hive",
     description:
@@ -27,6 +27,7 @@ export const contributeFindingToHiveDefinition: ToolDefinition =
       },
       required: ["proposalId"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_platform",
     executionMode: "proposal",
     sideEffect: true,

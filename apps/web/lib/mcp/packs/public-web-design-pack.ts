@@ -14,7 +14,7 @@
 
 import { prisma } from "@dpf/db";
 import * as crypto from "crypto";
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
+import type { RegisteredToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { CapabilityKey } from "@/lib/permissions";
 import {
   analyzePublicWebsiteBranding,
@@ -27,7 +27,7 @@ import { recordExternalEvidence } from "@/lib/actions/external-evidence";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
 
-const definitions: ToolDefinition[] = [
+const definitions: RegisteredToolDefinition[] = [
   {
     name: "search_public_web",
     description: "Search the public web for relevant pages or facts",
@@ -38,6 +38,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["query"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: null,
     requiresExternalAccess: true,
     executionMode: "immediate",
@@ -54,6 +55,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["url"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: null,
     requiresExternalAccess: true,
     executionMode: "immediate",
@@ -70,6 +72,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["url"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_branding",
     requiresExternalAccess: true,
     executionMode: "immediate",
@@ -86,6 +89,7 @@ const definitions: ToolDefinition[] = [
         uploadIds: { type: "array", items: { type: "string" }, description: "IDs of AgentAttachment records to include (logos, brand kit PDFs, style decks)." },
       },
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_branding",
     requiresExternalAccess: true,
     executionMode: "immediate",
@@ -115,6 +119,7 @@ const definitions: ToolDefinition[] = [
         },
       },
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: null,
     executionMode: "immediate",
     sideEffect: false,
@@ -136,6 +141,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["query", "domain"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: null, // Read-only design reference — no capability gate
     sideEffect: false,
     buildPhases: ["ideate", "plan", "build", "review"],
@@ -152,6 +158,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["query"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: null, // Read-only design reference — no capability gate
     sideEffect: false,
     buildPhases: ["ideate", "plan", "build", "review"],
@@ -169,6 +176,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["fileName", "fileContent", "fileType"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_branding" as CapabilityKey,
     executionMode: "immediate",
   },

@@ -4,9 +4,9 @@
 // stays inside its size ceiling. The write itself lives in
 // lib/marketing/retire-work.ts.
 
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
+import type { RegisteredToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 
-export const retireMarketingWorkDefinition: ToolDefinition = {
+export const retireMarketingWorkDefinition: RegisteredToolDefinition = {
   name: "retire_marketing_work",
   description:
     "Archive campaign briefs and asset tasks that rest on a wrong or outdated premise (wrong audience, superseded campaign, duplicate), with the reason. Archived work leaves the active strategy, scheduler and calendar but is kept for history — nothing is deleted. Use the ids from get_marketing_summary.",
@@ -19,6 +19,7 @@ export const retireMarketingWorkDefinition: ToolDefinition = {
     },
     required: ["reason"],
   },
+  workroomAccess: "outside-workroom",
   requiredCapability: "operate_marketing",
   sideEffect: true,
   coworkerArtifact: true,

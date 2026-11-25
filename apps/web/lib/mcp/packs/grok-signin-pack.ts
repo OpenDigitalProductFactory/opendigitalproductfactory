@@ -9,14 +9,15 @@
 // Definitions moved verbatim out of the inline PLATFORM_TOOLS array; grants
 // mirror agent-grants.ts TOOL_TO_GRANTS, which stays the gating source.
 
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
+import type { RegisteredToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
 
-const definitions: ToolDefinition[] = [
+const definitions: RegisteredToolDefinition[] = [
   {
     name: "grok_signin_start",
     description: "Begin Grok (xAI) device-code OAuth sign-in for the build sandbox — the 'sign in with Google' alternative to an xAI API key. Runs `grok login --device-auth` in the sandbox and returns a verification URL + user code. Relay these to a human to authorize in their browser (Google / X / Apple), then call grok_signin_status to detect completion.",
     inputSchema: { type: "object", properties: {} },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_provider_connections",
     sideEffect: true,
     // reaches a third party → consult-gated (TAK §8.4.1).
@@ -27,6 +28,7 @@ const definitions: ToolDefinition[] = [
     name: "grok_signin_status",
     description: "Check whether the Grok device-code sign-in started by grok_signin_start has been authorized. Returns status 'ok' (credential captured + xAI provider activated), 'pending' (still waiting for the human to authorize), or 'failed'.",
     inputSchema: { type: "object", properties: {} },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_provider_connections",
     sideEffect: true,
   },

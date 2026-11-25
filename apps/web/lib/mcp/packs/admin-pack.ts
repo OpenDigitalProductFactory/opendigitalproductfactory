@@ -20,14 +20,14 @@ import { prisma } from "@dpf/db";
 import { ACTUATOR_SERVICE_LOG_NAMES, hasPrivateActuatorMount, readActuatorProjectContainers, readActuatorServiceLogs } from "../../../../../scripts/lib/scope-writer-observation.mjs";
 
 import { lazyFsPromises, lazyPath, lazyChildProcess, lazyUtil, getCwd } from "@/lib/shared/lazy-node";
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
+import type { RegisteredToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
 import { parseAdminDiagnostic } from "../admin-command-diagnostic";
 import { stripSqlComments } from "../sql-comments";
 
 // These tools are available on the /admin route for platform administration.
 // Tier 1 = read-only, Tier 2 = reversible, Tier 3 = destructive (sideEffect: true).
-const definitions: ToolDefinition[] = [
+const definitions: RegisteredToolDefinition[] = [
   {
     name: "admin_view_logs",
     description: "View recent logs from a Docker Compose service. Returns the last N lines (default 100).",
@@ -39,6 +39,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["service"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_admin",
     executionMode: "immediate",
     sideEffect: false,
@@ -53,6 +54,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["sql"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_admin",
     executionMode: "immediate",
     sideEffect: false,
@@ -69,6 +71,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["path"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_admin",
     executionMode: "immediate",
     sideEffect: false,
@@ -83,6 +86,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["service"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_admin",
     executionMode: "immediate",
     sideEffect: false, // Tier 2: reversible
@@ -91,6 +95,7 @@ const definitions: ToolDefinition[] = [
     name: "admin_run_migration",
     description: "Run 'prisma migrate deploy' inside the portal container to apply pending database migrations.",
     inputSchema: { type: "object", properties: {} },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_admin",
     executionMode: "immediate",
     sideEffect: false, // Tier 2: reversible
@@ -99,6 +104,7 @@ const definitions: ToolDefinition[] = [
     name: "admin_run_seed",
     description: "Run the database seed script inside the portal container to populate reference data.",
     inputSchema: { type: "object", properties: {} },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_admin",
     executionMode: "immediate",
     sideEffect: false, // Tier 2: reversible
@@ -113,6 +119,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["command"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_admin",
     executionMode: "immediate",
     sideEffect: true, // Preserve the public grant and consequence floor.

@@ -15,14 +15,14 @@
 
 import { prisma } from "@dpf/db";
 import { lazyFsPromises, lazyPath, getCwd } from "@/lib/shared/lazy-node";
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
+import type { RegisteredToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
 import { resolveActiveBuildId, extractBuildIdHint } from "@/lib/mcp/build-tool-helpers";
 import { providerAccountDefinitions } from "./provider-account-tools";
 import type { ActionResult } from "@/lib/shared/action-result";
 import { PROVIDER_MANAGEMENT_TOOL_GRANTS } from "@/lib/tak/provider-management-tool-grants";
 
-const definitions: ToolDefinition[] = [
+const definitions: RegisteredToolDefinition[] = [
   ...providerAccountDefinitions,
   {
     name: "resolve_model_selection",
@@ -32,6 +32,7 @@ const definitions: ToolDefinition[] = [
       type: "object",
       properties: {},
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: false,
@@ -48,6 +49,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["model_name"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: false,
@@ -64,6 +66,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["model_name"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: false,
@@ -85,6 +88,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["providerId", "name", "category"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_provider_connections",
     sideEffect: true,
     // changes identity or authority → consult-gated (TAK §8.4.1).
@@ -101,6 +105,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["providerId", "category"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_provider_connections",
     sideEffect: true,
   },

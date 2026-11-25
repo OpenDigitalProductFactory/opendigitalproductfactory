@@ -13,10 +13,10 @@
 // Definitions moved verbatim out of the inline PLATFORM_TOOLS array; grants
 // mirror agent-grants.ts TOOL_TO_GRANTS, which stays the gating source.
 
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
+import type { RegisteredToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
 
-const definitions: ToolDefinition[] = [
+const definitions: RegisteredToolDefinition[] = [
   {
     name: "assess_complexity",
     description: "Score a feature on 7 dimensions, get path recommendation (simple/moderate/complex).",
@@ -33,6 +33,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["taxonomySpan", "dataEntities", "integrations", "novelty", "regulatory", "costEstimate", "techDebt"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: false,
@@ -50,6 +51,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["epicTitle", "epicDescription", "featureSets"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: false,
@@ -74,6 +76,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["buildId"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_backlog",
     sideEffect: true,
   },
@@ -110,6 +113,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["buildId", "candidate"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_backlog",
     sideEffect: true,
   },
@@ -124,6 +128,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["buildId", "rationale"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_backlog",
     sideEffect: true,
   },
@@ -170,6 +175,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["itemId", "planPath", "planArtifactRef", "decision", "deliverables"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_backlog",
     sideEffect: true,
   },
@@ -185,6 +191,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["itemId", "planPath", "receiptId"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_platform",
     sideEffect: false,
   },
@@ -198,6 +205,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["branchName"],
     },
+    workroomAccess: "gate",
     requiredCapability: "view_platform",
     sideEffect: false,
   },

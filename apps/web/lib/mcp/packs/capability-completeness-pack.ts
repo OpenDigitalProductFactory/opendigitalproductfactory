@@ -19,7 +19,7 @@
 // authority is a consequential act that belongs behind the governance gate and
 // a human decision, not behind a read tool.
 
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
+import type { RegisteredToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack } from "../tool-pack";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 import {
@@ -31,7 +31,7 @@ import {
 
 /** Plane -> the concrete action that raises it. Keeps the tool actionable
  *  rather than merely diagnostic: a coworker reading a gap gets the next move. */
-const definitions: ToolDefinition[] = [
+const definitions: RegisteredToolDefinition[] = [
   {
     name: "get_capability_completeness",
     description:
@@ -75,6 +75,7 @@ const definitions: ToolDefinition[] = [
         },
       },
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: false,

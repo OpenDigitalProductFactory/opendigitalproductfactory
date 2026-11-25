@@ -8,10 +8,10 @@
 // agent-grants.ts TOOL_TO_GRANTS (the gating source); tool-registry.test asserts
 // no drift.
 
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
+import type { RegisteredToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack } from "../tool-pack";
 
-const definitions: ToolDefinition[] = [
+const definitions: RegisteredToolDefinition[] = [
   {
     name: "create_recurring_work_engagement",
     description:
@@ -29,6 +29,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["title", "rrule", "timezone", "anchorAt"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "operate_marketing",
     sideEffect: true,
     coworkerArtifact: true,
@@ -46,6 +47,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["engagementId", "to"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "operate_marketing",
     sideEffect: true,
     coworkerArtifact: true,
@@ -64,6 +66,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["engagementId", "kind", "summary"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "operate_marketing",
     sideEffect: true,
     coworkerArtifact: true,
@@ -80,6 +83,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["parentId"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_marketing",
     sideEffect: false,
   },

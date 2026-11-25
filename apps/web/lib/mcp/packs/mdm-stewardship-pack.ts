@@ -7,11 +7,11 @@
 // row survives as a superseded tombstone pointing at the survivor.
 
 import { prisma } from "@dpf/db";
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
+import type { RegisteredToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack } from "../tool-pack";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 
-const definitions: ToolDefinition[] = [
+const definitions: RegisteredToolDefinition[] = [
   {
     name: "merge_customer_accounts",
     description:
@@ -30,6 +30,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["survivorAccountId", "loserAccountId"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "operate_customer",
     sideEffect: true,
     consequence: "irreversible",
@@ -39,6 +40,7 @@ const definitions: ToolDefinition[] = [
     description:
       "Scan ALL existing customer accounts for likely/possible duplicate pairs (batch retroactive scan — the write-time gate only protects new records). Use when asked to clean up customer data, or before bulk work that assumes unique accounts. Returns scored pairs strongest-first with the match reasons; confirm with the user, then use merge_customer_accounts to resolve a confirmed pair. Read-only; takes no parameters.",
     inputSchema: { type: "object", properties: {} },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_customer",
     sideEffect: false,
   },
@@ -56,6 +58,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["mergedAccountId"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "operate_customer",
     sideEffect: true,
     // destroys state → consult-gated (TAK §8.4.1).
@@ -73,6 +76,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["survivorContactId", "loserContactId"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "operate_customer",
     sideEffect: true,
     consequence: "irreversible",
@@ -82,6 +86,7 @@ const definitions: ToolDefinition[] = [
     description:
       "Scan customer data for quality issues and file them into the steward review queue: duplicate account/contact pairs (batch scan) and stale records (no update within the configured window). Idempotent — re-running refreshes open items and never re-files resolved ones. Use when asked to check or clean up data quality. Returns counts; follow with list_mdm_steward_tasks to see the queue.",
     inputSchema: { type: "object", properties: {} },
+    workroomAccess: "outside-workroom",
     requiredCapability: "operate_customer",
     sideEffect: true,
   },
@@ -90,6 +95,7 @@ const definitions: ToolDefinition[] = [
     description:
       "List open data-quality review tasks (possible duplicates and stale records) from the steward queue, strongest signal first. Read-only. Resolve duplicates with merge_customer_accounts / merge_customer_contacts; a human can also resolve tasks at /admin/data-stewardship.",
     inputSchema: { type: "object", properties: {} },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_customer",
     sideEffect: false,
   },
@@ -104,6 +110,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["accountId"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "operate_customer",
     sideEffect: true,
     // reaches a third party → consult-gated (TAK §8.4.1).
@@ -120,6 +127,7 @@ const definitions: ToolDefinition[] = [
         dryRun: { type: "boolean", description: "Preview only — report what would auto-merge without merging. Default false." },
       },
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "operate_customer",
     sideEffect: true,
   },
