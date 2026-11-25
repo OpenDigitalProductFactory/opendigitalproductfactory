@@ -110,6 +110,15 @@ not rewritten or replayed by admission.
 
 ## 1. The lifecycle sequence
 
+When the only Workroom for an approved design has been archived, the first
+implementation claim can start a fresh branch at its immutable base. The claim
+verifies that the current scope baseline and latest passing spec approval name
+the same repository, path, revision, blob and digest. It reads that blob at the
+proposed head and rechecks the persisted binding under lock. This does not reopen
+the archive or replace plan coverage, actor admission or any review. A changed
+design still needs the amendment lane. An ambiguous or missing binding stays
+blocked. Existing Workrooms still use their exact live source binding.
+
 An xlarge initiative does not enter implementation itself. After decomposition,
 close it through the existing completion writer using its current governed plan
 coverage, at least two distinct mapped children and actual parent outcome
