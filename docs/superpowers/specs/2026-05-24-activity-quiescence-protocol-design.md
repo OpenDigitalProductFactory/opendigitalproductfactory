@@ -371,6 +371,15 @@ Note `triggerRefId` is included on every `platform.quiescence-cleared` payload (
 
 **Recovery-aware deadline (BI-3C3CCC59, DI-F59EB9FDF9A8).** The upgrade request records the server-computed maximum that the operator saw before confirming. Readiness commits the absolute timestamp on the owned `QuiescenceRun` and does not renew it on replay. The paired capture bound uses the actual Postgres and upload runner caps, then adds the configured promoter budget and the existing handoff margin. The pre-ready wait and its operator controls are separate. A request without the new confirmation receives no extended allowance. The volume-deletion mode adds its paired trial bound, but its exact-scope authorization and host handoff are owned by BI-56077D27. Other triggers keep the prior coordinator window.
 
+**Standing authorization for scheduled upgrades (follow-up).** BI-EAFE9732 and
+DI-2015BBE2E873 cover a separately revocable operator confirmation in the existing
+self-upgrade settings. Scheduling still governs when upgrades may start, not how
+long they may hold admission. The scheduler must match the approved runner-budget
+requirements before closing admission and bind that maximum to the run. A change
+requires a new operator confirmation. Until this follow-up lands, a scheduled
+upgrade keeps its legacy window and fails without swapping when capture and the
+full promoter timeout cannot fit.
+
 Three properties this preserves:
 
 - **Resumable on worker restart** — every `step.run` is checkpointed; a worker dying mid-drain resumes from the next step.

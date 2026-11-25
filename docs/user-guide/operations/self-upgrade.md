@@ -134,6 +134,15 @@ shows the deadline for that attempt. If the required maximum grows after you
 review it, refresh the upgrade page and confirm the new estimate. A request
 without a confirmed maximum cannot receive the longer window.
 
+Scheduled and other unattended upgrades still have about 35 minutes after
+active work clears with the default settings. The upgrade reserves the full
+25-minute installer timeout, leaving roughly ten minutes for the Postgres and
+upload backups and any preparation before the swap. If the backups and
+installation cannot fit, the scheduled run fails safely without swapping.
+Open the Upgrade Center and choose **Install now** to review and confirm the
+longer window for a manual attempt. Standing approval for scheduled runs is
+tracked in BI-EAFE9732 and is not available yet.
+
 ### When work is still running
 
 An upgrade no longer gives up because work is in progress. When you press
