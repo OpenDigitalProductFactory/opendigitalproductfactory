@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { constants } from "node:fs";
-import { mkdir, open, realpath, rename, unlink, type FileHandle } from "node:fs/promises";
+import { lstat, mkdir, open, readdir, realpath, rename, unlink, type FileHandle } from "node:fs/promises";
 import { isAbsolute, join, resolve, sep } from "node:path";
 import type { RestoreFileIntent, RestoreJournalIntent } from "./paired-restore-journal";
 
@@ -200,23 +200,57 @@ export function assertCoveredUploadCollisions(preview: RestoreUploadInspection, 
   if (needed.size) throw new Error("A different destination file is not covered by the verified safety upload pair");
 }
 
+const PUBLICATION_DIRECTORY_MODE = 0o755;
+
+async function createPublicationDirectory(path: string): Promise<boolean> {
+  try {
+    await mkdir(path, { mode: PUBLICATION_DIRECTORY_MODE });
+    return true;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+    return false;
+  }
+}
+
 async function openPublicationParent(root: FileHandle, dev: string, parts: string[], create: boolean): Promise<FileHandle> {
   let current = root;
   try {
     for (const part of parts) {
       const path = fdPath(current, part);
-      let next;
-      try { next = await open(path, DIRECTORY_FLAGS); } catch (error) {
-        if (!missing(error) || !create) throw error;
-        try { await mkdir(path, { mode: 0o755 }); } catch (mkdirError) {
-          if ((mkdirError as NodeJS.ErrnoException).code !== "EEXIST") throw mkdirError;
+      // mkdir decides atomically whether it created the name. Do not probe
+      // the pathname first and assume it still refers to the same directory.
+      const mode = BigInt(PUBLICATION_DIRECTORY_MODE & ~process.umask());
+      const created = create && await createPublicationDirectory(path);
+      const next = await open(path, DIRECTORY_FLAGS);
+      try {
+        const stat = await next.stat({ bigint: true });
+        if (!stat.isDirectory() || String(stat.dev) !== dev) {
+          throw new Error("Upload destination crosses a filesystem boundary");
         }
-        await current.sync();
-        next = await open(path, DIRECTORY_FLAGS);
+        if (created) {
+          // The parent is already pinned and open refuses symlinks. Require a
+          // fresh, empty directory with our effective owner and expected mode,
+          // then confirm its name still identifies that descriptor. The
+          // writer fence excludes concurrent managed writes, and a later
+          // pathname replacement cannot redirect descriptor-relative writes.
+          const uid = process.geteuid?.();
+          if (uid === undefined || stat.uid !== BigInt(uid) || (stat.mode & 0o777n) !== mode
+            || (await readdir(fdPath(next, "."))).length !== 0) {
+            throw new Error("New upload publication directory is not a fresh receiver directory");
+          }
+          const named = await lstat(path, { bigint: true });
+          if (!named.isDirectory() || named.dev !== stat.dev || named.ino !== stat.ino || named.ctimeNs !== stat.ctimeNs) {
+            throw new Error("New upload publication directory identity changed");
+          }
+          await current.sync();
+        }
+      } catch (error) {
+        await next.close();
+        throw error;
       }
-      if (current !== root) await current.close();
+      const prior = current;
       current = next;
-      if (String((await current.stat({ bigint: true })).dev) !== dev) throw new Error("Upload destination crosses a filesystem boundary");
+      if (prior !== root) await prior.close();
     }
     return current;
   } catch (error) {
