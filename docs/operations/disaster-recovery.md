@@ -40,6 +40,15 @@ The DR-hardening epic (BIs shipped 2026-05-24) put recovery artifacts in **speci
 | Graph topology + vector/semantic memory | **Inside the Postgres dump above** — since BET-5 these are the `graph_node` / `graph_edge` tables and `pgvector` embeddings, not separate stores | Same Postgres restore; there is no separate graph or vector member to restore |
 | Uploaded files: documents (including sent and signed invoice copies), media, coworker attachments, voice audio | `$DPF_BACKUPS_HOST_PATH/uploads/<YYYY-MM-DDTHH-MM-SSZ>/uploads.tar`, written right after each successful nightly or manual Postgres backup and paired with it (`manifest.json` names the paired run and its dump digest). `files.ndjson` lists every file with its SHA-256; `deletedAfterSnapshot` lists blob rows deleted between the dump and the copy (BI-1C6BF6B6) | Restore the paired Postgres dump first. Then, with the portal stopped, verify `sha256sum -c uploads.tar.sha256`, extract into an empty directory (`tar -xf uploads.tar -C <dir>`), check every `files.ndjson` line's hash, and move `<dir>/upload-store/` into the upload store (`upload_storage_path`, else `UPLOAD_STORAGE_PATH`). A governed restore and trial restore for this member are tracked in BI-03093FDD |
 
+In Admin > Advanced > Backups, check **Last uploads run** separately from
+**Captured pair**. A failed latest run can appear beside an earlier retained
+pair. A captured pair matches the recorded Postgres and uploads identities but
+does not establish that a trial passed. An unfinished or unreadable paired
+restore journal is not a clean state. Keep service stopped, preserve the host
+backup directories and journal, and have the operator confirm the last durable
+step before continuing. If Postgres was restored but uploads did not finish,
+do not resume service with just the restored database.
+
 The uploads writer refuses non-UTF-8 filenames and reports the raw name in hex.
 It also refuses runs above the shared DPF2 intake limits of 16 MiB for
 `manifest.json`, 1 GiB for `files.ndjson` (64 KiB per line before LF), and

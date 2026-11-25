@@ -1,4 +1,29 @@
 {
+  "backups": {
+    "description": "Daily Postgres and uploads backups. Manual controls apply only to Postgres.",
+    "uploads": {
+      "heading": "Uploads",
+      "lastRun": "Last uploads run",
+      "noRuns": "No runs yet",
+      "run": {
+        "ok": "Succeeded",
+        "failed": "Failed",
+        "running": "Running"
+      },
+      "capturedPair": "Captured pair",
+      "latestPair": "Latest uploads run paired with Postgres. Capture only.",
+      "earlierPair": "Earlier uploads run paired with Postgres. Capture only.",
+      "unverifiedPair": "Could not confirm the pair",
+      "noPair": "No successful retained uploads backup",
+      "pairedRestore": "Paired restore",
+      "noUnfinished": "No unfinished restore found",
+      "unreadable": "Could not check the paired restore journal",
+      "unfinished": "Paired restore unfinished",
+      "postgresRestored": "Postgres restored. Uploads may be incomplete.",
+      "lastConfirmedStep": "Check the journal for the last confirmed step.",
+      "followRecovery": "Follow the disaster recovery runbook before resuming service."
+    }
+  },
   "scheduledWork": {
     "lastResult": "Last result",
     "intakeController": {
