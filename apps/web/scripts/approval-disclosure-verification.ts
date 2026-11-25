@@ -53,7 +53,7 @@ export function assertApprovalVerificationRuntime(env: Readonly<Record<string, s
   return { origin: target.origin, sourceSha, runKey: "ux-approval-" + runId + "-" + attempt };
 }
 
-type Case = { key: string; tool: string; args: Record<string, unknown>; expired?: boolean; primaryTitle?: string };
+type Case = { key: string; tool: string; args: Record<string, unknown>; expired?: boolean; primaryTitle?: string; primaryEffect?: string };
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 const OUT = resolve(ROOT, "apps/web/test-results/ux-route-sweep/approval-scenarios");
 function check(ok: unknown, message: string): asserts ok { if (!ok) throw new Error(message); }
@@ -116,7 +116,10 @@ export async function verifyApprovalDisclosure() {
       { key: "app-update", tool: "request_self_upgrade", args: { reason: "Ready release batch" },
         primaryTitle: "Request an update for this app?" },
       { key: "merge-work", tool: "merge_backlog_items", args: { canonicalItemId: "BI-FIXTURE-KEEP", duplicateItemId: "BI-FIXTURE-DUP" },
-        primaryTitle: "Combine these duplicate work requests?" },
+        primaryTitle: "Combine these duplicate work requests?", primaryEffect: "add its recorded demand" },
+      { key: "retire-duplicate", tool: "retire_backlog_item", args: { itemId: "BI-FIXTURE-DUP", duplicateOfId: "BI-FIXTURE-KEEP",
+        outcome: "duplicate", rationale: "Same work" },
+        primaryTitle: "Retire this duplicate work request?", primaryEffect: "does not combine their recorded demand" },
       { key: "release-reservation", tool: "release_nonprod_environment_lease", args: { leaseId: "NPEL-FIXTURE" },
         primaryTitle: "Release this shared test reservation?" },
       { key: "report", tool: "record_workroom_evidence", args: { capsuleId: roomId, kind: "assurance-finding",
@@ -163,9 +166,14 @@ export async function verifyApprovalDisclosure() {
         if (value.primaryTitle) {
           check(await card.getByRole("heading", { name: value.primaryTitle, exact: true }).count() === 1,
             value.key + ": operation missing from the initial question");
-          check(text.includes("Keep this on hold until its effect is clear."), value.key + ": unresolved-effect recommendation lost");
-          check(!text.includes("BI-FIXTURE-KEEP") && !text.includes("BI-FIXTURE-DUP") && !text.includes("NPEL-FIXTURE"),
-            value.key + ": technical identity leaked into the initial question");
+          if (value.primaryEffect) {
+            check(text.includes(value.primaryEffect) && text.includes("BI-FIXTURE-KEEP") && text.includes("BI-FIXTURE-DUP"),
+              value.key + ": requested effect or affected work missing from the initial card");
+            check(!text.includes("Keep this on hold until its effect is clear."), value.key + ": known effect shown as unresolved");
+          } else {
+            check(text.includes("Keep this on hold until its effect is clear."), value.key + ": unresolved-effect recommendation lost");
+            check(!text.includes("NPEL-FIXTURE"), value.key + ": technical identity leaked into the initial question");
+          }
           if (value.key === "app-update") check(text.includes("This app") && text.includes("approval does not mean it is installed"),
             "Update request presented as installed");
         }
