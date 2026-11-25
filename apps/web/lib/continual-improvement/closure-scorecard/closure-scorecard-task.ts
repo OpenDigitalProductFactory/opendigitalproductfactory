@@ -15,14 +15,14 @@ import { prisma, type Prisma } from "@dpf/db";
 
 import { computeNextCronRun } from "@/lib/operate/cron-next-run";
 
-import { loadClosureCounts } from "./load-closure-counts";
+import { loadClosureCountsWithTimeout } from "./load-closure-counts";
 import {
   computeClosureScorecard,
   describeClosureScorecard,
   type ClosureCounts,
   type ClosureScorecard,
   type PriorRun,
-  type WeekFlows,
+  type StockChanges,
 } from "./measures";
 
 export const CLOSURE_SCORECARD_ARTIFACT_KIND = "closure-scorecard";
@@ -33,7 +33,8 @@ export type ClosureScorecardArtifact = {
   periodKey: string;
   window: { since: string; until: string };
   counts: ClosureCounts;
-  flows: WeekFlows;
+  /** Net change in each stock since the prior snapshot (not event counts). */
+  changes: StockChanges;
   priorPeriodKey: string;
   priorFound: boolean;
   scorecard: ClosureScorecard;
@@ -47,8 +48,11 @@ export interface ClosureScorecardStore {
   loadCounts(window: { since: Date; until: Date }): Promise<ClosureCounts>;
   /** Write run and artifact atomically; "conflict" when the day key already exists. */
   createRun(input: RunWrite): Promise<"created" | "conflict">;
-  /** Attach the artifact to a run that was recorded without one. */
-  addArtifact(taskRunId: string, artifact: ClosureScorecardArtifact, summary: string): Promise<void>;
+  /**
+   * Attach the artifact to a run recorded without one, under a row lock on the
+   * run so two retries cannot both attach; "exists" when another got there first.
+   */
+  addArtifact(taskRunId: string, artifact: ClosureScorecardArtifact, summary: string): Promise<"added" | "exists">;
 }
 
 export type RunWrite = {
@@ -110,7 +114,7 @@ export const prismaClosureScorecardStore: ClosureScorecardStore = {
     return { taskRunId: run.taskRunId, artifact };
   },
 
-  loadCounts: (window) => loadClosureCounts(window),
+  loadCounts: (window) => loadClosureCountsWithTimeout(window),
 
   async createRun(input) {
     try {
@@ -154,17 +158,26 @@ export const prismaClosureScorecardStore: ClosureScorecardStore = {
   },
 
   async addArtifact(taskRunId, artifact, summary) {
-    const run = await prisma.taskRun.findUniqueOrThrow({ where: { taskRunId }, select: { id: true } });
-    await prisma.taskArtifact.create({
-      data: {
-        id: randomUUID(),
-        artifactId: `ta_${randomUUID()}`,
-        taskRunId: run.id,
-        name: "Closure scorecard",
-        description: summary,
-        parts: artifactParts(artifact),
-        metadata: { kind: CLOSURE_SCORECARD_ARTIFACT_KIND, periodKey: artifact.periodKey, repaired: true },
-      },
+    return prisma.$transaction(async (tx) => {
+      // Serialise repairers on the run row, then re-check under the lock.
+      const locked = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT id FROM "TaskRun" WHERE "taskRunId" = ${taskRunId} FOR UPDATE`;
+      const runId = locked[0]?.id;
+      if (!runId) throw new Error(`closure scorecard run ${taskRunId} disappeared before repair`);
+      const existing = await tx.taskArtifact.findMany({ where: { taskRunId: runId }, select: { parts: true } });
+      if (existing.some((row) => artifactFromParts(row.parts) !== null)) return "exists" as const;
+      await tx.taskArtifact.create({
+        data: {
+          id: randomUUID(),
+          artifactId: `ta_${randomUUID()}`,
+          taskRunId: runId,
+          name: "Closure scorecard",
+          description: summary,
+          parts: artifactParts(artifact),
+          metadata: { kind: CLOSURE_SCORECARD_ARTIFACT_KIND, periodKey: artifact.periodKey, repaired: true },
+        },
+      });
+      return "added" as const;
     });
   },
 };
@@ -190,7 +203,7 @@ export async function runClosureScorecard(
     store.findRun(closureScorecardRunId(priorPeriodKey)),
   ]);
   const prior: PriorRun | null = priorRun?.artifact
-    ? { counts: priorRun.artifact.counts, flows: priorRun.artifact.flows ?? null }
+    ? { counts: priorRun.artifact.counts, changes: priorRun.artifact.changes ?? null }
     : null;
   const scorecard = computeClosureScorecard(counts, prior);
   const summary = describeClosureScorecard(scorecard);
@@ -198,15 +211,17 @@ export async function runClosureScorecard(
     periodKey,
     window: { since: since.toISOString(), until: until.toISOString() },
     counts,
-    flows: scorecard.flows,
+    changes: scorecard.changes,
     priorPeriodKey,
     priorFound: prior !== null,
     scorecard,
   };
 
   if (existing) {
-    await store.addArtifact(taskRunId, artifact, summary);
-    return { outcome: "repaired", periodKey, taskRunId, summary, artifact };
+    const added = await store.addArtifact(taskRunId, artifact, summary);
+    return added === "added"
+      ? { outcome: "repaired", periodKey, taskRunId, summary, artifact }
+      : { outcome: "idempotent", periodKey, taskRunId };
   }
   const written = await store.createRun({
     taskRunId, ownerUserId: input.ownerUserId, agentId: input.agentId, taskId: input.taskId,
@@ -217,8 +232,10 @@ export async function runClosureScorecard(
   // Another writer took the day key first: repair its run if it has no artifact yet.
   const winner = await store.findRun(taskRunId);
   if (winner?.artifact) return { outcome: "idempotent", periodKey, taskRunId };
-  await store.addArtifact(taskRunId, artifact, summary);
-  return { outcome: "repaired", periodKey, taskRunId, summary, artifact };
+  const added = await store.addArtifact(taskRunId, artifact, summary);
+  return added === "added"
+    ? { outcome: "repaired", periodKey, taskRunId, summary, artifact }
+    : { outcome: "idempotent", periodKey, taskRunId };
 }
 
 /** The scheduled-task fields this branch reads. */

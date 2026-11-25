@@ -12,6 +12,7 @@ import {
   selfFiledFromRows,
   signalsFromRows,
 } from "./load-closure-counts";
+import { routedDedupeKey } from "@/lib/govern/authority/route-to-human";
 
 // BI-97C56E20: the SQL returns raw counts per state; these tests pin the
 // state-to-bucket classification and the query shapes the review asked for.
@@ -38,11 +39,20 @@ describe("state classification", () => {
 
   it("classifies each owner-attention ask once, owner first", () => {
     expect(asksFromRows([
-      { for_owner: true, routed: true },
-      { for_owner: true, routed: false },
-      { for_owner: false, routed: true },
-      { for_owner: null, routed: null },
-    ])).toEqual({ forOwner: 2, routedToAgent: 1 });
+      { ask_key: "a", for_owner: true, routed: false },
+      { ask_key: "b", for_owner: false, routed: true },
+      { ask_key: "c", for_owner: null, routed: null },
+    ])).toEqual({ forOwner: 1, routedToAgent: 1 });
+  });
+
+  it("merges the producer's K and K:routed reports into one ask", () => {
+    const key = "build-escalation:FB-1";
+    expect(asksFromRows([
+      { ask_key: key, for_owner: true, routed: false },
+      { ask_key: routedDedupeKey(key), for_owner: false, routed: true },
+    ])).toEqual({ forOwner: 1, routedToAgent: 0 });
+    expect(asksFromRows([{ ask_key: routedDedupeKey(key), for_owner: false, routed: true }]))
+      .toEqual({ forOwner: 0, routedToAgent: 1 });
   });
 });
 

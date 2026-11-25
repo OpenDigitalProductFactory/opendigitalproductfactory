@@ -13,6 +13,8 @@
 
 import { prisma } from "@dpf/db";
 
+import { askIdentityFromDedupeKey } from "@/lib/govern/authority/route-to-human";
+
 import type { ClosureCounts, ClosureSnapshot, ClosureWindowFlows } from "./measures";
 
 /** Marker a federated copy carries in its body; only its home install may close it (BI-C5794F1D). */
@@ -74,22 +76,50 @@ export function selfFiledFromRows(byStatus: readonly CountRow[]): ClosureSnapsho
   return { total: total(c), done: pickWhere(c, (k) => k === "done") };
 }
 
-/** One row per distinct ask: whether any report for it was for the owner, and whether it was routed. */
-export type AskRow = { for_owner: boolean | null; routed: boolean | null };
+/**
+ * One row per raw report key in the window. The owner report for an ask is
+ * keyed `K` and its routed report `K:routed` (route-to-human.ts), so rows are
+ * merged by askIdentityFromDedupeKey, the producer's own helper, before
+ * counting.
+ */
+export type AskRow = { ask_key: string; for_owner: boolean | null; routed: boolean | null };
 
 /** Each ask lands on exactly one side: owner wins, otherwise routed; neither counts on neither side. */
 export function asksFromRows(rows: readonly AskRow[]): ClosureWindowFlows["asks"] {
+  const asks = new Map<string, { forOwner: boolean; routed: boolean }>();
+  for (const row of rows) {
+    const id = askIdentityFromDedupeKey(row.ask_key);
+    const seen = asks.get(id) ?? { forOwner: false, routed: false };
+    asks.set(id, { forOwner: seen.forOwner || row.for_owner === true, routed: seen.routed || row.routed === true });
+  }
   let forOwner = 0;
   let routedToAgent = 0;
-  for (const row of rows) {
-    if (row.for_owner) forOwner += 1;
-    else if (row.routed) routedToAgent += 1;
+  for (const ask of asks.values()) {
+    if (ask.forOwner) forOwner += 1;
+    else if (ask.routed) routedToAgent += 1;
   }
   return { forOwner, routedToAgent };
 }
 
 type Raw = <T>(query: TemplateStringsArray, ...values: unknown[]) => Promise<T>;
 export type ClosureDb = { $queryRaw: Raw };
+
+/** Each scorecard query gets at most this long; a slow read fails the run instead of loading the database. */
+export const CLOSURE_SCORECARD_STATEMENT_TIMEOUT = "15s";
+
+/**
+ * The production read: every query runs in one read transaction under a local
+ * statement timeout. The snapshot GROUP BYs are whole-table counts through the
+ * status/phase indexes, acceptable at today's sizes (BacklogItem ~12k rows);
+ * past ~1M rows they should move to maintained counters.
+ */
+export async function loadClosureCountsWithTimeout(window: { since: Date; until: Date }): Promise<ClosureCounts> {
+  return prisma.$transaction(async (tx) => {
+    const db = tx as unknown as ClosureDb & { $executeRawUnsafe(query: string): Promise<number> };
+    await db.$executeRawUnsafe(`SET LOCAL statement_timeout = '${CLOSURE_SCORECARD_STATEMENT_TIMEOUT}'`);
+    return loadClosureCounts(window, db);
+  });
+}
 
 export async function loadClosureCounts(
   window: { since: Date; until: Date },
@@ -123,7 +153,8 @@ export async function loadClosureCounts(
              extract(epoch FROM (${until}::timestamp - min("createdAt"))) / 86400 AS oldest_days
       FROM "PlatformIssueReport" WHERE status = 'awaiting_escalation_ack'`,
     db.$queryRaw<AskRow[]>`
-      SELECT bool_or("selfFixClass" = 'needs-human') AS for_owner, bool_or(type = 'routed-repair') AS routed
+      SELECT coalesce("dedupeKey", id) AS ask_key,
+             bool_or("selfFixClass" = 'needs-human') AS for_owner, bool_or(type = 'routed-repair') AS routed
       FROM "PlatformIssueReport"
       WHERE "createdAt" >= ${since} AND "createdAt" < ${until}
         AND ("selfFixClass" = 'needs-human' OR type = 'routed-repair')

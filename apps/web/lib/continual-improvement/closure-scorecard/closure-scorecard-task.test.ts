@@ -34,8 +34,11 @@ function fakeStore(seed: Record<string, Row> = {}, opts: { failArtifactOnce?: bo
   const runs = new Map<string, Row>(Object.entries(seed));
   let failNext = opts.failArtifactOnce ?? false;
   const loadCounts = vi.fn(async () => counts(4));
-  const addArtifact = vi.fn(async (taskRunId: string, artifact: ClosureScorecardArtifact) => {
+  // Mirrors the row lock: the first repairer attaches, a later one finds it attached.
+  const addArtifact = vi.fn(async (taskRunId: string, artifact: ClosureScorecardArtifact): Promise<"added" | "exists"> => {
+    if (runs.get(taskRunId)?.artifact) return "exists";
     runs.set(taskRunId, { artifact });
+    return "added";
   });
   const store: ClosureScorecardStore = {
     findRun: async (taskRunId): Promise<RecordedRun | null> => {
@@ -114,7 +117,17 @@ describe("runClosureScorecard", () => {
     const result = await runClosureScorecard(store, INPUT);
     if (result.outcome === "idempotent") throw new Error("expected a fresh run");
     expect(result.artifact.priorFound).toBe(true);
-    expect(result.artifact.flows.signalsClosed).toBe(4);
+    expect(result.artifact.changes.signalsClosed).toBe(4);
+  });
+});
+
+describe("repair under the run-row lock", () => {
+  it("two retries repairing the same day attach exactly one artifact", async () => {
+    const { store, addArtifact, runs } = fakeStore({ [TODAY]: { artifact: null } });
+    const [first, second] = await Promise.all([runClosureScorecard(store, INPUT), runClosureScorecard(store, INPUT)]);
+    expect([first.outcome, second.outcome].sort()).toEqual(["idempotent", "repaired"]);
+    expect(addArtifact).toHaveBeenCalledTimes(2);
+    expect(runs.get(TODAY)?.artifact).not.toBeNull();
   });
 });
 
