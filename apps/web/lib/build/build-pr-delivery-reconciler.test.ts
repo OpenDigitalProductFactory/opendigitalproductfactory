@@ -13,7 +13,7 @@ const state = createBuildPrDeliveryState({
 describe("decideBuildPrDeliveryAction", () => {
   it("queues an evidence-cleared exact head once", () => {
     expect(decideBuildPrDeliveryAction({
-      state,
+      state: { ...state, queueIntentHeadSha: "abc" },
       readiness: { kind: "ready", headSha: "abc" },
     })).toEqual({ kind: "queue", headSha: "abc" });
     expect(decideBuildPrDeliveryAction({
@@ -139,7 +139,7 @@ const redInfra = observation({
 
 describe("executeBuildPrDeliveryAction — PR follow-through (BI-88341B5D)", () => {
   it("arms auto-merge through the merge queue when checks are green, and never merges by hand", async () => {
-    const outcome = await run({ observed: observation() });
+    const outcome = await run({ observed: observation(), from: { ...state, queueIntentHeadSha: "sha1" } });
     expect(outcome.actuated).toBe(true);
     expect(outcome.state.status).toBe("armed");
     expect(outcome.calls).toHaveLength(1);
@@ -152,6 +152,37 @@ describe("executeBuildPrDeliveryAction — PR follow-through (BI-88341B5D)", () 
         return /mergePullRequest/.test(text) || /\/merge"?$/.test(text);
       }),
     ).toBe(false);
+  });
+
+  it("does not arm a green external PR on readiness alone", async () => {
+    const outcome = await run({ observed: observation(), from: state });
+    expect(outcome.calls).toEqual([]);
+    expect(outcome.action).toMatchObject({ kind: "wait", reason: "queue-intent-required" });
+  });
+
+  it("does not reuse explicit queue intent on a different head or override changes requested", async () => {
+    const from = { ...state, queueIntentHeadSha: "prior" };
+    const moved = await run({ observed: observation(), from });
+    expect(moved.calls).toEqual([]);
+    const reviewed = await run({ observed: observation({ changesRequested: true }),
+      from: { ...from, queueIntentHeadSha: "sha1" } });
+    expect(reviewed.calls).toEqual([]);
+    expect(reviewed.action).toMatchObject({ kind: "wait", reason: "changes-requested" });
+  });
+
+  it("retains a removal for its old head but returns the new head to normal readiness on every tick", async () => {
+    const event = { kind: "removed" as const, id: "old-removal", at: "2026-11-25T22:54:08Z",
+      reason: "failed_checks", groupHeadSha: "group1", failingChecks: [] };
+    const held = await run({ observed: observation({ queueEvent: event }), from: state });
+    expect(held.state.status).toBe("removed");
+    const newHead = observation({ headSha: "sha2", queueEvent: event });
+    const next = await run({ observed: newHead, from: held.state });
+    expect(next.action).toMatchObject({ kind: "wait", reason: "queue-intent-required" });
+    expect(next.state.queueHold).toBeNull();
+    expect((await run({ observed: newHead, from: next.state })).state.queueHold).toBeNull();
+    const fresh = await run({ observed: newHead, from: { ...next.state, queueIntentHeadSha: "sha2" } });
+    expect(fresh.state.status).toBe("armed");
+    expect(fresh.calls).toHaveLength(1);
   });
 
   it("owns an ejected queue attempt through a named handoff and checks for authorized recovery", async () => {
@@ -203,13 +234,27 @@ describe("executeBuildPrDeliveryAction — PR follow-through (BI-88341B5D)", () 
     expect(next.state.queueHold?.routeReportId).toBe("PIR-disarm");
     expect(routeQueueHold).toHaveBeenCalledTimes(2);
     expect([...failed.calls, ...next.calls]).toEqual([]);
+    const moved = await run({ observed: observation({ headSha: "sha2" }), from: next.state, routeQueueHold });
+    expect(moved.state.queueHold).toMatchObject({ headSha: "sha2", eventId: "disable", routeReportId: "PIR-disarm" });
+    expect(moved.calls).toEqual([]);
     const quiet = await run({ observed, repairAuthority: "record", routeQueueHold });
     expect(quiet.state.queueHold?.routeReportId).toBeNull();
     expect(routeQueueHold).toHaveBeenCalledTimes(2);
   });
 
+  it("does not transfer observed arming across a changed head", async () => {
+    const armed = observation({ autoMergeEnabled: true, autoMergeEnabledAt: "2026-11-25T23:00:00Z" });
+    const old = await run({ observed: armed, from: state });
+    const moved = await run({ from: old.state, observed: { ...armed, headSha: "sha2" } });
+    expect(moved.state.queueHold?.reason).toBe("armed-for-previous-head");
+    expect(moved.calls).toEqual([]);
+    const replay = await run({ from: moved.state, observed: { ...armed, headSha: "sha2" } });
+    expect(replay.state.queueHold?.reason).toBe("armed-for-previous-head");
+    expect(replay.calls).toEqual([]);
+  });
+
   it("withholds GitHub actuation when the room's boundary does, but still records the state", async () => {
-    const outcome = await run({ observed: observation(), actuationAllowed: false });
+    const outcome = await run({ observed: observation(), from: { ...state, queueIntentHeadSha: "sha1" }, actuationAllowed: false });
     expect(outcome.actuated).toBe(false);
     expect(outcome.calls).toHaveLength(0);
     expect(outcome.state.lastError).toBe("withheld:queue");
@@ -293,6 +338,24 @@ describe("initializeAndReconcileBuildPrDelivery keeps the PR's repair budget", (
     expect(readBuildPrDeliveryState(fake.read())?.followThrough.attempts.attempts["post-push-ci-failure"]).toBe(1);
   });
 
+  it("persists only a governed exact publication intent and leaves actuation to the worker", async () => {
+    const fake = db({});
+    const head = "a".repeat(40);
+    const fetchImpl = vi.fn(async () => ({
+      ok: true, json: async () => ({ data: { repository: { pullRequest: {
+        id: "PR_node", number: 42, url: "https://github.com/o/r/pull/42",
+        state: "OPEN", headRefOid: head, mergeStateStatus: "CLEAN",
+      } } } }),
+    }));
+    await initializeAndReconcileBuildPrDelivery({
+      db: fake as never, featureBuildId: "fb", owner: "o", repo: "r", prNumber: 42,
+      prUrl: "https://github.com/o/r/pull/42", token: "t", eligible: true, mode: "enforce",
+      publishedHeadSha: head, fetchImpl: fetchImpl as never,
+    });
+    expect(readBuildPrDeliveryState(fake.read())?.queueIntentHeadSha).toBe(head);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
   it("starts a different PR with a fresh budget", async () => {
     const prior = createBuildPrDeliveryState({ repository: "o/r", prNumber: 41, prUrl: "https://github.com/o/r/pull/41" });
     prior.followThrough.attempts.attempts["post-push-ci-failure"] = 2;
@@ -319,7 +382,7 @@ describe("executeBuildPrDeliveryAction — PR #6983's undecided merge state (BI-
   });
 
   it("keeps observing through any run of UNKNOWN and arms the merge queue once GitHub decides", async () => {
-    let current: BuildPrDeliveryStateV1 = { ...state, reconciliationAttempts: 7, lastReadiness: "checking", lastObservedHeadSha: "sha1" };
+    let current: BuildPrDeliveryStateV1 = { ...state, queueIntentHeadSha: "sha1", reconciliationAttempts: 7, lastReadiness: "checking", lastObservedHeadSha: "sha1" };
     const t0 = Date.parse("2026-11-13T08:02:06Z");
     for (let i = 0; i < 12; i++) {
       const outcome = await executeBuildPrDeliveryAction({

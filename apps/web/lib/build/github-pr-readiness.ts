@@ -59,6 +59,7 @@ export type GithubPrObservation = {
   autoMergeEnabled: boolean;
   autoMergeEnabledAt?: string | null;
   mergeQueueEntry: boolean;
+  changesRequested?: boolean;
   queueEvent?: GithubQueueEvent | null;
 };
 
@@ -75,6 +76,7 @@ export function projectGithubPrReadiness(observation: GithubPrObservation): Gith
   if (observation.merged || observation.state === "MERGED") return { kind: "merged", headSha };
   if (observation.state === "CLOSED") return { kind: "closed", headSha };
   if (observation.mergeQueueEntry) return { kind: "queued", headSha };
+  if (observation.changesRequested) return { kind: "checking", headSha, reason: "changes-requested" };
   // A lingering auto-merge request from before the queue event is not fresh intent.
   const event = observation.queueEvent;
   const enabledAfterEvent = event && Date.parse(observation.autoMergeEnabledAt ?? "") > Date.parse(event.at);
@@ -146,7 +148,8 @@ const PR_OBSERVATION_QUERY = `
 query DpfPullRequestReadiness($owner:String!,$name:String!,$number:Int!){
   repository(owner:$owner,name:$name){
     pullRequest(number:$number){
-      id number url state merged headRefOid mergeStateStatus
+      id number url state merged headRefOid mergeStateStatus reviewDecision
+      latestReviews(first:100){ nodes { state } pageInfo { hasNextPage } }
       autoMergeRequest { enabledAt }
       mergeQueueEntry { id }
       timelineItems(last:1,itemTypes:[ADDED_TO_MERGE_QUEUE_EVENT,REMOVED_FROM_MERGE_QUEUE_EVENT,AUTO_MERGE_DISABLED_EVENT]){
@@ -232,6 +235,8 @@ type ObservationQueryData = {
       merged?: boolean;
       headRefOid?: string;
       mergeStateStatus?: string | null;
+      reviewDecision?: string | null;
+      latestReviews?: { nodes?: Array<{ state?: string } | null>; pageInfo?: { hasNextPage?: boolean } } | null;
       autoMergeRequest?: { enabledAt?: string } | null;
       mergeQueueEntry?: { id?: string } | null;
       timelineItems?: { nodes?: Array<QueueTimelineNode | null> } | null;
@@ -317,7 +322,10 @@ export async function observeGithubPullRequest(input: {
     headSha: pr.headRefOid,
     mergeStateStatus: pr.mergeStateStatus ?? null,
     unresolvedReviewThreads: (pr.reviewThreads?.nodes ?? []).filter((thread) => thread?.isResolved === false).length,
-    reviewThreadsComplete: pr.reviewThreads?.pageInfo?.hasNextPage !== true,
+    reviewThreadsComplete: pr.reviewThreads?.pageInfo?.hasNextPage !== true
+      && pr.latestReviews?.pageInfo?.hasNextPage !== true,
+    changesRequested: pr.reviewDecision === "CHANGES_REQUESTED"
+      || (pr.latestReviews?.nodes ?? []).some((review) => review?.state === "CHANGES_REQUESTED"),
     checksComplete: contexts?.pageInfo?.hasNextPage !== true,
     checks,
     autoMergeEnabled: Boolean(pr.autoMergeRequest),
@@ -328,7 +336,7 @@ export async function observeGithubPullRequest(input: {
 }
 
 const ENABLE_AUTOMERGE_MUTATION = `
-mutation DpfEnableAutoMerge($id:ID!,$expectedHeadOid:GitObjectID){
+mutation DpfEnableAutoMerge($id:ID!,$expectedHeadOid:GitObjectID!){
   enablePullRequestAutoMerge(input:{pullRequestId:$id,mergeMethod:SQUASH,expectedHeadOid:$expectedHeadOid}) {
     pullRequest { number }
   }
@@ -363,13 +371,13 @@ export async function enablePullRequestAutoMerge(input: {
   nodeId: string;
   token: string;
   /** GitHub refuses when the PR head has moved off this commit (BI-53BED66C). */
-  expectedHeadOid?: string;
+  expectedHeadOid: string;
   fetchImpl?: typeof fetch;
 }): Promise<void> {
   await githubGraphql({
     token: input.token,
     query: ENABLE_AUTOMERGE_MUTATION,
-    variables: { id: input.nodeId, expectedHeadOid: input.expectedHeadOid ?? null },
+    variables: { id: input.nodeId, expectedHeadOid: input.expectedHeadOid },
     fetchImpl: input.fetchImpl,
   });
 }

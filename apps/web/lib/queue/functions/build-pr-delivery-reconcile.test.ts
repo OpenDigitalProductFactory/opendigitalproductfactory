@@ -83,6 +83,12 @@ function room(overrides: Record<string, unknown>) {
   };
 }
 
+function publicationIntentWorkspace() {
+  return writeBuildPrDeliveryState({}, { ...createBuildPrDeliveryState({
+    repository: "o/r", prNumber: 9, prUrl: "https://github.com/o/r/pull/9",
+  }), queueIntentHeadSha: "sha1" });
+}
+
 function observation(checks: Array<Record<string, unknown>>, mergeStateStatus = "BLOCKED") {
   return {
     nodeId: "PR_node", number: 9, url: "https://github.com/o/r/pull/9", state: "OPEN", merged: false,
@@ -307,11 +313,12 @@ describe("runBuildPrDeliveryReconcile — every room with a PR, whichever client
     expect(mocks.updateMany.mock.calls[0]?.[0]?.data).toMatchObject({ headSha: mergedHead });
   });
 
-  it("arms auto-merge for a green PR in a non-Build-Studio room, and withholds it in a quiet room", async () => {
+  it("requires current-head intent and withholds even that intent in a quiet room", async () => {
     mocks.fetch.mockResolvedValue({ ok: true, status: 200, json: async () => ({ data: { enablePullRequestAutoMerge: { pullRequest: { number: 9 } } } }) });
     mocks.findMany.mockResolvedValue([
-      room({ id: "green" }),
-      room({ id: "quiet", scopeClaims: [{ workroomPosture: { proactivityLevel: "quiet" }, recordedAt: "2026-10-01T00:00:00Z" }] }),
+      room({ id: "unrequested" }),
+      room({ id: "green", workspaceState: publicationIntentWorkspace() }),
+      room({ id: "quiet", workspaceState: publicationIntentWorkspace(), scopeClaims: [{ workroomPosture: { proactivityLevel: "quiet" }, recordedAt: "2026-10-01T00:00:00Z" }] }),
     ]);
     mocks.observe.mockResolvedValue(observation([{ name: "ci", status: "COMPLETED", conclusion: "SUCCESS" }], "CLEAN"));
 
@@ -327,7 +334,7 @@ describe("runBuildPrDeliveryReconcile — every room with a PR, whichever client
   // BI-4D0B2AAB: a passed review's status expires after an hour, and the merge queue re-checks it.
   it("republishes Failure Readiness before arming auto-merge, and withholds a PR with no publishable review", async () => {
     mocks.fetch.mockResolvedValue({ ok: true, status: 200, json: async () => ({ data: { enablePullRequestAutoMerge: { pullRequest: { number: 9 } } } }) });
-    mocks.findMany.mockResolvedValue([room({ id: "reviewed", capsuleId: "WC-OK" }), room({ id: "unreviewed", capsuleId: "WC-NONE" })]);
+    mocks.findMany.mockResolvedValue([room({ id: "reviewed", capsuleId: "WC-OK", workspaceState: publicationIntentWorkspace() }), room({ id: "unreviewed", capsuleId: "WC-NONE", workspaceState: publicationIntentWorkspace() })]);
     mocks.verdict.mockImplementation(async (capsuleId: string) => capsuleId === "WC-OK"
       ? { mayPublish: true, reason: "reviewed" } : { mayPublish: false, reason: "No failure-analysis review exists for this final change." });
     const order: string[] = [];
@@ -462,6 +469,7 @@ describe("runBuildPrDeliveryReconcile — re-evaluating stopped rooms (BI-0EDCF2
   const stoppedOnUnknown = () => ({
     ...createBuildPrDeliveryState({ repository: "o/r", prNumber: 9, prUrl: "https://github.com/o/r/pull/9" }),
     status: "escalated" as const,
+    queueIntentHeadSha: "sha1",
     lastError: "observation-budget-exhausted:merge-state-unknown",
     escalationKey: "build-pr-delivery:9:observation-budget-exhausted:merge-state-unknown",
     lastReadiness: "unknown" as const,
@@ -764,9 +772,10 @@ describe("BI-C3EBDCEC VERIFY-PR-2 & VERIFY-PR-3: PR-only custody repair and term
     expect(mocks.fetch).not.toHaveBeenCalled();
   });
 
-  it("follows a newly pushed repair head and arms the protected merge queue once green", async () => {
+  it("follows a newly pushed repair head without transferring old enqueue authority", async () => {
     mocks.fetch.mockResolvedValue({ ok: true, status: 200, json: async () => ({ data: { enablePullRequestAutoMerge: { pullRequest: { number: 7184 } } } }) });
     const repairing = createBuildPrDeliveryState({ repository: "o/r", prNumber: 7184, prUrl: PR_URL });
+    repairing.queueIntentHeadSha = "sha1";
     repairing.followThrough.hold = "repairing";
     repairing.followThrough.judgedHeadSha = "sha1";
     mocks.findMany.mockResolvedValue([custodyRoom({ workspaceState: writeBuildPrDeliveryState(prCustody(), repairing) })]);
@@ -774,11 +783,11 @@ describe("BI-C3EBDCEC VERIFY-PR-2 & VERIFY-PR-3: PR-only custody repair and term
       ...observation([{ name: "Merge Readiness", status: "COMPLETED", conclusion: "SUCCESS", required: true }], "CLEAN"),
       number: 7184, url: PR_URL, headSha: "sha2-repaired",
     });
-    expect((await runBuildPrDeliveryReconcile()).actuated).toBe(1);
-    expect(String(mocks.fetch.mock.calls[0]?.[1]?.body)).toContain('"expectedHeadOid":"sha2-repaired"');
+    expect((await runBuildPrDeliveryReconcile()).actuated).toBe(0);
+    expect(mocks.fetch).not.toHaveBeenCalled();
     const write = mocks.updateMany.mock.calls[0]?.[0];
     expect(write.data).toMatchObject({ headSha: "sha2-repaired" });
-    expect(write.data.workspaceState.prDelivery).toMatchObject({ status: "armed" });
+    expect(write.data.workspaceState.prDelivery).toMatchObject({ status: "checking", lastError: "queue-intent-required" });
     expect(write.data.workspaceState.prDelivery.followThrough.hold).toBeNull();
   });
 

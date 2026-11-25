@@ -148,13 +148,15 @@ test("publish pushes exactly once, and a refused push is reported, never retried
   // Plan 2026-10-02 item 9: every `git push` can claim a new gate lease, so a
   // second push "just to read the refusal" can overwrite a recorded PASS.
   const calls = [];
+  const failed = publicationScenario({ branch: "b", pushRefused: true });
   const exec = (cmd, args) => {
     calls.push([cmd, ...args].join(" "));
-    return { ok: cmd !== "git", status: cmd === "git" ? 1 : 0, out: "" };
+    return failed.runner(cmd, args);
   };
   const refusal = publish({ branch: "b", base: "main", title: "t", body: "", dry: false, log: () => {}, runner: exec });
   assert.equal(refusal?.step, "push");
-  assert.deepEqual(calls, ["git push -u origin b"], "one push, and nothing after a refusal");
+  assert.equal(calls.filter(c => c.startsWith("git push")).length, 1);
+  assert.equal(calls.at(-1), "git push -u origin b", "no mutation after a refusal");
 
   calls.length = 0;
   const scenario = publicationScenario({ branch: "b" });
@@ -205,6 +207,7 @@ function publicationScenario(options = {}) {
   const runner = (command, args) => {
     calls.push([command, ...args]);
     const ok = out => ({ ok: true, status: 0, out });
+    if (command === 'git' && args[0] === 'push' && options.pushRefused) return { ok: false, status: 1, out: 'remote refused push' };
     if (command === 'git') return ok(args[0] === 'rev-parse' ? PUBLISH_HEAD : args[0] === 'remote' ? 'https://github.com/OpenDigitalProductFactory/opendigitalproductfactory.git' : '');
     if (command === process.execPath) return options.policyRefused
       ? { ok: false, status: 1, out: 'stale-receipt' } : ok('fresh-receipt');
@@ -225,7 +228,7 @@ function publicationScenario(options = {}) {
     if (args[0] === 'api') {
       if (options.observationFailed) return ok(JSON.stringify({ errors: [{ message: 'unavailable' }], data: null }));
       const state = enabled ? options.after ?? 'queued' : options.before ?? 'unconfirmed';
-      const row = { ...pr, state: state === 'merged' ? 'MERGED' : 'OPEN',
+      const row = { ...pr, ...(options.changesRequested ? { reviewDecision: 'CHANGES_REQUESTED' } : {}), state: state === 'merged' ? 'MERGED' : 'OPEN',
         autoMergeRequest: state === 'auto' ? { mergeMethod: 'SQUASH' } : null,
         mergeQueueEntry: state === 'queued' ? { id: 'MQE-test', state: 'AWAITING_CHECKS', position: 1 } : null };
       if (state === 'partial') delete row.autoMergeRequest;
@@ -246,6 +249,22 @@ test('historical merged PR is excluded; a new current OPEN PR is created and exp
   assert(selection.includes('--state') && selection.includes('open') && selection.includes(fixture.branch));
   const request = fixture.calls.find(call => call[1] === 'pr' && call[2] === 'merge');
   assert(request.includes('7051'), 'enqueue the exact observed current PR');
+});
+
+for (const before of ['queued', 'auto']) test(`replacement of a past ${before} head refuses before push or queue mutation`, () => {
+  const old = 'b'.repeat(40);
+  const fixture = publicationScenario({ observedHead: old, before });
+  const refusal = fixture.publish();
+  assert.equal(refusal.step, 'push');
+  assert.match(refusal.message, /7051.*bbbbbbbbbbbb.*aaaaaaaaaaaa/);
+  assert.match(refusal.next, /authorized PR owner/);
+  assert(!fixture.calls.some(call => call.includes('push') || call.includes('merge')));
+});
+
+test('outstanding changes requested refuses explicit land auto-merge', () => {
+  const fixture = publicationScenario({ changesRequested: true });
+  assert.equal(fixture.publish()?.step, 'auto-merge');
+  assert(!fixture.calls.some(call => call.includes('merge')));
 });
 
 test('actual queue entry with null autoMergeRequest is success without another enable', () => {

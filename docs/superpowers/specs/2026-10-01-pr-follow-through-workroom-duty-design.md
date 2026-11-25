@@ -87,6 +87,21 @@ removed, disarmed, or unconfirmed attempt automatically or treat a queue-group
 failure as a verdict on the author head. Existing writers retain source repair,
 humans retain required decisions, and GitHub retains every protected check.
 
+The worker may arm only from a durable intent for the exact commit an eligible
+Build Studio publication produced. PR inventory and green checks do not grant
+that intent. Current changes-requested review blocks enrollment. A known
+removal stays bound to the old source when the same PR is rebound to a new
+author head. New bytes go through normal readiness without inheriting previous
+intent. A disarm stays held until there is a fresh explicit request.
+
+The repository has four enqueue paths: the Workroom delivery worker, the
+authorized `queue_workroom_pull_request` call, `pnpm land`, and the separately
+opted-in Assurance remediation gate. Their mutation is fenced at the expected
+head. Landing refuses to replace an old queued or armed head and names the
+authorized owner action. It never dequeues, pushes twice, or bypasses branch
+protection. GitHub records the shared account on historical #7232; that record
+does not identify which client or service used it.
+
 ### 3.3 Inputs: events first, poll as the safety net
 
 - **Webhook.** The receiver adds `check_suite` (completed), `workflow_run`

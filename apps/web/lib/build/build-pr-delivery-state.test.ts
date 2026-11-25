@@ -4,6 +4,7 @@ import {
   clearBuildPrDeliveryState,
   createBuildPrDeliveryState,
   readBuildPrDeliveryState,
+  restoreBuildPrQueueHistory,
   writeBuildPrDeliveryState,
 } from "./build-pr-delivery-state";
 import { createPrFollowThrough } from "./pr-follow-through";
@@ -52,6 +53,18 @@ describe("BuildPrDeliveryStateV1", () => {
 
     // A non-Build-Studio room never grows a buildStudio key.
     expect(writeBuildPrDeliveryState({ claim: "kept" }, state)).not.toHaveProperty("buildStudio");
+  });
+
+  it("rebinds known removal history only to the same PR, never queue intent", () => {
+    const initial = createBuildPrDeliveryState({ repository: "o/r", prNumber: 42, prUrl: "https://github.com/o/r/pull/42" });
+    const lastQueueRemoval = { eventId: "removed-1", headSha: "old" };
+    const detached = clearBuildPrDeliveryState(writeBuildPrDeliveryState({}, {
+      ...initial, lastQueueRemoval, queueIntentHeadSha: "old",
+    }));
+    expect(readBuildPrDeliveryState(detached)).toBeNull();
+    expect(restoreBuildPrQueueHistory(initial, detached)).toEqual({ ...initial, lastQueueRemoval });
+    const different = { ...initial, prNumber: 43 };
+    expect(restoreBuildPrQueueHistory(different, detached)).toEqual(different);
   });
 
   it("retires current and legacy delivery identity without erasing unrelated room state", () => {

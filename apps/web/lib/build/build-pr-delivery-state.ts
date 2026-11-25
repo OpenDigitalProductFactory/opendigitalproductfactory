@@ -59,6 +59,11 @@ export type BuildPrDeliveryStateV1 = {
   /** CI follow-through: classification, holds and the reused recovery budget. */
   followThrough: PrFollowThroughV1;
   queueHold?: BuildPrQueueHold | null;
+  /** Only a governed publication may write an intent for the commit it published. */
+  queueIntentHeadSha?: string | null;
+  confirmedQueueHeadSha?: string;
+  /** Bind the last removal event to the exact room head first observed with it. */
+  lastQueueRemoval?: { eventId: string; headSha: string } | null;
 };
 
 type JsonObject = Record<string, unknown>;
@@ -129,6 +134,7 @@ export function readBuildPrDeliveryState(workspaceState: unknown): BuildPrDelive
   ) {
     return null;
   }
+  const removal = asObject(value.lastQueueRemoval);
   const integer = (candidate: unknown) =>
     typeof candidate === "number" && Number.isInteger(candidate) && candidate >= 0 ? candidate : 0;
   return {
@@ -150,6 +156,10 @@ export function readBuildPrDeliveryState(workspaceState: unknown): BuildPrDelive
     unknownObservations: integer(value.unknownObservations),
     nextObservationAt: typeof value.nextObservationAt === "string" ? value.nextObservationAt : null,
     followThrough: readPrFollowThrough(value.followThrough),
+    ...(typeof value.confirmedQueueHeadSha === "string" ? { confirmedQueueHeadSha: value.confirmedQueueHeadSha } : {}),
+    ...(typeof value.queueIntentHeadSha === "string" ? { queueIntentHeadSha: value.queueIntentHeadSha } : {}),
+    ...(typeof removal.eventId === "string" && typeof removal.headSha === "string"
+      ? { lastQueueRemoval: { eventId: removal.eventId, headSha: removal.headSha } } : {}),
     ...(value.queueHold !== undefined ? { queueHold: readQueueHold(value.queueHold) } : {}),
   };
 }
@@ -166,9 +176,27 @@ export function writeBuildPrDeliveryState(
   return root;
 }
 
+/** Carry only the old queue binding across verified rebinding of the same PR. Never carry enqueue authority. */
+export function restoreBuildPrQueueHistory(state: BuildPrDeliveryStateV1, workspaceState: unknown): BuildPrDeliveryStateV1 {
+  const previous = readBuildPrDeliveryState({ prDelivery: asObject(workspaceState).prDeliveryPriorQueue });
+  if (!previous || previous.repository.toLowerCase() !== state.repository.toLowerCase()
+    || previous.prNumber !== state.prNumber) return state;
+  return {
+    ...state,
+    ...(previous.lastQueueRemoval ? { lastQueueRemoval: previous.lastQueueRemoval } : {}),
+    ...(previous.queueHold?.reason === "disarmed" ? { queueHold: previous.queueHold } : {}),
+  };
+}
+
 /** Retire delivery state when a Workroom advances to a different authored head. */
 export function clearBuildPrDeliveryState(workspaceState: unknown): JsonObject {
+  const prior = readBuildPrDeliveryState(workspaceState);
   const { prDelivery: _current, ...root } = asObject(workspaceState);
+  if (prior?.lastQueueRemoval || prior?.queueHold?.reason === "disarmed") {
+    const { repository, prNumber, prUrl, lastQueueRemoval, queueHold } = prior;
+    root.prDeliveryPriorQueue = { schemaVersion: 1, status: "checking", repository, prNumber, prUrl,
+      lastQueueRemoval: lastQueueRemoval ?? null, queueHold: queueHold?.reason === "disarmed" ? queueHold : null };
+  }
   if (root.buildStudio !== undefined) {
     const { delivery: _legacy, ...buildStudio } = asObject(root.buildStudio);
     root.buildStudio = buildStudio;

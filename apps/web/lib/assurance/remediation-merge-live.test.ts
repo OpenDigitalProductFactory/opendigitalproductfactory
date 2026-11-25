@@ -145,10 +145,14 @@ describe("createLiveMergeGateAdapters.armAutoMerge (P2.2b)", () => {
     };
   }
 
-  it("resolves the PR node id and calls enablePullRequestAutoMerge", async () => {
+  const headSha = "a".repeat(40);
+  const observed = (headRefOid: string) => ({ id: "PR_NODE_1", number: 123, url: "https://github.com/o/r/pull/123",
+    state: "OPEN", headRefOid, mergeStateStatus: "CLEAN" });
+
+  it("verifies the governed Workroom head and fences enablePullRequestAutoMerge", async () => {
     const fetchImpl = vi
       .fn()
-      .mockResolvedValueOnce(okJson({ data: { repository: { pullRequest: { id: "PR_NODE_1" } } } }))
+      .mockResolvedValueOnce(okJson({ data: { repository: { pullRequest: observed(headSha) } } }))
       .mockResolvedValueOnce(okJson({ data: { enablePullRequestAutoMerge: { pullRequest: { number: 123 } } } }));
 
     const adapters = await createLiveMergeGateAdapters({
@@ -156,11 +160,19 @@ describe("createLiveMergeGateAdapters.armAutoMerge (P2.2b)", () => {
       actuationEnabled: true,
       fetchImpl: fetchImpl as never,
     });
-    await expect(adapters.armAutoMerge(pr)).resolves.toBeUndefined();
+    await expect(adapters.armAutoMerge({ ...pr, headSha })).resolves.toBeUndefined();
     expect(fetchImpl).toHaveBeenCalledTimes(2);
     const mutationCall = (fetchImpl.mock.calls[1]![1] as { body: string }).body;
     expect(mutationCall).toContain("enablePullRequestAutoMerge");
     expect(mutationCall).toContain("PR_NODE_1");
+    expect(JSON.parse(mutationCall).variables.expectedHeadOid).toBe(headSha);
+  });
+
+  it("does not arm a provider head other than the governed Workroom head", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(okJson({ data: { repository: { pullRequest: observed("b".repeat(40)) } } }));
+    const adapters = await createLiveMergeGateAdapters({ prisma: tokenPrisma() as never, actuationEnabled: true, fetchImpl: fetchImpl as never });
+    await expect(adapters.armAutoMerge({ ...pr, headSha })).rejects.toThrow(/exact reviewed PR head/);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 
   it("throws when no GitHub token is configured", async () => {

@@ -91,7 +91,9 @@ export function decideBuildPrDeliveryAction(input: {
             headSha: readiness.headSha,
             reason: "queue-confirmation-missing",
           }
-        : { kind: "queue", headSha: readiness.headSha };
+        : state.queueIntentHeadSha === readiness.headSha
+          ? { kind: "queue", headSha: readiness.headSha }
+          : { kind: "wait", status: "checking", headSha: readiness.headSha, reason: "queue-intent-required" };
     case "armed":
       return {
         kind: "wait",
@@ -222,6 +224,38 @@ async function applyFollowThroughEffects(input: {
   return { decision, actuated: false, note: null };
 }
 
+/** Only a removal tied to the previous exact head may be ignored after a verified head change. */
+export function projectBuildPrDeliveryReadiness(
+  state: BuildPrDeliveryStateV1,
+  observation: GithubPrObservation,
+): GithubPrReadiness {
+  const readiness = projectGithubPrReadiness(observation);
+  const removal = state.lastQueueRemoval;
+  const event = observation.queueEvent;
+  const staleArm = state.queueHold?.reason === "armed-for-previous-head" ? state.queueHold : null;
+  if (readiness.kind === "armed" && staleArm
+    && !(Date.parse(observation.autoMergeEnabledAt ?? "") > Date.parse(staleArm.eventAt))) {
+    return { kind: "queue-hold", headSha: observation.headSha, event: {
+      kind: "entry-unconfirmed", id: staleArm.eventId, at: staleArm.eventAt,
+      reason: staleArm.reason, groupHeadSha: null, failingChecks: [],
+    } };
+  }
+  if (readiness.kind === "armed" && state.status === "armed" && state.lastObservedHeadSha
+    && state.lastObservedHeadSha !== observation.headSha
+    && !(Date.parse(observation.autoMergeEnabledAt ?? "") > Date.parse(state.lastObservedAt ?? ""))) {
+    return { kind: "queue-hold", headSha: observation.headSha, event: {
+      kind: "entry-unconfirmed", id: `armed-for-previous-head:${state.lastObservedHeadSha}`,
+      at: observation.autoMergeEnabledAt ?? state.lastObservedAt ?? "",
+      reason: "armed-for-previous-head", groupHeadSha: null, failingChecks: [],
+    } };
+  }
+  if (!observation.autoMergeEnabled && event?.kind === "removed" && removal?.eventId === event.id
+    && removal.headSha !== observation.headSha) {
+    return projectGithubPrReadiness({ ...observation, queueEvent: null });
+  }
+  return readiness;
+}
+
 /** The worker checks this before refreshing hosted review status or taking any other GitHub action. */
 export function holdsPrQueueAttempt(state: BuildPrDeliveryStateV1, readiness: GithubPrReadiness): boolean {
   return observeQueueHold(state, readiness, "") !== null;
@@ -235,7 +269,11 @@ function observeQueueHold(
   const headSha = readiness.headSha;
   if (!headSha || readiness.kind === "armed" || readiness.kind === "queued"
     || readiness.kind === "merged" || readiness.kind === "closed") return null;
-  const prior = state.queueHold?.headSha === headSha ? state.queueHold : null;
+  const prior = state.queueHold?.headSha === headSha || state.queueHold?.reason === "disarmed"
+    ? state.queueHold ?? null : null;
+  if (prior?.reason === "disarmed" && (readiness.kind !== "queue-hold" || readiness.event.kind !== "disarmed")) {
+    return { ...prior, headSha };
+  }
   if (readiness.kind === "queue-hold") {
     const { event } = readiness;
     const sameEvent = prior?.eventId === event.id ? prior : null;
@@ -251,9 +289,9 @@ function observeQueueHold(
       routeReportId: sameEvent?.routeReportId ?? null,
     };
   }
-  if (prior) return { ...prior };
+  if (prior) return { ...prior, headSha };
   if (state.lastActuatedHeadSha !== headSha
-    && !(state.lastObservedHeadSha === headSha && (state.status === "queued" || state.status === "armed"))) return null;
+    && !(state.lastObservedHeadSha === headSha && (state.status === "armed" || (state.status === "queued" && state.lastReadiness === "queued" && state.confirmedQueueHeadSha === headSha)))) return null;
   return {
     headSha, eventId: `confirmation-missing:${headSha}`, reason: "queue-confirmation-missing",
     eventAt: state.lastObservedAt ?? now, groupHeadSha: null, failingChecks: [],
@@ -292,18 +330,20 @@ export async function executeBuildPrDeliveryAction(input: {
   actuated: boolean;
   followThrough: PrFollowThroughDecision;
 }> {
+  const readiness = input.readiness.kind === "queue-hold" || input.readiness.kind === "armed"
+    ? projectBuildPrDeliveryReadiness(input.state, input.observation) : input.readiness;
   const plannedAction = decideBuildPrDeliveryAction({
     state: input.state,
-    readiness: input.readiness,
+    readiness,
     prOnlyCustody: input.prOnlyCustody,
   });
   const now = (input.now ?? new Date()).toISOString();
   const mayActuate = input.mode === "enforce" && input.actuationAllowed !== false;
-  const queueHold = observeQueueHold(input.state, input.readiness, now);
+  const queueHold = observeQueueHold(input.state, readiness, now);
   if (queueHold) {
     const action = {
       kind: "wait",
-      status: (input.readiness.kind === "queue-hold" ? input.readiness.event.kind === "removed"
+      status: (readiness.kind === "queue-hold" ? readiness.event.kind === "removed"
         : input.state.status === "removed") ? "removed" : "checking",
       headSha: queueHold.headSha,
       reason: queueHold.reason,
@@ -319,10 +359,12 @@ export async function executeBuildPrDeliveryAction(input: {
       state: {
         ...input.state,
         queueHold,
+        ...(readiness.kind === "queue-hold" && readiness.event.kind === "removed"
+          ? { lastQueueRemoval: { eventId: readiness.event.id, headSha: queueHold.headSha } } : {}),
         status: action.status,
         lastObservedAt: now,
         lastObservedHeadSha: queueHold.headSha,
-        lastReadiness: input.readiness.kind,
+        lastReadiness: readiness.kind,
         lastError: queueHold.reason,
         unknownObservations: 0,
         nextObservationAt: new Date(Date.parse(now) + QUEUE_HOLD_RECHECK_MS).toISOString(),
@@ -334,7 +376,7 @@ export async function executeBuildPrDeliveryAction(input: {
   const effects = await applyFollowThroughEffects({
     decision: decidePrFollowThrough({
       followThrough: input.state.followThrough,
-      readiness: input.readiness,
+      readiness: readiness,
       checks: input.observation.checks,
       authority: input.repairAuthority ?? "propose",
     }),
@@ -347,16 +389,17 @@ export async function executeBuildPrDeliveryAction(input: {
     dispatchRepair: input.dispatchRepair,
   });
   const followThrough = effects.decision;
-  const undecided = input.readiness.kind === "unknown"
-    ? nextUnknownObservation(input.state, input.readiness.headSha, input.now ?? new Date())
+  const undecided = readiness.kind === "unknown"
+    ? nextUnknownObservation(input.state, readiness.headSha, input.now ?? new Date())
     : { unknownObservations: 0, nextObservationAt: null };
   let next: BuildPrDeliveryStateV1 = {
     ...input.state,
     ...undecided,
+    ...(readiness.kind === "queued" ? { confirmedQueueHeadSha: readiness.headSha } : {}),
     ...(input.state.queueHold ? { queueHold: null } : {}),
     reconciliationAttempts: input.state.reconciliationAttempts + 1,
-    lastObservedHeadSha: input.readiness.headSha,
-    lastReadiness: input.readiness.kind,
+    lastObservedHeadSha: readiness.headSha,
+    lastReadiness: readiness.kind,
     lastObservedAt: now,
     lastError: effects.note,
     followThrough: followThrough.followThrough,
@@ -369,7 +412,8 @@ export async function executeBuildPrDeliveryAction(input: {
   });
 
   if (action.kind === "wait") {
-    next = { ...next, status: action.status };
+    next = { ...next, status: action.status,
+      ...(action.reason === "queue-intent-required" || action.reason === "changes-requested" ? { lastError: action.reason } : {}) };
     return done(next, false);
   }
   if (action.kind === "escalate") {
@@ -424,6 +468,7 @@ export async function executeBuildPrDeliveryAction(input: {
   next = {
     ...next,
     status: "armed",
+    queueIntentHeadSha: null,
     lastActuatedHeadSha: action.headSha,
   };
   return done(next, true);
@@ -464,7 +509,14 @@ export async function initializeAndReconcileBuildPrDelivery(input: {
     where: { featureBuildId: input.featureBuildId },
     select: { id: true, workspaceState: true, updatedAt: true },
   })).map((room) => readBuildPrDeliveryState(room.workspaceState)).find((state) => state?.prNumber === input.prNumber);
-  if (prior) initial.followThrough = { ...initial.followThrough, attempts: prior.followThrough.attempts };
+  if (prior) {
+    initial.followThrough = { ...initial.followThrough, attempts: prior.followThrough.attempts };
+    initial.lastQueueRemoval = prior.lastQueueRemoval ?? null;
+    if (prior.queueHold?.reason === "disarmed") initial.queueHold = prior.queueHold;
+  }
+  if (input.eligible === true && input.publishedHeadSha && /^[a-f0-9]{40}$/.test(input.publishedHeadSha)) {
+    initial.queueIntentHeadSha = input.publishedHeadSha;
+  }
   const capture = await captureBuildPrOntoCapsule({
     db: input.db,
     featureBuildId: input.featureBuildId,
@@ -472,6 +524,7 @@ export async function initializeAndReconcileBuildPrDelivery(input: {
     prNumber: input.prNumber,
     prUrl: input.prUrl,
     headSha: input.publishedHeadSha,
+    initialDelivery: initial,
   });
   if (capture.captured === 0) {
     return {
@@ -504,11 +557,15 @@ export async function initializeAndReconcileBuildPrDelivery(input: {
     token: input.token,
     fetchImpl: input.fetchImpl,
   });
+  if (input.publishedHeadSha && observation.headSha !== input.publishedHeadSha) {
+    return { captured: capture.captured, state: initial, action: null, actuated: false };
+  }
   const outcome = await executeBuildPrDeliveryAction({
     state: initial,
     observation,
     readiness: projectGithubPrReadiness(observation),
-    mode: input.mode ?? resolveBuildPrReconcilerMode(),
+    // Only the worker can refresh review evidence and check the live room posture before arming.
+    mode: (input.mode ?? resolveBuildPrReconcilerMode()) === "off" ? "off" : "shadow",
     token: input.token,
     owner: input.owner,
     repo: input.repo,
