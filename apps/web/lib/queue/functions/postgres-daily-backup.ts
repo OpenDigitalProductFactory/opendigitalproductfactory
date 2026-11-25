@@ -109,6 +109,18 @@ export async function runScheduledCoreAndCapabilityBackups(deps: {
   }
 }
 
+export function selectScheduledPairedTrial(postgresResult: unknown, uploadsResult: unknown): {
+  sourceBackupRunId?: string; uploadsBackupRunId: string | null;
+} {
+  const pg = postgresResult as { status?: unknown; runId?: unknown } | null | undefined;
+  const uploads = uploadsResult as { status?: unknown; runId?: unknown } | null | undefined;
+  return {
+    sourceBackupRunId: typeof pg?.runId === "string" && pg.runId ? pg.runId : undefined,
+    uploadsBackupRunId: pg?.status === "ok" && uploads?.status === "ok" && typeof uploads.runId === "string" && uploads.runId
+      ? uploads.runId : null,
+  };
+}
+
 // ─── Daily cron (postgres backup + trial-restore) ────────────────────────────
 
 export const allBackupsDailyScheduled = jobs.createFunction(
@@ -146,7 +158,7 @@ export const allBackupsDailyScheduled = jobs.createFunction(
         const { runPostgresTrialRestore } = await import(
           "@/lib/operate/backups/postgres-trial-restore-runner"
         );
-        return runPostgresTrialRestore();
+        return runPostgresTrialRestore(selectScheduledPairedTrial(planned.pgResult, planned.uploadsResult));
       },
     );
 
