@@ -1,3 +1,7 @@
+---
+status: draft
+---
+
 # Governed rehearsal draft for the S5 Contributor preview
 
 Status: F1 amendment candidate for independent review. BI-1F994B73, WC-9917332E. Builds on the approval producer proposed in BI-EA9E62F5 (pending), follows the parent BI-687E7D81, and applies only to the synthetic rehearsal policy on BI-588688A7. It neither relaxes v1 nor authorizes a rehearsal send.

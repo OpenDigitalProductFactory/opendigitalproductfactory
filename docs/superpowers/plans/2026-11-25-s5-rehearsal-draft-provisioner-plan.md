@@ -1,3 +1,7 @@
+---
+status: draft
+---
+
 # S5 rehearsal draft provisioner implementation plan
 
 Draft pending canonical design, independent review and coverage admission for BI-1F994B73 / WC-9917332E. Do not implement against this draft alone. Implementation depends on the approval producer proposed in BI-EA9E62F5 (pending) and retains its exact approval and separate execution clock. BI-588688A7 remains the one-shot policy owner. Do not use this branch to evidence a live run.
