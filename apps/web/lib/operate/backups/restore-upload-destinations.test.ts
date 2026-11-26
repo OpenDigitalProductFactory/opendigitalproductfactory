@@ -3,6 +3,13 @@ import { lstat, mkdir, mkdtemp, readFile, readdir, realpath, rename, rm, symlink
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+// A legacy install, stated rather than read from the host's /proc, which the
+// fail-closed mount rule would otherwise make platform-dependent.
+vi.mock("@/lib/platform-runtime/actuator-client", async importOriginal => ({
+  ...await importOriginal<typeof import("@/lib/platform-runtime/actuator-client")>(),
+  usesPrivateActuator: async () => false,
+  usesPrivateActuatorSync: () => false,
+}));
 import { assertCoveredUploadCollisions, captureRestoreUploadRoots, inspectRestoreUploadDestinations, publishRestoreUploadFile } from "./restore-upload-destinations";
 
 vi.mock("node:fs/promises", async (importOriginal) => {

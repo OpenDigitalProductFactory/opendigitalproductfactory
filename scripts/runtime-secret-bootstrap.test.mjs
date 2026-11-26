@@ -302,3 +302,12 @@ test("production image and compose route portal startup through the provider bou
   assert.match(compose, /CREDENTIAL_ENCRYPTION_KEY: \$\{CREDENTIAL_ENCRYPTION_KEY:-\}/);
   assert.doesNotMatch(compose, /CREDENTIAL_ENCRYPTION_KEY: \$\{CREDENTIAL_ENCRYPTION_KEY:\?/);
 });
+
+test("the production image boots the served portal with a fixed loader invocation", async () => {
+  const dockerfile = await readFile(new URL("../Dockerfile", import.meta.url), "utf8");
+  const command = dockerfile.split("\n").find(line => line.startsWith('CMD ["node", "/usr/local/bin/runtime-secret-bootstrap.mjs"'));
+  assert.deepEqual(JSON.parse(command.slice(4)), [
+    "node", "/usr/local/bin/runtime-secret-bootstrap.mjs", "--",
+    "/usr/local/bin/portal-migrate-boot.sh", "/usr/local/bin/node", "--disable-sigusr1", "/app/apps/web/server.js",
+  ]);
+});

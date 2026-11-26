@@ -16,6 +16,10 @@ const BASE = "http://localhost:3000";
 describe("writeMcpJsonToHost", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(fs.readFileSync).mockReset();
+    // A legacy install: the mount table reads and shows no actuator mount.
+    vi.mocked(fs.readFileSync).mockImplementation((path) => path === "/proc/self/mountinfo"
+      ? "10 8 0:1 / / rw - overlay overlay rw\n" : "");
   });
 
   afterEach(() => {
@@ -24,6 +28,22 @@ describe("writeMcpJsonToHost", () => {
 
   it("no-ops when /host-dpf does not exist", () => {
     vi.mocked(fs.existsSync).mockReturnValue(false);
+    writeMcpJsonToHost(TOKEN, BASE);
+    expect(fs.writeFileSync).not.toHaveBeenCalled();
+    expect(fs.mkdirSync).not.toHaveBeenCalled();
+  });
+
+  it("writes nothing when the mount table cannot be read (fail closed)", () => {
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.readFileSync).mockImplementation(() => { throw Object.assign(new Error("EACCES"), { code: "EACCES" }); });
+    writeMcpJsonToHost(TOKEN, BASE);
+    expect(fs.writeFileSync).not.toHaveBeenCalled();
+  });
+
+  it("keeps host setup files under their existing host owner in the qualified portal", () => {
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.readFileSync).mockImplementation((path) => path === "/proc/self/mountinfo"
+      ? "10 8 0:1 / /run/dpf-actuator ro - tmpfs tmpfs rw\n" : "");
     writeMcpJsonToHost(TOKEN, BASE);
     expect(fs.writeFileSync).not.toHaveBeenCalled();
     expect(fs.mkdirSync).not.toHaveBeenCalled();
@@ -101,6 +121,8 @@ describe("writeMcpJsonToHost", () => {
   it("writes no .mcp.json dpf entry when the folder enables the dpf-platform plugin", () => {
     vi.mocked(fs.existsSync).mockReturnValue(true);
     vi.mocked(fs.readFileSync).mockImplementation(((path: string) => {
+      // A legacy install: the mount table reads and shows no actuator mount.
+      if (path === "/proc/self/mountinfo") return "10 8 0:1 / / rw - overlay overlay rw\n";
       if (path === "/host-dpf/.claude/settings.json") {
         return JSON.stringify({ enabledPlugins: { "dpf-platform@dpf-platform-local": true } });
       }
@@ -119,6 +141,8 @@ describe("writeMcpJsonToHost", () => {
   it("still writes .mcp.json when the plugin is installed but disabled for the folder", () => {
     vi.mocked(fs.existsSync).mockReturnValue(true);
     vi.mocked(fs.readFileSync).mockImplementation(((path: string) => {
+      // A legacy install: the mount table reads and shows no actuator mount.
+      if (path === "/proc/self/mountinfo") return "10 8 0:1 / / rw - overlay overlay rw\n";
       if (path === "/host-dpf/.claude/settings.local.json") {
         return JSON.stringify({ enabledPlugins: { "dpf-platform@dpf-platform-local": false } });
       }

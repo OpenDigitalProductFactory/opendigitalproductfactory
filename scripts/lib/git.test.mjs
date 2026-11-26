@@ -6,7 +6,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { GitCommandError, REPO_ROOT, gitText, gitTextOrNull, runGit } from "./git.mjs";
+import { GitCommandError, REPO_ROOT, gitText, gitTextOrNull, runGit, runGitAsync } from "./git.mjs";
 
 function failingExec(stdout, stderr, status) {
   return () => {
@@ -118,4 +118,36 @@ test("reads a tracked-file inventory beyond Node's 1 MiB default without ignorin
   } finally {
     rmSync(cwd, { recursive: true, force: true });
   }
+});
+
+test("runGitAsync: resolves ok with stdout from a real repository", async () => {
+  const result = await runGitAsync(["rev-parse", "--is-inside-work-tree"], { cwd: REPO_ROOT });
+  assert.deepEqual({ ...result, stdout: result.stdout.trim() }, { ok: true, stdout: "true", stderr: "", status: 0, timedOut: false });
+});
+
+test("runGitAsync: never rejects; a failure carries git's status and stderr", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "git-async-"));
+  try {
+    const result = await runGitAsync(["rev-parse", "HEAD"], { cwd: dir });
+    assert.equal(result.ok, false);
+    assert.equal(result.timedOut, false);
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /not a git repository/i);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("runGitAsync: a timeout kill is reported as status 124, not as git's own failure", async () => {
+  let seen;
+  const execAsync = (_bin, args, options, callback) => {
+    seen = { args, options };
+    callback(Object.assign(new Error("killed"), { killed: true, signal: "SIGKILL" }), "partial", "");
+  };
+  const result = await runGitAsync(["fetch", "origin", "main"], { execAsync, timeout: 5, killSignal: "SIGKILL", env: { A: "1" } });
+  assert.deepEqual(result, { ok: false, stdout: "partial", stderr: "git timed out after 5ms and was terminated", status: 124, timedOut: true });
+  assert.deepEqual(seen.args, ["fetch", "origin", "main"]);
+  assert.equal(seen.options.timeout, 5);
+  assert.equal(seen.options.killSignal, "SIGKILL");
+  assert.deepEqual(seen.options.env, { A: "1" });
 });

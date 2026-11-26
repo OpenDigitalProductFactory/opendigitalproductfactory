@@ -1,7 +1,8 @@
 # ─── Stage 1: base ────────────────────────────────────────────────────────────
 # Cache bust: 2026-04-09-ideate-dispatch
 FROM node:24-alpine AS base
-RUN corepack enable && corepack prepare pnpm@10.33.2 --activate
+ENV COREPACK_HOME=/opt/dpf/corepack
+RUN corepack enable && corepack prepare pnpm@10.33.2 --activate && chmod -R a+rX /opt/dpf/corepack
 WORKDIR /app
 
 # ─── Dev stage (parallel branch — not part of production chain) ──────────────
@@ -83,10 +84,17 @@ COPY scripts/lib/capability-service-projection.mjs ./scripts/lib/
 COPY scripts/lib/capability-state-hash.mjs ./scripts/lib/
 COPY scripts/lib/transition-signing.mjs ./scripts/lib/
 COPY scripts/lib/maintenance-epoch-receipt.mjs ./scripts/lib/
+COPY scripts/lib/scope-writer-observation.mjs ./scripts/lib/
+COPY scripts/lib/docker-socket.mjs ./scripts/lib/
+COPY scripts/lib/entry-module.mjs ./scripts/lib/
 COPY scripts/lib/canonical-json.mjs ./scripts/lib/
 # The local-CI status set is shared by the gate scripts and the MCP evidence
 # handler, so the build stage needs it too (BI-C59AC8AF).
 COPY scripts/lib/local-integration-status.mjs ./scripts/lib/
+# Self-upgrade source preparation is shared with the source writer the actuator
+# launches (BI-224F56F1); the portal imports the same closure.
+COPY scripts/lib/upgrade-source/ ./scripts/lib/upgrade-source/
+COPY scripts/lib/error-message.mjs ./scripts/lib/
 # Build Studio carries a build's recorded gate decisions into its PR using the
 # same trailer names the readiness gates read (BI-BA6EDCDD).
 COPY scripts/lib/pr-trailer-contract.mjs ./scripts/lib/
@@ -134,6 +142,8 @@ COPY scripts/lib/capability-state-hash.mjs ./scripts/lib/
 COPY scripts/lib/capability-service-projection.mjs ./scripts/lib/
 COPY scripts/lib/transition-signing.mjs ./scripts/lib/
 COPY scripts/lib/maintenance-epoch-receipt.mjs ./scripts/lib/
+COPY scripts/lib/scope-writer-observation.mjs ./scripts/lib/
+COPY scripts/lib/docker-socket.mjs ./scripts/lib/
 COPY scripts/installer/resolve-host-identity.mjs ./scripts/installer/
 COPY scripts/installer/local-model-policy.json ./scripts/installer/
 COPY scripts/capability-service-catalog.generated.json ./scripts/
@@ -257,6 +267,10 @@ COPY scripts/lib/git-changed-files.mjs ./scripts/lib/
 COPY scripts/lib/git.mjs ./scripts/lib/
 COPY scripts/lib/entry-module.mjs ./scripts/lib/
 COPY scripts/lib/local-integration-status.mjs ./scripts/lib/
+# Self-upgrade source preparation is shared with the source writer the actuator
+# launches (BI-224F56F1); the portal imports the same closure.
+COPY scripts/lib/upgrade-source/ ./scripts/lib/upgrade-source/
+COPY scripts/lib/error-message.mjs ./scripts/lib/
 COPY scripts/module-size-baseline.txt ./scripts/
 COPY scripts/prose-lint-baseline.json ./scripts/
 COPY scripts/style-drift-baseline.json ./scripts/
@@ -438,6 +452,10 @@ ENV PORT=3000
 
 # Copy standalone Next.js output
 COPY --from=build /app/apps/web/.next/standalone ./
+# The served-writer probe validates the emitted dependency closure in the
+# runner, where the standalone files and their symlink targets are present.
+COPY --from=build /app/apps/web/.next/next-server.js.nft.json ./apps/web/.next/next-server.js.nft.json
+COPY --from=build /app/apps/web/.next/server/app/api/mcp/v1/route.js.nft.json ./apps/web/.next/server/app/api/mcp/v1/route.js.nft.json
 COPY --from=build /app/apps/web/.next/static ./apps/web/.next/static
 COPY --from=build /app/apps/web/public ./apps/web/public
 
@@ -583,6 +601,8 @@ COPY scripts/lib/transition-signing.mjs /promoter/scripts/lib/transition-signing
 COPY scripts/promoter-migration-envelope.mjs /promoter/scripts/promoter-migration-envelope.mjs
 COPY scripts/promoter-epoch-evidence.mjs /promoter/scripts/promoter-epoch-evidence.mjs
 COPY scripts/lib/maintenance-epoch-receipt.mjs /promoter/scripts/lib/maintenance-epoch-receipt.mjs
+COPY scripts/lib/scope-writer-observation.mjs /promoter/scripts/lib/scope-writer-observation.mjs
+COPY scripts/lib/docker-socket.mjs /promoter/scripts/lib/docker-socket.mjs
 COPY scripts/installer/validate-install-state.mjs /promoter/scripts/installer/validate-install-state.mjs
 COPY scripts/installer/install-state-transaction.mjs /promoter/scripts/installer/install-state-transaction.mjs
 COPY scripts/installer/install-release-assets.mjs /promoter/scripts/installer/install-release-assets.mjs
@@ -598,6 +618,14 @@ COPY scripts/lib/govern-capability-compose-args.mjs /promoter/scripts/lib/govern
 COPY scripts/lib/script-argv.mjs /promoter/scripts/lib/script-argv.mjs
 COPY scripts/lib/git.mjs /promoter/scripts/lib/git.mjs
 COPY scripts/lib/capability-state-hash.mjs /promoter/scripts/lib/capability-state-hash.mjs
+COPY scripts/source-writer.mjs /promoter/scripts/source-writer.mjs
+COPY scripts/promoter-candidate-build.mjs /promoter/scripts/promoter-candidate-build.mjs
+COPY scripts/lib/promoter-build-context-sources.mjs /promoter/scripts/lib/promoter-build-context-sources.mjs
+COPY scripts/lib/upgrade-source/prepare-source.mjs /promoter/scripts/lib/upgrade-source/prepare-source.mjs
+COPY scripts/lib/upgrade-source/transient-network.mjs /promoter/scripts/lib/upgrade-source/transient-network.mjs
+COPY scripts/lib/upgrade-source/lfs-materialization.mjs /promoter/scripts/lib/upgrade-source/lfs-materialization.mjs
+COPY scripts/lib/upgrade-source/version-stamp.mjs /promoter/scripts/lib/upgrade-source/version-stamp.mjs
+COPY scripts/lib/error-message.mjs /promoter/scripts/lib/error-message.mjs
 COPY scripts/capability-service-catalog.generated.json /promoter/scripts/capability-service-catalog.generated.json
 
 EXPOSE 3000
@@ -616,4 +644,4 @@ EXPOSE 3000
 # restart) can never leave the DB drifted. It is fail-closed: if migrations
 # can't apply, the portal does not start. portal-init is unaffected — it
 # overrides CMD with /docker-entrypoint.sh.
-CMD ["node", "/usr/local/bin/runtime-secret-bootstrap.mjs", "--", "/usr/local/bin/portal-migrate-boot.sh", "sh", "-c", "if [ -z \"$DEPLOYED_SHA\" ] && [ -s /app/.dpf-image-version ]; then DEPLOYED_SHA=\"$(tr -d '[:space:]' < /app/.dpf-image-version)\"; export DEPLOYED_SHA; fi; exec node apps/web/server.js"]
+CMD ["node", "/usr/local/bin/runtime-secret-bootstrap.mjs", "--", "/usr/local/bin/portal-migrate-boot.sh", "/usr/local/bin/node", "--disable-sigusr1", "/app/apps/web/server.js"]

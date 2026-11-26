@@ -3,7 +3,8 @@ import { readFile } from "node:fs/promises";
 import { prisma } from "@dpf/db";
 import { canonicalJson } from "@dpf/integration-shared/canonical-json";
 import { isRecord } from "@/lib/shared/coerce";
-import { verifyMaintenanceEpoch } from "../../../../scripts/lib/maintenance-epoch-receipt.mjs";
+import { readAttestedMaintenanceRetirement, verifyMaintenanceEpoch } from "../../../../scripts/lib/maintenance-epoch-receipt.mjs";
+import { usesPrivateActuator, readScopeWriterRetirement } from "@/lib/platform-runtime/actuator-client";
 import { readSuccessfulMaintenanceRecoveryPoint } from "./recovery-eligibility";
 
 export const MAINTENANCE_EPOCH_RECEIPT_PATH = "/dpf-state/maintenance-epoch-retirement.json";
@@ -23,19 +24,39 @@ export async function attachMaintenanceEpochEvidence(deps: {
   db?: EpochDb; now?: Date;
   readEnvelope?: () => Promise<string | null>;
   readSecret?: () => Promise<string>;
+  readAttested?: () => Promise<unknown>;
   // Internal diagnostic hook; callers must sanitize failures before reporting them.
   onProbeFailure?: (step: RetirementProbeStep, error: unknown) => void;
 } = {}): Promise<ImportResult> {
   const unavailable: ImportResult = { status: "unavailable" };
-  const bytes = await (deps.readEnvelope ?? (() => readFile(MAINTENANCE_EPOCH_RECEIPT_PATH, "utf8").catch(error => {
-    // An absent receipt is missing evidence, not a broken read probe.
-    if (error?.code !== "ENOENT") deps.onProbeFailure?.("read-retirement-receipt", error);
-    return null;
-  })))();
-  if (!bytes || bytes.length > 32_768) return unavailable;
-  let envelope: unknown, payload: unknown;
+  // The qualified portal reads the actuator's attested retirement; the legacy
+  // recipe reads and verifies the host receipt itself (BI-224F56F1).
+  const actuator = deps.readAttested ?? (!deps.readEnvelope
+    && await usesPrivateActuator() ? readScopeWriterRetirement : undefined);
+  let envelope: unknown, payload: unknown, attested: unknown;
+  if (actuator) {
+    try {
+      attested = await actuator();
+      envelope = isRecord(attested) ? attested.envelope : null;
+    } catch (error) {
+      deps.onProbeFailure?.("read-retirement-receipt", error);
+      return unavailable;
+    }
+  } else {
+    const bytes = await (deps.readEnvelope ?? (() => readFile(MAINTENANCE_EPOCH_RECEIPT_PATH, "utf8").catch(error => {
+      // An absent receipt is missing evidence, not a broken read probe.
+      if (error?.code !== "ENOENT") deps.onProbeFailure?.("read-retirement-receipt", error);
+      return null;
+    })))();
+    if (!bytes || bytes.length > 32_768) return unavailable;
+    try {
+      envelope = JSON.parse(bytes);
+    } catch (error) {
+      deps.onProbeFailure?.("parse-retirement-receipt", error);
+      return unavailable;
+    }
+  }
   try {
-    envelope = JSON.parse(bytes);
     payload = isRecord(envelope) && typeof envelope.payload === "string" ? JSON.parse(envelope.payload) : null;
   } catch (error) {
     deps.onProbeFailure?.("parse-retirement-receipt", error);
@@ -55,20 +76,23 @@ export async function attachMaintenanceEpochEvidence(deps: {
   if (!recovery
     || readiness?.result !== "ready" || readiness.mode !== "enforced"
     || readiness.targetSha !== run.targetSha || typeof readiness.imageDigest !== "string") return unavailable;
-  let secret: string;
-  try {
-    secret = await (deps.readSecret ?? (() => readFile("/dpf-state/runtime-transition.secret", "utf8")))();
-  } catch (error) {
-    deps.onProbeFailure?.("read-transition-secret", error);
-    return unavailable;
+  let secret = "";
+  if (!actuator) {
+    try {
+      secret = await (deps.readSecret ?? (() => readFile("/dpf-state/runtime-transition.secret", "utf8")))();
+    } catch (error) {
+      deps.onProbeFailure?.("read-transition-secret", error);
+      return unavailable;
+    }
   }
   let verified: { capturedAt: string };
   try {
-    verified = verifyMaintenanceEpoch(envelope, secret.trim(), {
+    const expected = {
       runId: run.runId, targetSha: run.targetSha, promoterDigest: readiness.imageDigest,
       recoveryPointDigest: createHash("sha256").update(canonicalJson(recovery)).digest("hex"),
       now: (deps.now ?? new Date()).getTime(),
-    });
+    };
+    verified = actuator ? readAttestedMaintenanceRetirement(attested, expected) : verifyMaintenanceEpoch(envelope, secret.trim(), expected);
   } catch (error) {
     deps.onProbeFailure?.("verify-maintenance-retirement", error);
     return unavailable;

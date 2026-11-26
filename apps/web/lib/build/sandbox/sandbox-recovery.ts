@@ -1,6 +1,7 @@
 import { prisma } from "@dpf/db";
 
 import { lazyChildProcess, lazyUtil } from "@/lib/shared/lazy-node";
+import { execSandbox } from "@/lib/workroom-runtime/sandbox-exec";
 
 import { diagnoseSandboxReadiness } from "./sandbox-admin";
 import {
@@ -66,7 +67,7 @@ const STALE_SLOT_IDLE_FLOOR_MS = 7 * 24 * 60 * 60 * 1000;
 export async function recoverSandbox(args: RecoverSandboxArgs): Promise<SandboxRecoveryResult> {
   const db = args.db ?? (prisma as unknown as SandboxRecoveryDb);
   const diagnose = args.diagnose ?? ((buildId: string) => diagnoseSandboxReadiness({ buildId }));
-  const runCommand = args.runCommand ?? runCommandDefault;
+  const runCommand = args.runCommand ?? runSandboxRecoveryCommand;
   const now = args.now ?? new Date();
   const before = await diagnose(args.buildId);
 
@@ -383,7 +384,18 @@ function shellQuote(value: string): string {
   return `'${value.replace(/'/g, `'\"'\"'`)}'`;
 }
 
-async function runCommandDefault(command: string, args: string[]): Promise<string> {
+export async function runSandboxRecoveryCommand(command: string, args: string[]): Promise<string> {
+  const observation = await import("@/lib/platform-runtime/actuator-client");
+  if (command === "docker" && await observation.usesPrivateActuator()) {
+    // BI-224F56F1: exec goes to the observed sandbox; start and restart go to
+    // the actuator's catalog restart of that sandbox; nothing else runs.
+    if (args[0] === "exec") return (await execSandbox(args, { timeout: 30_000 })).stdout;
+    const selected = await observation.readActuatorSandbox();
+    if ((args[0] !== "start" && args[0] !== "restart") || args.length !== 2
+      || (args[1] !== selected.containerId && args[1] !== selected.name)) throw new Error("sandbox_recovery_target_unproven");
+    await observation.restartActuatorService("sandbox");
+    return "";
+  }
   const { execFile } = lazyChildProcess();
   const { promisify } = lazyUtil();
   const execFileAsync = promisify(execFile);

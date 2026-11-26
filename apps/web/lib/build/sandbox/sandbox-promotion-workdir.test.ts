@@ -2,6 +2,13 @@
 // when per-build isolation is on, not from the shared /workspace root.
 // Kept apart from sandbox-promotion.test.ts, which is pure-function only.
 import { afterEach, describe, expect, it, vi } from "vitest";
+// A legacy install, stated rather than read from the host's /proc, which the
+// fail-closed mount rule would otherwise make platform-dependent.
+vi.mock("@/lib/platform-runtime/actuator-client", async importOriginal => ({
+  ...await importOriginal<typeof import("@/lib/platform-runtime/actuator-client")>(),
+  usesPrivateActuator: async () => false,
+  usesPrivateActuatorSync: () => false,
+}));
 
 const mocks = vi.hoisted(() => ({
   extractDiff: vi.fn(),

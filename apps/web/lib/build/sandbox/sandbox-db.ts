@@ -5,8 +5,15 @@
 
 import { lazyExec } from "@/lib/shared/lazy-node";
 import { Prisma, prisma } from "@dpf/db";
+import { execSandboxCommandLine } from "@/lib/workroom-runtime/sandbox-exec";
+import { sandboxDbThroughActuator } from "./sandbox-db-actuator";
 
-const exec = lazyExec();
+const localExec = lazyExec();
+/** BI-224F56F1: Docker lines are refused in the qualified portal (the
+ * sandbox database steps go to the actuator below); unchanged otherwise. */
+const exec: typeof localExec = (command, options) => (command.startsWith("docker ")
+  ? execSandboxCommandLine(command, options as { timeout?: number; maxBuffer?: number })
+  : localExec(command, options));
 
 // ─── Resource Limit Constants ─────────────────────────────────────────────────
 
@@ -123,7 +130,13 @@ export async function createSandboxDbStack(
 
 // ─── Lifecycle — Health Checks ────────────────────────────────────────────────
 
-export async function waitForSandboxDb(dbContainerId: string): Promise<void> {
+export async function waitForSandboxDb(dbContainerId: string, buildId?: string): Promise<void> {
+  const deadline = Date.now() + POLL_TIMEOUT_MS;
+  for (let routed = await sandboxDbThroughActuator(buildId, "ready"); routed; routed = await sandboxDbThroughActuator(buildId, "ready")) {
+    if (routed.ok) return;
+    if (!buildId || Date.now() >= deadline) throw new Error(`PostgreSQL did not become ready within ${POLL_TIMEOUT_MS / 1000}s: ${routed.detail}`);
+    await new Promise<void>((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
+  }
   await pollUntilReady(
     dbContainerId,
     "pg_isready -U dpf",
@@ -136,7 +149,13 @@ export async function waitForSandboxDb(dbContainerId: string): Promise<void> {
 export async function seedSandboxDb(
   productionDbContainerName: string,
   sandboxDbContainerId: string,
+  buildId?: string,
 ): Promise<void> {
+  const routed = await sandboxDbThroughActuator(buildId, "seed");
+  if (routed) {
+    if (!routed.ok) throw new Error(`Sandbox database seed failed: ${routed.detail}`);
+    return;
+  }
   await exec(
     `docker exec ${productionDbContainerName} pg_dump --data-only -U dpf dpf | docker exec -i ${sandboxDbContainerId} psql -U dpf dpf`,
     { maxBuffer: 100 * 1024 * 1024 },

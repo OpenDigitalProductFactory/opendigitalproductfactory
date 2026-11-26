@@ -37,6 +37,8 @@
 !scripts/promoter-migration-envelope.mjs
 !scripts/promoter-epoch-evidence.mjs
 !scripts/lib/maintenance-epoch-receipt.mjs
+!scripts/lib/scope-writer-observation.mjs
+!scripts/lib/docker-socket.mjs
 !scripts/installer/validate-install-state.mjs
 !scripts/installer/migrate-install-state.mjs
 !scripts/installer/resolve-host-identity.mjs
@@ -58,3 +60,12 @@
 !scripts/lib/canonical-json.mjs
 !scripts/lib/local-sandbox-fence.mjs
 !scripts/lib/entry-module.mjs
+# BI-224F56F1: authorized source writer and its shared upgrade-source modules.
+!scripts/source-writer.mjs
+!scripts/promoter-candidate-build.mjs
+!scripts/lib/promoter-build-context-sources.mjs
+!scripts/lib/upgrade-source/prepare-source.mjs
+!scripts/lib/upgrade-source/transient-network.mjs
+!scripts/lib/upgrade-source/lfs-materialization.mjs
+!scripts/lib/upgrade-source/version-stamp.mjs
+!scripts/lib/error-message.mjs

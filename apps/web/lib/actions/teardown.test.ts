@@ -37,6 +37,13 @@ vi.mock("@dpf/db", () => ({ prisma: { backupRun: { findUnique: mocks.backupFind 
 vi.mock("@/lib/self-upgrade/promoter", () => ({ ensurePromoterImage: mocks.ensurePromoter }));
 vi.mock("@/lib/teardown/dispatcher", () => ({ dispatchTeardown: mocks.dispatch }));
 vi.mock("node:fs/promises", () => ({ readFile: mocks.readFile }));
+// A legacy install: the fs fake above answers every path, so the mount rule is
+// stated rather than inferred from a placeholder (read as mounted, fail closed).
+// The hardened refusal is covered by qualified-portal-refusals.test.ts.
+vi.mock("@/lib/platform-runtime/actuator-client", async importOriginal => ({
+  ...await importOriginal<typeof import("@/lib/platform-runtime/actuator-client")>(),
+  usesPrivateActuator: async () => false,
+}));
 
 import { executeInstallationTeardown, previewInstallationTeardown } from "./teardown";
 

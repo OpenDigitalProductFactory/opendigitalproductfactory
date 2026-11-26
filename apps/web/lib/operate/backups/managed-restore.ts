@@ -37,6 +37,8 @@ import crypto from "node:crypto";
 import { summarizeScriptFailure, type PrismaLike } from "./managed-backup";
 import { resolveManagedScriptPath, runManagedScript } from "./managed-script-path";
 import type { RestoreEngineSpec } from "./engine-specs";
+import { managedPostgresConnection } from "./managed-postgres-connection";
+import { usesPrivateActuator } from "@/lib/platform-runtime/actuator-client";
 import { listUnfinishedRestoreJournals } from "./paired-restore-journal";
 
 const BACKUPS_ROOT = "/backups";
@@ -223,6 +225,10 @@ export async function runManagedRestore(
       throw new RestoreIntegrityError("Resolve the unfinished paired restore before starting a standalone restore.");
     }
 
+    const env = spec.target === "postgres" && !args.scriptPath && await usesPrivateActuator()
+      ? { ...managedPostgresConnection(), DUMP_PATH: artifactPath }
+      : spec.buildEnv({ dumpPath: artifactPath });
+
     // ── 2. Pre-restore safety backup ──────────────────────────────────────
     trace(spec.messages.safetyStartTrace);
     const safetyTake = args.takeSafetyBackup
@@ -242,7 +248,6 @@ export async function runManagedRestore(
       : null;
 
     // ── 3. Run the restore script ─────────────────────────────────────────
-    const env = spec.buildEnv({ dumpPath: artifactPath });
     // Routes through the shared /bin/sh chokepoint so the script need not
     // carry the executable bit (which git-on-Windows + Docker COPY strip).
     const outcome = await runManagedScript(scriptPath, {

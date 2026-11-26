@@ -56,6 +56,9 @@ export async function issuePreviewAutomationSignIn(input: {
   leaseId: string; ownerSessionId: string; nextPath?: string; userId: string;
   context?: { agentId?: string; authSource?: string };
 }) {
+  // BI-224F56F1: the qualified portal has no Docker and must not receive a
+  // preview's signing secret; issuance there waits for an actuator owner.
+  if (await (await import("@/lib/platform-runtime/actuator-client")).usesPrivateActuator()) throw new Error("preview_issuer_unavailable_in_qualified_portal");
   const lease = await prisma.nonProductionEnvironmentLease.findUnique({ where: { leaseId: input.leaseId } });
   assertPreviewAdmission(lease, input.ownerSessionId, new Date());
   const actor = await workCapsuleActor(input.userId, input.context);

@@ -33,6 +33,8 @@ export function prebuildPromoterParams(base: PromoterParams, runId: string): Pro
   return {
     ...base,
     phase: "build",
+    // The owning run, so the private actuator can bind this launch to it.
+    launchOwner: { kind: "self-upgrade", runId },
     timeoutMs: prebuildTimeoutMs(base),
     // Its own container name, so it never collides with the swap's promoter.
     containerName: `dpf-promoter-${runId}-prebuild`,

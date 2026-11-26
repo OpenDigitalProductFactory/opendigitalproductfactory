@@ -10,7 +10,8 @@ import catalogSeed from "../../../../scripts/capability-service-catalog.generate
 import { isPromoterAvailable, resolvePromoterArtifact, runPromoter, runRuntimeCapabilityProtocolProbe } from "@/lib/self-upgrade/promoter";
 import { countAttributedWork, createPrismaWorkAttributionStore } from "./work-attribution";
 import { computeCapabilityStateVersion, coordinateRuntimeCapabilityTransition, createPrismaRuntimeTransitionReceipts } from "./transition-coordinator";
-import { canonicalTransitionPayload, prepareRuntimeReconciliationIntent, type RuntimeReconciliationIntent, type RuntimeServiceImagePlan, type RuntimeTransitionReceipt } from "./transition-protocol";
+import { canonicalTransitionPayload, prepareRuntimeReconciliationIntent, validateRuntimeCapabilityProtocolInfo, type RuntimeReconciliationIntent, type RuntimeServiceImagePlan, type RuntimeTransitionReceipt } from "./transition-protocol";
+import type { ResolvedPromoterArtifact } from "@/lib/self-upgrade/promoter-artifact";
 import { computeCapabilityStateVersion as computeHostStateVersion } from "../../../../scripts/lib/capability-state-hash.mjs";
 import { runtimeTransitionHostContext, runtimeTransitionHostPlatform } from "./runtime-transition-host-context";
 
@@ -45,7 +46,7 @@ async function readReceipt(id: string): Promise<RuntimeTransitionReceipt> {
   return JSON.parse(await readFile(receiptPath(id), "utf8")) as RuntimeTransitionReceipt;
 }
 
-async function activeRuntimeTransitionIds(): Promise<string[]> {
+export async function activeRuntimeTransitionIds(): Promise<string[]> {
   const active = await prisma.runtimeCapabilityTransition.findMany({ where: { status: { in: ["pending", "applying", "host_applied", "compensating"] } }, select: { transitionId: true } });
   return active.map((row) => row.transitionId).sort();
 }
@@ -68,7 +69,8 @@ export async function rotateProductionRuntimeTransitionSecret() {
 /** The portal image carries the same source closure used to build its promoter.
  * Expected bytes come from that packaged closure, never the host install or a
  * caller-supplied digest. This probe has no host mounts or launch authority. */
-async function inspectPackagedReconciliationProtocol(observedHostSnapshot?: RuntimeReconciliationIntent["observedHost"]) {
+/** The packaged protocol this server expects, from its own /promoter files. */
+async function packagedProtocolExpectation() {
   const image = await readImageVersion();
   if (!image || image.source !== "git-sha" || !/^[a-f0-9]{40}$/.test(image.raw)) throw new Error("runtime_protocol_server_identity_missing");
   const sourceSha = image.raw;
@@ -81,21 +83,61 @@ async function inspectPackagedReconciliationProtocol(observedHostSnapshot?: Runt
   ]);
   const expected = { sourceSha, actuatorSha256: createHash("sha256").update(actuator).digest("hex"), signerSha256: createHash("sha256").update(signer).digest("hex"),
     ...(gitReader ? { imageQualifierSha256: createHash("sha256").update(imageQualifier).update("\0").update(gitReader).digest("hex") } : {}) };
-  // Consumer installs carry published promoter images, not a source-built
-  // dpf-promoter:<sha>. Resolve the installed immutable release, never its
-  // moving discovery channel; the existing artifact validator still binds the
-  // source revision and packaged protocol bytes before any host authority.
+  return { sourceSha, expected };
+}
+
+/** Consumer installs carry published promoter images, not a source-built
+ * dpf-promoter:<sha>. Resolve the installed immutable release, never its
+ * moving discovery channel. */
+function protocolReleaseIdentity(observedHostSnapshot?: RuntimeReconciliationIntent["observedHost"]) {
   const installMode = observedHostSnapshot && "installMode" in observedHostSnapshot ? observedHostSnapshot.installMode : null;
   const releaseInstall = installMode === "consumer" || installMode === "customer";
   const release = releaseInstall ? parseReleaseInstallContext({ state: observedHostSnapshot, markerMode: null, env: process.env }) : null;
   if (releaseInstall && (!release || !RELEASE_IMAGE_TAG.test(release.imageTag) || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,254}$/.test(release.ghcrOwner))) {
     throw new Error("runtime_protocol_release_identity_missing");
   }
+  return release;
+}
+
+function requireReconciliationProtocol(info: { signingVersions: readonly number[]; applyVersions: readonly number[]; reconciliationVersions: readonly number[] }) {
+  if (!info.signingVersions.includes(2) || !info.applyVersions.includes(2) || !info.reconciliationVersions.includes(2)) throw new Error("runtime_reconciliation_protocol_unsupported");
+}
+
+/** Resolve the packaged promoter and run its fixed protocol probe. The probe
+ * has no host mounts or launch authority. In the qualified portal this runs
+ * inside the private actuator, which also requires a release identity to name
+ * the install's own registry owner. */
+export async function inspectPackagedReconciliationProtocolAtDaemon(observedHostSnapshot?: RuntimeReconciliationIntent["observedHost"], allowedOwner?: string,
+  expectation?: Awaited<ReturnType<typeof packagedProtocolExpectation>>) {
+  const { sourceSha, expected } = expectation ?? await packagedProtocolExpectation();
+  const release = protocolReleaseIdentity(observedHostSnapshot);
+  if (release && allowedOwner !== undefined && release.ghcrOwner.toLowerCase() !== allowedOwner) throw new Error("runtime_protocol_release_owner_refused");
+  // The existing artifact validator still binds the source revision and
+  // packaged protocol bytes before any host authority.
   const reference = release ? `ghcr.io/${release.ghcrOwner.toLowerCase()}/dpf-promoter:${release.imageTag}` : null;
   const artifact = await resolvePromoterArtifact({ targetSha: sourceSha,
     ...(reference ? { promoterImage: reference, candidateReference: reference } : {}) });
   const info = await runRuntimeCapabilityProtocolProbe({ artifact, expected, containerName: `dpf-runtime-protocol-${randomUUID()}`, ...(observedHostSnapshot ? { observedHostSnapshot } : {}) });
-  if (!info.signingVersions.includes(2) || !info.applyVersions.includes(2) || !info.reconciliationVersions.includes(2)) throw new Error("runtime_reconciliation_protocol_unsupported");
+  requireReconciliationProtocol(info);
+  return { info, artifact, release };
+}
+
+async function inspectPackagedReconciliationProtocol(observedHostSnapshot?: RuntimeReconciliationIntent["observedHost"]) {
+  // The server's own identity is proven before anything else is read.
+  const expectation = await packagedProtocolExpectation();
+  const observation = await import("@/lib/platform-runtime/actuator-client");
+  if (!await observation.usesPrivateActuator()) return inspectPackagedReconciliationProtocolAtDaemon(observedHostSnapshot, undefined, expectation);
+  // BI-224F56F1: the actuator probes; this server re-checks the answer against
+  // its own expectation and snapshot, and derives the release identity itself.
+  const { sourceSha, expected } = expectation;
+  const release = protocolReleaseIdentity(observedHostSnapshot);
+  const result = await observation.probeActuatorRuntimeProtocol({ observedHostSnapshot: observedHostSnapshot ?? null }, { timeoutMs: 3 * 60_000 });
+  const artifact = result && typeof result === "object" ? (result as { artifact?: ResolvedPromoterArtifact }).artifact : undefined;
+  if (!artifact || artifact.sourceSha !== sourceSha || !/^sha256:[a-f0-9]{64}$/.test(artifact.digest)) throw new Error("runtime_protocol_actuator_unconfirmed");
+  const info = validateRuntimeCapabilityProtocolInfo((result as { info?: unknown }).info, expected);
+  const snapshotHash = observedHostSnapshot === undefined ? undefined : createHash("sha256").update(Buffer.from(JSON.stringify(observedHostSnapshot))).digest("hex");
+  if (snapshotHash && info.validatedSnapshotSha256 !== snapshotHash) throw new Error("runtime_protocol_snapshot_mismatch");
+  requireReconciliationProtocol(info);
   return { info, artifact, release };
 }
 
@@ -112,8 +154,11 @@ async function serverServiceImagePlan(protocol: Awaited<ReturnType<typeof inspec
     // Reuse the release manifest format and parser used by the existing image
     // owner. Discovery channels and caller-supplied image references are absent.
     const reference = `ghcr.io/${protocol.release.ghcrOwner.toLowerCase()}/dpf-browser-use:${protocol.release.imageTag}`;
-    const result = await runProcessWithBudget("docker", ["buildx", "imagetools", "inspect", reference, "--format", "{{json .Manifest}}"],
-      { timeoutMs: 60_000, maxStdoutBytes: 8192, timeoutLabel: "runtime-service-image-resolution-timeout" });
+    const args = ["buildx", "imagetools", "inspect", reference, "--format", "{{json .Manifest}}"];
+    // BI-224F56F1: the qualified portal resolves through the actuator's fixed release image operation.
+    const routed = await (await import("@/lib/self-upgrade/doctools-image-actuator")).doctoolsDockerThroughActuator(args);
+    const result = routed ? { ...routed, outputLimitExceeded: false }
+      : await runProcessWithBudget("docker", args, { timeoutMs: 60_000, maxStdoutBytes: 8192, timeoutLabel: "runtime-service-image-resolution-timeout" });
     const digest = result.exitCode === 0 && !result.outputLimitExceeded ? parseImagetoolsDigest(result.stdout) : null;
     if (!digest) throw new Error("runtime_service_image_manifest_unproven");
     source = { kind: "published", sourceSha, reference: `ghcr.io/${protocol.release.ghcrOwner.toLowerCase()}/dpf-browser-use@${digest}` };

@@ -33,6 +33,7 @@ vi.mock("./cli-pool-status", () => ({ recordCliRateLimit: vi.fn(), clearCliRateL
 vi.mock("@/lib/build/sandbox/agent-cli-runtime", () => ({
   writeSandboxFile: vi.fn(async (file: { path: string; content: string }) => { fixture.writes.push(file); }),
 }));
+vi.mock("@/lib/workroom-runtime/sandbox-exec", () => import("@/lib/workroom-runtime/sandbox-exec.test-support").then(m => m.legacySandboxExec()));
 vi.mock("@/lib/shared/lazy-node", () => ({
   lazyUtil: () => ({ promisify }),
   lazyChildProcess: () => ({

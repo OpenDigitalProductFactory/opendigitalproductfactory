@@ -1,4 +1,4 @@
-import { lazyChildProcess } from "@/lib/shared/lazy-node";
+import { spawnSandboxExec } from "@/lib/workroom-runtime/sandbox-exec";
 import { StringDecoder } from "node:string_decoder";
 
 const SANDBOX_CONTAINER = process.env.SANDBOX_CONTAINER_ID ?? "dpf-sandbox-1";
@@ -116,7 +116,7 @@ export async function discoverCodexCliModels(login: CodexCatalogLogin): Promise<
   delete childEnv.CODEX_API_KEY;
 
   return new Promise<DiscoveredModel[]>((resolve, reject) => {
-    const proc = lazyChildProcess().spawn("docker", args, {
+    const proc = spawnSandboxExec(args, {
       stdio: ["pipe", "pipe", "pipe"],
       env: childEnv,
     });

@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
+import type { PromoterLaunchOwner } from "./promoter-launch";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 import type { SelfUpgradeHostIdentity } from "./config";
 import type { InstallStateMigrationHandoff } from "./preflight";
@@ -83,14 +84,11 @@ export async function resolvePromoterArtifact(
   );
 }
 
-export async function runPromoterReadiness(
-  params: PromoterParams & { artifact: ResolvedPromoterArtifact },
-): Promise<PromoterResult> {
+export const runPromoterReadiness = async (params: PromoterParams & { artifact: ResolvedPromoterArtifact }): Promise<PromoterResult> => // BI-224F56F1
+  (await import("./promoter-actuator")).routedOrLocalPromoter(await (await import("./promoter-actuator")).readinessThroughPrivateActuator(params), () => runPromoterReadinessAtDaemon(params));
+export async function runPromoterReadinessAtDaemon(params: PromoterParams & { artifact: ResolvedPromoterArtifact }): Promise<PromoterResult> {
   const { command, args } = await buildCompatiblePromoterCommand(params, buildPromoterReadinessCommand, createPromoterDockerRunner(params));
-  return runProcessWithBudget(command, args, {
-    timeoutMs: Math.min(resolvePromoterTimeoutMs(params), 5 * 60_000),
-    containerName: params.containerName,
-  });
+  return runProcessWithBudget(command, args, { timeoutMs: Math.min(resolvePromoterTimeoutMs(params), 5 * 60_000), containerName: params.containerName });
 }
 
 /** Probe the verified packaged actuator without any host authority or mounts. */
@@ -173,6 +171,8 @@ export type PromoterParams = {
    * targeted for cleanup (SUR-756751D1). Convention: `dpf-promoter-<runId>`.
    */
   containerName?: string;
+  /** Canonical durable owner for launches that can change the live runtime. */
+  launchOwner?: PromoterLaunchOwner;
   /**
    * BI-F9EE05E5 plan item 0: "build" runs promote.sh's prepare and image build
    * only (PROMOTE_PHASE=build), before the drain, so admission is not closed
@@ -460,26 +460,11 @@ export function buildPromoterReadinessCommand(
  * dryRun never swaps, so callers skip this check on the dry-run path.
  */
 export async function isPromoterAvailable(promoterImage?: string): Promise<boolean> {
-  const image =
-    promoterImage && promoterImage.length > 0 ? promoterImage : DEFAULT_PROMOTER_IMAGE;
-  return new Promise((resolve) => {
-    let settled = false;
-    const finish = (ok: boolean): void => {
-      if (settled) return;
-      settled = true;
-      resolve(ok);
-    };
-    try {
-      const child = spawn("docker", ["image", "inspect", image], { env: { ...process.env } });
-      // Drain stdio so the child can exit cleanly; we only care about the code.
-      child.stdout?.on("data", () => {});
-      child.stderr?.on("data", () => {});
-      child.on("close", (code: number | null) => finish(code === 0));
-      child.on("error", () => finish(false));
-    } catch {
-      finish(false);
-    }
-  });
+  const args = ["image", "inspect", "--format", "{{.Id}}", promoterImage && promoterImage.length > 0 ? promoterImage : DEFAULT_PROMOTER_IMAGE];
+  // BI-224F56F1: the qualified portal asks the actuator's fixed presence check.
+  const result = (await (await import("./doctools-image-actuator")).doctoolsDockerThroughActuator(args).catch(() => null))
+    ?? await runProcessWithBudget("docker", args, { timeoutMs: 30_000, maxStdoutBytes: 1024 }).catch(() => null);
+  return result?.exitCode === 0;
 }
 
 /**
@@ -520,6 +505,8 @@ export const PROMOTER_JIT_BUILD_SCRIPT =
   "cp /promoter/scripts/promoter-migration-envelope.mjs \"$BDIR/scripts/promoter-migration-envelope.mjs\" && " +
   "cp /promoter/scripts/promoter-epoch-evidence.mjs \"$BDIR/scripts/promoter-epoch-evidence.mjs\" && " +
   "cp /promoter/scripts/lib/maintenance-epoch-receipt.mjs \"$BDIR/scripts/lib/maintenance-epoch-receipt.mjs\" && " +
+  "cp /promoter/scripts/lib/scope-writer-observation.mjs \"$BDIR/scripts/lib/scope-writer-observation.mjs\" && " +
+  "cp /promoter/scripts/lib/docker-socket.mjs \"$BDIR/scripts/lib/docker-socket.mjs\" && " +
   "cp /promoter/scripts/installer/validate-install-state.mjs \"$BDIR/scripts/installer/validate-install-state.mjs\" && " +
   "cp /promoter/scripts/installer/migrate-install-state.mjs \"$BDIR/scripts/installer/migrate-install-state.mjs\" && " +
   "cp /promoter/scripts/installer/resolve-host-identity.mjs \"$BDIR/scripts/installer/resolve-host-identity.mjs\" && " +
@@ -527,15 +514,13 @@ export const PROMOTER_JIT_BUILD_SCRIPT =
   "cp /promoter/scripts/installer/install-release-assets.mjs \"$BDIR/scripts/installer/install-release-assets.mjs\" && " +
   "cp /promoter/scripts/installer/install-state-lock-contract.json \"$BDIR/scripts/installer/install-state-lock-contract.json\" && " +
   "cp /promoter/scripts/installer/install-state-schema-registry.mjs \"$BDIR/scripts/installer/install-state-schema-registry.mjs\" && " +
-  "cp /promoter/scripts/installer/install-state.schema.json \"$BDIR/scripts/installer/install-state.schema.json\" && " +
-  "cp /promoter/scripts/installer/install-state.v1.schema.json \"$BDIR/scripts/installer/install-state.v1.schema.json\" && " +
+  "cp /promoter/scripts/installer/install-state.schema.json \"$BDIR/scripts/installer/install-state.schema.json\" && cp /promoter/scripts/installer/install-state.v1.schema.json \"$BDIR/scripts/installer/install-state.v1.schema.json\" && " +
   "cp /promoter/scripts/installer/install-state.v2.schema.json \"$BDIR/scripts/installer/install-state.v2.schema.json\" && " +
-  "cp /promoter/scripts/lib/resolve-capability-compose-profiles.mjs \"$BDIR/scripts/lib/resolve-capability-compose-profiles.mjs\" && " +
-  "cp /promoter/scripts/lib/govern-capability-compose-args.mjs \"$BDIR/scripts/lib/govern-capability-compose-args.mjs\" && " +
-  "cp /promoter/scripts/lib/script-argv.mjs \"$BDIR/scripts/lib/script-argv.mjs\" && " +
-  "cp /promoter/scripts/lib/git.mjs \"$BDIR/scripts/lib/git.mjs\" && " +
+  "cp /promoter/scripts/lib/resolve-capability-compose-profiles.mjs \"$BDIR/scripts/lib/resolve-capability-compose-profiles.mjs\" && cp /promoter/scripts/lib/govern-capability-compose-args.mjs \"$BDIR/scripts/lib/govern-capability-compose-args.mjs\" && " +
+  "cp /promoter/scripts/lib/script-argv.mjs \"$BDIR/scripts/lib/script-argv.mjs\" && cp /promoter/scripts/lib/git.mjs \"$BDIR/scripts/lib/git.mjs\" && " +
   "cp /promoter/scripts/lib/capability-state-hash.mjs \"$BDIR/scripts/lib/capability-state-hash.mjs\" && " +
   "cp /promoter/scripts/capability-service-catalog.generated.json \"$BDIR/scripts/capability-service-catalog.generated.json\" && " +
+  "mkdir -p \"$BDIR/scripts/lib/upgrade-source\" && cp /promoter/scripts/source-writer.mjs \"$BDIR/scripts/source-writer.mjs\" && cp /promoter/scripts/promoter-candidate-build.mjs \"$BDIR/scripts/promoter-candidate-build.mjs\" && cp /promoter/scripts/lib/promoter-build-context-sources.mjs \"$BDIR/scripts/lib/promoter-build-context-sources.mjs\" && cp /promoter/scripts/lib/upgrade-source/prepare-source.mjs \"$BDIR/scripts/lib/upgrade-source/prepare-source.mjs\" && cp /promoter/scripts/lib/upgrade-source/transient-network.mjs \"$BDIR/scripts/lib/upgrade-source/transient-network.mjs\" && cp /promoter/scripts/lib/upgrade-source/lfs-materialization.mjs \"$BDIR/scripts/lib/upgrade-source/lfs-materialization.mjs\" && cp /promoter/scripts/lib/upgrade-source/version-stamp.mjs \"$BDIR/scripts/lib/upgrade-source/version-stamp.mjs\" && cp /promoter/scripts/lib/error-message.mjs \"$BDIR/scripts/lib/error-message.mjs\" && " +
   "tar -C \"$BDIR\" -c . | docker buildx build --load -t dpf-promoter -f Dockerfile.promoter -";
 
 /**
@@ -607,6 +592,9 @@ export async function ensurePromoterImage(
   promoterImage?: string,
 ): Promise<EnsurePromoterResult> {
   const present = await isPromoterAvailable(promoterImage);
+  // BI-224F56F1: the qualified portal builds no image; the actuator's candidate stage builds the run's promoter (DI-B3171A8F09DC).
+  if (await (await import("@/lib/platform-runtime/actuator-client")).usesPrivateActuator()) return present
+    ? { ok: true, alreadyPresent: true, built: false } : { ok: false, alreadyPresent: false, built: false, skipReason: "build-failed", detail: "The installed promoter image is missing." };
   const action = decidePromoterEnsureAction(
     present,
     isJitBuildablePromoterImage(promoterImage),
@@ -763,23 +751,34 @@ import {
   runProcessWithBudget,
 } from "@/lib/shared/run-process-with-budget";
 
-export async function runPromoter(params: PromoterParams, assertAdmission?: () => Promise<void>): Promise<PromoterResult> {
-  const docker = createPromoterDockerRunner(params);
-  const { command, args } = await buildCompatiblePromoterCommand(params, buildPromoterCommand, async (args) => {
-    // A registry pull is also a new host effect. Recheck after any artifact inspection.
-    if (args[0] === "pull") await assertAdmission?.();
-    return docker(args);
-  });
+/** The one fixed serializer for a promoter launch; shared with the actuator. */
+export const buildAdmittedPromoterCommand = (input: PromoterParams, docker = createPromoterDockerRunner(input)) => buildCompatiblePromoterCommand(input, buildPromoterCommand, docker);
+// BI-224F56F1: no socket in the immutable portal; the actuator runs runPromoterAtDaemon after admission and re-runs the swap fence itself (BI-3C3CCC59).
+export const runPromoter = async (params: PromoterParams, assertAdmission?: () => Promise<void>): Promise<PromoterResult> => (await import("./promoter-actuator")).routedOrLocalPromoter(await (await import("./promoter-actuator")).launchThroughPrivateActuator(params, undefined, undefined, assertAdmission), () => runPromoterAtDaemon(params, assertAdmission));
+/**
+ * Where the launch runs decides how it runs. "actuator": the private actuator,
+ * after its admission, uses the durable owned launch (create/start/wait under
+ * the canonical admission lock, the container kept as a replay barrier).
+ * "local" (the default): an install without the actuator keeps the original
+ * `docker run --rm` launch unchanged, whatever launchOwner says.
+ */
+export type PromoterLaunchSite = "local" | "actuator";
+export const usesDurablePromoterLaunch = (params: PromoterParams, site: PromoterLaunchSite): boolean =>
+  site === "actuator" && Boolean(params.launchOwner) && !params.runtimeTransitionAuthorityOperation && !params.dryRun && params.phase !== "build";
+export async function runPromoterAtDaemon(params: PromoterParams, assertAdmission?: () => Promise<void>,
+  site: PromoterLaunchSite = "local"): Promise<PromoterResult> {
+  if (usesDurablePromoterLaunch(params, site) && params.launchOwner) {
+    return (await import("./promoter-launch")).runAdmittedPromoter(params, params.launchOwner, params.promoterImage || DEFAULT_PROMOTER_IMAGE, buildAdmittedPromoterCommand, assertAdmission);
+  }
+  const docker = createPromoterDockerRunner(params); // A registry pull is also a new host effect: recheck admission first.
+  const { command, args } = await buildAdmittedPromoterCommand(params, async (args) => { if (args[0] === "pull") await assertAdmission?.(); return docker(args); });
   // A retry must not replace or erroneously fail an already running promoter (SUR-E2BF265E).
   const name = params.containerName;
   if (name) {
     const action = decidePromoterLaunch(await inspectPromoterContainerState(name));
     if (action === "defer") {
-      return {
-        exitCode: PROMOTER_ALREADY_RUNNING_EXIT_CODE,
-        stdout: "",
-        stderr: `[promoter-already-running] a promoter container named ${name} is already building this run; deferring to it instead of launching a duplicate.`,
-      };
+      return { exitCode: PROMOTER_ALREADY_RUNNING_EXIT_CODE, stdout: "",
+        stderr: `[promoter-already-running] a promoter container named ${name} is already building this run; deferring to it instead of launching a duplicate.` };
     }
     if (action === "reclaim") {
       // A stopped container may have survived --rm after a daemon restart.

@@ -2923,6 +2923,9 @@
       "docs/architecture/capability-driven-runtime-profiles.md",
       "docs/operations/install.md"
     ],
+    "scripts/lib/upgrade-source/prepare-source.mjs": [
+      "docs/dev/collision-free-dev-workflow.md"
+    ],
     "scripts/lib/worktree-provision.mjs": [
       "docs/architecture/branch-and-worktree-runbook.md",
       "docs/architecture/delivery-surfaces-runbook.md"
@@ -4143,7 +4146,8 @@
       "apps/web/lib/golden-triangle/compile.ts"
     ],
     "docs/dev/collision-free-dev-workflow.md": [
-      "apps/web/lib/self-upgrade/prepare-source.ts"
+      "apps/web/lib/self-upgrade/prepare-source.ts",
+      "scripts/lib/upgrade-source/prepare-source.mjs"
     ],
     "docs/dogfood/2026-05-23-dale-hvac-build-studio.md": [
       "apps/web/lib/build/ideate-build-resolution.ts",

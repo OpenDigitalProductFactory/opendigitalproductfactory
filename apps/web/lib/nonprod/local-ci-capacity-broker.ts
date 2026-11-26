@@ -5,6 +5,7 @@ import type { LocalCiHostPressure } from "./local-ci-pool-policy";
 import localCiSlotResources from "./local-ci-slot-resources.json" with {
   type: "json",
 };
+import { usesPrivateActuator, readActuatorCiCapacity } from "@/lib/platform-runtime/actuator-client";
 
 type MaybePromise<T> = T | Promise<T>;
 
@@ -190,6 +191,12 @@ async function defaultBuilderMemoryUsageBytes(): Promise<number[]> {
   return builderMemoryUsageBytesFromDocker(dockerSocketGet);
 }
 
+export async function observeCiCapacityAtDaemon() {
+  const [daemon, memory] = await Promise.allSettled([defaultDockerHealthy(), defaultBuilderMemoryUsageBytes()]);
+  return { dockerHealthy: daemon.status === "fulfilled" ? daemon.value : null,
+    builderMemoryUsageBytes: memory.status === "fulfilled" ? memory.value : null };
+}
+
 /** How long the CPU sample runs. Matches the host client's window (BI-48F42581). */
 export const LOCAL_CI_CPU_SAMPLE_WINDOW_MS = 1_000;
 
@@ -277,14 +284,33 @@ const DEFAULT_PROBES: LocalCiServerPressureProbes = {
  * build) dropped every server number and reported "host-cpu-unmeasurable".
  */
 export async function observeLocalCiServerPressure(
-  probes: LocalCiServerPressureProbes = DEFAULT_PROBES,
+  probes?: LocalCiServerPressureProbes,
 ): Promise<LocalCiHostPressure> {
-  const observedAt = probes.now().toISOString();
+  if (!probes && await usesPrivateActuator()) {
+    const capacity = readActuatorCiCapacity();
+    probes = {
+      ...DEFAULT_PROBES,
+      dockerHealthy: async () => {
+        const { dockerHealthy } = await capacity;
+        if (typeof dockerHealthy !== "boolean") throw new Error("actuator_docker_health_unavailable");
+        return dockerHealthy;
+      },
+      builderMemoryUsageBytes: async () => {
+        const { builderMemoryUsageBytes } = await capacity;
+        if (!Array.isArray(builderMemoryUsageBytes)
+          || builderMemoryUsageBytes.length !== Object.keys(localCiSlotResources.slots).length
+          || builderMemoryUsageBytes.some(bytes => !Number.isFinite(bytes) || bytes < 0)) throw new Error("actuator_builder_memory_unavailable");
+        return builderMemoryUsageBytes;
+      },
+    };
+  }
+  const currentProbes = probes ?? DEFAULT_PROBES;
+  const observedAt = currentProbes.now().toISOString();
   const names = [
     "availableMemoryBytes", "builderMemoryUsageBytes", "sustainedCpuPercent", "diskFreeBytes",
     "dockerHealthy", "convergenceActive", "fencesHealthy", "evidenceIsolationHealthy",
   ] as const;
-  const settled = await Promise.allSettled(names.map(async (name) => probes[name]()));
+  const settled = await Promise.allSettled(names.map(async (name) => currentProbes[name]()));
   const value = (name: (typeof names)[number]): unknown => {
     const result = settled[names.indexOf(name)];
     return result.status === "fulfilled" ? result.value : undefined;

@@ -11,7 +11,11 @@ import { prisma } from "@dpf/db";
 import { jobs } from "@/lib/jobs";
 import { gateAtEntry } from "../quiescence-gates";
 import { dockerSocketGet } from "@/lib/platform-runtime/docker-socket.mjs";
-import { loadOperationalCapabilityState } from "@/lib/platform-runtime/operational-state";
+import { loadOperationalCapabilityState, observeDockerProjectServices } from "@/lib/platform-runtime/operational-state";
+import { getQuiescenceLevel, parseQuiescenceConfig, QUIESCENCE_CONFIG_KEY } from "@/lib/self-upgrade/quiescence";
+import { lockScopeEpochEnrollmentAdmission } from "@/lib/work-capsules/scope-epoch-enrollment.server";
+import type { CapsuleDb } from "@/lib/work-capsules/work-capsule-store-types";
+import { usesPrivateActuator, reconcileActuatorSubstrate } from "@/lib/platform-runtime/actuator-client";
 import {
   reconcileSubstrate,
   type SubstrateContainer,
@@ -28,9 +32,10 @@ import {
 
 type DockerSummary = { Id: string; Names?: string[]; State?: string; Labels?: Record<string, string> };
 type DockerInspect = {
+  Id?: string;
   HostConfig?: { RestartPolicy?: { Name?: string } };
   Config?: { Labels?: Record<string, string> };
-  State?: { FinishedAt?: string; ExitCode?: number };
+  State?: { FinishedAt?: string; ExitCode?: number; Running?: boolean };
 };
 type DockerTop = { Titles?: string[]; Processes?: string[][] };
 
@@ -89,7 +94,8 @@ export async function listSubstrateContainers(
 
 async function requiredServices(): Promise<Set<string> | null> {
   try {
-    const state = await loadOperationalCapabilityState({ observedProviders: {} });
+    const state = await loadOperationalCapabilityState({ observedProviders: {},
+      readObservedServices: () => observeDockerProjectServices(dockerSocketGet) });
     return new Set(state.serviceRequirements.map((requirement) => requirement.service));
   } catch {
     return null;
@@ -111,6 +117,56 @@ async function topProcesses(container: SubstrateContainer): Promise<TopRow[]> {
   }));
 }
 
+/** The private actuator derives targets and checks present admission at start. */
+export async function reconcileSubstrateAtDaemon(actuatorProject?: string) {
+  if (actuatorProject && await getQuiescenceLevel() !== "normal") return { skipped: true, reason: "quiescence" };
+  return reconcileSubstrate({
+    listContainers: () => listSubstrateContainers(),
+    requiredServices,
+    startContainer: async (container) => {
+      if (!/^[a-f0-9]{64}$/.test(container.id)) return err("container_identity_unproven");
+      const start = async (timeoutMs: number) => {
+        const started = await runProcessWithBudget("docker", ["start", container.id], {
+          timeoutMs, timeoutLabel: "substrate-reconciler-start",
+        });
+        return started.exitCode === 0 ? ok() : err((started.stderr || `docker start exited ${started.exitCode}`).trim().slice(0, 300));
+      };
+      if (!actuatorProject) return start(30_000);
+      try {
+        return await prisma.$transaction(async tx => {
+          await lockScopeEpochEnrollmentAdmission(tx as unknown as CapsuleDb, "canonical");
+          const config = await tx.platformConfig.findUnique({ where: { key: QUIESCENCE_CONFIG_KEY } });
+          if (parseQuiescenceConfig(config?.value).level !== "normal") return err("quiescence");
+          const live = await dockerSocketGet(`/containers/${container.id}/json`) as DockerInspect;
+          if (live?.Id !== container.id || live.State?.Running !== false
+            || live.Config?.Labels?.["com.docker.compose.project"] !== actuatorProject
+            || live.Config.Labels["com.docker.compose.service"] !== container.service
+            || live.HostConfig?.RestartPolicy?.Name !== container.restartPolicy
+            || live.State.FinishedAt !== container.stoppedAt || live.State.ExitCode !== container.exitCode) {
+            return err("container_binding_changed");
+          }
+          return start(5_000);
+        }, { timeout: 15_000 });
+      } catch { return err("runtime_admission_unavailable"); }
+    },
+    topProcesses,
+    openIssue: async (issue) => {
+      await openMonitorIssue(monitorDb, { ...issue, issueType: "health_alert" });
+    },
+    resolveIssue: (issueKey) => resolveMonitorIssue(monitorDb, issueKey),
+    localCiLeases: () => prisma.nonProductionEnvironmentLease.findMany({
+      where: {
+        environmentKey: "local-integration-ci",
+        admittedAt: { gte: new Date(Date.now() - LOCAL_CI_LIVENESS_WINDOW_MS) },
+        // A served AI turn is a queue placeholder and never records a gate result.
+        OR: [{ claimKey: null }, { NOT: { claimKey: { startsWith: AI_TURN_CLAIM_PREFIX } } }],
+      },
+      select: { leaseId: true, admittedAt: true, releasedAt: true, evidenceRecordId: true, status: true },
+    }),
+    now: () => new Date(),
+  });
+}
+
 export const substrateReconciler = jobs.createFunction(
   { id: "ops/substrate-reconciler", retries: 0, triggers: [cron("4,9,14,19,24,29,34,39,44,49,54,59 * * * *")] },
   async ({ step }) => {
@@ -125,35 +181,9 @@ export const substrateReconciler = jobs.createFunction(
         return { converged: [], error: error instanceof Error ? error.message : String(error) };
       }
     });
-    return step.run("reconcile-substrate", () => reconcileSubstrate({
-      listContainers: () => listSubstrateContainers(),
-      requiredServices,
-      startContainer: async (container) => {
-        const started = await runProcessWithBudget("docker", ["start", container.id], {
-          timeoutMs: 30_000,
-          timeoutLabel: "substrate-reconciler-start",
-        });
-        return started.exitCode === 0
-          ? ok()
-          : err((started.stderr || `docker start exited ${started.exitCode}`).trim().slice(0, 300));
-      },
-      topProcesses,
-      openIssue: async (issue) => {
-        await openMonitorIssue(monitorDb, { ...issue, issueType: "health_alert" });
-      },
-      resolveIssue: (issueKey) => resolveMonitorIssue(monitorDb, issueKey),
-      localCiLeases: () => prisma.nonProductionEnvironmentLease.findMany({
-        where: {
-          environmentKey: "local-integration-ci",
-          admittedAt: { gte: new Date(Date.now() - LOCAL_CI_LIVENESS_WINDOW_MS) },
-          // BI-218A4555: a served AI turn is a queue placeholder, not a gate
-          // run, so it never records a result and must not read as a stall.
-          // (SQL NOT on a NULL claimKey is NULL, so keep keyless rows explicitly.)
-          OR: [{ claimKey: null }, { NOT: { claimKey: { startsWith: AI_TURN_CLAIM_PREFIX } } }],
-        },
-        select: { leaseId: true, admittedAt: true, releasedAt: true, evidenceRecordId: true, status: true },
-      }),
-      now: () => new Date(),
-    }));
+    return step.run("reconcile-substrate", async () => {
+      if (await usesPrivateActuator()) return reconcileActuatorSubstrate();
+      return reconcileSubstrateAtDaemon();
+    });
   },
 );

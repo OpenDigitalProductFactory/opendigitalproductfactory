@@ -1,4 +1,15 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
+
+const routed = vi.hoisted(() => ({ lines: [] as string[] }));
+vi.mock("@dpf/db", () => ({ prisma: { platformConfig: { findUnique: async () => ({ value: { enabled: true } }) } } }));
+vi.mock("@/lib/mcp/session-token", () => ({ createMcpSessionToken: async () => "fixture-token" }));
+vi.mock("@/lib/tak/agent-grants", () => ({ getAgentToolGrantsAsync: async () => ["backlog_read"] }));
+vi.mock("@/lib/workroom-runtime/sandbox-exec", () => ({
+  execSandboxCommandLine: async (line: string) => {
+    routed.lines.push(line);
+    return { stdout: line.includes("node /") ? `${TOOL_SCRIPT_RESULT_MARKER}"done"\n` : "", stderr: "" };
+  },
+}));
 import {
   parseProgrammaticToolCallingConfig,
   PROGRAMMATIC_TOOL_CALLING_DEFAULTS,
@@ -6,6 +17,7 @@ import {
   wrapToolScript,
   parseToolScriptOutput,
   TOOL_SCRIPT_RESULT_MARKER,
+  runToolScript,
   TOOL_SCRIPT_TOKEN_PATH,
 } from "./tool-script";
 
@@ -116,5 +128,15 @@ describe("parseToolScriptOutput", () => {
     const out = parseToolScriptOutput("just some logs\nno result here");
     expect(out.ok).toBe(false);
     expect(out.output).toContain("no result");
+  });
+});
+
+describe("runToolScript sandbox commands", () => {
+  it("runs every sandbox command through the routed exec, never a local shell", async () => {
+    routed.lines.length = 0;
+    const result = await runToolScript({ code: "emit('done')" }, { userId: "user-1", agentId: "agent-1" });
+    expect(result).toMatchObject({ success: true });
+    expect(routed.lines).toHaveLength(4);
+    for (const line of routed.lines) expect(line).toMatch(/^docker exec 'dpf-sandbox-1' sh -c '/);
   });
 });

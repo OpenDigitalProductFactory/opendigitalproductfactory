@@ -88,4 +88,8 @@ if ! pnpm --filter web exec tsx scripts/reembed-wiki-store.ts --budget-seconds 1
 fi
 
 echo "[portal-boot] provider catalog reconciled (or degraded); starting server"
+if [ -z "${DEPLOYED_SHA:-}" ] && [ -s .dpf-image-version ]; then
+  DEPLOYED_SHA="$(tr -d '[:space:]' < .dpf-image-version)"
+  export DEPLOYED_SHA
+fi
 exec "$@"

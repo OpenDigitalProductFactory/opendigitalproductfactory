@@ -8,6 +8,13 @@ const mocks = vi.hoisted(() => ({
 }));
 vi.mock("@/lib/platform/image-version", () => ({ readImageVersion: mocks.imageVersion }));
 vi.mock("node:fs/promises", () => ({ readFile: mocks.readFile }));
+// This suite models an install without the private actuator. The fs fake above
+// answers every path, so the mount rule is stated here rather than inferred
+// from a placeholder mount table (which the fail-closed rule reads as mounted).
+vi.mock("@/lib/platform-runtime/actuator-client", async importOriginal => ({
+  ...await importOriginal<typeof import("@/lib/platform-runtime/actuator-client")>(),
+  usesPrivateActuator: async () => false,
+}));
 vi.mock("@/lib/shared/run-process-with-budget", () => ({ runProcessWithBudget: mocks.process }));
 vi.mock("@dpf/db", () => ({ prisma: {
   platformCapability: { findMany: mocks.rows }, runtimeCapabilityTransition: { findMany: mocks.active },

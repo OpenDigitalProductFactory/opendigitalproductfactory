@@ -22,7 +22,6 @@ export { isCliQuotaBanner, stripLeadingQuotaBanner } from "./cli-result-errors";
 import type { AdapterRequest, AdapterResult, ExecutionAdapterHandler } from "./adapter-types";
 import { InferenceError } from "./inference-error";
 import { registerExecutionAdapter } from "./execution-adapter-registry";
-import { lazyChildProcess, lazyUtil } from "@/lib/shared/lazy-node";
 import { writeSandboxFile } from "@/lib/build/sandbox/agent-cli-runtime";
 import { createMcpSessionToken, type McpToolSurface } from "@/lib/mcp/session-token";
 import { getToolGrantMapping } from "@/lib/tak/agent-grants";
@@ -37,6 +36,7 @@ import { claudeCredential, resolveClaudeAuth } from "@/lib/executor-drivers/clau
 import { claudeOneShotArgs, parseClaudeResult } from "@/lib/executor-drivers/claude/one-shot";
 import { extractMentionedPlatformToolNames } from "@/lib/executor-drivers/tool-trace";
 import type { NativeCliDiagnostics } from "../shared/execution-uncertainty";
+import { execSandboxCommandLine, spawnSandboxExec } from "@/lib/workroom-runtime/sandbox-exec";
 
 
 const SANDBOX_CONTAINER = process.env.SANDBOX_CONTAINER_ID ?? "dpf-sandbox-1";
@@ -197,13 +197,10 @@ export const cliAdapter: ExecutionAdapterHandler = {
     const mcpConfigFile = `${authHome}/cli-mcp-${slug}.json`;
     const runnerScript = `${authHome}/cli-run-${slug}.js`;
 
-    const cp = lazyChildProcess();
-    const execAsync = lazyUtil().promisify(cp.exec);
-    const spawnCb = cp.spawn;
     let containerDispatchStarted = false;
 
     try {
-      await execAsync(`docker exec ${SANDBOX_CONTAINER} sh -c 'mkdir -p ${authHome} && chmod 700 ${authHome} && chown node:node ${authHome}'`, { timeout: 5_000 });
+      await execSandboxCommandLine(`docker exec ${SANDBOX_CONTAINER} sh -c 'mkdir -p ${authHome} && chmod 700 ${authHome} && chown node:node ${authHome}'`, { timeout: 5_000 });
       // Write prompt and system prompt to sandbox. Content is streamed via the
       // child's stdin (writeSandboxFile → dockerExecWriteStdin), NOT embedded in
       // the docker exec command — so secrets staged this way (the OAuth token /
@@ -308,7 +305,7 @@ export const cliAdapter: ExecutionAdapterHandler = {
       // shared sandbox / portal. Prep (auth, file writes) stays outside the
       // slot so slots turn over on real inference, not setup.
       const { stdout, diagnostics } = await withCliSlot(() => new Promise<{ stdout: string; diagnostics: NativeCliDiagnostics }>((resolve, reject) => {
-        const proc = spawnCb("docker", [
+        const proc = spawnSandboxExec([
           "exec", "--user", "node", SANDBOX_CONTAINER, "node", runnerScript,
         ]);
         containerDispatchStarted = true;
@@ -458,7 +455,7 @@ export const cliAdapter: ExecutionAdapterHandler = {
       // short-lived JWT; even though it's already 5-minute capped, we wipe it
       // so a leaked sandbox shell can't dump the bearer from disk after the
       // call returns.
-      if (!containerDispatchStarted) await execAsync(
+      if (!containerDispatchStarted) await execSandboxCommandLine(
         `docker exec ${SANDBOX_CONTAINER} sh -c 'rm -rf ${authHome}'`, { timeout: 5_000 },
       ).catch(() => {});
     }

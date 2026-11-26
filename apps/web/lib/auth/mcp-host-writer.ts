@@ -1,5 +1,6 @@
 import { lazyFs, lazyPath } from "@/lib/shared/lazy-node";
 import type { McpAuthMode } from "@dpf/integration-shared/mcp-client-credential-policy";
+import { usesPrivateActuatorSync } from "@/lib/platform-runtime/actuator-client";
 
 import { buildSetupSnippets } from "./mcp-setup-snippets";
 
@@ -49,6 +50,10 @@ export function writeMcpJsonToHost(plaintext: string, baseUrl: string, authMode:
   const mountPath = "/host-dpf";
   const fs = lazyFs();
   const p = lazyPath();
+  // The installer and toolchain bootstrap own host configuration. Token
+  // issuance still returns the onboarding snippets from the portal.
+  // Fail closed (actuator-client): an unreadable mount table is treated as mounted.
+  if (usesPrivateActuatorSync({ read: path => fs.readFileSync(path) })) return;
   if (!fs.existsSync(mountPath)) return;
 
   const snippets = buildSetupSnippets(plaintext, baseUrl, authMode);

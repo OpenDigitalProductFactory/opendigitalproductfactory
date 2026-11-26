@@ -59,15 +59,7 @@ export function buildFetchCommand(input: {
   return ["git", "-C", input.hostSourcePath, "fetch", input.remote, input.branch];
 }
 
-/** `git -C <path> rev-parse HEAD` — the true identity of the tree on disk. */
-export function buildHeadShaCommand(hostSourcePath: string): string[] {
-  return ["git", "-C", hostSourcePath, "rev-parse", "HEAD"];
-}
 
-/** `git -C <path> status --porcelain` — empty stdout ⇒ clean working tree. */
-export function buildDirtyCheckCommand(hostSourcePath: string): string[] {
-  return ["git", "-C", hostSourcePath, "status", "--porcelain"];
-}
 
 /**
  * `git -C <path> merge --no-edit --no-ff <remote>/<branch>` — merge the upstream
@@ -91,15 +83,10 @@ export function buildMergeCommand(input: {
   ];
 }
 
-/**
- * The deployed identity stamp for the bytes actually built. A dirty tree yields
- * a non-40-hex `<sha>-dirty` token so `compareUpgradeVersions` honestly reports
- * it as not-a-tracked-release rather than colliding with a real commit SHA.
- */
-export function deriveDeployedStamp(headSha: string, dirty: boolean): string {
-  const trimmed = headSha.trim();
-  return dirty ? `${trimmed}-dirty` : trimmed;
-}
+
+// BI-224F56F1: upgrade-source identity helpers live once in the shared
+// module used by the portal and the promoter-image source writer.
+export { buildHeadShaCommand, buildDirtyCheckCommand, deriveDeployedStamp } from "../../../../scripts/lib/upgrade-source/version-stamp.mjs";
 
 // ─── Version State Resolution ─────────────────────────────────────────────────
 
@@ -268,8 +255,13 @@ async function resolveTargetShaUncached(
       }
       if (localSha !== remoteSha) {
         try {
-          const [, ...fetchArgs] = buildFetchCommand(at);
-          await execFile("git", fetchArgs);
+          // BI-224F56F1: in the qualified portal the checkout is read-only and
+          // the authorized source writer refreshes it.
+          const { refreshUpstreamThroughWriter } = await import("./source-writer-actuator");
+          if (!(await refreshUpstreamThroughWriter({ remote: at.remote, branch: at.branch }))) {
+            const [, ...fetchArgs] = buildFetchCommand(at);
+            await execFile("git", fetchArgs);
+          }
         } catch (err) {
           console.info("self-upgrade.target-fetch-skipped", {
             channel,

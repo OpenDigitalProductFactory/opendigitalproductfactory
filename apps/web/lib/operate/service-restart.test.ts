@@ -1,4 +1,11 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+// A legacy install, stated rather than read from the host's /proc, which the
+// fail-closed mount rule would otherwise make platform-dependent.
+vi.mock("@/lib/platform-runtime/actuator-client", async importOriginal => ({
+  ...await importOriginal<typeof import("@/lib/platform-runtime/actuator-client")>(),
+  usesPrivateActuator: async () => false,
+  usesPrivateActuatorSync: () => false,
+}));
 
 import {
   restartPlatformService,
@@ -89,5 +96,47 @@ describe("restartPlatformService", () => {
     const result = await restartPlatformService("postgres", exec);
     expect(result.success).toBe(false);
     expect(result.message).toContain("Cannot connect to the Docker daemon");
+  });
+});
+
+describe("restartPlatformService through the private actuator", () => {
+  const actuator = (outcome: { container?: string; error?: string }) => {
+    const calls: string[] = [];
+    return {
+      calls,
+      port: {
+        available: async () => true,
+        restart: async (service: string) => {
+          calls.push(service);
+          if (outcome.error) throw new Error(outcome.error);
+          return { service, container: outcome.container ?? "" };
+        },
+      },
+    };
+  };
+
+  it("restarts a catalog service without any shell Docker command", async () => {
+    const { exec, calls } = execScript([]);
+    const { port, calls: restarted } = actuator({ container: "dpf-sandbox-1" });
+    const result = await restartPlatformService("sandbox", exec, port);
+    expect(result).toEqual({ success: true, message: "Restarted sandbox (dpf-sandbox-1).", container: "dpf-sandbox-1" });
+    expect(restarted).toEqual(["sandbox"]);
+    expect(calls).toEqual([]);
+  });
+
+  it("reports an actuator refusal and never falls back to shell Docker", async () => {
+    const { exec, calls } = execScript([]);
+    const { port } = actuator({ error: "scope_writer_observation_unavailable" });
+    const result = await restartPlatformService("postgres", exec, port);
+    expect(result.success).toBe(false);
+    expect(result.error).toBe("actuator_restart_unavailable");
+    expect(calls).toEqual([]);
+  });
+
+  it("still refuses services outside the catalog before reaching the actuator", async () => {
+    const { exec } = execScript([]);
+    const { port, calls: restarted } = actuator({ container: "x" });
+    expect((await restartPlatformService("redis", exec, port)).success).toBe(false);
+    expect(restarted).toEqual([]);
   });
 });

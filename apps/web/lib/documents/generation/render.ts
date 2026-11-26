@@ -24,6 +24,7 @@ import { CONVERTER_CONTAINER_PREFIX, hardenedRunArgs, isPinnedImageReference } f
 import { sharedDoctoolsLimiter, type ConversionLimiter } from "@/lib/documents/conversion/convert";
 import { CONVERTER_TARGET_MIME } from "@/lib/documents/conversion/formats";
 import { resolveDoctoolsImage, type DoctoolsImageResolution } from "@/lib/documents/conversion/image";
+import { runActuatorDoctools, usesPrivateActuator } from "@/lib/platform-runtime/actuator-client";
 import { readTar } from "./tar";
 import {
   validateRenderRequest,
@@ -211,6 +212,16 @@ export async function renderDocument(request: RenderDocumentRequest, deps: Rende
   );
   if (wire.length > maxRequestBytes) {
     return fail("input-too-large", `the render request is ${wire.length} bytes; the limit is ${maxRequestBytes}`);
+  }
+
+  if (!deps.run && !deps.resolveImage && await usesPrivateActuator()) {
+    try {
+      return await (deps.limiter ?? sharedDoctoolsLimiter()).run(async () => {
+        const result = await runActuatorDoctools({ kind: "render" }, wire,
+          { timeoutMs: timeoutMs + 15_000, maxOutputBytes: deps.maxOutputBytes ?? DEFAULT_MAX_RENDER_OUTPUT_BYTES }) as BudgetedProcessResult;
+        return interpretRenderExit(result) ?? unpack(result.stdoutBytes, content.family, content.title, formats);
+      });
+    } catch { return fail("converter-unavailable", "could not reach the document rendering actuator"); }
   }
 
   const resolution = await (deps.resolveImage ?? resolveDoctoolsImage)();

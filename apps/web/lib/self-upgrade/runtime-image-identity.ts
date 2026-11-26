@@ -1,6 +1,7 @@
 import { hostname } from "node:os";
 import { spawn } from "node:child_process";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
+import { readActuatorPortalImage, usesPrivateActuator } from "@/lib/platform-runtime/actuator-client";
 
 const CONFIG_DIGEST = /^sha256:[a-f0-9]{64}$/;
 
@@ -51,10 +52,18 @@ async function defaultDockerRunner(args: string[]): Promise<{
 }
 
 export async function readCurrentContainerConfigDigest(
-  runDocker: ImageIdentityDockerRunner = defaultDockerRunner,
+  runDocker?: ImageIdentityDockerRunner,
   containerId = hostname(),
 ): Promise<string | null> {
   if (!containerId.trim()) return null;
-  const result = await runDocker(["inspect", "--format", "{{.Image}}", containerId]);
+  if (!runDocker && await usesPrivateActuator()) {
+    try {
+      const actual = await readActuatorPortalImage();
+      if (!/^(?:[a-f0-9]{12}|[a-f0-9]{64})$/.test(containerId) || typeof actual.containerId !== "string"
+        || !actual.containerId.startsWith(containerId) || typeof actual.image !== "string") return null;
+      return parseContainerConfigDigest(actual.image);
+    } catch { return null; }
+  }
+  const result = await (runDocker ?? defaultDockerRunner)(["inspect", "--format", "{{.Image}}", containerId]);
   return result.exitCode === 0 ? parseContainerConfigDigest(result.stdout) : null;
 }

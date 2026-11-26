@@ -21,6 +21,28 @@ export type ShellExec = (
   options: { timeout: number },
 ) => Promise<{ stdout: string }>;
 
+/** Private-actuator route; injected by tests. */
+export type RestartActuatorPort = {
+  available(): Promise<boolean>;
+  restart(service: string): Promise<{ service: string; container: string }>;
+};
+
+const privateActuatorRestart: RestartActuatorPort = {
+  available: async () => {
+    const { usesPrivateActuator } = await import("@/lib/platform-runtime/actuator-client");
+    return usesPrivateActuator();
+  },
+  restart: async (service) => {
+    const { restartActuatorService } = await import("@/lib/platform-runtime/actuator-client");
+    const result: unknown = await restartActuatorService(service);
+    const container = (result as { container?: unknown } | null)?.container;
+    if (typeof container !== "string" || !/^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}$/.test(container)) {
+      throw new Error("actuator_restart_unverified");
+    }
+    return { service, container };
+  },
+};
+
 export type RestartResult = {
   success: boolean;
   message: string;
@@ -52,6 +74,7 @@ export async function resolveOwnComposeProject(exec: ShellExec): Promise<string 
 export async function restartPlatformService(
   service: string,
   exec: ShellExec,
+  actuator: RestartActuatorPort = privateActuatorRestart,
 ): Promise<RestartResult> {
   if (!(RESTARTABLE_SERVICES as readonly string[]).includes(service)) {
     return {
@@ -59,6 +82,22 @@ export async function restartPlatformService(
       message: `Unknown service "${service}".`,
       error: `Invalid service. Allowed: ${RESTARTABLE_SERVICES.join(", ")}`,
     };
+  }
+
+  // The immutable portal has no Docker socket. When the private actuator is
+  // mounted it alone resolves and restarts the owned container; a refusal is
+  // final and never falls back to shell Docker (BI-224F56F1).
+  if (await actuator.available()) {
+    try {
+      const { container } = await actuator.restart(service);
+      return { success: true, message: `Restarted ${service} (${container}).`, container };
+    } catch {
+      return {
+        success: false,
+        message: `The platform could not confirm a restart of ${service}.`,
+        error: "actuator_restart_unavailable",
+      };
+    }
   }
 
   const project = await resolveOwnComposeProject(exec);

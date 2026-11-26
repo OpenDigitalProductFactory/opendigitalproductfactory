@@ -3,6 +3,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { hostname } from "node:os";
 import { readFile } from "node:fs/promises";
 import { readCurrentContainerConfigDigest } from "./self-upgrade/runtime-image-identity";
+import { readActuatorReassessmentProof, usesPrivateActuator } from "@/lib/platform-runtime/actuator-client";
 import { runProcessWithBudget } from "./shared/run-process-with-budget";
 import { currentReassessmentExecution } from "./routing/reassessment-execution-scope";
 import { REASSESSMENT_OWNERS, REASSESSMENT_OWNER_PATHS, REASSESSMENT_OWNER_VERSIONS,
@@ -17,13 +18,21 @@ const digest = (bytes: Buffer | string) => createHash("sha256").update(bytes).di
 const brands = new WeakSet<object>();
 let retained: { pid: number; hostname: string; proof: ReassessmentRuntimeCompatibility } | null = null;
 const defaultRunDocker: ReassessmentContractPorts["runDocker"] = async args => {
+  // BI-224F56F1: the qualified portal has no Docker; the actuator passes its own runner.
+  if (await usesPrivateActuator()) refuseReassessmentWithDetail("portal-docker-unavailable");
   const nameIndex = args.indexOf("--name"), containerName = nameIndex < 0 ? undefined : args[nameIndex + 1];
   const result = await runProcessWithBudget("docker", args, { timeoutMs: 60_000, maxStdoutBytes: 8192, containerName });
   if (result.outputLimitExceeded) refuseReassessmentWithDetail("docker-output-oversized");
   return result;
 };
+/** The config-digest runner: an install without the actuator keeps the budgeted,
+ * output-capped runner; the qualified portal passes none, so the digest comes
+ * from the actuator's observation (runtime-image-identity). */
+export async function configDigestRunner(mounted: () => Promise<boolean> = usesPrivateActuator) {
+  return await mounted() ? undefined : defaultRunDocker;
+}
 const defaultPorts: ReassessmentContractPorts = {
-  readCurrentConfigDigest: () => readCurrentContainerConfigDigest(defaultRunDocker), readFile, runDocker: defaultRunDocker,
+  readCurrentConfigDigest: async () => readCurrentContainerConfigDigest(await configDigestRunner()), readFile, runDocker: defaultRunDocker,
 };
 function sameInfo(left: ReassessmentCapabilityInfo, right: ReassessmentCapabilityInfo): boolean {
   return left.sourceSha === right.sourceSha && left.sourceContentHash === right.sourceContentHash && left.contractSha256 === right.contractSha256
@@ -83,8 +92,11 @@ export async function readCurrentReassessmentContract(ports: ReassessmentContrac
     const expected = validateReassessmentCapabilityInfo({ schemaVersion: 1, sourceSha: version.toString().trim(),
       sourceContentHash: source.toString().trim(), contractSha256: digest(contract), owners: Object.fromEntries(REASSESSMENT_OWNERS.map((owner, index) =>
         [owner, { version: REASSESSMENT_OWNER_VERSIONS[owner], sourceSha256: digest(ownerBytes[index]!) }])) });
-    const observed = await readReassessmentImageContract(configDigest, expected.sourceSha, ports.runDocker);
-    if (!sameInfo(expected, observed) || await ports.readCurrentConfigDigest() !== configDigest) refuseReassessmentCompatibility();
+    const observed = ports === defaultPorts && await usesPrivateActuator()
+      ? validateReassessmentRuntimeCompatibility(await readActuatorReassessmentProof())
+      : await readReassessmentImageContract(configDigest, expected.sourceSha, ports.runDocker);
+    if (observed.configDigest !== configDigest || !sameInfo(expected, observed)
+      || await ports.readCurrentConfigDigest() !== configDigest) refuseReassessmentCompatibility();
     for (const owner of REASSESSMENT_OWNERS) Object.freeze(observed.owners[owner]);
     Object.freeze(observed.owners); Object.freeze(observed); brands.add(observed);
     retained = { pid: process.pid, hostname: hostname(), proof: observed };

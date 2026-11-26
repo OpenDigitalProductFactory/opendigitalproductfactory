@@ -36,7 +36,7 @@
 import { prisma } from "@dpf/db";
 import { createMcpSessionToken } from "@/lib/mcp/session-token";
 import { buildDockerExecSandboxCommand } from "@/lib/build/sandbox/sandbox";
-import { lazyExec } from "@/lib/shared/lazy-node";
+import { execSandboxCommandLine } from "@/lib/workroom-runtime/sandbox-exec";
 import { clampToolResultForModel } from "@/lib/tak/tool-result-budget";
 import type { ToolResult } from "@/lib/mcp-tool-types";
 
@@ -227,8 +227,9 @@ type RunToolScriptContext = {
  * access. Mirrors the CLI-adapter mint→inject→exec→wipe sequence. Returns a
  * ToolResult whose message carries the small filtered output (capped).
  *
- * Not unit-tested (the sandbox cannot run in `dev`); the pure pieces it calls
- * are. Verified per the spec's live runbook before the flag is enabled.
+ * The sandbox itself is not unit-tested (it cannot run in `dev`); the pure
+ * pieces and the routed exec are. Verified per the spec's live runbook before
+ * the flag is enabled.
  */
 export async function runToolScript(
   params: { code?: unknown; purpose?: unknown },
@@ -277,7 +278,9 @@ export async function runToolScript(
 
   const container = resolveSandboxContainer();
   const script = wrapToolScript(code);
-  const exec = lazyExec();
+  // Routed: a plain `docker exec` into the canonical sandbox goes through the
+  // private actuator when it is mounted; without it this is the local exec.
+  const exec = execSandboxCommandLine;
   const scriptB64 = Buffer.from(script).toString("base64");
   const tokenB64 = Buffer.from(token).toString("base64");
 

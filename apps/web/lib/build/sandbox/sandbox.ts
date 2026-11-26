@@ -2,11 +2,20 @@
 // Sandbox lifecycle management — creates, manages, and destroys Docker containers
 // for isolated code generation.
 
-import { lazyChildProcess, lazyExec, lazyFs } from "@/lib/shared/lazy-node";
+import { lazyChildProcess, lazyExec } from "@/lib/shared/lazy-node";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 import { ensureGlobalSafeDirectoryCommand } from "@/lib/shared/git-safe-directory";
+import { readActuatorSandbox, readActuatorServiceLogs, restartActuatorService, usesPrivateActuator } from "@/lib/platform-runtime/actuator-client";
+import { execSandboxCommandLine, spawnSandboxExec } from "@/lib/workroom-runtime/sandbox-exec";
 
-const exec = lazyExec();
+const localExec = lazyExec();
+/** BI-224F56F1: every Docker line goes through execSandboxCommandLine. Without
+ * the actuator it runs as before; in the qualified portal only a plain
+ * `docker exec` into the observed sandbox runs, and any other Docker line
+ * (create, network, remove) is refused. */
+const exec: typeof localExec = (command, options) => (command.startsWith("docker ")
+  ? execSandboxCommandLine(command, options as { timeout?: number; maxBuffer?: number })
+  : localExec(command, options));
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -117,7 +126,7 @@ export function prefixSafeWorkspaceCommand(command: string): string {
   ].join(" && ");
 }
 
-function quotePosixArg(value: string): string {
+export function quotePosixArg(value: string): string {
   return `'${value.replace(/'/g, `'\"'\"'`)}'`;
 }
 
@@ -198,24 +207,20 @@ export function buildSandboxNextDevReadinessCommand(workspace: string = SANDBOX_
 }
 
 export function buildSandboxAppsWebCopyCommand(
-  portalContainer: string,
   containerId: string,
 ): string {
   return [
-    `docker exec ${portalContainer} tar`,
+    "tar",
     "--exclude='apps/web/node_modules'",
     "--exclude='apps/web/.next'",
     "--exclude='apps/web/tsconfig.tsbuildinfo'",
     "-cf - -C /app apps/web",
-    `| docker exec -i ${containerId} sh -c 'mkdir -p /workspace/apps && tar -xf - -C /workspace'`,
+    `| docker exec -i ${quotePosixArg(containerId)} sh -c 'mkdir -p /workspace/apps && tar -xf - -C /workspace'`,
   ].join(" ");
 }
 
-export function buildSandboxRootScriptsCopyCommand(
-  portalContainer: string,
-  containerId: string,
-): string {
-  return `docker exec ${portalContainer} tar -cf - -C /app scripts | docker exec -i ${containerId} tar -xf - -C /workspace`;
+export function buildSandboxRootScriptsCopyCommand(containerId: string): string {
+  return `tar -cf - -C /app scripts | docker exec -i ${quotePosixArg(containerId)} tar -xf - -C /workspace`;
 }
 
 /**
@@ -375,9 +380,67 @@ export async function createSandbox(
   return stdout.trim();
 }
 
+/**
+ * The canonical sandbox's container state ("running", "exited", ...), or null
+ * when it does not exist. With the private actuator the sandbox it observed
+ * decides; without it, the original local `docker inspect` (BI-224F56F1).
+ */
+export async function readSandboxStatus(sandboxId: string, timeout: number): Promise<string | null> {
+  if (await usesPrivateActuator()) {
+    const selected = await readActuatorSandbox().catch(() => null);
+    if (!selected?.containerId || (sandboxId !== selected.containerId && sandboxId !== selected.name)) return null;
+    return selected.running ? "running" : "exited";
+  }
+  try {
+    const { stdout } = await exec(`docker inspect -f "{{.State.Status}}" ${sandboxId}`, { timeout });
+    return String(stdout).trim();
+  } catch {
+    return null;
+  }
+}
+
 export async function startSandbox(containerId: string): Promise<void> {
+  if (await usesPrivateActuator()) {
+    // The canonical sandbox runs under Compose; a stopped one is restarted by
+    // the actuator's catalog restart, and no other container is started.
+    const selected = await readActuatorSandbox();
+    if (!selected.containerId || (containerId !== selected.containerId && containerId !== selected.name)) throw new Error("sandbox_target_unproven");
+    if (!selected.running) await restartActuatorService("sandbox");
+    return;
+  }
   await exec(`docker start ${containerId}`);
 }
+
+/** Copy fixed paths of this portal's image into the sandbox. In the qualified
+ * portal a local tar of /app streams into the sandbox's own extract. */
+async function copyPortalPathsIntoSandbox(containerId: string, legacyCommand: string, tarArgs: string[],
+  sandboxCommand: string[], timeoutMs: number): Promise<void> {
+  if (!await usesPrivateActuator()) { await exec(legacyCommand, { timeout: timeoutMs }); return; }
+  await new Promise<void>((resolve, reject) => {
+    const tar = lazyChildProcess().spawn("tar", tarArgs, { stdio: ["ignore", "pipe", "pipe"] });
+    const sink = spawnSandboxExec(["exec", "-i", containerId, ...sandboxCommand], { stdio: ["pipe", "pipe", "pipe"] });
+    let tarCode: number | null | undefined, sinkCode: number | null | undefined, stderr = "", settled = false;
+    const finish = (error?: Error) => {
+      if (settled) return;
+      settled = true; clearTimeout(timer);
+      if (error) reject(error); else resolve();
+    };
+    const timer = setTimeout(() => { tar.kill(); sink.kill(); finish(new Error("Command failed: sandbox copy timed out")); }, timeoutMs);
+    const settle = () => {
+      if (tarCode === undefined || sinkCode === undefined) return;
+      if (tarCode === 0 && sinkCode === 0) finish();
+      else finish(new Error(`Command failed: sandbox copy exited ${tarCode}/${sinkCode}\n${stderr.slice(-2048)}`));
+    };
+    tar.stdout.pipe(sink.stdin);
+    tar.stderr.on("data", (chunk: Buffer) => { stderr += chunk.toString("utf8"); });
+    sink.stderr.on("data", (chunk: Buffer) => { stderr += chunk.toString("utf8"); });
+    sink.stdout.resume();
+    tar.on("error", error => { sink.kill(); finish(error); });
+    tar.on("close", code => { tarCode = code; settle(); });
+    sink.on("close", code => { sinkCode = code; settle(); });
+  });
+}
+const extractIntoWorkspace = ["tar", "-xf", "-", "-C", "/workspace"];
 
 /**
  * Initialize the sandbox workspace with the project source.
@@ -386,18 +449,9 @@ export async function startSandbox(containerId: string): Promise<void> {
  * This runs AFTER startSandbox and typically takes 60-90 seconds.
  */
 export async function initializeSandboxWorkspace(containerId: string): Promise<void> {
-  // Resolve the portal container name — HOSTNAME is 0.0.0.0 (Next.js bind),
-  // so discover our actual container ID from /etc/hostname (Docker sets this).
-  let portalContainer = "dpf-portal-1";
-  try {
-    const { readFileSync } = lazyFs();
-    const hostname = readFileSync("/etc/hostname", "utf-8").trim();
-    if (hostname && hostname !== "0.0.0.0") portalContainer = hostname;
-  } catch { /* fallback to dpf-portal-1 */ }
-
-  // Start the container first — both docker exec and tar pipe need it running
-  console.log(`[sandbox-init] portal=${portalContainer} sandbox=${containerId}`);
-  await exec(`docker start ${containerId}`);
+  // Start only the destination. The source tar reads this portal's image.
+  console.log(`[sandbox-init] sandbox=${containerId}`);
+  await startSandbox(containerId);
   console.log(`[sandbox-init] container started`);
 
   // Copy project source via tar pipe (docker cp between containers is not supported).
@@ -405,28 +459,29 @@ export async function initializeSandboxWorkspace(containerId: string): Promise<v
   // Copy root config files one at a time (more reliable than multi-file tar which can fail silently)
   const rootFiles = ["package.json", "pnpm-workspace.yaml", "pnpm-lock.yaml", "tsconfig.base.json"];
   for (const f of rootFiles) {
-    await exec(
-      `docker exec ${portalContainer} tar -cf - -C /app ${f} | docker exec -i ${containerId} tar -xf - -C /workspace`,
-      { timeout: 10_000 },
+    await copyPortalPathsIntoSandbox(containerId,
+      `tar -cf - -C /app ${f} | docker exec -i ${quotePosixArg(containerId)} tar -xf - -C /workspace`,
+      ["-cf", "-", "-C", "/app", f], extractIntoWorkspace, 10_000,
     ).catch(() => console.log(`[sandbox-init] ${f} not found, skipping`));
   }
   console.log("[sandbox-init] root files done");
 
-  await exec(
-    `docker exec ${portalContainer} tar -cf - -C /app packages | docker exec -i ${containerId} tar -xf - -C /workspace`,
-    { timeout: 60_000 },
+  await copyPortalPathsIntoSandbox(containerId,
+    `tar -cf - -C /app packages | docker exec -i ${quotePosixArg(containerId)} tar -xf - -C /workspace`,
+    ["-cf", "-", "-C", "/app", "packages"], extractIntoWorkspace, 60_000,
   );
   console.log("[sandbox-init] packages/ copied");
 
-  await exec(
-    buildSandboxRootScriptsCopyCommand(portalContainer, containerId),
-    { timeout: 20_000 },
+  await copyPortalPathsIntoSandbox(containerId,
+    buildSandboxRootScriptsCopyCommand(containerId),
+    ["-cf", "-", "-C", "/app", "scripts"], extractIntoWorkspace, 20_000,
   ).catch(() => console.log("[sandbox-init] scripts/ not found, skipping"));
   console.log("[sandbox-init] scripts/ copied");
 
-  await exec(
-    buildSandboxAppsWebCopyCommand(portalContainer, containerId),
-    { timeout: 60_000 },
+  await copyPortalPathsIntoSandbox(containerId,
+    buildSandboxAppsWebCopyCommand(containerId),
+    ["--exclude=apps/web/node_modules", "--exclude=apps/web/.next", "--exclude=apps/web/tsconfig.tsbuildinfo", "-cf", "-", "-C", "/app", "apps/web"],
+    ["sh", "-c", "mkdir -p /workspace/apps && tar -xf - -C /workspace"], 60_000,
   );
   console.log("[sandbox-init] apps/web/ copied");
 
@@ -477,10 +532,9 @@ export async function execInSandboxWithStdin(
   command: string,
   input: string,
 ): Promise<string> {
-  const { spawn } = lazyChildProcess();
   const safeCommand = prefixSafeWorkspaceCommand(command);
   return new Promise((resolve, reject) => {
-    const child = spawn("docker", ["exec", "-i", containerId, "sh", "-c", safeCommand], {
+    const child = spawnSandboxExec(["exec", "-i", containerId, "sh", "-c", safeCommand], {
       stdio: ["pipe", "pipe", "pipe"],
       windowsHide: true,
     });
@@ -614,6 +668,13 @@ server.listen(3000, '0.0.0.0', () => console.log('Preview server on :3000'));
 }
 
 export async function getSandboxLogs(containerId: string, tail: number = 50): Promise<string> {
+  if (await usesPrivateActuator()) {
+    const selected = await readActuatorSandbox();
+    if (containerId !== selected.containerId && containerId !== selected.name) throw new Error("sandbox_target_unproven");
+    const { output } = await readActuatorServiceLogs("sandbox", tail);
+    if (typeof output !== "string") throw new Error("sandbox_logs_unavailable");
+    return output;
+  }
   const { stdout } = await exec(`docker logs --tail ${tail} ${containerId}`);
   return stdout;
 }
@@ -677,6 +738,10 @@ export async function destroyFullSandboxStack(
 
 export async function isSandboxRunning(containerId: string): Promise<boolean> {
   try {
+    if (await usesPrivateActuator()) {
+      const selected = await readActuatorSandbox();
+      return (containerId === selected.containerId || containerId === selected.name) && selected.running === true;
+    }
     const { stdout } = await exec(`docker inspect -f "{{.State.Running}}" ${containerId}`);
     return stdout.trim() === "true";
   } catch {

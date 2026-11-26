@@ -364,7 +364,7 @@ async function stepInitDb(
   // Per-build DB containers are only created for dynamic sandboxes.
   const dbContainer = state.dbContainerId ?? "dpf-sandbox-postgres-1";
 
-  await waitForSandboxDb(dbContainer);
+  await waitForSandboxDb(dbContainer, buildId);
 
   // Run prisma migrate deploy inside the sandbox container.
   // The sandbox has DATABASE_URL pointing to its own postgres.
@@ -376,7 +376,7 @@ async function stepInitDb(
   // Seed sandbox DB with a copy of production data.
   const productionDbContainer =
     process.env.DPF_PRODUCTION_DB_CONTAINER ?? "dpf-postgres-1";
-  await seedSandboxDb(productionDbContainer, dbContainer);
+  await seedSandboxDb(productionDbContainer, dbContainer, buildId);
 
   return state;
 }

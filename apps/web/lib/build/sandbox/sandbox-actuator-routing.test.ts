@@ -1,0 +1,86 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const actuator = vi.hoisted(() => ({
+  mounted: vi.fn(async () => true),
+  sandbox: vi.fn(async () => ({ containerId: "c".repeat(64), name: "dpf-sandbox-1", running: true })),
+  restart: vi.fn(async () => ({ service: "sandbox", container: "dpf-sandbox-1" })),
+  exec: vi.fn(async () => ({ stdout: "ok", stderr: "" })),
+}));
+vi.mock("../../../../../scripts/lib/scope-writer-observation.mjs", async (load) => ({
+  ...await load<object>(), usesPrivateActuator: actuator.mounted, readActuatorSandbox: actuator.sandbox, restartActuatorService: actuator.restart,
+}));
+vi.mock("@/lib/workroom-runtime/sandbox-exec", async (load) => ({ ...await load<object>(), execSandbox: actuator.exec }));
+
+import { inspectDockerContainer } from "./sandbox-admin";
+import { runSandboxRecoveryCommand } from "./sandbox-recovery";
+import { readSandboxStatus } from "./sandbox";
+
+beforeEach(() => { actuator.restart.mockClear(); actuator.exec.mockClear(); });
+
+describe("sandbox admin and recovery in the qualified portal (BI-224F56F1)", () => {
+  it("reports only the sandbox the actuator observed", async () => {
+    await expect(inspectDockerContainer("dpf-sandbox-1")).resolves.toMatchObject({ containerId: "c".repeat(64), running: true,
+      status: "running", composeProjectName: null, composeWorkingDir: null });
+    await expect(inspectDockerContainer("dpf-portal-1")).resolves.toBeNull();
+  });
+
+  it("routes exec to the sandbox, start and restart to the actuator restart, and refuses anything else", async () => {
+    await expect(runSandboxRecoveryCommand("docker", ["exec", "dpf-sandbox-1", "sh", "-lc", "git status"])).resolves.toBe("ok");
+    expect(actuator.exec).toHaveBeenCalledWith(["exec", "dpf-sandbox-1", "sh", "-lc", "git status"], { timeout: 30_000 });
+    await runSandboxRecoveryCommand("docker", ["restart", "dpf-sandbox-1"]);
+    await runSandboxRecoveryCommand("docker", ["start", "c".repeat(64)]);
+    expect(actuator.restart).toHaveBeenCalledTimes(2);
+    for (const args of [["restart", "dpf-portal-1"], ["rm", "-f", "dpf-sandbox-1"], ["restart", "dpf-sandbox-1", "--time", "0"]]) {
+      await expect(runSandboxRecoveryCommand("docker", args)).rejects.toThrow("sandbox_recovery_target_unproven");
+    }
+    expect(actuator.restart).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("readSandboxStatus", () => {
+  it("reads the actuator's observed sandbox, by ID or name, and nothing else", async () => {
+    actuator.mounted.mockResolvedValue(true);
+    await expect(readSandboxStatus("dpf-sandbox-1", 5_000)).resolves.toBe("running");
+    await expect(readSandboxStatus("c".repeat(64), 5_000)).resolves.toBe("running");
+    await expect(readSandboxStatus("dpf-portal-1", 5_000)).resolves.toBeNull();
+    actuator.sandbox.mockResolvedValueOnce({ containerId: "c".repeat(64), name: "dpf-sandbox-1", running: false });
+    await expect(readSandboxStatus("dpf-sandbox-1", 5_000)).resolves.toBe("exited");
+    actuator.sandbox.mockRejectedValueOnce(new Error("scope_writer_observation_unavailable"));
+    await expect(readSandboxStatus("dpf-sandbox-1", 5_000)).resolves.toBeNull();
+    expect(actuator.exec).not.toHaveBeenCalled();
+  });
+
+  it("keeps the local docker inspect without the actuator", async () => {
+    actuator.mounted.mockResolvedValue(false);
+    const lines: string[] = [];
+    vi.spyOn(await import("@/lib/workroom-runtime/sandbox-exec"), "execSandboxCommandLine").mockImplementation(async line => {
+      lines.push(line);
+      return { stdout: "paused\n", stderr: "" };
+    });
+    await expect(readSandboxStatus("dpf-sandbox-1", 5_000)).resolves.toBe("paused");
+    expect(lines).toEqual(['docker inspect -f "{{.State.Status}}" dpf-sandbox-1']);
+    actuator.mounted.mockResolvedValue(true);
+  });
+});
+
+describe("sandbox.ts exec lines under the host command check", () => {
+  it("every built docker exec line reads as a canonical sandbox exec request", async () => {
+    const { sandboxExecOwnerFor, splitHostCommand } = await vi.importActual<typeof import("@/lib/workroom-runtime/sandbox-exec")>("@/lib/workroom-runtime/sandbox-exec");
+    const sandbox = await import("./sandbox");
+    const c = "dpf-sandbox-1";
+    const lines = [
+      sandbox.buildDockerExecSandboxCommand(c, "git -C /workspace status --porcelain"),
+      sandbox.buildSandboxNextDevLaunchCommand(c),
+      `docker exec ${c} sh -c ${JSON.stringify(sandbox.buildSandboxWorkspaceCleanupCommand())}`,
+      `docker exec ${c} sh -c ${JSON.stringify(sandbox.buildSandboxDevServerStopCommand())}`,
+      `docker exec ${c} sh -c ${JSON.stringify(sandbox.buildSandboxNextDevReadinessCommand())}`,
+      `docker exec ${c} sh -c "cd /workspace && { CI=true pnpm install --frozen-lockfile 2>&1 || CI=true pnpm install 2>&1; }"`,
+      `docker exec ${c} sh -c "ss -tlnp 2>/dev/null | grep ':3000' || echo none"`,
+    ];
+    for (const line of lines) {
+      const argv = splitHostCommand(line);
+      expect(argv, line).not.toBeNull();
+      expect(sandboxExecOwnerFor(argv!.slice(1)), line).not.toBeNull();
+    }
+  });
+});

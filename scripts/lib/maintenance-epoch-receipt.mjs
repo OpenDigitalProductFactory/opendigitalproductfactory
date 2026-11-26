@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { canonicalJson } from './canonical-json.mjs';
 import { signTransitionPayload, verifyTransitionSignature } from './transition-signing.mjs';
 
@@ -9,6 +10,32 @@ const time = value => typeof value === 'string' && /^\d{4}-\d\d-\d\dT.*Z$/.test(
 const SERVICES = ['portal', 'sandbox'];
 const BASE_KEYS = ['schemaVersion', 'runId', 'targetSha', 'promoterDigest', 'recoveryPointDigest', 'project', 'daemonId', 'capturedAt', 'before'];
 const FINAL_KEYS = [...BASE_KEYS, 'completedAt', 'after', 'retiredContainerIds', 'inventoryDigest'];
+
+function dockerStartNanoseconds(value) {
+  if (typeof value !== 'string') return null;
+  const match = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.(\d{1,9}))?Z$/.exec(value);
+  if (!match) return null;
+  const milliseconds = Date.parse(`${match[1]}Z`);
+  if (!Number.isFinite(milliseconds) || milliseconds <= 0
+    || new Date(milliseconds).toISOString() !== `${match[1]}.000Z`) return null;
+  return BigInt(milliseconds) * 1_000_000n + BigInt((match[2] ?? '').padEnd(9, '0'));
+}
+
+/** Compare exact replacement IDs and Docker's full fractional timestamps.
+ * Callers separately authenticate retirement and qualify the writer lifetime. */
+export function hasContinuousMaintenanceStarts(retired, current, observedAtMs) {
+  if (!exact(retired, SERVICES) || !exact(current, SERVICES)
+    || !Number.isSafeInteger(observedAtMs) || observedAtMs <= 0) return false;
+  const observedAt = BigInt(observedAtMs) * 1_000_000n;
+  return SERVICES.every(service => {
+    const previous = retired[service], observed = current[service];
+    if (!exact(previous, ['id', 'startedAt']) || !exact(observed, ['id', 'startedAt'])
+      || typeof previous.id !== 'string' || !HEX.test(previous.id) || observed.id !== previous.id) return false;
+    const originalStart = dockerStartNanoseconds(previous.startedAt);
+    const currentStart = dockerStartNanoseconds(observed.startedAt);
+    return originalStart !== null && currentStart !== null && currentStart >= originalStart && currentStart <= observedAt;
+  });
+}
 
 function validatePayload(value, expected, checkpoint) {
   if (!exact(value, checkpoint ? BASE_KEYS : FINAL_KEYS) || value.schemaVersion !== 1
@@ -45,21 +72,39 @@ export function signMaintenanceEpoch(payload, secret, checkpoint = false) {
   return { ...unsigned, signature: signTransitionPayload(unsigned, secret) };
 }
 
-export function verifyMaintenanceEpoch(envelope, secret, expected, checkpoint = false) {
+function inspectEnvelope(envelope, checkpoint) {
   if (!exact(envelope, ['version', 'kind', 'payload', 'signature']) || envelope.version !== 1
     || envelope.kind !== (checkpoint ? 'maintenance-epoch-checkpoint' : 'maintenance-epoch-retirement')
     || typeof envelope.payload !== 'string' || envelope.payload.length > 16_384
     || typeof envelope.signature !== 'string') refuse();
-  const { signature, ...unsigned } = envelope;
-  verifyTransitionSignature(unsigned, signature, secret);
+}
+
+function readEnvelopePayload(envelope, expected, checkpoint) {
   let payload;
   try { payload = JSON.parse(envelope.payload); } catch { refuse(); }
   if (canonicalJson(payload) !== envelope.payload) refuse();
   return validatePayload(payload, expected, checkpoint);
 }
 
+export function verifyMaintenanceEpoch(envelope, secret, expected, checkpoint = false) {
+  inspectEnvelope(envelope, checkpoint);
+  const { signature, ...unsigned } = envelope;
+  verifyTransitionSignature(unsigned, signature, secret);
+  return readEnvelopePayload(envelope, expected, checkpoint);
+}
 
-const INSPECT_TEMPLATE = '{"Id":{{json .Id}},"State":{"Running":{{json .State.Running}},"StartedAt":{{json .State.StartedAt}}},"Config":{"Labels":{{json .Config.Labels}}}}';
+/** The private actuator has already authenticated this retirement. Bind the
+ * attested digest and exact run before importing the original envelope. */
+export function readAttestedMaintenanceRetirement(observation, expected) {
+  const { envelope, retirementDigest } = observation ?? {};
+  inspectEnvelope(envelope, false);
+  if (typeof retirementDigest !== 'string' || !HEX.test(retirementDigest)
+    || createHash('sha256').update(canonicalJson(envelope)).digest('hex') !== retirementDigest) refuse();
+  return readEnvelopePayload(envelope, expected, false);
+}
+
+
+const INSPECT_TEMPLATE = '{"Id":{{json .Id}},"State":{"Running":{{json .State.Running}},"Status":{{json .State.Status}},"StartedAt":{{json .State.StartedAt}}},"Config":{"Labels":{{json .Config.Labels}}}}';
 const observationInvalid = () => { throw new Error("maintenance_epoch_observation_unavailable"); };
 
 /** Read-only observer. It never starts, stops, signals or removes a container. */
@@ -70,32 +115,42 @@ export async function observeMaintenanceEnvironments({ project, runDocker }) {
   if (!inventory.length || inventory.length > 10_000 || inventory.some(id => !/^[a-f0-9]{64}$/.test(id))
     || new Set(inventory).size !== inventory.length) observationInvalid();
   const environments = {};
+  let activeProjectPromoter = false;
   // Inspect only this project's candidate services; inventory remains complete
   // for proving removal. Do not load Docker Config.Env or other secret fields.
   const projectIds = (await runDocker(['ps', '--all', '--no-trunc', '--filter', `label=com.docker.compose.project=${project}`,
     '--format', '{{.ID}}'])).trim().split(/\r?\n/).filter(Boolean);
-  for (const id of projectIds) {
-    if (!inventory.includes(id)) observationInvalid();
-    const raw = await runDocker(['inspect', '--type', 'container', '--format', INSPECT_TEMPLATE, id]);
-    // The executable prints a bounded JSON projection (not the environment).
+  const inventoryIds = new Set(inventory);
+  if (projectIds.length < SERVICES.length || projectIds.length > 1024
+    || new Set(projectIds).size !== projectIds.length || projectIds.some(id => !inventoryIds.has(id))) observationInvalid();
+  // Ask for the whole project in one inspection. The executable emits one
+  // bounded projection per ID without container environment values.
+  const rows = (await runDocker(['inspect', '--type', 'container', '--format', INSPECT_TEMPLATE, ...projectIds])).trim().split(/\r?\n/);
+  if (rows.length !== projectIds.length) observationInvalid();
+  for (const [index, raw] of rows.entries()) {
     let inspected;
     try { inspected = JSON.parse(raw); } catch { observationInvalid(); }
-    const service = inspected.Config?.Labels?.['com.docker.compose.service'];
+    const id = projectIds[index], labels = inspected?.Config?.Labels;
+    if (inspected?.Id !== id || labels?.['com.docker.compose.project'] !== project) observationInvalid();
+    const service = labels['com.docker.compose.service'];
+    if (service === 'promoter' && !['exited', 'dead'].includes(inspected.State?.Status)) activeProjectPromoter = true;
     if (!SERVICES.includes(service)) continue;
-    if (environments[service] || inspected.Id !== id || inspected.State?.Running !== true
-      || inspected.Config.Labels['com.docker.compose.project'] !== project) observationInvalid();
+    if (environments[service] || inspected.State?.Running !== true) observationInvalid();
     environments[service] = { id, startedAt: inspected.State.StartedAt };
   }
   if (!SERVICES.every(service => environments[service])) observationInvalid();
   // A daemon switch during the multi-call observation invalidates the snapshot.
   if ((await runDocker(['info', '--format', '{{.ID}}'])).trim() !== daemonId) observationInvalid();
-  return { daemonId, environments, inventory: inventory.sort() };
+  return { daemonId, environments, inventory: inventory.sort(), activeProjectPromoter };
 }
 
 
 /** Existing canonical launchers name rollback-capable actuators dpf-promoter-*.
  * Final portal/sandbox retirement alone does not prove those actuators exited. */
 export async function assertNoCanonicalActuators({ runDocker }) {
-  const output = await runDocker(['ps', '--no-trunc', '--filter', 'name=dpf-promoter', '--format', '{{.ID}}']);
-  if (output.trim()) observationInvalid();
+  const output = await runDocker(['ps', '--all', '--no-trunc', '--filter', 'name=dpf-promoter', '--format', '{{.ID}}\t{{.State}}']);
+  const rows = output.trim().split(/\r?\n/).filter(Boolean);
+  // A created container may represent a lost start reply. Preserve the hold
+  // until a verified terminal exit or exact removal closes that reservation.
+  if (rows.length > 256 || rows.some(row => !/^[a-f0-9]{64}\t(?:exited|dead)$/.test(row))) observationInvalid();
 }

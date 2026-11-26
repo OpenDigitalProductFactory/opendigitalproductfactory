@@ -144,6 +144,22 @@ function evidenceMatches(input: {
   );
 }
 
+/**
+ * BI-224F56F1: the private actuator's view of the verified release target. It
+ * applies every rule of evidenceMatches that does not need the portal's own
+ * install context or container digest: schema, candidate, publisher run and
+ * freshness. The caller binds the candidate to its own run.
+ */
+export async function readFreshVerifiedReleaseTarget(now: Date = new Date()): Promise<VerifiedReleaseTargetEvidence | null> {
+  const state = await loadReleaseHealthState();
+  const evidence = state?.verifiedTarget;
+  if (!state || !evidence || typeof evidence !== "object" || evidence.schemaVersion !== 1) return null;
+  if (!validCandidate(evidence.candidate) || !verifiedPublisherMatches(state, evidence.candidate, now)) return null;
+  if (evidence.publisherRunId !== state.snapshot?.runId || !freshTimestamp(evidence.verifiedAt, now)) return null;
+  if (!REGISTRY_OWNER.test(evidence.ghcrOwner) || !OCI_TAG.test(evidence.channelTag)) return null;
+  return evidence;
+}
+
 export async function loadVerifiedReleaseTargetEvidence(input: {
   context: ReleaseInstallContext;
   currentConfigDigest: string;

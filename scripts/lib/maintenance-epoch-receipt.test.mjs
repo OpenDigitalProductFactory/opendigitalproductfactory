@@ -1,6 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { signMaintenanceEpoch, verifyMaintenanceEpoch } from './maintenance-epoch-receipt.mjs';
+import * as epochs from './maintenance-epoch-receipt.mjs';
 
 const secret = 'a'.repeat(64);
 const at = '2026-10-16T01:00:00.000Z';
@@ -54,3 +55,38 @@ describe('authenticated maintenance epoch retirement', () => {
   }
 });
 function mutateCopy(mutate) { const p = fixture(); mutate(p); return p; }
+
+describe('authenticated replacement start continuity', () => {
+  const original = fixture().after;
+  original.portal.startedAt = '2026-10-16T01:01:00.296462753Z';
+  const observedAt = Date.parse('2026-10-16T01:03:00.000Z');
+
+  it('accepts exact replacement IDs with increasing starts at full Docker precision', () => {
+    const current = structuredClone(original);
+    current.portal.startedAt = '2026-10-16T01:01:00.296462754Z';
+    current.sandbox.startedAt = '2026-10-16T01:02:00.001Z';
+    assert.equal(epochs.hasContinuousMaintenanceStarts(original, current, observedAt), true);
+    assert.equal(epochs.hasContinuousMaintenanceStarts(original, original, observedAt), true);
+  });
+
+  for (const [label, time] of [
+    ['one-nanosecond reversal', '2026-10-16T01:01:00.296462752Z'],
+    ['future sub-millisecond part', '2026-10-16T01:03:00.000000001Z'],
+    ['normalized calendar value', '2026-11-31T01:01:00.300Z'],
+    ['normalized midnight', '2026-10-15T24:00:00Z'],
+    ['extra precision', '2026-10-16T01:01:01.0000000001Z'],
+    ['non-UTC equivalent', '2026-10-16T02:01:00.296462753+01:00'],
+  ]) it(`refuses a ${label}`, () => {
+    const current = structuredClone(original);
+    current.portal.startedAt = time;
+    const ceiling = label === 'normalized calendar value' ? Date.parse('2027-01-01T00:00:00.000Z') : observedAt;
+    assert.equal(epochs.hasContinuousMaintenanceStarts(original, current, ceiling), false);
+  });
+
+  it('requires both exact signed replacement identities', () => {
+    const current = structuredClone(original);
+    current.sandbox.id = '5'.repeat(64);
+    assert.equal(epochs.hasContinuousMaintenanceStarts(original, current, observedAt), false);
+    assert.equal(epochs.hasContinuousMaintenanceStarts(original, { portal: original.portal }, observedAt), false);
+  });
+});

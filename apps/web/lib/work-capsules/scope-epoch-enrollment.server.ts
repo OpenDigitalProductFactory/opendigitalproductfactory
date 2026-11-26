@@ -7,12 +7,15 @@ import { canonicalJson } from "@dpf/integration-shared/canonical-json";
 import { isRecord } from "@/lib/shared/coerce";
 import { runProcessWithBudget } from "@/lib/shared/run-process-with-budget";
 import { attachMaintenanceEpochEvidence } from "@/lib/self-upgrade/maintenance-epoch-evidence";
+import { lockCanonicalRuntimeAdmission } from "@/lib/platform-runtime/work-admission";
 import { readSuccessfulMaintenanceRecoveryPoint } from "@/lib/self-upgrade/recovery-eligibility";
-import { verifyMaintenanceEpoch, observeMaintenanceEnvironments, assertNoCanonicalActuators } from "../../../../scripts/lib/maintenance-epoch-receipt.mjs";
+import { verifyMaintenanceEpoch, readAttestedMaintenanceRetirement, observeMaintenanceEnvironments, assertNoCanonicalActuators, hasContinuousMaintenanceStarts } from "../../../../scripts/lib/maintenance-epoch-receipt.mjs";
+import { usesPrivateActuator, readScopeWriterObservation, readScopeWriterRetirement } from "@/lib/platform-runtime/actuator-client";
 import type { ToolResult } from "@/lib/mcp-tool-types";
 import { SCOPE_EPOCH_WRITER_PATHS, validateScopeEpochWriterContract, type ScopeEpochWriterContract } from "./scope-epoch-contract";
 import type { CapsuleDb } from "./work-capsule-store-types";
 
+type WriterProbe = typeof import("./scope-epoch-writer-probe.mjs");
 type Run = { runId: string; status: string; targetSha: string | null; deployedSha: string | null;
   startedAt: Date | null; completionEvidence: unknown };
 export type ScopeEpochEnrollmentPorts = {
@@ -21,6 +24,10 @@ export type ScopeEpochEnrollmentPorts = {
   attachRetirement: typeof attachMaintenanceEpochEvidence;
   readRun: (runId: string) => Promise<Run | null>;
   now: () => Date;
+  attestProcess?: WriterProbe["attestScopeWriterProcess"];
+  inspectServed?: WriterProbe["inspectServedScopeWriter"];
+  readClosing?: () => Promise<unknown>;
+  readAttested?: () => Promise<unknown>;
 };
 export type ScopeEpochEnrollmentProof = { assertCurrent(tx: CapsuleDb): Promise<void> };
 const prepared = new WeakMap<object, ScopeEpochEnrollmentProof>();
@@ -98,6 +105,20 @@ async function probe<T>(step: ProbeStep, run: () => T | Promise<T>): Promise<T> 
 const record = (value: unknown) => isRecord(value) ? value : null;
 const brands = new WeakSet<object>();
 const currentInspect = '{"id":{{json .Id}},"image":{{json .Image}},"running":{{json .State.Running}},"hostname":{{json .Config.Hostname}},"labels":{{json .Config.Labels}}}';
+let installedWriter: ReturnType<WriterProbe["inspectServedScopeWriter"]> | undefined;
+
+// Cache the emitted bytes only after proving the loader namespace for the
+// lifetime of this process. A failed initial qualification can be retried.
+function inspectInstalledWriter() {
+  installedWriter ??= import("./scope-epoch-writer-probe.mjs").then(async probe => {
+    await probe.attestScopeWriterProcess();
+    return probe.inspectServedScopeWriter();
+  }).catch(error => {
+    installedWriter = undefined;
+    throw error;
+  });
+  return installedWriter;
+}
 
 /** Full kernel-provided container identity, never an arbitrary hostname prefix. */
 export function currentScopeWriterContainerId(cgroup: string, mounts: string): string {
@@ -124,8 +145,76 @@ function defaults(): ScopeEpochEnrollmentPorts {
     } };
 }
 
-/** Canonical identity/cohort qualification happens outside the scope transaction.
- * Its byte proof is independent of semantic, authority and retirement evidence. */
+async function authenticatedRetirement(ports: ScopeEpochEnrollmentPorts, sourceSha: string, attested?: Record<string, unknown>) {
+  const imported = await probe("attach-retirement", () => ports.attachRetirement({ onProbeFailure: refuseProbe,
+    ...(attested ? { readAttested: async () => attested } : {}) }));
+  if (imported.status === "raced") refuse("retirement-attachment-raced");
+  if (imported.status !== "attached" && imported.status !== "replayed") refuse("final-retirement-unavailable");
+  const run = await probe("read-upgrade-run", () => ports.readRun(imported.runId));
+  const evidence = record(run?.completionEvidence), readiness = record(evidence?.readiness);
+  const recovery = run ? readSuccessfulMaintenanceRecoveryPoint(evidence?.recoveryPoint, run.runId) : null;
+  if (!run || run.status !== "succeeded" || run.targetSha !== sourceSha || run.deployedSha !== sourceSha || !run.startedAt
+    || !recovery
+    || readiness?.result !== "ready" || readiness.mode !== "enforced" || readiness.targetSha !== sourceSha || typeof readiness.imageDigest !== "string") refuse("matching-canonical-run-unproven");
+  const envelope = evidence!.maintenanceEpochRetirement;
+  const expected = { runId: run.runId, targetSha: sourceSha, promoterDigest: readiness.imageDigest,
+    recoveryPointDigest: hash(canonicalJson(recovery)), now: ports.now().getTime() };
+  const retirementDigest = hash(canonicalJson(envelope));
+  if (attested && attested.retirementDigest !== retirementDigest) refuse("final-retirement-unavailable");
+  // The qualified portal verifies the actuator's attestation; the legacy recipe reads the host secret itself.
+  const secret = attested ? "" : (await probe("read-transition-secret", () => ports.readFile("/dpf-state/runtime-transition.secret"))).toString().trim();
+  const retired = await probe("verify-maintenance-retirement", () => attested
+    ? readAttestedMaintenanceRetirement(attested, expected) : verifyMaintenanceEpoch(envelope, secret, expected));
+  if (Date.parse(recovery.createdAt) > Date.parse(retired.capturedAt) || run.startedAt.getTime() > Date.parse(retired.capturedAt)) refuse("retirement-order-unproven");
+  return { retired, retirementDigest };
+}
+
+function createEnrollmentProof(mode: EnrollmentAdmissionMode, close?: () => Promise<void>): ScopeEpochEnrollmentProof {
+  const pid = process.pid, processHostname = hostname();
+  const checks = new WeakMap<CapsuleDb, Promise<void>>();
+  const proof: ScopeEpochEnrollmentProof = { async assertCurrent(tx) {
+    if (!brands.has(proof) || pid !== process.pid || processHostname !== hostname()) refuse("process-proof-unproven");
+    let checked = checks.get(tx);
+    if (!checked) {
+      checked = lockScopeEpochEnrollmentAdmission(tx, mode).then(close);
+      checks.set(tx, checked);
+    }
+    return checked;
+  } };
+  Object.freeze(proof); brands.add(proof);
+  return proof;
+}
+
+async function prepareHardenedEnrollment(ports: ScopeEpochEnrollmentPorts, containerId: string) {
+  const observedBundle = ports.attestProcess && ports.inspectServed
+    ? ports.attestProcess().then(() => ports.inspectServed!()) : inspectInstalledWriter();
+  const [bundle, version, attested] = await Promise.all([observedBundle, ports.readFile("/app/.dpf-image-version"),
+    (ports.readAttested ?? readScopeWriterRetirement)().then(record)]);
+  const source = version.toString().trim();
+  if (!attested) refuse("final-retirement-unavailable");
+  const { retired, retirementDigest } = await authenticatedRetirement(ports, source, attested);
+  if (retired.after.portal.id !== containerId) refuse("current-portal-unproven");
+  return createEnrollmentProof("canonical", async () => {
+    try {
+      const current = record(await (ports.readClosing ?? readScopeWriterObservation)());
+      const launch = record(current?.launch), served = record(current?.served);
+      const cohort = record(current?.cohort), portal = record(cohort?.portal);
+      const now = ports.now().getTime();
+      if (!current || current.runId !== retired.runId || current.sourceSha !== source
+        || current.retirementDigest !== retirementDigest || current.project !== retired.project
+        || current.daemonId !== retired.daemonId || typeof current.observedAt !== "number"
+        || !Number.isSafeInteger(current.observedAt) || now - current.observedAt < 0 || now - current.observedAt > 2_500
+        || !launch || launch.id !== containerId || launch.startedAt !== portal?.startedAt
+        || typeof launch.image !== "string" || !/^sha256:[a-f0-9]{64}$/.test(launch.image)
+        || typeof launch.recipeDigest !== "string" || !/^[a-f0-9]{64}$/.test(launch.recipeDigest)
+        || canonicalJson(served) !== canonicalJson({ image: launch.image, ...bundle })
+        || !hasContinuousMaintenanceStarts(retired.after, current.cohort, current.observedAt)) refuse("current-cohort-unproven");
+    } catch { refuse("current-cohort-unproven"); }
+  });
+}
+
+/** Prepare identity before the claim locks and close the hardened observation
+ * inside the same transaction that will publish the epoch. */
 export async function assertScopeEpochEnrollmentReady(ports: ScopeEpochEnrollmentPorts = defaults()): Promise<ScopeEpochEnrollmentProof> {
   const docker = async (args: string[]) => {
     const result = await ports.runDocker(args);
@@ -138,6 +227,11 @@ export async function assertScopeEpochEnrollmentReady(ports: ScopeEpochEnrollmen
       read("read-process-cgroup", "/proc/self/cgroup"), read("read-process-mounts", "/proc/self/mountinfo"),
     ]);
     const containerId = await probe("identify-container", () => currentScopeWriterContainerId(cgroup.toString(), mounts.toString()));
+    // The one mount rule (actuator-client), applied to the table read above; a
+    // failed read already refused, and a malformed table selects the hardened proof.
+    if (await usesPrivateActuator({ read: async () => mounts })) {
+      return await prepareHardenedEnrollment(ports, containerId);
+    }
     const inspect = async () => {
       const output = await probe("inspect-portal", () => docker(["inspect", "--type", "container", "--format", currentInspect, containerId]));
       const value = record(await probe("parse-portal-inspect", () => JSON.parse(output)));
@@ -165,52 +259,49 @@ export async function assertScopeEpochEnrollmentReady(ports: ScopeEpochEnrollmen
     const observed: ScopeEpochWriterContract = await probe("validate-packaged-writer-contract", () => validateScopeEpochWriterContract(packaged));
     if (canonicalJson(local) !== canonicalJson(observed)) refuse("packaged-writer-mismatch");
 
-    const imported = await probe("attach-retirement", () => ports.attachRetirement({ onProbeFailure: refuseProbe }));
-    if (imported.status === "raced") refuse("retirement-attachment-raced");
-    if (imported.status !== "attached" && imported.status !== "replayed") refuse("final-retirement-unavailable");
-    const run = await probe("read-upgrade-run", () => ports.readRun(imported.runId));
-    const evidence = record(run?.completionEvidence), readiness = record(evidence?.readiness);
-    const recovery = run ? readSuccessfulMaintenanceRecoveryPoint(evidence?.recoveryPoint, run.runId) : null;
-    if (!run || run.status !== "succeeded" || run.targetSha !== local.sourceSha || run.deployedSha !== local.sourceSha || !run.startedAt
-      || !recovery
-      || readiness?.result !== "ready" || readiness.mode !== "enforced" || readiness.targetSha !== local.sourceSha || typeof readiness.imageDigest !== "string") refuse("matching-canonical-run-unproven");
-    const secret = (await read("read-transition-secret", "/dpf-state/runtime-transition.secret")).toString().trim();
-    const retired = await probe("verify-maintenance-retirement", () => verifyMaintenanceEpoch(evidence!.maintenanceEpochRetirement, secret, { runId: run.runId,
-      targetSha: local.sourceSha, promoterDigest: readiness.imageDigest,
-      recoveryPointDigest: hash(canonicalJson(recovery)), now: ports.now().getTime() }));
-    if (Date.parse(recovery.createdAt) > Date.parse(retired.capturedAt) || run.startedAt.getTime() > Date.parse(retired.capturedAt)) refuse("retirement-order-unproven");
+    const { retired } = await authenticatedRetirement(ports, local.sourceSha);
     await probe("observe-canonical-actuators", () => assertNoCanonicalActuators({ runDocker: docker }));
     const cohort = await probe("observe-current-cohort", () => observeMaintenanceEnvironments({ project: current.project, runDocker: docker }));
+    // Legacy recipe: the original cohort comparison, unchanged (BI-224F56F1).
     if (retired.project !== current.project || retired.daemonId !== cohort.daemonId
       || retired.after.portal.id !== containerId || canonicalJson(retired.after) !== canonicalJson(cohort.environments)
       || retired.retiredContainerIds.some((id: string) => cohort.inventory.includes(id))
       || canonicalJson(await inspect()) !== canonicalJson(current)) refuse("current-cohort-unproven");
-    const pid = process.pid, processHostname = hostname();
-    const proof: ScopeEpochEnrollmentProof = { async assertCurrent(tx) {
-      if (!brands.has(proof) || pid !== process.pid || processHostname !== hostname()) refuse("process-proof-unproven");
-      await lockScopeEpochEnrollmentAdmission(tx);
-    } };
-    Object.freeze(proof); brands.add(proof);
-    return proof;
+    return createEnrollmentProof("legacy");
   } catch (error) {
     return refuseProbe("assemble-enrollment-proof", error);
   }
 }
 
 
-/** Existing durable admission protocol, reused by the qualified scope writer. */
-export async function lockScopeEpochEnrollmentAdmission(tx: CapsuleDb): Promise<void> {
-  const admission = tx as unknown as {
-    $executeRaw?: (strings: TemplateStringsArray, ...values: unknown[]) => Promise<unknown>;
+/**
+ * Existing durable admission protocol, reused by the qualified scope writer.
+ *
+ * "legacy" (the default) is the original protocol for installs without the
+ * private actuator: the two advisory locks, and an active run is pending,
+ * queued or running. "canonical" is for the hardened portal and the
+ * actuator's own admissions: it shares the durable launcher's
+ * table-before-advisory lock order (avoiding inversion with transition
+ * settlement) and also counts a completing run as active.
+ */
+export type EnrollmentAdmissionMode = "legacy" | "canonical";
+export async function lockScopeEpochEnrollmentAdmission(tx: CapsuleDb, mode: EnrollmentAdmissionMode = "legacy"): Promise<void> {
+  const admission = tx as unknown as Partial<Parameters<typeof lockCanonicalRuntimeAdmission>[0]> & {
     selfUpgradeRun?: { findFirst(args: unknown): Promise<unknown> };
     runtimeCapabilityTransition?: { findFirst(args: unknown): Promise<unknown> };
   };
-  if (!admission.$executeRaw || !admission.selfUpgradeRun?.findFirst || !admission.runtimeCapabilityTransition?.findFirst) refuse("transaction-admission-unavailable");
-  // Existing admission keys, one order, no Docker or filesystem I/O here.
-  await admission.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('runtime-capability-transition'))`;
-  await admission.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('self-upgrade-admission'))`;
+  if (!admission.$executeRaw || (mode === "canonical" && !admission.$queryRaw) || !admission.selfUpgradeRun?.findFirst
+    || !admission.runtimeCapabilityTransition?.findFirst) refuse("transaction-admission-unavailable");
+  if (mode === "canonical") {
+    await lockCanonicalRuntimeAdmission(admission as Parameters<typeof lockCanonicalRuntimeAdmission>[0]);
+  } else {
+    // Existing admission keys, one order, no Docker or filesystem I/O here.
+    await admission.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('runtime-capability-transition'))`;
+    await admission.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('self-upgrade-admission'))`;
+  }
+  const activeRuns = mode === "canonical" ? ["pending", "queued", "running", "completing"] : ["pending", "queued", "running"];
   if (await admission.runtimeCapabilityTransition.findFirst({ where: { OR: [{ status: { in: ["pending", "applying", "host_applied", "compensating"] } }, { status: "rollback_failed", failure: { path: ["recoveryRequired"], equals: true } }] }, select: { id: true } })
-    || await admission.selfUpgradeRun.findFirst({ where: { status: { in: ["pending", "queued", "running"] } }, select: { id: true } })) refuse("canonical-transition-active");
+    || await admission.selfUpgradeRun.findFirst({ where: { status: { in: activeRuns } }, select: { id: true } })) refuse("canonical-transition-active");
   // A terminal history row is not a global revision. Continuing actuator
   // and actual portal compatibility floors, not a history heuristic, exclude
   // later unaware writers. Active/recovery admissions remain serialized.

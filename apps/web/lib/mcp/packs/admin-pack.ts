@@ -17,13 +17,13 @@
 // mirror agent-grants.ts TOOL_TO_GRANTS, which stays the gating source.
 
 import { prisma } from "@dpf/db";
+import { ACTUATOR_SERVICE_LOG_NAMES, readPrivateActuatorMount, readActuatorProjectContainers, readActuatorServiceLogs } from "../../../../../scripts/lib/scope-writer-observation.mjs";
 
-import { lazyFsPromises, lazyPath, lazyChildProcess, lazyUtil, getCwd } from "@/lib/shared/lazy-node";
+import { lazyFsPromises, lazyOs, lazyPath, lazyChildProcess, lazyUtil, getCwd } from "@/lib/shared/lazy-node";
 import type { RegisteredToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
 import { parseAdminDiagnostic } from "../admin-command-diagnostic";
 import { stripSqlComments } from "../sql-comments";
-import { hasPortalActuator } from "../admin-actuator-mountinfo";
 
 // These tools are available on the /admin route for platform administration.
 // Tier 1 = read-only, Tier 2 = reversible, Tier 3 = destructive (sideEffect: true).
@@ -111,18 +111,18 @@ const definitions: RegisteredToolDefinition[] = [
   },
   {
     name: "admin_run_command",
-    description: "Run a diagnostic or controlled command in the project directory. Only docker compose, git, and pnpm commands are permitted. Bounded local diagnostics use current delegation; destructive commands remain blocked.",
+    description: "Run a bounded project diagnostic. Supports Docker Compose ps and logs, Git status and Git rev-parse. Use the dedicated tools for service, migration and recovery actions.",
     inputSchema: {
       type: "object",
       properties: {
-        command: { type: "string", description: "Shell command to run (docker compose, git, or pnpm only)" },
+        command: { type: "string", description: "A supported Docker Compose or Git diagnostic" },
       },
       required: ["command"],
     },
     workroomAccess: "outside-workroom",
     requiredCapability: "view_admin",
     executionMode: "immediate",
-    sideEffect: true, // Tier 3: potentially destructive
+    sideEffect: true, // Preserve the public grant and consequence floor.
     consequence: "irreversible",
     consequenceForCall: async ({ params }) => parseAdminDiagnostic(params.command)
       ? { consequence: null, reason: "bounded-local-diagnostic" }
@@ -151,28 +151,38 @@ function logAdminActivity(
   }).then(() => {}).catch(() => {});
 }
 
-async function holdDirectDockerLogs(userId: string, tool: string, params: Record<string, unknown>): Promise<ToolResult> {
-  const message = "Direct Docker logs are unavailable unless the private actuator mount is confirmed absent.";
+function readAdminActuatorMount() {
+  return readPrivateActuatorMount({ read: path => lazyFsPromises().readFile(path, "utf8"), platform: lazyOs().platform() });
+}
+
+async function holdDirectDocker(userId: string, tool: string, params: Record<string, unknown>, error: string): Promise<ToolResult> {
+  const message = "Direct Docker is unavailable unless the private actuator mount is confirmed absent.";
   await logAdminActivity(userId, tool, params, "blocked", 1, message);
-  return { success: false, error: "admin_logs_require_actuator", message };
+  return { success: false, error, message };
 }
 
 async function adminViewLogs(params: Record<string, unknown>, userId: string): Promise<ToolResult> {
   const service = String(params.service ?? "");
-  const lines = Math.min(Number(params.lines) || 100, 500);
-  const ALLOWED_SERVICES = ["portal", "sandbox", "postgres", "portal-init", "browser-use"];
-  if (!ALLOWED_SERVICES.includes(service)) {
-    return { success: false, error: `Invalid service. Allowed: ${ALLOWED_SERVICES.join(", ")}`, message: `Unknown service "${service}".` };
+  const lines = Math.max(1, Math.min(Math.trunc(Number(params.lines) || 100), 500));
+  if (!ACTUATOR_SERVICE_LOG_NAMES.includes(service)) {
+    return { success: false, error: `Invalid service. Allowed: ${ACTUATOR_SERVICE_LOG_NAMES.join(", ")}`, message: `Unknown service "${service}".` };
   }
   try {
-    if (await hasPortalActuator()) return holdDirectDockerLogs(userId, "admin_view_logs", { service, lines });
-    const { exec: execCb } = lazyChildProcess();
-    const { promisify } = lazyUtil();
-    const execAsync = promisify(execCb);
-    const { stdout } = await execAsync(`docker compose logs ${service} --tail ${lines} --no-color 2>&1`, {
-      cwd: composeCwd(),
-      timeout: 15_000,
-    });
+    const mount = await readAdminActuatorMount();
+    if (mount === "unknown") return holdDirectDocker(userId, "admin_view_logs", { service, lines }, "admin_logs_require_actuator");
+    let stdout: string;
+    if (mount === "mounted") {
+      const logs = await readActuatorServiceLogs(service, lines) as { output?: unknown };
+      if (typeof logs.output !== "string") throw new Error("actuator_log_service_unavailable");
+      stdout = logs.output;
+    } else {
+      const { exec: execCb } = lazyChildProcess();
+      const { promisify } = lazyUtil();
+      const result = await promisify(execCb)(`docker compose logs ${service} --tail ${lines} --no-color 2>&1`, {
+        cwd: composeCwd(), timeout: 15_000,
+      });
+      stdout = result.stdout;
+    }
     await logAdminActivity(userId, "admin_view_logs", { service, lines }, "success", 1, stdout.slice(0, 500));
     return { success: true, message: `Last ${lines} lines from ${service}:`, data: { service, output: stdout.slice(0, 30000) } };
   } catch (err) {
@@ -303,14 +313,8 @@ async function adminRestartService(params: Record<string, unknown>, userId: stri
 
 async function adminRunMigration(_params: Record<string, unknown>, userId: string): Promise<ToolResult> {
   try {
-    const { exec: execCb } = lazyChildProcess();
-    const { promisify } = lazyUtil();
-    const execAsync = promisify(execCb);
     await logAdminActivity(userId, "admin_run_migration", {}, "success", 2, "Running prisma migrate deploy");
-    const { stdout, stderr } = await execAsync(
-      `docker compose exec -T portal pnpm --filter @dpf/db exec prisma migrate deploy 2>&1`,
-      { cwd: composeCwd(), timeout: 120_000 },
-    );
+    const { stdout, stderr } = await runAdminDatabaseMaintenance("migrate");
     const output = (stdout + "\n" + stderr).trim();
     return { success: true, message: "Migration deploy complete.", data: { output: output.slice(0, 5000) } };
   } catch (err) {
@@ -321,14 +325,8 @@ async function adminRunMigration(_params: Record<string, unknown>, userId: strin
 
 async function adminRunSeed(_params: Record<string, unknown>, userId: string): Promise<ToolResult> {
   try {
-    const { exec: execCb } = lazyChildProcess();
-    const { promisify } = lazyUtil();
-    const execAsync = promisify(execCb);
     await logAdminActivity(userId, "admin_run_seed", {}, "success", 2, "Running seed");
-    const { stdout, stderr } = await execAsync(
-      `docker compose exec -T portal pnpm --filter @dpf/db run seed 2>&1`,
-      { cwd: composeCwd(), timeout: 300_000 },
-    );
+    const { stdout, stderr } = await runAdminDatabaseMaintenance("seed");
     const output = (stdout + "\n" + stderr).trim();
     return { success: true, message: "Seed complete.", data: { output: output.slice(0, 5000) } };
   } catch (err) {
@@ -337,56 +335,41 @@ async function adminRunSeed(_params: Record<string, unknown>, userId: string): P
   }
 }
 
+async function runAdminDatabaseMaintenance(action: "migrate" | "seed") {
+  const { exec, execFile } = lazyChildProcess();
+  const { promisify } = lazyUtil();
+  const migrate = action === "migrate";
+  const args = ["--filter", "@dpf/db", ...(migrate ? ["exec", "prisma", "migrate", "deploy"] : ["run", "seed"])];
+  const timeout = migrate ? 120_000 : 300_000;
+  const mount = await readAdminActuatorMount();
+  if (mount === "unknown") throw new Error("Could not determine whether the private actuator is mounted.");
+  if (mount === "mounted") return promisify(execFile)("/usr/local/bin/pnpm", args, { cwd: "/app", timeout });
+  return promisify(exec)(`docker compose exec -T portal pnpm ${args.join(" ")} 2>&1`, { cwd: composeCwd(), timeout });
+}
+
 async function adminRunCommand(params: Record<string, unknown>, userId: string): Promise<ToolResult> {
-  const command = String(params.command ?? "").trim();
+  const command = typeof params.command === "string" ? params.command.trim() : "";
   if (!command) return { success: false, error: "command is required.", message: "Provide a command." };
-
-  // Allowlist: only docker compose, git, and pnpm commands
-  if (!/^(docker compose|git|pnpm)\b/.test(command)) {
-    await logAdminActivity(userId, "admin_run_command", { command }, "blocked", 3, "Command not in allowlist");
-    return {
-      success: false,
-      error: "Only docker compose, git, and pnpm commands are permitted.",
-      message: `Command blocked: "${command.slice(0, 80)}". Only docker compose, git, and pnpm commands are allowed.`,
-    };
-  }
-
-  // Block destructive patterns
-  const ADMIN_BLOCKED = [
-    /rm\s+-rf/i,
-    /docker compose\s+down/i,
-    /git\s+push/i,
-    /git\s+reset\s+--hard/i,
-    /prisma\s+migrate\s+reset/i,
-    /curl\s+.*\|\s*(ba)?sh/i,
-    /wget\s+.*\|\s*(ba)?sh/i,
-    /--privileged/i,
-    /--force/i,
-  ];
-  const blocked = ADMIN_BLOCKED.find(p => p.test(command));
-  if (blocked) {
-    await logAdminActivity(userId, "admin_run_command", { command }, "blocked", 3, "Destructive command blocked");
-    return {
-      success: false,
-      error: "Destructive command blocked by safety policy.",
-      message: `This command is blocked: "${command.slice(0, 80)}". Use the governed recovery or deployment operation for destructive work.`,
-    };
+  const diagnostic = parseAdminDiagnostic(params.command);
+  if (!diagnostic) {
+    await logAdminActivity(userId, "admin_run_command", { command: command.slice(0, 1_000) }, "blocked", 3, "Unsupported diagnostic");
+    return { success: false, error: "unsupported_diagnostic",
+      message: "Use Docker Compose ps or logs, Git status or Git rev-parse, or call the dedicated operation." };
   }
 
   try {
-    const diagnostic = parseAdminDiagnostic(command);
-    if (/^docker compose\s+logs\b/u.test(command) && await hasPortalActuator()) {
-      return holdDirectDockerLogs(userId, "admin_run_command", { command });
+    const mount = diagnostic.file === "docker" ? await readAdminActuatorMount() : "absent";
+    if (mount === "unknown") {
+      return holdDirectDocker(userId, "admin_run_command", { command },
+        diagnostic.args[1] === "logs" ? "admin_logs_require_actuator" : "admin_docker_require_actuator");
     }
-    const { exec: execCb, execFile: execFileCb } = lazyChildProcess();
+    const { execFile: execFileCb } = lazyChildProcess();
     const { promisify } = lazyUtil();
-    const execAsync = promisify(execCb);
-    await logAdminActivity(userId, "admin_run_command", { command }, "success", diagnostic ? 1 : 2, `Running: ${command.slice(0, 200)}`);
+    await logAdminActivity(userId, "admin_run_command", { command }, "success", 1, `Running: ${command.slice(0, 200)}`);
     const options = { cwd: composeCwd(), timeout: 60_000 };
-    // The exact argv admitted by the refiner is executed without a shell.
-    const { stdout, stderr } = diagnostic
-      ? await promisify(execFileCb)(diagnostic.file, diagnostic.args, options)
-      : await execAsync(command + " 2>&1", options);
+    const { stdout, stderr } = mount === "mounted"
+      ? { stdout: await runActuatorDiagnostic(diagnostic.args), stderr: "" }
+      : await promisify(execFileCb)(diagnostic.file, diagnostic.args, options);
     const output = (stdout + "\n" + stderr).trim();
     return { success: true, message: `Command completed.`, data: { command, output: output.slice(0, 15000), exitCode: 0 } };
   } catch (err) {
@@ -400,6 +383,30 @@ async function adminRunCommand(params: Record<string, unknown>, userId: string):
     if (output) return { success: false, error: "command_failed", message: "Command exited with error.", data };
     return { success: false, error: (execErr.message ?? "Command failed").slice(0, 1000), message: `Failed: ${command.slice(0, 80)}`, data };
   }
+}
+
+async function runActuatorDiagnostic([, action, ...flags]: string[]): Promise<string> {
+  if (action === "logs") {
+    const tail = flags.lastIndexOf("--tail");
+    const lines = tail < 0 ? 100 : Math.min(Number(flags[tail + 1]), 500);
+    const named = flags.filter(flag => ACTUATOR_SERVICE_LOG_NAMES.includes(flag));
+    const services = named.length ? named : (await readActuatorProjectContainers()).containers
+      .map(({ Service }: { Service: string }) => Service).filter((service: string) => ACTUATOR_SERVICE_LOG_NAMES.includes(service));
+    const logs = await Promise.all([...new Set<string>(services)].map(async service => {
+      const { output } = await readActuatorServiceLogs(service, lines, { timestamps: flags.includes("--timestamps") });
+      if (typeof output !== "string") throw new Error("actuator_log_service_unavailable");
+      return output;
+    }));
+    return logs.join("\n");
+  }
+  const { containers } = await readActuatorProjectContainers() as {
+    containers: Array<{ ID: string; Name: string; Service: string; State: string; Status: string }>;
+  };
+  const shown = flags.includes("--all") ? containers : containers.filter(row => ["running", "paused", "restarting"].includes(row.State));
+  if (flags.includes("--quiet")) return shown.map(row => row.ID).join("\n");
+  if (flags.includes("--services")) return [...new Set(shown.map(row => row.Service))].join("\n");
+  if (flags.includes("--format")) return JSON.stringify(shown);
+  return ["NAME\tSERVICE\tSTATUS", ...shown.map(row => `${row.Name}\t${row.Service}\t${row.Status}`)].join("\n");
 }
 
 const handlers: Record<string, ToolPackHandler> = {

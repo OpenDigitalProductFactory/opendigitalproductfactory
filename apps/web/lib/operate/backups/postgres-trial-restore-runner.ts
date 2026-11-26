@@ -32,6 +32,8 @@ import {
 } from "./constants";
 import { recordJobHeartbeat } from "./managed-backup";
 import { resolveManagedScriptPath, runManagedScript } from "./managed-script-path";
+import { managedPostgresConnection } from "./managed-postgres-connection";
+import { usesPrivateActuator } from "@/lib/platform-runtime/actuator-client";
 
 const BACKUPS_ROOT = "/backups";
 const TRIAL_RESTORE_SCRIPT_NAME = "postgres-trial-restore.sh";
@@ -319,21 +321,35 @@ export async function runPostgresTrialRestore(
   };
 
   let preflightFailure: string | null = null;
+  // Paired-trial variables are carried into either connection mode.
+  const pairedEnv: Record<string, string> = {};
   if (pairedRequired) {
     if (!args.uploadsBackupRunId) {
       preflightFailure = "The required upload backup capture did not finish successfully.";
     } else {
       try {
         const readCustody = args.readCustody ?? (await import("./uploads-custody")).readUploadsCustody;
-        Object.assign(env, await pairedTrialEnvironment(prisma, backupsRoot, source, args.uploadsBackupRunId, readCustody));
+        Object.assign(pairedEnv, await pairedTrialEnvironment(prisma, backupsRoot, source, args.uploadsBackupRunId, readCustody));
+        Object.assign(env, pairedEnv);
       } catch (error) {
         preflightFailure = error instanceof PairedTrialAdmissionError ? error.message : "Paired trial preflight failed.";
       }
     }
   }
-  const outcome = preflightFailure
-    ? { ok: false, stdout: "", stderr: "", exitCode: 2 }
-    : await runScript(scriptPath, env);
+  let outcome: ScriptOutcome;
+  if (preflightFailure) {
+    outcome = { ok: false, stdout: "", stderr: "", exitCode: 2 };
+  } else if (!args.runScript && !args.scriptPath && await usesPrivateActuator()) {
+    try {
+      outcome = await runScript(scriptPath, {
+        ...managedPostgresConnection(), DUMP_PATH: source.dumpPath, ASSERT_TABLES: assertTables.join(","), ...pairedEnv,
+      });
+    } catch {
+      outcome = { ok: false, exitCode: 2, stdout: "", stderr: "The trial restore connection could not be verified." };
+    }
+  } else {
+    outcome = await runScript(scriptPath, env);
+  }
   const parsed = parseResultLine(outcome.stdout);
   const paired = args.uploadsBackupRunId ? parsePairedUploadsTrialReceipt(outcome.stdout, {
     postgresRunId: source.runId, uploadsRunId: args.uploadsBackupRunId,

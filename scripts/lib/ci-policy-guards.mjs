@@ -532,6 +532,11 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       // the image — so it reaches main green and breaks the release chain.
       node("scripts/check-dockerfile-copied-script-imports.mjs"),
       node("--test", "scripts/check-dockerfile-copied-script-imports.test.mjs"),
+      // BI-224F56F1: the immutable portal has no Docker socket. Every raw
+      // Docker call site is registered and may only shrink, and the
+      // portal-immutable-v1 recipe label is refused while any is pending.
+      node("scripts/check-docker-authority-cutover.mjs"),
+      node("--test", "scripts/check-docker-authority-cutover.test.mjs"),
       // The package-resolution twin (BI-PIR-53d2c42d): scripts the image runs
       // from /app/apps/web-src resolve bare imports from the `@dpf/db...`
       // runtime set, not the web app's deps. A web-only package anywhere in
@@ -958,7 +963,10 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "scripts/lib/compose-safety.test.mjs",
         "scripts/lib/promoter-compose-mounts.test.mjs",
         "scripts/lib/maintenance-epoch-receipt.test.mjs",
+        "scripts/lib/scope-writer-observation.test.mjs",
         "scripts/promoter-epoch-evidence.test.mjs",
+        "scripts/source-writer.test.mjs",
+        "scripts/promoter-candidate-build.test.mjs",
         "scripts/promote-reassessment-compatibility.test.mjs",
         "scripts/reassessment-capability-probe.test.mjs",
         "scripts/sandbox-entrypoint.test.mjs",

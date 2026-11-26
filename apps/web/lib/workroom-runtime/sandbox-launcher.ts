@@ -12,6 +12,8 @@ import type { ChildProcess } from "node:child_process";
 import { lazyChildProcess } from "@/lib/shared/lazy-node";
 
 import type { JsonRpcStreams } from "./json-rpc-peer";
+import type { WorkroomSessionOwner } from "./sandbox-session-actuator";
+import { usesPrivateActuatorSync, openActuatorRuntimeSession } from "@/lib/platform-runtime/actuator-client";
 
 const SANDBOX_CONTAINER = process.env.SANDBOX_CONTAINER_ID ?? "dpf-sandbox-1";
 
@@ -26,6 +28,7 @@ export type RuntimeLaunch = {
   /** Variables the script reads; their values never appear in argv. */
   env: Record<string, string>;
   cwd: string;
+  actuatorOwner?: WorkroomSessionOwner;
 };
 
 export type RuntimeLauncher = (launch: RuntimeLaunch) => RuntimeProcess;
@@ -34,6 +37,11 @@ export type RuntimeLauncher = (launch: RuntimeLaunch) => RuntimeProcess;
 const ENV_NAME = /^[A-Z][A-Z0-9_]{0,63}$/;
 
 export const sandboxRuntimeLauncher: RuntimeLauncher = (launch) => {
+  // Fail closed (actuator-client): an unreadable mount table counts as mounted.
+  if (usesPrivateActuatorSync()) {
+    if (!launch.actuatorOwner) throw new Error("workroom_runtime_admission_unproven");
+    return openActuatorRuntimeSession(launch.actuatorOwner);
+  }
   const names = Object.keys(launch.env);
   for (const name of names) if (!ENV_NAME.test(name)) throw new Error(`Invalid runtime variable name ${name}`);
   const args = ["exec", "-i", "-w", launch.cwd, ...names.flatMap((name) => ["-e", name]), SANDBOX_CONTAINER, "sh", "-c", launch.script];

@@ -21,7 +21,7 @@ function makeRevisionId(): string {
   return `${REVISION_ID_PREFIX}-${randomUUID().slice(0, 8).toUpperCase()}`;
 }
 
-import { writeSkillSeed, type SkillSeedWriteResult } from "./seed-writeback";
+import { propagateSkillSeed, type SkillSeedWriteResult } from "./seed-writeback";
 import { emitSeedPullRequest, type SeedPullRequestResult } from "./seed-pull-request";
 
 export type SubmitSkillImprovementProposalInput = {
@@ -256,11 +256,12 @@ export async function approveSkillImprovementProposal(
   // filesystem failure here must be reported, never allowed to unwind it.
   // Writing the seed is what stops the next reseed reverting the approval
   // (BI-5798BBA3), because the seed file is the authoritative copy.
-  const propagation = writeSkillSeed(
-    applied.category,
-    applied.skillId,
-    applied.approvedContent,
-  );
+  const propagation = await propagateSkillSeed({
+    appliedRevisionId: applied.appliedRevisionId,
+    category: applied.category,
+    skillId: applied.skillId,
+    content: applied.approvedContent,
+  });
 
   // Then publish it for review. This runs over the GitHub API and touches no
   // working tree, so it is safe on a production install where DPF_REPO_ROOT is

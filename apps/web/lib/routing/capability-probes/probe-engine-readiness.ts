@@ -17,9 +17,9 @@
 //
 // Spec: docs/superpowers/specs/2026-06-06-build-engine-provisioning-design.md (Phase 1a, slice B)
 
-import { lazyChildProcess, lazyUtil } from "@/lib/shared/lazy-node";
 
 import { extractEngineVersion } from "./engine-version-parser";
+import { execSandboxCommandLine } from "@/lib/workroom-runtime/sandbox-exec";
 
 const SANDBOX_CONTAINER = process.env.SANDBOX_CONTAINER_ID ?? "dpf-sandbox-1";
 const PROBE_TIMEOUT_MS = 10_000;
@@ -58,14 +58,13 @@ export type EngineReadiness = {
  * present=false — it never throws.
  */
 export async function probeEngineReadiness(engine: EngineProbeConfig): Promise<EngineReadiness> {
-  const execAsync = lazyUtil().promisify(lazyChildProcess().exec);
   const probedAt = new Date().toISOString();
   const regex =
     typeof engine.versionRegex === "string" ? new RegExp(engine.versionRegex) : engine.versionRegex;
 
   let stdout: string;
   try {
-    const result = (await execAsync(`docker exec ${SANDBOX_CONTAINER} ${engine.verifyCommand}`, {
+    const result = (await execSandboxCommandLine(`docker exec ${SANDBOX_CONTAINER} ${engine.verifyCommand}`, {
       timeout: PROBE_TIMEOUT_MS,
     })) as { stdout: string; stderr: string };
     stdout = result.stdout ?? "";

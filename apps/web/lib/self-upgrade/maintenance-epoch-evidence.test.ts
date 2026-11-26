@@ -78,6 +78,21 @@ describe("server-only maintenance epoch import", () => {
     expect(await attachMaintenanceEpochEvidence(options())).toEqual({ status: "replayed", runId: "SUR-EXAMPLE" });
     expect(updateMany).not.toHaveBeenCalled();
   });
+  it("imports the exact host-attested receipt without reading the transition signing key", async () => {
+    const envelope = signMaintenanceEpoch(payload(), secret);
+    const readSecret = vi.fn(async () => { throw new Error("the writer has no signing key"); });
+    const retirementDigest = createHash("sha256").update(canonicalJson(envelope)).digest("hex");
+    const input = { db, now, readSecret, readAttested: async () => ({ envelope, retirementDigest }) };
+    expect(await attachMaintenanceEpochEvidence(input)).toEqual({ status: "attached", runId: "SUR-EXAMPLE" });
+    expect(updateMany.mock.calls[0][0].data.completionEvidence.maintenanceEpochRetirement).toEqual(envelope);
+    expect(readSecret).not.toHaveBeenCalled();
+    updateMany.mockClear();
+    expect(await attachMaintenanceEpochEvidence({ ...input, readAttested: async () => ({
+      envelope: { ...envelope, signature: "0".repeat(64) }, retirementDigest,
+    }) })).toEqual({ status: "unavailable" });
+    expect(updateMany).not.toHaveBeenCalled();
+    expect(readSecret).not.toHaveBeenCalled();
+  });
   it.each(["different-recovery", "wrong-source", "wrong-promoter", "failed-run", "wrong-deployed", "changed-proof", "legacy-readiness", "failed-backup"])("rejects %s without writes", async fault => {
     if (fault === "different-recovery") row.completionEvidence.recoveryPoint = { ...recoveryPoint, createdAt: now.toISOString() };
     if (fault === "wrong-source") row.targetSha = "9".repeat(40);

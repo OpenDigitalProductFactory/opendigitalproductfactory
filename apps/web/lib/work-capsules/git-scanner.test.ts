@@ -2,7 +2,10 @@ import { execFile } from "node:child_process";
 import { tmpdir } from "node:os";
 import { promisify } from "node:util";
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+
+const writer = vi.hoisted(() => ({ refreshUpstreamThroughWriter: vi.fn() }));
+vi.mock("@/lib/self-upgrade/source-writer-actuator", () => writer);
 
 const execFileAsync = promisify(execFile);
 
@@ -12,6 +15,7 @@ import {
   parseBranchList,
   parsePrUrlFromText,
   parseWorktreeList,
+  refreshTrunkRef,
   shouldSurfaceAdoptableBranch,
   trunkHasMergedPullRequest,
   trunkRefExists,
@@ -135,5 +139,22 @@ describe("trustedGitArgs", () => {
       "-c", "safe.directory=/sandbox-workspace", "-C", "/sandbox-workspace", "rev-parse", "HEAD",
     ]);
     expect(trustedGitArgs("/a", ["log"]).join(" ")).not.toContain("safe.directory=*");
+  });
+});
+
+describe("refreshTrunkRef in the qualified portal (BI-224F56F1)", () => {
+  it("refreshes the read-only install checkout through the authorized source writer", async () => {
+    writer.refreshUpstreamThroughWriter.mockResolvedValueOnce({ ok: true, upstreamSha: "b".repeat(40) });
+    await expect(refreshTrunkRef("/host-dpf")).resolves.toEqual({ status: "refreshed" });
+    expect(writer.refreshUpstreamThroughWriter).toHaveBeenCalledWith({ remote: "origin", branch: "main" });
+
+    writer.refreshUpstreamThroughWriter.mockResolvedValueOnce({ ok: false, reason: "no-target" });
+    await expect(refreshTrunkRef("/host-dpf")).resolves.toMatchObject({ status: "failed" });
+  });
+
+  it("leaves every other clone on its own fetch", async () => {
+    writer.refreshUpstreamThroughWriter.mockClear();
+    await refreshTrunkRef(tmpdir(), { timeoutMs: 2_000 });
+    expect(writer.refreshUpstreamThroughWriter).not.toHaveBeenCalled();
   });
 });

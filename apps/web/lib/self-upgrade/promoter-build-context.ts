@@ -46,6 +46,8 @@ export const PROMOTER_BUILD_CONTEXT_SOURCES: readonly string[] = [
   "scripts/promoter-migration-envelope.mjs",
   "scripts/promoter-epoch-evidence.mjs",
   "scripts/lib/maintenance-epoch-receipt.mjs",
+  "scripts/lib/scope-writer-observation.mjs",
+  "scripts/lib/docker-socket.mjs",
   "scripts/installer/validate-install-state.mjs",
   "scripts/installer/migrate-install-state.mjs",
   "scripts/installer/resolve-host-identity.mjs",
@@ -63,6 +65,16 @@ export const PROMOTER_BUILD_CONTEXT_SOURCES: readonly string[] = [
   "scripts/lib/git.mjs",
   "scripts/lib/capability-state-hash.mjs",
   "scripts/capability-service-catalog.generated.json",
+  // BI-224F56F1: the authorized source writer and its shared upgrade-source modules.
+  "scripts/source-writer.mjs",
+  // BI-224F56F1 (DI-B3171A8F09DC): the candidate stage builds the next promoter here.
+  "scripts/promoter-candidate-build.mjs",
+  "scripts/lib/promoter-build-context-sources.mjs",
+  "scripts/lib/upgrade-source/prepare-source.mjs",
+  "scripts/lib/upgrade-source/transient-network.mjs",
+  "scripts/lib/upgrade-source/lfs-materialization.mjs",
+  "scripts/lib/upgrade-source/version-stamp.mjs",
+  "scripts/lib/error-message.mjs",
 ] as const;
 
 /**

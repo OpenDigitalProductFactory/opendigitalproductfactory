@@ -15,12 +15,12 @@
 // file the loader never reads; the caller surfaces `no-seed-file` instead so the
 // gap stays visible rather than being papered over.
 
-import { writeFileSync } from "fs";
+import { existsSync, writeFileSync } from "fs";
 
 import { getErrorMessage } from "@/lib/shared/get-error-message";
+import type { AppliedSkillRevision } from "@/lib/self-upgrade/source-writer-actuator";
 
 import { resolveSeedPathCandidates } from "./seed-parity";
-import { existsSync } from "fs";
 
 /**
  * Outcome of a seed write. ONLY `written` means the approval reached the copy
@@ -81,4 +81,46 @@ export function writeSkillSeed(
     console.warn(`[seed-writeback] could not write seed file ${target}:`, reason);
     return { status: "write-failed", path: target, reason };
   }
+}
+
+/**
+ * Propagate an approval to its seed file. In the qualified portal the install
+ * checkout is read-only (BI-224F56F1), so the authorized source writer writes
+ * the applied revision, which the actuator re-reads; elsewhere the portal
+ * writes it as before.
+ */
+export async function propagateSkillSeed(input: { appliedRevisionId: string; category: string; skillId: string; content: string },
+  writeThroughWriter?: (revisionId: string) => Promise<{ ok: boolean; status: string; path?: string } | null>,
+): Promise<SkillSeedWriteResult> {
+  const viaWriter = writeThroughWriter
+    ?? (async (revisionId: string) => (await import("@/lib/self-upgrade/source-writer-actuator")).writeSkillSeedThroughWriter(revisionId));
+  const written = await viaWriter(input.appliedRevisionId);
+  if (!written) return writeSkillSeed(input.category, input.skillId, input.content);
+  if (written.ok && written.path) return { status: "written", path: `${repoRoot()}/${written.path}`, reason: null };
+  return written.status === "no-seed-file"
+    ? { status: "no-seed-file", path: null, reason: "No seed file exists for this skill in the install checkout." }
+    : { status: "write-failed", path: null, reason: "The authorized source writer did not write the seed file." };
+}
+
+/** Actuator side: the applied revision as the database holds it now. */
+export async function readAppliedSkillRevision(revisionId: string): Promise<AppliedSkillRevision | null> {
+  const { prisma } = await import("@dpf/db");
+  const revision = await prisma.skillRevision.findUnique({
+    where: { revisionId },
+    select: { skillId: true, version: true, content: true, proposalId: true,
+      skill: { select: { category: true, skillMdContent: true } } },
+  });
+  if (!revision?.proposalId) return null;
+  const [proposal, latest] = await Promise.all([
+    prisma.improvementProposal.findUnique({ where: { proposalId: revision.proposalId }, select: { status: true } }),
+    prisma.skillRevision.findFirst({ where: { skillId: revision.skillId }, orderBy: { version: "desc" }, select: { version: true } }),
+  ]);
+  return {
+    skillId: revision.skillId,
+    category: revision.skill.category,
+    content: revision.content,
+    proposalStatus: proposal?.status ?? null,
+    isLatest: latest?.version === revision.version,
+    matchesDefinition: revision.skill.skillMdContent === revision.content,
+  };
 }

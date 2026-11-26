@@ -8,6 +8,9 @@ import { loadReleaseInstallContext, resolveUpgradeStrategy, type ReleaseTargetRe
 import { resolveWorkerReleaseTarget } from "@/lib/self-upgrade/worker-release-target";
 import { countPendingUpstreamCommits, evaluateReleaseBatch } from "@/lib/self-upgrade/release-batch";
 import { prepareUpgradeSource, defaultGitRunner } from "@/lib/self-upgrade/prepare-source";
+import type { PrepareSourceResult } from "@/lib/self-upgrade/prepare-source";
+import { refreshUpstreamThroughWriter, sourceWriterThroughPrivateActuator } from "@/lib/self-upgrade/source-writer-actuator";
+import { usesPrivateActuator } from "@/lib/platform-runtime/actuator-client";
 import {
   runCandidatePreflight,
   runReassessmentCandidatePreflight,
@@ -295,9 +298,16 @@ export async function beginSelfUpgrade(params: SelfUpgradeRunEventData): Promise
     upstreamSha = target.sourceSha;
     releaseTarget = target;
   } else if (config.sourceMode === "upstream") {
-    await gitRun(buildFetchCommand({ hostSourcePath, remote, branch }).slice(1));
-    const head = await gitRun(buildRemoteHeadCommand({ hostSourcePath, remote, branch }).slice(1));
-    upstreamSha = head.code === 0 ? head.stdout.trim() : null;
+    // BI-224F56F1: the qualified portal cannot write the install checkout; the
+    // authorized source writer runs the bounded upstream refresh instead.
+    const refreshed = await refreshUpstreamThroughWriter({ remote, branch });
+    if (refreshed) {
+      upstreamSha = refreshed.ok ? refreshed.upstreamSha : null;
+    } else {
+      await gitRun(buildFetchCommand({ hostSourcePath, remote, branch }).slice(1));
+      const head = await gitRun(buildRemoteHeadCommand({ hostSourcePath, remote, branch }).slice(1));
+      upstreamSha = head.code === 0 ? head.stdout.trim() : null;
+    }
     if (!upstreamSha) return await skipAttempt("no-target");
     const lastOk = await getLatestSucceededRun();
     if (!params.dryRun && !params.force && lastOk?.targetSha === upstreamSha) {
@@ -355,7 +365,22 @@ export async function beginSelfUpgrade(params: SelfUpgradeRunEventData): Promise
         toVersion: upstreamSha ?? undefined,
       })).runId;
     }
-    const prep = await prepareUpgradeSource(
+    let prep: PrepareSourceResult | null = null;
+    if (await usesPrivateActuator()) {
+      // BI-224F56F1: prepared by the authorized source writer for an existing
+      // run (a manual attempt without one creates it here); a refusal is
+      // reported, never retried as a local write.
+      if (hostSourcePath !== "/host-dpf") {
+        prep = { ok: false, reason: "prep-error", message: "The authorized source writer prepares only the install checkout at /host-dpf." };
+      } else {
+        ownedRunId ??= (await createRun({ triggeredBy: params.triggeredBy, fromVersion: deployedSha ?? undefined,
+          toVersion: upstreamSha ?? undefined })).runId;
+        prep = await sourceWriterThroughPrivateActuator({ owner: { kind: "self-upgrade", runId: ownedRunId },
+          operation: "prepare-upgrade-source", input: { sourceMode: config.sourceMode, remote, branch,
+            installBranch: config.installBranch, isolatedWorkspace: Boolean(upgradeWorkspaceMountPath) } });
+      }
+    }
+    prep ??= await prepareUpgradeSource(
       {
         sourceMode: config.sourceMode,
         hostSourcePath,

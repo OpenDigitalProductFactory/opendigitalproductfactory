@@ -9,8 +9,14 @@ import { extractDiff } from "@/lib/sandbox";
 import { resolveBuildWorkdir } from "@/lib/build/sandbox/build-branch";
 import { isInWindow } from "@/lib/deployment-window-utils";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
+import { execSandboxCommandLine } from "@/lib/workroom-runtime/sandbox-exec";
 
-const exec = lazyExec();
+const localExec = lazyExec();
+/** BI-224F56F1: Docker lines are refused in the qualified portal (see
+ * executePromotion); unchanged otherwise. */
+const exec: typeof localExec = (command, options) => (command.startsWith("docker ")
+  ? execSandboxCommandLine(command, options as { timeout?: number; maxBuffer?: number })
+  : localExec(command, options));
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -151,6 +157,21 @@ export async function executePromotion(
   if (!promotion) return { success: false, step: "validate", message: `Promotion ${promotionId} not found.` };
   if (promotion.status !== "approved") {
     return { success: false, step: "validate", message: `Promotion must be approved first. Current status: ${promotion.status}` };
+  }
+
+  // DI-062828328841 (BI-224F56F1): the qualified portal has a read-only root
+  // and no Docker, so it neither patches itself nor touches the production
+  // database. A ChangePromotion there is delivered through the governed
+  // source path (protected PR, merge, canonical self-upgrade), whose promoter
+  // owns backup and migrations. Refuse before any effect; the promotion stays
+  // approved.
+  const observation = await import("@/lib/platform-runtime/actuator-client");
+  if (await observation.usesPrivateActuator()) {
+    return {
+      success: false,
+      step: "validate",
+      message: "This portal delivers changes through a protected pull request and the canonical self-upgrade, not an in-place promotion. The promotion is still approved; ship the build's branch to deploy it.",
+    };
   }
 
   const build = promotion.productVersion.featureBuild;

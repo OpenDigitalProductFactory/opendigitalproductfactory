@@ -13,6 +13,12 @@ vi.mock("@dpf/db", () => ({
 
 const execution = vi.hoisted(() => ({ exec: vi.fn(), execFile: vi.fn() }));
 const mounts = vi.hoisted(() => ({ readFile: vi.fn(), platform: vi.fn() }));
+const actuator = vi.hoisted(() => ({ containers: vi.fn(), logs: vi.fn() }));
+vi.mock("../../../../../scripts/lib/scope-writer-observation.mjs", async importOriginal => ({
+  ...await importOriginal<object>(),
+  readActuatorProjectContainers: actuator.containers,
+  readActuatorServiceLogs: actuator.logs,
+}));
 vi.mock("@/lib/shared/lazy-node", async (importOriginal) => ({
   ...await importOriginal<object>(),
   lazyChildProcess: () => execution,
@@ -51,7 +57,7 @@ const EXPECTED_SIDE_EFFECT: Record<string, boolean> = {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mounts.readFile.mockReset();
+  mounts.readFile.mockReset().mockResolvedValue("21 1 0:2 / / rw - overlay overlay rw\n");
   mounts.platform.mockReset().mockReturnValue("linux");
   db.adminActivityCreate.mockResolvedValue({});
 });
@@ -164,6 +170,36 @@ describe("admin pack — handler behavior (delegation preserved)", () => {
     expect(db.adminActivityCreate).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ tier: 1 }) }));
   });
 
+  it("reads project diagnostics and logs through typed paths in the qualified portal", async () => {
+    mounts.readFile.mockResolvedValue("21 1 0:2 / /run/dpf-actuator rw - tmpfs tmpfs rw\n");
+    const sandbox = { ID: "a".repeat(64), Name: "dpf-sandbox-1", Service: "sandbox", State: "running", Status: "Up" };
+    const init = { ID: "b".repeat(64), Name: "dpf-init-1", Service: "portal-init", State: "exited", Status: "Exited" };
+    actuator.containers.mockResolvedValue({ containers: [sandbox, init] });
+    actuator.logs.mockResolvedValue({ output: "sandbox log" });
+    const command = (value: string) => adminPack.handlers.admin_run_command({ command: value }, "u1");
+    expect(await command("docker compose ps --format json")).toMatchObject({ success: true, data: { output: JSON.stringify([sandbox]) } });
+    expect(await command("docker compose ps --all --services")).toMatchObject({ success: true, data: { output: "sandbox\nportal-init" } });
+    expect(await command("docker compose logs sandbox --tail 50 --timestamps")).toMatchObject({ success: true, data: { output: "sandbox log" } });
+    expect(actuator.logs).toHaveBeenCalledWith("sandbox", 50, { timestamps: true });
+    expect(await adminPack.handlers.admin_view_logs({ service: "sandbox" }, "u1"))
+      .toMatchObject({ success: true, data: { output: "sandbox log" } });
+    expect(execution.execFile).not.toHaveBeenCalled();
+    expect(execution.exec).not.toHaveBeenCalled();
+  });
+
+  it("runs only the packaged database maintenance commands in the qualified portal", async () => {
+    mounts.readFile.mockResolvedValue("21 1 0:2 / /run/dpf-actuator rw - tmpfs tmpfs rw\n");
+    execution.execFile.mockResolvedValue({ stdout: "complete", stderr: "" });
+    for (const [tool, args] of [
+      ["admin_run_migration", ["--filter", "@dpf/db", "exec", "prisma", "migrate", "deploy"]],
+      ["admin_run_seed", ["--filter", "@dpf/db", "run", "seed"]],
+    ] as const) {
+      expect(await adminPack.handlers[tool]({}, "u1")).toMatchObject({ success: true });
+      expect(execution.execFile).toHaveBeenLastCalledWith("/usr/local/bin/pnpm", args, expect.objectContaining({ cwd: "/app" }));
+    }
+    expect(execution.exec).not.toHaveBeenCalled();
+  });
+
   it("does not allow the equivalent Compose logs diagnostic to bypass an unreadable mount table", async () => {
     mounts.readFile.mockRejectedValue(Object.assign(new Error("mountinfo unavailable"), { code: "EACCES" }));
     execution.execFile.mockResolvedValue({ stdout: "fixture logs", stderr: "" });
@@ -171,6 +207,7 @@ describe("admin pack — handler behavior (delegation preserved)", () => {
     expect(res).toMatchObject({ success: false, error: "admin_logs_require_actuator" });
     expect(execution.exec).not.toHaveBeenCalled();
     expect(execution.execFile).not.toHaveBeenCalled();
+    expect(actuator.logs).not.toHaveBeenCalled();
   });
 
   it("admin_view_logs rejects an unknown service without shelling out", async () => {
@@ -195,9 +232,8 @@ describe("admin pack — handler behavior (delegation preserved)", () => {
   );
 
   it.each(["", "garbled\n", "21 1 0:2 / / rw - overlay overlay rw\nnot a mount record\n",
-    "23 21 0:4 net:[4026531992] relative-mount rw - nsfs nsfs rw\n",
-    "21 1 0:2 / /run/dpf-actuator rw - tmpfs tmpfs rw\n"])(
-    "admin_view_logs refuses direct Docker for an invalid or mounted snapshot %j",
+    "23 21 0:4 net:[4026531992] relative-mount rw - nsfs nsfs rw\n"])(
+    "admin_view_logs refuses direct Docker for an invalid snapshot %j",
     async table => {
       mounts.readFile.mockResolvedValue(table);
       execution.exec.mockResolvedValue({ stdout: "fixture logs" });
@@ -289,21 +325,24 @@ describe("admin pack — handler behavior (delegation preserved)", () => {
   });
 
   it("admin_run_command blocks a command outside the allowlist", async () => {
-    const res = await adminPack.handlers.admin_run_command({ command: "rm -rf /" }, "u1");
+    const res = await adminPack.handlers.admin_run_command({ command: "date" }, "u1");
     expect(res.success).toBe(false);
-    expect(res.error).toContain("Only docker compose, git, and pnpm");
+    expect(res.error).toBe("unsupported_diagnostic");
   });
 
-  it("admin_run_command blocks a destructive allowlisted command", async () => {
-    const res = await adminPack.handlers.admin_run_command({ command: "git push origin main" }, "u1");
+  it.each(["git push origin main", "pnpm run seed", "docker compose restart sandbox"])("admin_run_command refuses %s without executing it", async command => {
+    const res = await adminPack.handlers.admin_run_command({ command }, "u1");
     expect(res.success).toBe(false);
-    expect(res.error).toContain("Destructive command blocked");
+    expect(res.error).toBe("unsupported_diagnostic");
+    expect(execution.exec).not.toHaveBeenCalled();
+    expect(execution.execFile).not.toHaveBeenCalled();
+    expect(db.adminActivityCreate).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ result: "blocked" }) }));
   });
 
   it("admin_run_command reports a nonzero command failure while retaining its output", async () => {
-    execution.exec.mockRejectedValue({ code: 1, stderr: 'service "web" is not running', message: "Command failed" });
-    const res = await adminPack.handlers.admin_run_command({ command: "docker compose exec -T web printenv PUBLIC_URL" }, "u1");
-    expect(res).toMatchObject({ success: false, data: { output: 'service "web" is not running', exitCode: 1 } });
+    execution.execFile.mockRejectedValue({ code: 1, stderr: "Compose configuration unavailable", message: "Command failed" });
+    const res = await adminPack.handlers.admin_run_command({ command: "docker compose ps" }, "u1");
+    expect(res).toMatchObject({ success: false, data: { output: "Compose configuration unavailable", exitCode: 1 } });
   });
 
   it("admin_run_command keeps stdout and stderr bounded for a failed safe diagnostic", async () => {

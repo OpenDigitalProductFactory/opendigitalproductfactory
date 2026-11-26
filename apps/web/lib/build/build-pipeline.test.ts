@@ -8,6 +8,11 @@ vi.mock("@dpf/db", () => ({ prisma: { featureBuild: { findUnique: async () => ({
 vi.mock("./coding-agent", () => ({ runSandboxTests: verificationFixture.run, diagnoseTestFailures: () => ({ summary: "fixture" }) }));
 vi.mock("./sandbox-state", () => ({ getSandboxStateForBuild: async () => ({ sourceDiffstat: [{ path: "docs/fixture.md" }] }) }));
 vi.mock("./sandbox/build-branch", () => ({ resolveBuildWorkdir: (id: string) => `/workspace/.builds/${id}`, getClientIdentity: async () => ({ clientBranch: "client/fixture" }) }));
+// The seed step runs the real sandbox-db code; only the actuator reply and the
+// in-sandbox migrate are fixtures.
+const seedFixture = vi.hoisted(() => ({ actuator: vi.fn(), exec: vi.fn() }));
+vi.mock("./sandbox/sandbox-db-actuator", () => ({ sandboxDbThroughActuator: seedFixture.actuator }));
+vi.mock("./sandbox/sandbox", () => ({ execInSandbox: seedFixture.exec }));
 vi.mock("@/lib/govern/operation-authority", () => ({ currentOperationAuthority: async () => ({ userId: "human", platformRole: "HR-000", isSuperuser: false }) }));
 import { getResumeStep, shouldRetry, nextStep, buildFailedState, executeStep } from "./build-pipeline";
 import type { BuildExecutionState } from "./build-exec-types";
@@ -42,6 +47,28 @@ describe("BI-57AF5162: persisted pipeline verification", () => {
         testsPassed: 0, testsFailed: 0, testsExecuted: false, testsApplicable: false,
       }) }),
     }));
+  });
+});
+
+describe("a failed sandbox seed", () => {
+  // stepInitDb throws on ok:false, so the step loops checkpoint nothing: the
+  // build stays at workspace_initialized (build-pipeline.ts, "Checkpoint the
+  // completed step" runs only after executeStep returns; the durable path in
+  // build-execute-helpers.ts runPipelineStepDurable does the same). Every retry
+  // or resume reruns the whole step, migrate and a fresh seed, whose setval
+  // statements overwrite any sequence a failed attempt advanced.
+  it("refuses to advance the build and reseeds in full on the next attempt", async () => {
+    seedFixture.exec.mockResolvedValue("");
+    seedFixture.actuator.mockImplementation(async (_buildId: string, operation: string) =>
+      operation === "ready" ? { ok: true, detail: "accepting connections" } : { ok: false, detail: "pg_dump: error: connection lost" });
+    const state = { step: "workspace_initialized", retryCount: 0, containerId: "fixture-container" } as BuildExecutionState;
+    await expect(executeStep("workspace_initialized", "FB-SEED-FIXTURE", state, () => {}))
+      .rejects.toThrow("Sandbox database seed failed: pg_dump: error: connection lost");
+
+    seedFixture.actuator.mockClear();
+    seedFixture.actuator.mockImplementation(async () => ({ ok: true, detail: "" }));
+    await expect(executeStep("workspace_initialized", "FB-SEED-FIXTURE", state, () => {})).resolves.toEqual(state);
+    expect(seedFixture.actuator.mock.calls).toEqual([["FB-SEED-FIXTURE", "ready"], ["FB-SEED-FIXTURE", "seed"]]);
   });
 });
 

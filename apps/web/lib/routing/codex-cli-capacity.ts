@@ -1,4 +1,4 @@
-import { lazyChildProcess } from "@/lib/shared/lazy-node";
+import { spawnSandboxExec } from "@/lib/workroom-runtime/sandbox-exec";
 import { createJsonRpcPeer } from "@/lib/workroom-runtime/json-rpc-peer";
 import { CODEX_CATALOG_RUNNER, type CodexCatalogLogin } from "./codex-cli-model-catalog";
 import { codexCapacityAvailable } from "./codex-capacity-observation";
@@ -11,7 +11,7 @@ export async function readCodexCliCapacity(login: CodexCatalogLogin): Promise<bo
   delete childEnv.OPENAI_API_KEY; delete childEnv.CODEX_API_KEY;
   let proc: ChildProcess;
   try {
-    proc = lazyChildProcess().spawn("docker", ["exec", "-i", "-e", "OPENAI_API_KEY=", "-e", "CODEX_API_KEY=",
+    proc = spawnSandboxExec(["exec", "-i", "-e", "OPENAI_API_KEY=", "-e", "CODEX_API_KEY=",
       process.env.SANDBOX_CONTAINER_ID ?? "dpf-sandbox-1", "node", "-e", CODEX_CATALOG_RUNNER],
     { stdio: ["pipe", "pipe", "pipe"], env: childEnv });
   } catch { return false; }

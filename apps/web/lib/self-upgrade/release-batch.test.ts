@@ -1,4 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
+// A legacy install, stated rather than read from the host's /proc, which the
+// fail-closed mount rule would otherwise make platform-dependent.
+vi.mock("@/lib/platform-runtime/actuator-client", async importOriginal => ({
+  ...await importOriginal<typeof import("@/lib/platform-runtime/actuator-client")>(),
+  usesPrivateActuator: async () => false,
+  usesPrivateActuatorSync: () => false,
+}));
 import {
   DEFAULT_BATCH_MAX_WAIT_HOURS,
   DEFAULT_BATCH_MIN_PENDING_PRS,
@@ -195,6 +202,15 @@ describe("countPendingUpstreamCommits", () => {
       .mockResolvedValueOnce({ stdout: "", stderr: "shallow", code: 1 }); // deepen fails
     const t = await countPendingUpstreamCommits(input, gitRun);
     expect(t.pendingCount).toBeNull();
+  });
+
+  it("does not deepen a read-only checkout; the tally fails open instead (BI-224F56F1)", async () => {
+    const gitRun = vi
+      .fn<(args: string[]) => Promise<GitResult>>()
+      .mockResolvedValueOnce({ stdout: "", stderr: "bad revision", code: 128 });
+    const t = await countPendingUpstreamCommits(input, gitRun, async () => false);
+    expect(t.pendingCount).toBeNull();
+    expect(gitRun).toHaveBeenCalledTimes(1);
   });
 
   it("fails open (null) when the git runner throws", async () => {

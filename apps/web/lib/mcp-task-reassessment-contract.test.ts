@@ -2,9 +2,12 @@ import { createHash } from "node:crypto";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 const phase = vi.hoisted(() => ({ current: vi.fn(() => null as unknown) }));
 vi.mock("./routing/reassessment-execution-scope", () => ({ currentReassessmentExecution: phase.current }));
+const actuator = vi.hoisted(() => ({ mounted: vi.fn(async () => false) }));
+vi.mock("../../../scripts/lib/scope-writer-observation.mjs", async (load) => ({ ...await load<object>(), usesPrivateActuator: actuator.mounted }));
 import { REASSESSMENT_OWNERS, REASSESSMENT_OWNER_PATHS, assertReassessmentOwnerSupport,
   validateReassessmentRuntimeCompatibility } from "./shared/reassessment-owner-versions";
-import { readCurrentReassessmentContract, assertCurrentReassessmentContract } from "./mcp-task-reassessment-contract";
+import { configDigestRunner, readCurrentReassessmentContract, assertCurrentReassessmentContract, readReassessmentImageContract,
+  reassessmentRefusalDetail } from "./mcp-task-reassessment-contract";
 const sha = (value: string) => createHash("sha256").update(value).digest("hex");
 function fixture() {
   const configDigest = `sha256:${"a".repeat(64)}`, sourceSha = "b".repeat(40), sourceContentHash = "c".repeat(64);
@@ -21,7 +24,12 @@ function fixture() {
   }), runDocker: vi.fn(async (_args: string[]) => ({ exitCode: 0, stdout: JSON.stringify(info), stderr: "" })) };
   return { configDigest, info, files, ports };
 }
-beforeEach(() => { phase.current.mockReset().mockReturnValue(null); });
+beforeEach(() => { phase.current.mockReset().mockReturnValue(null); actuator.mounted.mockReset().mockResolvedValue(false); });
+it("never runs Docker from the qualified portal's default runner (BI-224F56F1)", async () => {
+  actuator.mounted.mockResolvedValue(true);
+  const error = await readReassessmentImageContract(`sha256:${"a".repeat(64)}`).catch((caught: unknown) => caught);
+  expect(reassessmentRefusalDetail(error)).toBe("portal-docker-unavailable");
+});
 describe("actual executing reassessment owner compatibility", () => {
   it("binds exact current config and baked owner closure, then checks the retained proof without I/O", async () => {
     const f = fixture(), proof = await readCurrentReassessmentContract(f.ports);
@@ -78,5 +86,13 @@ describe("actual executing reassessment owner compatibility", () => {
     expect(f.ports.runDocker).not.toHaveBeenCalled();
     await fresh.readReassessmentImageContract(f.configDigest, f.info.sourceSha, f.ports.runDocker);
     expect(() => fresh.assertCurrentReassessmentContract({ ...f.info, configDigest: f.configDigest })).toThrow(/compatibility-unproven/);
+  });
+});
+
+describe("config digest runner", () => {
+  it("keeps the budgeted, output-capped runner without the actuator and passes none with it", async () => {
+    const local = await configDigestRunner(async () => false);
+    expect(typeof local).toBe("function");
+    await expect(configDigestRunner(async () => true)).resolves.toBeUndefined();
   });
 });

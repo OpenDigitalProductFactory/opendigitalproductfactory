@@ -9,6 +9,7 @@ vi.mock("@dpf/db", () => ({ prisma: db }));
 
 import {
   loadVerifiedReleaseTargetEvidence,
+  readFreshVerifiedReleaseTarget,
   recordVerifiedReleaseTargetEvidence,
   type ReleaseHealthState,
 } from "./state";
@@ -148,5 +149,25 @@ describe("verified release target evidence", () => {
       }),
     ).resolves.toBe(false);
     expect(db.platformConfig.update).not.toHaveBeenCalled();
+  });
+});
+
+describe("the actuator's view of the verified release target (BI-224F56F1)", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("returns fresh, publisher-bound evidence without the portal's install context", async () => {
+    db.platformConfig.findUnique.mockResolvedValue({ value: verifiedState() });
+    await expect(readFreshVerifiedReleaseTarget(NOW)).resolves.toMatchObject({ ghcrOwner: context.ghcrOwner, candidate });
+  });
+
+  it.each([
+    ["stale", { checkedAt: new Date(NOW.getTime() - VERIFIED_RELEASE_TARGET_MAX_AGE_MS - 1).toISOString() }],
+    ["failed publisher", { snapshot: { ...verifiedState().snapshot!, status: "publish-failed" as const } }],
+    ["another publisher run", { verifiedTarget: { ...verifiedState().verifiedTarget!, publisherRunId: 1 } }],
+    ["malformed candidate", { verifiedTarget: { ...verifiedState().verifiedTarget!, candidate: { ...candidate, channelDigest: "latest" } } }],
+    ["no evidence", { verifiedTarget: null }],
+  ])("returns nothing for %s evidence", async (_name, over) => {
+    db.platformConfig.findUnique.mockResolvedValue({ value: verifiedState(over) });
+    await expect(readFreshVerifiedReleaseTarget(NOW)).resolves.toBeNull();
   });
 });
