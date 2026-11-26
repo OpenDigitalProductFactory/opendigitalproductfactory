@@ -5,6 +5,8 @@ import { createHash } from "node:crypto";
 import { prisma } from "@dpf/db";
 import { canonicalJson } from "@dpf/integration-shared/canonical-json";
 
+import { PERMISSIONS } from "@/lib/govern/permissions";
+
 /**
  * BI-9F7192F9: owner-operated inactive enrollment and retirement of the S5
  * rehearsal requester. Design:
@@ -343,3 +345,145 @@ export function servedRequesterBoundaryPorts(deps: {
     execute: async () => held(409, "command_not_served"),
   };
 }
+
+// ── Phase 5: owner binding (AC-E2) ──────────────────────────────────────────
+
+/** Platform roles that grant manage_platform, from the static PERMISSIONS table. */
+export const MANAGE_PLATFORM_ROLE_KEYS: readonly string[] = [...PERMISSIONS.manage_platform.roles];
+const MANAGE_USERS_ROLE_KEYS: readonly string[] = [...PERMISSIONS.manage_users.roles];
+
+/**
+ * Every owner fact in one statement, so one snapshot decides. $1 is the acting
+ * User id; $2 is the text[] of role keys that grant manage_platform. Role keys
+ * come only from UserGroup → PlatformRole: isSuperuser grants nothing here.
+ */
+export const OWNER_SNAPSHOT_SQL = `
+WITH orgs AS (
+  SELECT "topAccountablePrincipalId" AS top_id FROM "Organization" ORDER BY "createdAt" ASC, id ASC LIMIT 2
+), org AS (
+  SELECT count(*)::int AS n, (array_agg(top_id))[1] AS top_id FROM orgs
+), top_user AS (
+  SELECT count(a.*)::int AS alias_count, bool_and(u."isActive") AS local_active
+  FROM org JOIN "PrincipalAlias" a ON a."principalId" = org.top_id AND a."aliasType" = 'user' AND a.issuer = ''
+  LEFT JOIN "User" u ON u.id = a."aliasValue"
+), fallback AS (
+  SELECT coalesce(array_agg(DISTINCT p.id ORDER BY p.id), ARRAY[]::text[]) AS ids
+  FROM "Principal" p
+  JOIN "PrincipalAlias" a ON a."principalId" = p.id AND a."aliasType" = 'user' AND a.issuer = ''
+  JOIN "User" u ON u.id = a."aliasValue" AND u."isActive"
+  JOIN "UserGroup" g ON g."userId" = u.id
+  JOIN "PlatformRole" r ON r.id = g."platformRoleId" AND r."roleId" = ANY($2::text[])
+  WHERE p.kind = 'human' AND p.status = 'active'
+), actor AS (
+  SELECT u.*,
+    (SELECT coalesce(array_agg(DISTINCT r."roleId" ORDER BY r."roleId"), ARRAY[]::text[])
+       FROM "UserGroup" g JOIN "PlatformRole" r ON r.id = g."platformRoleId" WHERE g."userId" = u.id) AS role_keys,
+    (SELECT a."principalId" FROM "PrincipalAlias" a
+       WHERE a."aliasType" = 'user' AND a."aliasValue" = u.id AND a.issuer = '') AS principal_id,
+    EXISTS (SELECT 1 FROM "S5RehearsalRequesterEnrollment" e WHERE e."userId" = u.id) AS governed
+  FROM "User" u WHERE u.id = $1
+)
+SELECT json_build_object(
+  'orgCount', org.n,
+  'topPrincipalId', org.top_id,
+  'top', (SELECT CASE WHEN p.id IS NULL THEN NULL ELSE json_build_object(
+            'kind', p.kind, 'status', p.status,
+            'userAliasCount', top_user.alias_count, 'localUserActive', top_user.local_active) END
+          FROM top_user LEFT JOIN "Principal" p ON p.id = org.top_id),
+  'fallback', (SELECT to_json(ids) FROM fallback),
+  'actor', json_build_object(
+    'userExists', actor.id IS NOT NULL,
+    'isActive', coalesce(actor."isActive", false),
+    'isSuperuser', coalesce(actor."isSuperuser", false),
+    'automation', actor."automationVerificationId" IS NOT NULL OR actor."automationProfile" IS NOT NULL
+                  OR actor."automationSlot" IS NOT NULL OR actor."automationExpiresAt" IS NOT NULL,
+    'handedOver', actor."workHandedOverAt" IS NOT NULL,
+    'roleKeys', coalesce(to_json(actor.role_keys), '[]'::json),
+    'principalId', actor.principal_id,
+    'governedRequester', coalesce(actor.governed, false))
+) AS snapshot
+FROM org LEFT JOIN actor ON true`;
+
+export type OwnerSnapshot = {
+  orgCount: number;
+  topPrincipalId: string | null;
+  top: { kind: string; status: string; userAliasCount: number; localUserActive: boolean | null } | null;
+  fallback: string[];
+  actor: {
+    userExists: boolean; isActive: boolean; isSuperuser: boolean; automation: boolean; handedOver: boolean;
+    roleKeys: string[]; principalId: string | null; governedRequester: boolean;
+  };
+};
+
+export type OwnerHoldCode = "org_missing" | "org_ambiguous" | "owner_mapping_invalid" | "owner_candidate_ambiguous";
+export type OwnerRefuseCode =
+  | "actor_inactive" | "automation_actor" | "handed_over_actor" | "requester_actor" | "not_owner" | "owner_capability_missing";
+export type OwnerReceiptCode = "owner_receipt_missing" | "owner_receipt_mismatch";
+export type OwnerDecision =
+  | { ok: true; ownerPrincipalId: string }
+  | { ok: false; code: OwnerHoldCode | OwnerRefuseCode | OwnerReceiptCode };
+
+/**
+ * Pure decision over one snapshot. No superuser fallback: capabilities come
+ * only from role keys, so a superuser with no qualifying role is refused.
+ */
+export function evaluateOwnerSnapshot(snapshot: OwnerSnapshot): OwnerDecision {
+  if (snapshot.orgCount === 0) return { ok: false, code: "org_missing" };
+  if (snapshot.orgCount !== 1) return { ok: false, code: "org_ambiguous" };
+
+  let candidate: string;
+  if (snapshot.topPrincipalId !== null) {
+    const top = snapshot.top;
+    if (!top || top.kind !== "human" || top.status !== "active" || top.userAliasCount !== 1 || top.localUserActive !== true) {
+      return { ok: false, code: "owner_mapping_invalid" };
+    }
+    candidate = snapshot.topPrincipalId;
+  } else {
+    if (snapshot.fallback.length !== 1) return { ok: false, code: "owner_candidate_ambiguous" };
+    candidate = snapshot.fallback[0]!;
+  }
+
+  const actor = snapshot.actor;
+  if (!actor.userExists || !actor.isActive) return { ok: false, code: "actor_inactive" };
+  if (actor.automation) return { ok: false, code: "automation_actor" };
+  if (actor.handedOver) return { ok: false, code: "handed_over_actor" };
+  if (actor.governedRequester) return { ok: false, code: "requester_actor" };
+  if (actor.principalId !== candidate) return { ok: false, code: "not_owner" };
+  const grants = (keys: readonly string[]) => actor.roleKeys.some((role) => keys.includes(role));
+  if (!grants(MANAGE_USERS_ROLE_KEYS) || !grants(MANAGE_PLATFORM_ROLE_KEYS)) {
+    return { ok: false, code: "owner_capability_missing" };
+  }
+  return { ok: true, ownerPrincipalId: candidate };
+}
+
+export type OwnerSnapshotReader = { $queryRawUnsafe(query: string, ...values: unknown[]): Promise<unknown> };
+export type OwnerReceipt = { ownerPrincipalId: string; installationRef: string };
+export type OwnerReceiptPort = {
+  /** The owner-confirmed governed receipt (BI-C7100183). The served adapter returns null until it lands. */
+  readOwnerReceipt(ownerPrincipalId: string): Promise<OwnerReceipt | null>;
+  installationRef: string;
+};
+
+/**
+ * Owner binding: one coherent statement, a pure evaluation, then the receipt.
+ * Call it on the transaction client after the per-setup lock.
+ */
+export async function decideOwnerBinding(db: OwnerSnapshotReader, userId: string, receipts: OwnerReceiptPort): Promise<OwnerDecision> {
+  const rows = (await db.$queryRawUnsafe(OWNER_SNAPSHOT_SQL, userId, [...MANAGE_PLATFORM_ROLE_KEYS])) as Array<{ snapshot: OwnerSnapshot }>;
+  const snapshot = rows[0]?.snapshot;
+  if (!snapshot) return { ok: false, code: "org_missing" };
+  const decision = evaluateOwnerSnapshot(snapshot);
+  if (!decision.ok) return decision;
+  const receipt = await receipts.readOwnerReceipt(decision.ownerPrincipalId);
+  if (!receipt) return { ok: false, code: "owner_receipt_missing" };
+  if (receipt.ownerPrincipalId !== decision.ownerPrincipalId || receipt.installationRef !== receipts.installationRef) {
+    return { ok: false, code: "owner_receipt_mismatch" };
+  }
+  return decision;
+}
+
+/** Served receipt port: denies until BI-C7100183 serves the owner-confirmed receipt. */
+export const servedOwnerReceiptPort = (installationRef: string): OwnerReceiptPort => ({
+  readOwnerReceipt: async () => null,
+  installationRef,
+});
