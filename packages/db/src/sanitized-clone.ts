@@ -97,7 +97,8 @@ export function shouldSkipTable(tableName: string): boolean {
 
 import { PrismaClient, type Prisma } from "../generated/client/client";
 import { PrismaPg } from "@prisma/adapter-pg";
-import { runSourceCheckedClone } from "./sanitized-clone-cleanup";
+import { randomUUID } from "node:crypto";
+import { assertSourceHasNoRequester, runSourceCheckedClone, withApplicationName, withRequesterDestinationFence } from "./sanitized-clone-cleanup";
 import { assertSanitizedCloneSourceIntegrity } from "./sanitized-clone-source-integrity";
 import { resetCloneInstallationIdentity } from "./sanitized-clone-identity-reset";
 
@@ -267,7 +268,9 @@ export function assertDistinctDatabaseIdentities(
  * Run the sanitized clone from production to dev.
  * Both DATABASE_URL (dev) and PRODUCTION_DATABASE_URL (production) must be set.
  */
-export async function runSanitizedClone(): Promise<void> {
+export async function runSanitizedClone(
+  { discardRetiredRehearsalEvidence = false }: { discardRetiredRehearsalEvidence?: boolean } = {},
+): Promise<void> {
   const prodUrl = process.env.PRODUCTION_DATABASE_URL;
   const devUrl = process.env.DATABASE_URL;
 
@@ -280,8 +283,14 @@ export async function runSanitizedClone(): Promise<void> {
     process.env.CONTRIBUTOR_PREVIEW_PASSWORD,
   );
 
+  // BI-9F7192F9: every destination connection of this run carries one tag, so a
+  // lost requester fence stops exactly this run's writers (Prisma pool and COPY psql).
+  const writerTag = `dpf-sanitized-clone:${randomUUID()}`;
+  const fenceClient = new Client({ connectionString: withApplicationName(devUrl, `${writerTag}:fence`) });
+  const supervisorClient = new Client({ connectionString: withApplicationName(devUrl, `${writerTag}:supervisor`) });
+  fenceClient.on("error", () => {}); // a lost fence is handled by withRequesterDestinationFence
   const prodAdapter = new PrismaPg({ connectionString: prodUrl });
-  const devAdapter = new PrismaPg({ connectionString: devUrl });
+  const devAdapter = new PrismaPg({ connectionString: withApplicationName(devUrl, writerTag) });
   const prod = new PrismaClient({ adapter: prodAdapter });
   const dev = new PrismaClient({ adapter: devAdapter });
   const sanitizedSource = new Client({ connectionString: prodUrl });
@@ -291,6 +300,8 @@ export async function runSanitizedClone(): Promise<void> {
     await prod.$connect();
     await dev.$connect();
     await sanitizedSource.connect();
+    await fenceClient.connect();
+    await supervisorClient.connect();
     // All confidential tables share one read-only snapshot and user ranking.
     await sanitizedSource.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
 
@@ -303,12 +314,19 @@ export async function runSanitizedClone(): Promise<void> {
     const destinationTables = await listPublicTables(dev, true);
     const destinationTableNames = new Set(destinationTables.map(({ tablename }) => tablename));
 
-    await runSourceCheckedClone(
-      () => resetDestinationData(dev, destinationTables.map(({ tablename }) => tablename)),
+    // The requester fence is held from before the destination preflight
+    // through reset, copy and failure cleanup (BI-9F7192F9, AC-E3).
+    await withRequesterDestinationFence({
+      fenceClient, supervisorClient, writerApplicationName: writerTag, discardRetiredEvidence: discardRetiredRehearsalEvidence,
+    }, (fence) => runSourceCheckedClone(
+      async () => { fence.assertHeld(); await resetDestinationData(dev, destinationTables.map(({ tablename }) => tablename)); },
       () => assertSanitizedCloneSourceIntegrity(prod),
       async () => {
         const tables = await listPublicTables(prod, false);
         console.log(`[sanitized-clone] Found ${tables.length} tables to process`);
+
+        // First use of the source snapshot: a requester-bearing source aborts through cleanup.
+        await assertSourceHasNoRequester(sanitizedSource);
 
         // PostgreSQL owns user ranking; never materialize a User map in JS.
         const userCount = (await sanitizedSource.query('SELECT count(*) AS count FROM "User"')).rows;
@@ -360,7 +378,7 @@ export async function runSanitizedClone(): Promise<void> {
 
           if (sensitivity === "public" || sensitivity === "internal") {
             console.log(`  COPY (${sensitivity}): ${tablename} (${rowCount} rows)`);
-            await copyTableCompatible(tablename, prodUrl, devUrl, prod, dev);
+            await copyTableCompatible(tablename, prodUrl, devUrl, prod, dev, writerTag);
           } else if (sensitivity === "confidential") {
             console.log(`  OBFUSCATE (confidential): ${tablename} (${rowCount} rows)`);
             await copySanitizedTable(tablename);
@@ -370,11 +388,13 @@ export async function runSanitizedClone(): Promise<void> {
         await resetCloneInstallationIdentity(dev);
         await provisionContributorPreviewAdmin(dev, previewPassword);
       },
-    );
+    ));
 
     await sanitizedSource.query("COMMIT");
     console.log("[sanitized-clone] PostgreSQL clone complete");
   } finally {
+    await fenceClient.end().catch(() => {});
+    await supervisorClient.end().catch(() => {});
     await sanitizedSource.end();
     await prod.$disconnect();
     await dev.$disconnect();
@@ -511,6 +531,7 @@ async function copyTableCompatible(
   devUrl: string,
   prod: RawDatabaseClient,
   dev: RawDatabaseClient,
+  writerTag: string,
 ): Promise<void> {
   const [sourceColumns, destinationColumns] = await Promise.all([
     getCloneColumns(prod, tableName),
@@ -523,7 +544,7 @@ async function copyTableCompatible(
   });
   const destinationPsql = spawn("psql", buildDestinationCopyArgs(devUrl, tableName, columns), {
     stdio: ["pipe", "ignore", "pipe"],
-    env: buildPsqlEnvironment(),
+    env: { ...buildPsqlEnvironment(), PGAPPNAME: writerTag },
   });
 
   const sourceError = collectBoundedStderr(sourcePsql);
@@ -761,7 +782,7 @@ async function getCloneColumns(
 // ── CLI Entry Point ──────────────────────────────────────────────────────────
 
 if (process.argv[1]?.endsWith("sanitized-clone.ts") || process.argv[1]?.endsWith("sanitized-clone.js")) {
-  runSanitizedClone()
+  runSanitizedClone({ discardRetiredRehearsalEvidence: process.argv.includes("--discard-retired-rehearsal-evidence") })
     .then(() => {
       console.log("[sanitized-clone] Done");
       process.exit(0);
