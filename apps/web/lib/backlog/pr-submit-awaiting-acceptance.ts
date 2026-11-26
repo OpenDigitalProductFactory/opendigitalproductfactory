@@ -3,6 +3,8 @@ import { randomUUID } from "node:crypto";
 import { prisma } from "@dpf/db";
 import { ownedRowBodyWhere, intakeOriginMarkers, isFederatedMirror } from "@/lib/federation/federated-twins";
 import { isBacklogStatus, isLegalTransition, type BacklogStatus } from "@/lib/backlog/transitions";
+import { hasImplementationChange, requiresImplementationChange } from "@/lib/backlog/implementation-change";
+import { readGithubPullRequestChange } from "@/lib/contributor-change-lanes/github-rest-reader";
 
 export const CODING_POOL_STATUSES = ["triaging", "open", "in-progress"] as const;
 export type CodingPoolStatus = (typeof CODING_POOL_STATUSES)[number];
@@ -295,6 +297,16 @@ export async function applyGitHubPullRequestToBacklog(payload: unknown): Promise
   if (!mark && !reopen) return { moved: [], skipped: items.length, reason: "no-status-action" };
 
   const docPullRequest = isDocPullRequest(event.title);
+  let change: ReturnType<typeof readGithubPullRequestChange> | undefined;
+  const provesImplementation = async () => {
+    change ??= readGithubPullRequestChange({
+      prisma, repositoryFullName: event.repositoryFullName, number: event.pullRequestNumber,
+    });
+    const result = await change;
+    return result !== null && !result.isDraft && result.state !== "closed"
+      && (!event.merged || result.state === "merged")
+      && !isDocPullRequest(result.title) && hasImplementationChange(result.paths);
+  };
   const moved: string[] = [];
   let skipped = 0;
   for (const item of items) {
@@ -307,7 +319,7 @@ export async function applyGitHubPullRequestToBacklog(payload: unknown): Promise
     const eligible = mark
       ? isCodingPoolStatus(item.status) && (!docPullRequest || item.workType === "doc")
       : item.status === AWAITING_ACCEPTANCE_STATUS;
-    if (!eligible) {
+    if (!eligible || (mark && requiresImplementationChange(item.workType) && !(await provesImplementation()))) {
       skipped += 1;
       continue;
     }
@@ -330,6 +342,10 @@ export async function applyGitHubPullRequestToBacklog(payload: unknown): Promise
   // twin stays open to be diagnosed and fixed again (BI-91FC6B9A).
   if (mark && event.merged && !docPullRequest) {
     for (const twin of await loadOwnedTwins(items)) {
+      if (requiresImplementationChange(twin.workType) && !(await provesImplementation())) {
+        skipped += 1;
+        continue;
+      }
       const did = await transitionItem({
         id: twin.id,
         itemId: twin.itemId,
@@ -365,10 +381,13 @@ export async function sweepPrSubmittedBacklogItems(args?: { limit?: number }): P
 
   const items = await prisma.backlogItem.findMany({
     where: { itemId: { in: itemIds }, status: { in: [...CODING_POOL_STATUSES] } },
-    select: { id: true, itemId: true, status: true, claimStatus: true },
+    select: { id: true, itemId: true, status: true, claimStatus: true, workType: true },
   });
 
-  const byItem = new Map(rooms.map((room) => [room.backlogItemId, room]));
+  const byItem = new Map<string, (typeof rooms)[number]>();
+  for (const room of rooms) {
+    if (room.backlogItemId && !byItem.has(room.backlogItemId)) byItem.set(room.backlogItemId, room);
+  }
   const moved: string[] = [];
   let skipped = 0;
   for (const item of items) {
@@ -380,6 +399,16 @@ export async function sweepPrSubmittedBacklogItems(args?: { limit?: number }): P
     if (typeof prNumber !== "number" || !prUrl) {
       skipped += 1;
       continue;
+    }
+    if (requiresImplementationChange(item.workType)) {
+      const change = repository
+        ? await readGithubPullRequestChange({ prisma, repositoryFullName: repository, number: prNumber })
+        : null;
+      if (!change || change.isDraft || change.state === "closed"
+        || isDocPullRequest(change.title) || !hasImplementationChange(change.paths)) {
+        skipped += 1;
+        continue;
+      }
     }
     const did = await transitionItem({
       id: item.id,
