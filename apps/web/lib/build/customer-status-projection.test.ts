@@ -13,6 +13,8 @@ describe("projectBuildStudioCustomerStatus (BI-BB13B599)", () => {
     ["checking", "Checking the pull request", false],
     ["updating", "Finalizing against the latest platform", false],
     ["queued", "Merge queued", false],
+    ["armed", "Auto-merge armed", false],
+    ["removed", "Needs your decision", true],
     ["awaiting-release", "Waiting for governed release", false],
     ["deployed", "Deployed", false],
     ["escalated", "Needs your decision", true],

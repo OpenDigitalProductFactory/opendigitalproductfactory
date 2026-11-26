@@ -33,6 +33,17 @@ export function checkBlocksMerge(check: GithubCheckObservation): boolean {
   return check.required !== false;
 }
 
+export type GithubQueueFailure = { name: string; conclusion: string; url: string | null };
+
+export type GithubQueueEvent = {
+  kind: "removed" | "disarmed" | "entry-unconfirmed";
+  id: string;
+  at: string;
+  reason: string;
+  groupHeadSha: string | null;
+  failingChecks: GithubQueueFailure[];
+};
+
 export type GithubPrObservation = {
   nodeId: string;
   number: number;
@@ -40,17 +51,23 @@ export type GithubPrObservation = {
   state: "OPEN" | "CLOSED" | "MERGED";
   merged: boolean;
   headSha: string;
+  baseSha?: string;
+  headParentShas?: string[];
   mergeStateStatus: string | null;
   unresolvedReviewThreads: number;
   reviewThreadsComplete: boolean;
   checksComplete: boolean;
   checks: GithubCheckObservation[];
   autoMergeEnabled: boolean;
+  autoMergeEnabledAt?: string | null;
   mergeQueueEntry: boolean;
+  changesRequested?: boolean;
+  queueEvent?: GithubQueueEvent | null;
 };
 
 export type GithubPrReadiness =
-  | { kind: "ready" | "behind" | "conflict" | "queued" | "merged" | "closed"; headSha: string }
+  | { kind: "ready" | "behind" | "conflict" | "queued" | "armed" | "merged" | "closed"; headSha: string }
+  | { kind: "queue-hold"; headSha: string; event: GithubQueueEvent }
   | { kind: "checking" | "unknown"; headSha: string | null; reason: string };
 
 const PASSING_CHECK_CONCLUSIONS = new Set(["SUCCESS", "NEUTRAL", "SKIPPED"]);
@@ -60,7 +77,13 @@ export function projectGithubPrReadiness(observation: GithubPrObservation): Gith
   if (!headSha) return { kind: "unknown", headSha: null, reason: "missing-head-sha" };
   if (observation.merged || observation.state === "MERGED") return { kind: "merged", headSha };
   if (observation.state === "CLOSED") return { kind: "closed", headSha };
-  if (observation.autoMergeEnabled || observation.mergeQueueEntry) return { kind: "queued", headSha };
+  if (observation.mergeQueueEntry) return { kind: "queued", headSha };
+  if (observation.changesRequested) return { kind: "checking", headSha, reason: "changes-requested" };
+  // A lingering auto-merge request from before the queue event is not fresh intent.
+  const event = observation.queueEvent;
+  const enabledAfterEvent = event && Date.parse(observation.autoMergeEnabledAt ?? "") > Date.parse(event.at);
+  if (observation.autoMergeEnabled && (!event || enabledAfterEvent)) return { kind: "armed", headSha };
+  if (event) return { kind: "queue-hold", headSha, event };
 
   const mergeState = (observation.mergeStateStatus ?? "").toUpperCase();
   if (mergeState === "DIRTY") return { kind: "conflict", headSha };
@@ -127,13 +150,33 @@ const PR_OBSERVATION_QUERY = `
 query DpfPullRequestReadiness($owner:String!,$name:String!,$number:Int!){
   repository(owner:$owner,name:$name){
     pullRequest(number:$number){
-      id number url state merged headRefOid mergeStateStatus
+      id number url state merged headRefOid baseRefOid mergeStateStatus reviewDecision
+      latestReviews(first:100){ nodes { state } pageInfo { hasNextPage } }
       autoMergeRequest { enabledAt }
       mergeQueueEntry { id }
+      timelineItems(last:1,itemTypes:[ADDED_TO_MERGE_QUEUE_EVENT,REMOVED_FROM_MERGE_QUEUE_EVENT,AUTO_MERGE_DISABLED_EVENT]){
+        nodes {
+          __typename
+          ... on AddedToMergeQueueEvent { id createdAt }
+          ... on AutoMergeDisabledEvent { id createdAt }
+          ... on RemovedFromMergeQueueEvent {
+            id createdAt reason
+            beforeCommit {
+              oid
+              statusCheckRollup { contexts(first:50) { nodes {
+                ... on CheckRun { name status conclusion detailsUrl }
+                ... on StatusContext { context state targetUrl }
+              } } }
+            }
+          }
+        }
+      }
       reviewThreads(first:100){ nodes { isResolved } pageInfo { hasNextPage } }
       commits(last:1){
         nodes {
           commit {
+            oid
+            parents(first:3){ nodes { oid } pageInfo { hasNextPage } }
             statusCheckRollup {
               contexts(first:100) {
                 nodes {
@@ -150,6 +193,42 @@ query DpfPullRequestReadiness($owner:String!,$name:String!,$number:Int!){
   }
 }`;
 
+type QueueTimelineNode = {
+  __typename?: string;
+  id?: string;
+  createdAt?: string;
+  reason?: string | null;
+  beforeCommit?: {
+    oid?: string;
+    statusCheckRollup?: { contexts?: { nodes?: Array<{
+      name?: string; status?: string; conclusion?: string | null; detailsUrl?: string | null;
+      context?: string; state?: string; targetUrl?: string | null;
+    } | null> } | null } | null;
+  } | null;
+};
+
+function readQueueEvent(node: QueueTimelineNode | null | undefined): GithubQueueEvent | null {
+  if (!node?.id || !node.createdAt) return null;
+  const kind = node.__typename === "RemovedFromMergeQueueEvent" ? "removed"
+    : node.__typename === "AutoMergeDisabledEvent" ? "disarmed"
+    : node.__typename === "AddedToMergeQueueEvent" ? "entry-unconfirmed" : null;
+  if (!kind) return null;
+  const failingChecks = (node.beforeCommit?.statusCheckRollup?.contexts?.nodes ?? []).flatMap((check) => {
+    if (!check) return [];
+    const name = check.name ?? check.context;
+    const conclusion = check.context ? check.state : check.status === "COMPLETED" ? check.conclusion : null;
+    if (!name || !conclusion || ["EXPECTED", "PENDING"].includes(conclusion)
+      || PASSING_CHECK_CONCLUSIONS.has(conclusion)) return [];
+    return [{ name, conclusion, url: check.detailsUrl ?? check.targetUrl ?? null }];
+  }).slice(0, 12);
+  return {
+    kind, id: node.id, at: node.createdAt,
+    reason: node.reason || kind,
+    groupHeadSha: node.beforeCommit?.oid ?? null,
+    failingChecks,
+  };
+}
+
 type ObservationQueryData = {
   repository?: {
     pullRequest?: {
@@ -159,9 +238,13 @@ type ObservationQueryData = {
       state?: "OPEN" | "CLOSED" | "MERGED";
       merged?: boolean;
       headRefOid?: string;
+      baseRefOid?: string;
       mergeStateStatus?: string | null;
+      reviewDecision?: string | null;
+      latestReviews?: { nodes?: Array<{ state?: string } | null>; pageInfo?: { hasNextPage?: boolean } } | null;
       autoMergeRequest?: { enabledAt?: string } | null;
       mergeQueueEntry?: { id?: string } | null;
+      timelineItems?: { nodes?: Array<QueueTimelineNode | null> } | null;
       reviewThreads?: {
         nodes?: Array<{ isResolved?: boolean } | null>;
         pageInfo?: { hasNextPage?: boolean };
@@ -169,6 +252,8 @@ type ObservationQueryData = {
       commits?: {
         nodes?: Array<{
           commit?: {
+            oid?: string;
+            parents?: { nodes?: Array<{ oid?: string } | null>; pageInfo?: { hasNextPage?: boolean } };
             statusCheckRollup?: {
               contexts?: {
                 nodes?: Array<{
@@ -210,7 +295,10 @@ export async function observeGithubPullRequest(input: {
     throw new Error(`GitHub PR #${input.prNumber} observation is incomplete`);
   }
 
-  const contexts = pr.commits?.nodes?.[0]?.commit?.statusCheckRollup?.contexts;
+  const headCommit = pr.commits?.nodes?.[0]?.commit;
+  const parents = headCommit?.oid === pr.headRefOid && headCommit.parents?.pageInfo?.hasNextPage === false
+    ? headCommit.parents.nodes?.map((parent) => parent?.oid) : undefined;
+  const contexts = headCommit?.statusCheckRollup?.contexts;
   const checks: GithubCheckObservation[] = (contexts?.nodes ?? []).flatMap((node) => {
     if (!node) return [];
     const required = typeof node.isRequired === "boolean" ? { required: node.isRequired } : {};
@@ -242,18 +330,25 @@ export async function observeGithubPullRequest(input: {
     state: pr.state,
     merged: pr.merged === true,
     headSha: pr.headRefOid,
+    ...(pr.baseRefOid ? { baseSha: pr.baseRefOid } : {}),
+    ...(parents?.every((parent): parent is string => typeof parent === "string") ? { headParentShas: parents } : {}),
     mergeStateStatus: pr.mergeStateStatus ?? null,
     unresolvedReviewThreads: (pr.reviewThreads?.nodes ?? []).filter((thread) => thread?.isResolved === false).length,
-    reviewThreadsComplete: pr.reviewThreads?.pageInfo?.hasNextPage !== true,
+    reviewThreadsComplete: pr.reviewThreads?.pageInfo?.hasNextPage !== true
+      && pr.latestReviews?.pageInfo?.hasNextPage !== true,
+    changesRequested: pr.reviewDecision === "CHANGES_REQUESTED"
+      || (pr.latestReviews?.nodes ?? []).some((review) => review?.state === "CHANGES_REQUESTED"),
     checksComplete: contexts?.pageInfo?.hasNextPage !== true,
     checks,
     autoMergeEnabled: Boolean(pr.autoMergeRequest),
+    autoMergeEnabledAt: pr.autoMergeRequest?.enabledAt ?? null,
     mergeQueueEntry: Boolean(pr.mergeQueueEntry),
+    queueEvent: readQueueEvent(pr.timelineItems?.nodes?.[0]),
   };
 }
 
 const ENABLE_AUTOMERGE_MUTATION = `
-mutation DpfEnableAutoMerge($id:ID!,$expectedHeadOid:GitObjectID){
+mutation DpfEnableAutoMerge($id:ID!,$expectedHeadOid:GitObjectID!){
   enablePullRequestAutoMerge(input:{pullRequestId:$id,mergeMethod:SQUASH,expectedHeadOid:$expectedHeadOid}) {
     pullRequest { number }
   }
@@ -288,13 +383,13 @@ export async function enablePullRequestAutoMerge(input: {
   nodeId: string;
   token: string;
   /** GitHub refuses when the PR head has moved off this commit (BI-53BED66C). */
-  expectedHeadOid?: string;
+  expectedHeadOid: string;
   fetchImpl?: typeof fetch;
 }): Promise<void> {
   await githubGraphql({
     token: input.token,
     query: ENABLE_AUTOMERGE_MUTATION,
-    variables: { id: input.nodeId, expectedHeadOid: input.expectedHeadOid ?? null },
+    variables: { id: input.nodeId, expectedHeadOid: input.expectedHeadOid },
     fetchImpl: input.fetchImpl,
   });
 }

@@ -342,6 +342,14 @@ read-only or concurrency-safe development services.
 Slot 1 is declared and testable, but automatic admission remains fixed at one
 until BI-A4427AB8 runs the separately governed capacity pilot.
 
+On the shared Mac, a DPF2 quiet-window reservation parks local CI before it
+starts a costly phase. The wait names the reservation and the holder PID and
+start time when known. It clears without approval when DPF2 releases the slot.
+A wait deadline means the gate is unrun or incomplete, not that the diff
+failed. Keep checking in with the convergence coordinator because the two
+runners do not yet share an atomic reservation. See the
+[owner protocol and race limit](../architecture/build-gate-runbook.md#dpf2-quiet-windows-on-the-shared-mac).
+
 From a worktree, the gate is:
 
 ```bash

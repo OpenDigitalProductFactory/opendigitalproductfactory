@@ -516,6 +516,7 @@ model DecisionInteraction {
   @@index([gateKey, createdAt])
   @@index([principleConflict, createdAt])
   @@index([riskTier, createdAt])
+  @@index([createdAt]) // BI-97C56E20: closure scorecard window read
   // Trust-envelope chain lookups (find the head of a chain to link the next entry).
   @@index([chainId, sealedAt])
   @@index([subjectKind, subjectRef])

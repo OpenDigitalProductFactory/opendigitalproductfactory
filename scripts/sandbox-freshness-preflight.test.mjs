@@ -79,7 +79,7 @@ function runPreflight(root, extraArgs = [], options = {}) {
   const scanArgs = options.scanInstalls ? [] : ["--skip-install-scan"];
   const result = spawnSync("node", [cli, "--dir", root, "--report", reportPath, ...scanArgs, ...extraArgs], {
     encoding: "utf8",
-    env: options.env ? { ...process.env, ...options.env } : process.env,
+    env: { ...process.env, DPF2_CI_SLOT_LOCK: join(root, "fixture-dpf2-ci.lock"), ...options.env },
   });
   let report = null;
   try {

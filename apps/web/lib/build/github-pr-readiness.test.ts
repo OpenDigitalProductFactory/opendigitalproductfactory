@@ -77,9 +77,9 @@ describe("projectGithubPrReadiness", () => {
     });
   });
 
-  it("recognizes queue enrollment without actuating it again", () => {
+  it("distinguishes armed intent from provider-confirmed queue enrollment", () => {
     expect(projectGithubPrReadiness(observed({ autoMergeEnabled: true }))).toEqual({
-      kind: "queued",
+      kind: "armed",
       headSha: "abc123",
     });
     expect(projectGithubPrReadiness(observed({ mergeQueueEntry: true }))).toEqual({
@@ -136,6 +136,34 @@ describe("updatePullRequestBranch", () => {
 });
 
 describe("observeGithubPullRequest check detail (BI-88341B5D)", () => {
+  it("keeps a removed group's failed check separate from green author-head checks", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue({
+      ok: true, json: async () => ({ data: { repository: { pullRequest: {
+        id: "PR_node", number: 42, url: "https://github.com/o/r/pull/42", state: "OPEN",
+        headRefOid: "author-head", mergeStateStatus: "CLEAN",
+        timelineItems: { nodes: [{
+          __typename: "RemovedFromMergeQueueEvent", id: "removed-1", createdAt: "2026-11-25T22:54:08Z", reason: "failed_checks",
+          beforeCommit: { oid: "group-head", statusCheckRollup: { contexts: { nodes: [
+            { name: "UX Route Budget Sweep", status: "COMPLETED", conclusion: "FAILURE", detailsUrl: "https://github.com/o/r/actions/runs/9" },
+            { name: "DCO", status: "COMPLETED", conclusion: "SUCCESS" },
+          ] } } },
+        }] },
+        commits: { nodes: [{ commit: { statusCheckRollup: { contexts: { nodes: [
+          { name: "UX Route Budget Sweep", status: "COMPLETED", conclusion: "SUCCESS" },
+        ] } } } }] },
+      } } } }),
+    });
+    const observation = await observeGithubPullRequest({ owner: "o", repo: "r", prNumber: 42, token: "t", fetchImpl: fetchImpl as never });
+    expect(observation.checks).toEqual([expect.objectContaining({ conclusion: "SUCCESS" })]);
+    expect(projectGithubPrReadiness(observation)).toEqual({
+      kind: "queue-hold", headSha: "author-head",
+      event: { kind: "removed", id: "removed-1", at: "2026-11-25T22:54:08Z", reason: "failed_checks",
+        groupHeadSha: "group-head", failingChecks: [
+          { name: "UX Route Budget Sweep", conclusion: "FAILURE", url: "https://github.com/o/r/actions/runs/9" },
+        ] },
+    });
+  });
+
   it("carries each failing run's page and workflow run id so the room can name and re-run it", async () => {
     const fetchImpl = vi.fn().mockResolvedValue({
       ok: true,

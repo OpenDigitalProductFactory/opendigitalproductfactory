@@ -362,6 +362,8 @@ model PlatformIssueReport {
   @@index([errorDigest])
   // BI-5FE8656F: dedupeKey lookup powers the scanner's idempotency check.
   @@index([dedupeKey])
+  @@index([createdAt]) // BI-97C56E20: closure scorecard window read
+  @@index([status, createdAt]) // BI-97C56E20: held owner-attention reports
   @@index([mergedIntoId])
   @@index([reportedById, supportSessionId, createdAt(sort: Desc)])
 }

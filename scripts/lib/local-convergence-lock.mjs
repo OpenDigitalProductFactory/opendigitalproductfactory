@@ -1,19 +1,159 @@
 import { randomUUID } from "node:crypto";
 import {
+  closeSync,
+  constants,
   existsSync,
+  fstatSync,
   mkdirSync,
+  openSync,
   readFileSync,
   renameSync,
   rmSync,
   statSync,
   writeFileSync,
 } from "node:fs";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 
 import { isProcessAlive, readProcessIdentity } from "./local-sandbox-fence.mjs";
 
 export const CONVERGENCE_LOCK_STALE_MS = 30 * 60_000;
 const OWNER_FILE = "owner.json";
+
+// DPF2 owns this host-wide O_EXCL file. Its ci-slot.mjs recognizes a positive
+// PID plus a token, uses kill(pid, 0) with EPERM meaning alive, and ages
+// incomplete JSON against a 2-second write grace. Its fixed path is a
+// coordination endpoint, not a temporary file DPF creates or owns.
+const DPF2_CI_RESERVATION_PATH = "/tmp/dpf2-local-ci.lock";
+const DPF2_RESERVATION_WAIT_MS = 60 * 60_000;
+const DPF2_CORRUPT_GRACE_MS = 2_000;
+export const DPF2_RESERVATION_POLL_MS = 30_000;
+
+export function dpf2ReservationDeadline(env = process.env, now = Date.now) {
+  const outerDeadline = Number(env.DPF_LOCAL_CI_OUTER_DEADLINE_MS);
+  const phaseDeadline = now() + DPF2_RESERVATION_WAIT_MS;
+  return Number.isFinite(outerDeadline) && outerDeadline > 0
+    ? Math.min(phaseDeadline, outerDeadline) : phaseDeadline;
+}
+
+export function dpf2ReservationPath(env = process.env, platform = process.platform) {
+  const override = env.DPF2_CI_SLOT_LOCK?.trim();
+  return override ? resolve(override) : platform === "darwin" ? DPF2_CI_RESERVATION_PATH : null;
+}
+
+function readDpf2Reservation(path) {
+  // This open has no creation or write flags. The explicit zero creation mode
+  // is ignored for an existing file and grants no permissions if those flags
+  // ever regress. Check the opened descriptor, not the path, before reading.
+  if (!Number.isInteger(constants.O_NOFOLLOW)) return {};
+  const fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK, 0o000);
+  try {
+    const stat = fstatSync(fd);
+    if (!stat.isFile() || (stat.mode & 0o022) !== 0) return { mtimeMs: stat.mtimeMs };
+    try {
+      return { raw: readFileSync(fd, "utf8"), mtimeMs: stat.mtimeMs };
+    } catch (error) {
+      error.mtimeMs = stat.mtimeMs;
+      throw error;
+    }
+  } finally {
+    closeSync(fd);
+  }
+}
+
+function dpf2PidAlive(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    if (error?.code === "ESRCH") return false;
+    if (error?.code === "EPERM") return true;
+    throw error;
+  }
+}
+
+function reservationSince(ms) {
+  return Number.isFinite(ms) ? { since: new Date(ms).toISOString() } : {};
+}
+
+export function inspectDpf2CiReservation({
+  env = process.env,
+  path = dpf2ReservationPath(env),
+  now = Date.now,
+  processAlive = dpf2PidAlive,
+  read = readDpf2Reservation,
+} = {}) {
+  if (path === null) return { status: "free" };
+  let file;
+  try {
+    file = read(path);
+  } catch (error) {
+    if (error?.code === "ENOENT") return { status: "free" };
+    return { status: "unreadable", ...reservationSince(error?.mtimeMs) };
+  }
+  const modified = reservationSince(file.mtimeMs);
+  if (file.raw === undefined) return { status: "unreadable", ...modified };
+  let owner;
+  try {
+    owner = JSON.parse(file.raw);
+  } catch {
+    // An exclusive create may have won but not written its metadata yet.
+    return {
+      status: now() - file.mtimeMs >= DPF2_CORRUPT_GRACE_MS ? "stale-corrupt" : "initializing",
+      ...modified,
+    };
+  }
+  if (!Number.isInteger(owner?.pid) || owner.pid <= 0
+      || typeof owner.token !== "string" || owner.token.length === 0) {
+    return { status: "unknown-owner", ...modified };
+  }
+  const acquiredMs = typeof owner.acquiredAt === "string" ? Date.parse(owner.acquiredAt) : NaN;
+  const holder = { pid: owner.pid, ...modified, ...reservationSince(acquiredMs) };
+  try {
+    return { status: processAlive(owner.pid) ? "held" : "stale-dead", ...holder };
+  } catch {
+    return { status: "unreadable", ...holder };
+  }
+}
+
+export function dpf2ReservationBlocks(reservation) {
+  return !["free", "stale-dead", "stale-corrupt"].includes(reservation.status);
+}
+
+export function describeDpf2Reservation(reservation) {
+  const holder = reservation.pid ? ` (PID ${reservation.pid})` : " (holder unknown)";
+  const since = reservation.since ? ` since ${reservation.since}` : " since unknown";
+  return `DPF2 quiet-window reservation ${reservation.status}${holder}${since}`;
+}
+
+// A read can defer a start, never reserve admission. DPF2 can acquire after
+// our last observation. The host-wide thread handshake still owns that race.
+export async function waitForDpf2Reservation({
+  inspect = inspectDpf2CiReservation,
+  now = Date.now,
+  deadline = dpf2ReservationDeadline(process.env, now),
+  sleep = ms => new Promise(resolve => setTimeout(resolve, ms)),
+  cancelled = () => false,
+  notice = console.log,
+} = {}) {
+  let waited = false;
+  for (;;) {
+    if (cancelled()) return "cancelled";
+    const reservation = inspect();
+    if (!dpf2ReservationBlocks(reservation)) {
+      if (waited) notice("DPF2 reservation no longer blocks this phase; resuming.");
+      return "clear";
+    }
+    const delayMs = Math.min(DPF2_RESERVATION_POLL_MS, deadline - now());
+    const description = describeDpf2Reservation(reservation);
+    if (delayMs <= 0) {
+      notice(`Timed out waiting for ${description}. No verdict from the blocked phase; resume after DPF2 releases it.`);
+      return "deadline";
+    }
+    waited = true;
+    notice(`Waiting for ${description}; checking again in ${Math.ceil(delayMs / 1000)}s.`);
+    await sleep(delayMs);
+  }
+}
 
 export function readLocalConvergenceOwner(path) {
   try {

@@ -1,0 +1,10 @@
+{
+  "version": "1",
+  "accountableOwner": "Mark Bodman (markdbodman@gmail.com)",
+  "summary": "BI-97C56E20. Index-only change: no field is added, removed, retyped or repurposed, so every field resolution below is empty by construction and no data subject, provenance or policy vector changes. Adds four btree indexes so the daily closure-scorecard task reads its windowed counts without sequential scans: PlatformIssueReport(createdAt), PlatformIssueReport(status, createdAt), DecisionInteraction(createdAt) and BacklogItem(source, status). The scorecard only reads these tables (inside a 15s statement_timeout); it writes only its own TaskRun and artifact rows through the existing scheduled-task path. Migration 20261125220000_closure_scorecard_read_indexes is additive and idempotent (CREATE INDEX IF NOT EXISTS), alters no column, constraint or row, and applies cleanly against any data state. Rollback: drop the four indexes; no data depends on them.",
+  "changes": [
+    { "kind": "model", "assetId": "PlatformIssueReport", "lifecycleDisposition": "unchanged (index-only; existing retention retained)", "fields": [] },
+    { "kind": "model", "assetId": "DecisionInteraction", "lifecycleDisposition": "unchanged (index-only; existing retention retained)", "fields": [] },
+    { "kind": "model", "assetId": "BacklogItem", "lifecycleDisposition": "retain-with-item", "fields": [] }
+  ]
+}

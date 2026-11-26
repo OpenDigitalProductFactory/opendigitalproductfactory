@@ -89,6 +89,9 @@ export function mergeLocalCiHostPressure(input: {
     convergenceActive:
       input.client.convergenceActive !== false
       || input.server.convergenceActive !== false,
+    // This is a client-host observation. The portal's container cannot see
+    // the Mac's /tmp or PID namespace. It can only carry the contraction.
+    ...(input.client.dpf2ReservationActive === true ? { dpf2ReservationActive: true } : {}),
     fencesHealthy:
       input.client.fencesHealthy === true
       && input.server.fencesHealthy === true,

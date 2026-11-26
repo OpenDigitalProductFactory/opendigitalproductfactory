@@ -478,13 +478,30 @@ export async function fileOwnerAttentionRoute(
       description: `${report.description}\n\n${decided}`,
       featureBuildId: report.featureBuildId ?? null,
       triggerKind: report.triggerKind,
-      dedupeKey: `${report.dedupeKey}:routed`,
+      dedupeKey: routedDedupeKey(report.dedupeKey),
       routeContext: report.routeContext ?? null,
     });
     return { reportId, ownerUserId: null, error: null };
   } catch (err) {
     return { reportId: null, ownerUserId: null, error: String(err instanceof Error ? err.message : err).slice(0, 300) };
   }
+}
+
+/** Suffix a routed (non-owner) report adds to its ask's dedupe key. */
+export const ROUTED_DEDUPE_SUFFIX = ":routed";
+
+/** The dedupe key a routed report is filed under for an ask keyed `dedupeKey`. */
+export function routedDedupeKey(dedupeKey: string): string {
+  return `${dedupeKey}${ROUTED_DEDUPE_SUFFIX}`;
+}
+
+/**
+ * The one identity of an owner-attention ask, whichever route filed it: the
+ * owner report carries `K`, the routed report `K:routed`. Readers that count
+ * asks (BI-97C56E20) normalise through this so one ask is never counted twice.
+ */
+export function askIdentityFromDedupeKey(dedupeKey: string): string {
+  return dedupeKey.endsWith(ROUTED_DEDUPE_SUFFIX) ? dedupeKey.slice(0, -ROUTED_DEDUPE_SUFFIX.length) : dedupeKey;
 }
 
 /** Decide, then write. The entry point for producers with nothing to fence. */

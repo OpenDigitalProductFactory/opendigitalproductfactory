@@ -32,6 +32,9 @@ import { callerGateDirectory, gateArtifactStamps, makeTempWorktree } from "./fix
 // re-claiming against a server that has been torn down. The spawn decision
 // itself is covered with an injected spawn in lib/durable-wait-resumer.test.mjs.
 process.env.DPF_DURABLE_RESUMER = "off";
+const dpf2FixtureDir = mkdtempSync(join(tmpdir(), "dpf-gate-lease-lock-"));
+const dpf2FixtureLock = join(dpf2FixtureDir, "fixture-dpf2-ci.lock");
+test.after(() => rmSync(dpf2FixtureDir, { recursive: true, force: true }));
 
 // BI-53B189C8. Every gate this file spawns must write into a temp repository.
 // Three tests once passed `--worktree process.cwd()`, so each run left stub
@@ -79,6 +82,7 @@ function run(command, args, options) {
       ...options,
       env: {
         ...options.env,
+        DPF2_CI_SLOT_LOCK: dpf2FixtureLock,
         NODE_ENV: "test",
         DPF_LOCAL_CI_HOST_PRESSURE_JSON: JSON.stringify(TEST_HOST_PRESSURE),
       },
@@ -1640,6 +1644,7 @@ test(
           // Spawned directly for the kill handle, so it does not get run()'s
           // fixed host pressure; without it the gate samples the real host.
           NODE_ENV: "test",
+          DPF2_CI_SLOT_LOCK: dpf2FixtureLock,
           DPF_LOCAL_CI_HOST_PRESSURE_JSON: JSON.stringify(TEST_HOST_PRESSURE),
           DPF_MCP_BEARER_TOKEN: "test-token",
           DPF_ALLOW_LOCAL_CI_STUB: "1",

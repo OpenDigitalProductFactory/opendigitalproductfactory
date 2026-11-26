@@ -517,6 +517,7 @@ async function contributeToHiveHandler(
   // Anonymous identity pushes dpf/<hash>/<slug> branch directly to the upstream repo.
   // No customer fork needed — the hive token provides write access.
   let prUrl: string | null = null;
+  let publishedHeadSha: string | null = null;
   let prError: string | null = null;
   try {
     const upstreamUrl = devConfig?.upstreamRemoteUrl ?? "https://github.com/OpenDigitalProductFactory/opendigitalproductfactory.git";
@@ -581,6 +582,7 @@ async function contributeToHiveHandler(
 
         if (prResult.prUrl) {
           prUrl = prResult.prUrl;
+          publishedHeadSha = prResult.commitSha ?? null;
           await prisma.featurePack.update({
             where: { packId },
             data: { status: "contributed", manifest: { ...manifest, dcoAttestation, prUrl } as unknown as import("@dpf/db").Prisma.InputJsonValue },
@@ -618,6 +620,7 @@ async function contributeToHiveHandler(
   await reconcileHiveContributionDelivery({
     buildId,
     prUrl,
+    publishedHeadSha,
     token: hiveTokenEarly,
     eligible: securityScan.passed && !prError,
   });
