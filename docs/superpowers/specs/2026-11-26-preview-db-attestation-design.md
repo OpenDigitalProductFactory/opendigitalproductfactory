@@ -1,3 +1,7 @@
+---
+status: draft
+---
+
 # Attest the database of a leased Contributor preview
 
 BI-5C193A3F. First in the S5 preview dependency stack. This change supplies read-only proof, not enrollment, draft provisioning or activation.

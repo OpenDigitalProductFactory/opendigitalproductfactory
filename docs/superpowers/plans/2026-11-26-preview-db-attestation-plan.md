@@ -1,3 +1,7 @@
+---
+status: draft
+---
+
 # BI-5C193A3F preview database attestation plan
 
 [Design](../specs/2026-11-26-preview-db-attestation-design.md). Atomic delivery. The probe, owner proof and current-connection comparison are not useful as independent deliverables.
