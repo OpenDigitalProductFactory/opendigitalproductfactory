@@ -17,7 +17,7 @@
 // mirror agent-grants.ts TOOL_TO_GRANTS, which stays the gating source.
 
 import { prisma } from "@dpf/db";
-import { ACTUATOR_SERVICE_LOG_NAMES, SCOPE_WRITER_OBSERVER_SOCKET, parseMountPoints, readActuatorProjectContainers, readActuatorServiceLogs } from "../../../../../scripts/lib/scope-writer-observation.mjs";
+import { ACTUATOR_SERVICE_LOG_NAMES, readPrivateActuatorMount, readActuatorProjectContainers, readActuatorServiceLogs } from "../../../../../scripts/lib/scope-writer-observation.mjs";
 
 import { lazyFsPromises, lazyOs, lazyPath, lazyChildProcess, lazyUtil, getCwd } from "@/lib/shared/lazy-node";
 import type { RegisteredToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
@@ -151,14 +151,8 @@ function logAdminActivity(
   }).then(() => {}).catch(() => {});
 }
 
-async function readAdminActuatorMount(): Promise<"mounted" | "absent" | "unknown"> {
-  try {
-    const points = parseMountPoints(await lazyFsPromises().readFile("/proc/self/mountinfo", "utf8"));
-    if (!points) return "unknown";
-    return points.includes(lazyPath().dirname(SCOPE_WRITER_OBSERVER_SOCKET)) ? "mounted" : "absent";
-  } catch (error) {
-    return (error as NodeJS.ErrnoException | null)?.code === "ENOENT" && lazyOs().platform() !== "linux" ? "absent" : "unknown";
-  }
+function readAdminActuatorMount() {
+  return readPrivateActuatorMount({ read: path => lazyFsPromises().readFile(path, "utf8"), platform: lazyOs().platform() });
 }
 
 async function holdDirectDocker(userId: string, tool: string, params: Record<string, unknown>, error: string): Promise<ToolResult> {

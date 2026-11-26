@@ -28,6 +28,10 @@ export declare const ACTUATOR_RESTARTABLE_SERVICES: readonly string[];
 export declare function parseMountPoints(mountinfo: unknown): string[] | null;
 /** True when the table shows the actuator socket directory, or does not parse (fail closed). */
 export declare function hasPrivateActuatorMount(mountinfo: string | Buffer): boolean;
+/** Distinguishes proven absence from an unreadable or invalid mount table. */
+export declare function readPrivateActuatorMount(options?: {
+  read?: (path: string) => Promise<string | Buffer>; platform?: NodeJS.Platform;
+}): Promise<"mounted" | "absent" | "unknown">;
 /**
  * Whether this process uses the private actuator. Fail closed: an unreadable
  * or unparsable mount table counts as mounted, so an unknown never reaches raw

@@ -69,10 +69,15 @@ export function parseMountPoints(mountinfo) {
   return points;
 }
 
+function actuatorMountFromTable(mountinfo) {
+  const points = parseMountPoints(mountinfo);
+  if (points === null) return 'unknown';
+  return points.includes(dirname(SCOPE_WRITER_OBSERVER_SOCKET)) ? 'mounted' : 'absent';
+}
+
 /** Fail closed: a table that does not parse as mountinfo counts as mounted. */
 export function hasPrivateActuatorMount(mountinfo) {
-  const points = parseMountPoints(mountinfo);
-  return points === null || points.includes(dirname(SCOPE_WRITER_OBSERVER_SOCKET));
+  return actuatorMountFromTable(mountinfo) !== 'absent';
 }
 
 // The one switch between the qualified (actuator) path and the legacy local
@@ -83,19 +88,24 @@ export function hasPrivateActuatorMount(mountinfo) {
 // Windows: ENOENT off Linux) has no container mounts, so that is a definite
 // "not mounted", not an unknown, and the only other route to the legacy path.
 const MOUNTINFO = '/proc/self/mountinfo';
-const mountUnreadable = (error, platform) => !(platform !== 'linux' && error?.code === 'ENOENT');
+const mountUnreadable = (error, platform) => platform !== 'linux' && error?.code === 'ENOENT' ? 'absent' : 'unknown';
+
+/** Preserve uncertainty for callers that need to report an explicit refusal. */
+export async function readPrivateActuatorMount({ read = readFile, platform = process.platform } = {}) {
+  let table;
+  try { table = await read(MOUNTINFO); } catch (error) { return mountUnreadable(error, platform); }
+  return actuatorMountFromTable(table);
+}
 
 /** Whether this process has the private actuator mounted. Never rejects. */
-export function usesPrivateActuator({ read = readFile, platform = process.platform } = {}) {
-  return Promise.resolve().then(() => read(MOUNTINFO))
-    .then(hasPrivateActuatorMount, error => mountUnreadable(error, platform))
-    .catch(() => true);
+export async function usesPrivateActuator(options) {
+  return await readPrivateActuatorMount(options) !== 'absent';
 }
 
 /** Synchronous form of usesPrivateActuator, with the same fail-closed rule. */
 export function usesPrivateActuatorSync({ read = readFileSync, platform = process.platform } = {}) {
   let mountinfo;
-  try { mountinfo = read(MOUNTINFO); } catch (error) { return mountUnreadable(error, platform); }
+  try { mountinfo = read(MOUNTINFO); } catch (error) { return mountUnreadable(error, platform) !== 'absent'; }
   try { return hasPrivateActuatorMount(mountinfo); } catch { return true; }
 }
 
