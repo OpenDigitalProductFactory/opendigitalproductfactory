@@ -10,7 +10,7 @@
 // Definitions moved verbatim out of the inline PLATFORM_TOOLS array; grants
 // mirror agent-grants.ts TOOL_TO_GRANTS, which stays the gating source.
 
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
+import type { RegisteredToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
 import { SCHEDULED_AGENT_TASK_KINDS } from "@/lib/operate/scheduled-jobs/agent-task-kind";
 import {
@@ -20,11 +20,10 @@ import {
   type ScheduledWorkTriggerKind,
 } from "@dpf/validators/workroom-policy/scheduled-work-trigger";
 
-const definitions: ToolDefinition[] = [
+const definitions: RegisteredToolDefinition[] = [
   {
     name: "create_scheduled_agent_task",
-    // changes identity or authority → consult-gated (TAK §8.4.1). Kept terse:
-    // the coverage measure only sees a 3000-char window from `name:` (BI-99F4B22C).
+    // Authority change. Keep within the coverage scanner's window (BI-99F4B22C).
     sideEffect: true,
     consequence: "authority",
     description: "Create a recurring agent task that runs in the coordination plane (TaskRun/thread/tools/evidence) on a 5-field UTC cron. Owned by the calling user; the supported way for an agent to schedule recurring work instead of a client-local cron.",
@@ -69,6 +68,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["agentId", "title", "prompt", "schedule"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_operations",
     executionMode: "immediate",
   },
@@ -95,6 +95,7 @@ const definitions: ToolDefinition[] = [
       },
       required: [],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_operations",
     executionMode: "immediate",
     sideEffect: false,
@@ -106,6 +107,7 @@ const definitions: ToolDefinition[] = [
       taskId: { type: "string" }, expectedRevision: { type: "string", description: "Exact current revision returned by the task list." },
       mode: { type: "string", enum: ["read-only-history"] }, reason: { type: "string" },
     }, required: ["taskId", "expectedRevision", "mode", "reason"], additionalProperties: false },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_operations", executionMode: "immediate", sideEffect: true, consequence: "authority",
   },
   {
@@ -118,6 +120,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["taskId"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_operations",
     executionMode: "immediate",
     sideEffect: true,
@@ -134,6 +137,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["taskId"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_operations",
     executionMode: "immediate",
     sideEffect: true,
@@ -148,6 +152,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["taskId"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_operations",
     executionMode: "immediate",
     sideEffect: true,
@@ -162,6 +167,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["taskId"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_operations",
     executionMode: "immediate",
     sideEffect: true,

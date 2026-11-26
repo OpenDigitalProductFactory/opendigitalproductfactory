@@ -16,7 +16,7 @@ import type { DemandEvidenceDb } from "@/lib/demand/evidence-repository";
 import type { DemandTransitionDb } from "@/lib/demand/transition-repository";
 import { resolveEstimateProvenance } from "@/lib/demand/estimate-provenance";
 import { mergeBacklogItemsConsequence } from "@/lib/demand/duplicate-merge-consequence";
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
+import type { RegisteredToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack } from "../tool-pack";
 import {
   approveDemandForFundingHandler,
@@ -29,7 +29,7 @@ import {
 } from "./demand-scoring-administration";
 import { queueProductManagementPlaybookRefreshForBacklogItem } from "@/lib/product-management/product-management-playbook-refresh";
 
-const definitions: ToolDefinition[] = [
+const definitions: RegisteredToolDefinition[] = [
   {
     name: "score_demand_item",
     description:
@@ -50,6 +50,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["itemId"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_backlog",
     sideEffect: true,
   },
@@ -73,6 +74,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["itemId", "to"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_backlog",
     sideEffect: true,
   },
@@ -96,6 +98,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["itemId", "sourceKind", "sourceRef"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_backlog",
     sideEffect: true,
   },
@@ -111,6 +114,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["evidenceLinkId", "rationale"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_backlog",
     sideEffect: true,
     // destroys state → consult-gated (TAK §8.4.1).
@@ -131,6 +135,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["itemId", "by"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_backlog",
     sideEffect: true,
   },
@@ -155,6 +160,7 @@ const definitions: ToolDefinition[] = [
       },
       required: [],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_backlog",
     sideEffect: true,
     // changes identity or authority → consult-gated (TAK §8.4.1).
@@ -183,6 +189,7 @@ const definitions: ToolDefinition[] = [
       },
       required: [],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_backlog",
     sideEffect: true,
     // changes identity or authority → consult-gated (TAK §8.4.1).
@@ -204,6 +211,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["itemId"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_operations",
     sideEffect: false,
   },
@@ -221,6 +229,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["canonicalItemId", "duplicateItemId"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_backlog",
     sideEffect: true,
     // destroys state → consult-gated (TAK §8.4.1). A proven same-origin
@@ -239,6 +248,7 @@ const definitions: ToolDefinition[] = [
       },
       required: [],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_backlog",
     sideEffect: true,
     // destroys state → consult-gated (TAK §8.4.1).
@@ -257,6 +267,7 @@ const definitions: ToolDefinition[] = [
       },
       required: [],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_operations",
     sideEffect: false,
   },
@@ -273,6 +284,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["itemId"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_backlog",
     sideEffect: true,
   },

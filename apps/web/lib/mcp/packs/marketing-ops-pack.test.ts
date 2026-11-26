@@ -19,7 +19,10 @@ vi.mock("@/lib/marketing/publish", () => publish);
 
 // prisma is imported at module scope by the pack; stub it so importing the pack
 // module does not require a live client.
-vi.mock("@dpf/db", () => ({ prisma: {} }));
+const organization = vi.hoisted(() => ({ findInstallOrganization: vi.fn() }));
+vi.mock("@dpf/db", () => ({ prisma: {}, ...organization }));
+const storefront = vi.hoisted(() => ({ resolveMarketingArchetypeContext: vi.fn(), MARKETING_NO_STOREFRONT_MESSAGE: "No storefront" }));
+vi.mock("@/lib/marketing/archetype-context", () => storefront);
 
 import { marketingOpsPack } from "./marketing-ops-pack";
 import { isToolAllowedByGrants } from "@/lib/tak/agent-grants";
@@ -78,6 +81,17 @@ describe("marketing-ops pack — registration", () => {
 });
 
 describe("marketing-ops pack — handler behavior (delegation preserved)", () => {
+  it("uses only the resolved storefront's install organization for SEO location", async () => {
+    storefront.resolveMarketingArchetypeContext.mockResolvedValue({ storefrontId: "store-1", organizationId: "org-1",
+      archetype: { category: "trades-maintenance", name: "Plumbing" }, items: [{ name: "Repair" }], sections: [],
+      playbook: { primaryGoal: "Attract clients", campaignTypes: [] } });
+    organization.findInstallOrganization.mockResolvedValueOnce({ id: "org-1", address: { city: "Fixture City" } });
+    const call = () => marketingOpsPack.handlers.analyze_seo_opportunity({}, "user-fixture");
+    await expect(call()).resolves.toMatchObject({ data: { location: "Fixture City", suggestedSearchIntents: ["repair Fixture City", "emergency plumbing Fixture City"] } });
+    organization.findInstallOrganization.mockResolvedValueOnce({ id: "other-org", address: { city: "Other City" } });
+    await expect(call()).resolves.toMatchObject({ data: { location: null, suggestedSearchIntents: ["repair near me", "emergency plumbing near me"] } });
+  });
+
   it("save_marketing_review delegates to recordMarketingStrategistReview with the acting agent id", async () => {
     marketing.recordMarketingStrategistReview.mockResolvedValue({ reviewId: "R1", message: "Saved" });
     const res = await marketingOpsPack.handlers.save_marketing_review(

@@ -346,3 +346,15 @@ was published, current native medium-work readiness admitted implementation
 (`IRD-9803B3A7DD28`) and atomic plan coverage was recorded. Its current obligations
 are delivery evidence and independent live acceptance; no spec/architecture/plan
 review receipt is synthesized or required by that medium-work admission.
+
+
+## Exact duplicate backlog requests — BI-B499CCB3
+
+The [bounded repair](2026-11-25-needs-you-backlog-requests-design.md) extends the
+same purpose-first card. An exact merge explains which request leaves active
+work, which stays, and that recorded demand is combined. An exact duplicate
+retirement explains the link without implying that demand is combined. Use
+titles only after the existing viewer content check, otherwise show the
+reference from the captured request. Do not resolve unknown argument shapes or
+change the authority binding. The existing protected disclosure sweep covers
+both effects without sending an approval.

@@ -21,13 +21,23 @@ rather than one unbounded surface.
 A [`ToolPack`](../../apps/web/lib/mcp/tool-pack.ts) bundles the three things that used to
 live in three places:
 
-- **definitions** — the `ToolDefinition[]` (was inline in `mcp-tools.ts`),
+- **definitions** — the `RegisteredToolDefinition[]` (was inline in `mcp-tools.ts`),
 - **handlers** — `name -> handler` (was a sibling module + a switch case),
 - **grants** — agent-grant categories per tool (was only in `agent-grants.ts`).
 
 [`composeToolPacks`](../../apps/web/lib/mcp/tool-registry.ts) merges packs into the flat
 surfaces `mcp-tools.ts` consumes (the combined definition list + a `name -> handler`
 lookup) and throws on a duplicate tool name across packs.
+
+Every registered definition declares its `workroomAccess` class. The registry
+rejects a missing or invalid class. This field describes the operation, not who
+may use it. Keep tools with no bounded Workroom adapter `outside-workroom`. Do
+not infer access from `sideEffect`, annotations or external discovery. Retained
+aliases use the canonical definition's class. The `load_tools` meta-tool and
+external MCP ingress do not add permitted Workroom operations. Existing user,
+coworker and token checks still apply. A room operation such as posting a
+message is not itself granted by this declaration. A Workroom broker must
+resolve the exact target and constrain the effects before calling a handler.
 
 The contract types a pack, a handler or a coworker surface names (`ToolDefinition`,
 `ToolResult`, `ToolExecutionContext`, `ToolAnnotations`, `BuildPhaseTag`) live in the leaf

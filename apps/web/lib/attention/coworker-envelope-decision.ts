@@ -69,6 +69,7 @@ export type EnvelopeDecisionSummary = {
   target: string;
   /** A readable target name resolved under the viewing person's access policy. */
   targetLabel?: string;
+  duplicateLabel?: string;
   /** A bounded preview of the proposed content. Empty when unresolved. */
   proposed: EnvelopeProposedField[];
   /** Complete original input for review; absent on older projections, null when unresolved. */
@@ -228,6 +229,24 @@ function stringParam(params: Record<string, unknown>, key: string): string | nul
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
+/** Recognize only the exact captured request, not a tool's broader capabilities. */
+export function duplicateBacklogRequest(toolName: string, params: Record<string, unknown>) {
+  const merge = toolName === "merge_backlog_items";
+  if (!merge && toolName !== "retire_backlog_item") return null;
+  const allowed = merge
+    ? ["canonicalItemId", "duplicateItemId", "rationale", "reconcileOnly"]
+    : ["itemId", "duplicateOfId", "outcome", "rationale", "reason"];
+  if (Object.keys(params).some(key => !allowed.includes(key))) return null;
+  if (params.rationale !== undefined && typeof params.rationale !== "string") return null;
+  if (merge ? params.reconcileOnly !== undefined && params.reconcileOnly !== false
+    : params.outcome !== "duplicate" || !stringParam(params, "rationale")
+      || (params.reason !== undefined && typeof params.reason !== "string")) return null;
+  const duplicateId = stringParam(params, merge ? "duplicateItemId" : "itemId");
+  const canonicalId = stringParam(params, merge ? "canonicalItemId" : "duplicateOfId");
+  if (!duplicateId || !canonicalId || duplicateId === canonicalId) return null;
+  return { kind: merge ? "merge" as const : "retire" as const, duplicateId, canonicalId };
+}
+
 /** Where the change lands, derived from the arguments the coworker sent. */
 export function envelopeTarget(toolName: string, params: Record<string, unknown>): string {
   const capsule = stringParam(params, "capsuleId");
@@ -263,6 +282,7 @@ type SummaryContext = {
   consequence?: string | null;
   rationale?: string | null;
   targetLabel?: string;
+  duplicateLabel?: string;
 };
 
 function sharedFacts(input: SummaryContext) {
@@ -277,6 +297,7 @@ function sharedFacts(input: SummaryContext) {
     whyAPerson: input.rationale?.trim() || "No reason was recorded for asking a person.",
     scope: SCOPE_TEXT,
     ...(input.targetLabel ? { targetLabel: input.targetLabel } : {}),
+    ...(input.duplicateLabel ? { duplicateLabel: input.duplicateLabel } : {}),
   };
 }
 
@@ -421,6 +442,7 @@ export function summarizeCoworkerEnvelopeDecision(input: {
   /** The governing reason stored on the envelope. */
   rationale?: string | null;
   targetLabel?: string;
+  duplicateLabel?: string;
 }): EnvelopeDecisionSummary {
   const fromExecution = originalToolParameters(input.proposedParameters);
   const fromEnvelope = originalToolParameters(input.argsJson);
@@ -438,6 +460,7 @@ export function summarizeCoworkerEnvelopeDecision(input: {
     consequence: input.consequence ?? null,
     rationale: input.rationale ?? null,
     targetLabel: input.targetLabel,
+    duplicateLabel: input.duplicateLabel,
   };
   const toolName = input.toolName.trim();
   const gate =
@@ -539,11 +562,30 @@ export function envelopePrimaryDecision(decision: EnvelopeDecisionSummary, local
   const appUpdate = exact && decision.toolName === "request_self_upgrade"
     && Object.keys(params).every(key => key === "reason")
     && (params.reason === undefined || typeof params.reason === "string");
-  const mergeWork = exact && decision.toolName === "merge_backlog_items"
-    && !!stringParam(params, "canonicalItemId") && !!stringParam(params, "duplicateItemId");
+  const duplicateWork = exact ? duplicateBacklogRequest(decision.toolName, params) : null;
+  if (duplicateWork) {
+    const merge = duplicateWork.kind === "merge";
+    const args = {
+      duplicate: decision.duplicateLabel ?? duplicateWork.duplicateId,
+      canonical: decision.targetLabel ?? duplicateWork.canonicalId,
+    };
+    return {
+      title: merge ? copy.mergeWorkTitle : copy.retireDuplicateTitle,
+      description: formatSource(locale, merge ? copy.mergeWorkDescription : copy.retireDuplicateDescription, args),
+      consequence: merge ? copy.mergeWorkConsequence : copy.retireDuplicateConsequence,
+      recommendation: copy.duplicateWorkRecommendation,
+      facts: [], unresolved: false, target: "",
+    };
+  }
   const releaseReservation = exact && decision.toolName === "release_nonprod_environment_lease"
     && !!stringParam(params, "leaseId");
-  let title = copy.unresolvedTitle;
+  // Name the requested operation without inferring its effects from unknown arguments.
+  const mergeSource = stringParam(params, "duplicateItemId");
+  const mergeTarget = stringParam(params, "canonicalItemId");
+  const namesUnresolvedMerge = exact && decision.toolName === "merge_backlog_items"
+    && mergeSource && mergeTarget && mergeSource !== mergeTarget
+    && (params.reconcileOnly === undefined || params.reconcileOnly === false);
+  let title = namesUnresolvedMerge ? copy.mergeWorkTitle : copy.unresolvedTitle;
   let description = copy.unresolvedDescription;
   let consequence = decision.consequence.startsWith("None declared.") ? copy.effectUnknown : decision.consequence;
   let recommendation = copy.unresolvedRecommendation;
@@ -572,8 +614,6 @@ export function envelopePrimaryDecision(decision: EnvelopeDecisionSummary, local
   } else if (appUpdate) {
     title = copy.appUpdateTitle;
     description = copy.appUpdateDescription;
-  } else if (mergeWork) {
-    title = copy.mergeWorkTitle;
   } else if (releaseReservation) {
     title = copy.releaseReservationTitle;
   }

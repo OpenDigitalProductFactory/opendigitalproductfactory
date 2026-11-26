@@ -14,7 +14,7 @@
 import { prisma } from "@dpf/db";
 
 import { recordExternalEvidence } from "@/lib/actions/external-evidence";
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
+import type { RegisteredToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import { buildStartApprovalRefusal, requiresBuildStartApproval } from "@/lib/build/build-start-approval";
 import { extractBuildIdHint, logBuildActivity, resolveActiveBuildId } from "@/lib/mcp/build-tool-helpers";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
@@ -52,7 +52,7 @@ function resolveSavePhaseHandoffTransition(
   };
 }
 
-const definitions: ToolDefinition[] = [
+const definitions: RegisteredToolDefinition[] = [
   {
     name: "save_build_notes",
     description: "Persist key points from the conversation to the running spec. Call silently after each significant exchange.",
@@ -68,6 +68,7 @@ const definitions: ToolDefinition[] = [
       },
       required: [],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: true,
@@ -87,6 +88,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["summary"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: true,
@@ -121,6 +123,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["provider", "externalSessionId", "summary", "routeContext"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: true,

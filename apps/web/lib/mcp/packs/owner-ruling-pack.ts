@@ -11,11 +11,11 @@
 // The ruling is written by the same core as the portal's "Answer" controls and
 // is attributed to the human the chat belongs to, never to the agent.
 
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
+import type { RegisteredToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack } from "../tool-pack";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 
-const definitions: ToolDefinition[] = [
+const definitions: RegisteredToolDefinition[] = [
   {
     name: "record_owner_ruling",
     description:
@@ -47,6 +47,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["interactionId", "answer"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_platform",
     executionMode: "proposal",
     sideEffect: true,

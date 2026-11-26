@@ -2456,6 +2456,17 @@
         "public-development-routing"
       ]
     },
+    "docs/architecture/s5-rehearsal-admission-read.md": {
+      "publicHref": "/architecture/s5-rehearsal-admission-read/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "s5-synthetic-rehearsal-admission-read",
+        "target",
+        "read-interface"
+      ]
+    },
     "docs/architecture/scoped-judgment-adoption.md": {
       "publicHref": "/architecture/scoped-judgment-adoption/",
       "portalHref": null,
@@ -2871,6 +2882,20 @@
         "decision-rules",
         "links-to-live-work",
         "maintenance"
+      ]
+    },
+    "docs/architecture/workroom-bound-launch-contract-v1.md": {
+      "publicHref": "/architecture/workroom-bound-launch-contract-v1/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "s5-workroom-launch-contract-v1",
+        "launch-and-custody",
+        "jsi-decision",
+        "read-only-coordination-and-the-no-wake-proposal",
+        "provider-metering",
+        "verification-still-owed"
       ]
     },
     "docs/architecture/workroom-cycle-continuity.md": {

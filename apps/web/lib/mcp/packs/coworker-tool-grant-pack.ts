@@ -8,10 +8,10 @@
 // defence in depth. Lives in a scoped pack so mcp-tools.ts stays a thin
 // composition layer instead of growing the frozen inline switch.
 
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
+import type { RegisteredToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack } from "../tool-pack";
 
-const definitions: ToolDefinition[] = [
+const definitions: RegisteredToolDefinition[] = [
   {
     name: "manage_coworker_tool_grant",
     description:
@@ -31,6 +31,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["coworker", "grantKey", "action"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_platform",
     sideEffect: true,
     // changes identity or authority → consult-gated (TAK §8.4.1).

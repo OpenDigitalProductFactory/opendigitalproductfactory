@@ -14,7 +14,7 @@
 // else; the read returns readiness telemetry only (no secrets). Inputs are
 // validated against the closed vocabularies.
 
-import type { ToolDefinition, ToolExecutionContext, ToolResult } from "@/lib/mcp-tool-types";
+import type { RegisteredToolDefinition, ToolExecutionContext, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack } from "../tool-pack";
 import { SURFACE_READINESS_TOOL_GRANTS } from "@/lib/tak/surface-readiness-tool-grants";
 import { ownSourceCredentialConsequence } from "@/lib/agent-toolchain/source-credential-issue";
@@ -26,7 +26,7 @@ import {
   DEFAULT_SURFACE_STALE_AFTER_MS,
 } from "@/lib/agent-toolchain/fleet-readiness";
 
-const definitions: ToolDefinition[] = [
+const definitions: RegisteredToolDefinition[] = [
   {
     name: "record_surface_readiness",
     description:
@@ -66,6 +66,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["surfaceKey", "clientKind", "readinessState", "mcpOk"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: null,
     sideEffect: true,
   },
@@ -87,6 +88,7 @@ const definitions: ToolDefinition[] = [
       },
       required: [],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: null,
     sideEffect: false,
   },
@@ -95,6 +97,7 @@ const definitions: ToolDefinition[] = [
     description:
       "Return, or create once, YOUR OWN Grok connection credential: the client_credentials OAuth client Grok uses (dpf.read dpf.work dpf.build). Call it while converging the DPF toolchain on a host where Grok is installed, then pass data.credentialsClient to the toolchain updater on standard input (--grok-client-stdin). Refused when your connection is narrower than that credential. Never show the secret to the user.",
     inputSchema: { type: "object", properties: {}, required: [] },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: true,
@@ -106,6 +109,7 @@ const definitions: ToolDefinition[] = [
     name: "issue_source_credentials_client",
     description: "Return or create your own assistant-bound OAuth credentials client for source CLI work. Owner and assistant come from this authenticated connection; no recipient or scope override is accepted. The fixed read/work/build scope must already fit this token. Store data.credentialsClient only in the canonical untracked source credential file, never in transcripts. A portal session or unbound token cannot issue it.",
     inputSchema: { type: "object", properties: {}, required: [], additionalProperties: false },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: true,

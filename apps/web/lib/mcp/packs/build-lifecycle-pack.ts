@@ -14,7 +14,7 @@
 // and build-ship-handlers.ts) so no single file exceeds the module-size cap;
 // they import the shared Build Studio helpers rather than replicating them.
 
-import type { ToolDefinition } from "@/lib/mcp-tool-types";
+import type { RegisteredToolDefinition } from "@/lib/mcp-tool-types";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
 import {
   updateFeatureBrief,
@@ -31,7 +31,7 @@ import {
   createPortalPr,
 } from "@/lib/mcp/build-ship-handlers";
 
-const definitions: ToolDefinition[] = [
+const definitions: RegisteredToolDefinition[] = [
   {
     name: "update_feature_brief",
     description: "Save the Feature Brief for the current build. Build ID is auto-resolved.",
@@ -61,6 +61,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["title", "description", "portfolioContext", "targetRoles", "dataNeeds", "acceptanceCriteria"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: true,
@@ -77,6 +78,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["name", "portfolioSlug"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_capabilities",
     sideEffect: true,
     buildPhases: ["ship"],
@@ -91,6 +93,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["title"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_capabilities",
     executionMode: "immediate",
     sideEffect: true,
@@ -105,6 +108,7 @@ const definitions: ToolDefinition[] = [
         buildId: { type: "string", description: "Optional FB-* build ID. Omit to target the current active build." },
       },
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: false,
@@ -120,6 +124,7 @@ const definitions: ToolDefinition[] = [
         buildId: { type: "string", description: "Optional FB-* build ID. Omit to target the current active build. Supply it to drive a specific build when several builds are in-flight (e.g. an autonomous batch)." },
       },
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: false,
@@ -129,6 +134,7 @@ const definitions: ToolDefinition[] = [
     name: "deploy_feature",
     description: "Extract the git diff from sandbox and deploy to the platform.",
     inputSchema: { type: "object", properties: {} },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_capabilities",
     executionMode: "immediate",
     sideEffect: true,
@@ -147,6 +153,7 @@ const definitions: ToolDefinition[] = [
         },
       },
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_capabilities",
     executionMode: "immediate",
     sideEffect: true,
@@ -167,6 +174,7 @@ const definitions: ToolDefinition[] = [
         },
       },
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: false,
@@ -187,6 +195,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["reusabilityScope", "userContext"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: true,
@@ -206,6 +215,7 @@ const definitions: ToolDefinition[] = [
       },
       required: [],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: true,

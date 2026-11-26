@@ -19,7 +19,7 @@
 // store, so a coworker reads exactly what the person it acts for may read. A
 // restricted document another person cannot read is "not found" here.
 
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
+import type { RegisteredToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack } from "../tool-pack";
 import { err, ok, type ActionResult } from "@/lib/shared/action-result";
 import type { PresentationOutline } from "@/lib/documents/generation/create-presentation";
@@ -106,7 +106,7 @@ const OUTLINE_SLIDE_SCHEMA = {
   required: ["title"],
 };
 
-const CREATE_PRESENTATION_DEFINITION: ToolDefinition = {
+const CREATE_PRESENTATION_DEFINITION: RegisteredToolDefinition = {
   name: "create_presentation",
   description:
     "Produce a branded presentation from an outline: a PowerPoint (.pptx) file, a PDF and a preview image of every slide, laid out in the organization's brand and saved as a managed document. To revise, send the whole corrected outline again with the presentation's documentId; that saves a new version of the same document. Never edit the file itself.",
@@ -122,12 +122,13 @@ const CREATE_PRESENTATION_DEFINITION: ToolDefinition = {
     },
     required: ["title", "slides"],
   },
+  workroomAccess: "outside-workroom",
   requiredCapability: null,
   executionMode: "immediate",
   sideEffect: true,
 };
 
-const definitions: ToolDefinition[] = [
+const definitions: RegisteredToolDefinition[] = [
   {
     name: "doc_save",
     description: "Create a managed document or append a new version. Use for coworker-authored briefs, policies, plans, and other durable non-code artifacts that need stable references, lifecycle, search, and version history. An office file (Word, Excel, PowerPoint, OpenDocument, RTF) saved as contentBase64 with its MIME type gets PDF and plain-text renditions in the background, which make its body text searchable.",
@@ -164,6 +165,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["title", "documentKind", "contentFormat"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: null,
     executionMode: "immediate",
     sideEffect: true,
@@ -186,6 +188,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["documentId"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: null,
     executionMode: "immediate",
     sideEffect: false,
@@ -207,6 +210,7 @@ const definitions: ToolDefinition[] = [
         limit: { type: "number", description: "Max results, default 25." },
       },
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: null,
     executionMode: "immediate",
     sideEffect: false,
@@ -226,6 +230,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["sourceDocumentId", "refType"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: null,
     executionMode: "immediate",
     sideEffect: true,
@@ -240,6 +245,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["documentId"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: null,
     executionMode: "immediate",
     sideEffect: false,
@@ -258,6 +264,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["documentId", "toState"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: null,
     executionMode: "immediate",
     sideEffect: true,
@@ -272,6 +279,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["documentId"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: null,
     executionMode: "immediate",
     sideEffect: false,

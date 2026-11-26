@@ -12,7 +12,7 @@
 // The split keeps the platform invariant: research/propose is non-destructive;
 // the record change is a separate, approved, governed step.
 
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
+import type { RegisteredToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 import {
@@ -26,7 +26,7 @@ import {
   type EnrichmentSourceKind,
 } from "@/lib/crm/enrichment/types";
 
-const definitions: ToolDefinition[] = [
+const definitions: RegisteredToolDefinition[] = [
   {
     name: "propose_crm_enrichment",
     description:
@@ -81,6 +81,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["recordId", "scope", "findings"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "operate_customer",
     sideEffect: true,
   },
@@ -95,6 +96,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["taskId"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "operate_customer",
     sideEffect: true,
   },

@@ -13,7 +13,7 @@
 // with the rest of the switch; it is replicated here so the pack is
 // self-contained (the original stays inline for its other consumers).
 
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
+import type { RegisteredToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
 
 /** Coerce an optional string param, trimming and nulling empties. */
@@ -21,7 +21,7 @@ function optionalString(value: unknown): string | null {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
 }
 
-const definitions: ToolDefinition[] = [
+const definitions: RegisteredToolDefinition[] = [
   {
     name: "reconcile_build_engines",
     description: "Re-provision build engines that were provisioned on demand and are now missing from the sandbox (e.g. after a sandbox rebuild). Idempotent and narrow: only restores engines with desired=present AND a prior successful provision that a fresh probe reports absent — a no-op for fresh or baked-only sandboxes. Side-effecting (may run installs). Also fires automatically when start_sandbox brings a recreated sandbox to ready. Returns { checked, restored[], skipped }.",
@@ -34,6 +34,7 @@ const definitions: ToolDefinition[] = [
         },
       },
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: true,
@@ -53,6 +54,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["engineId"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: true,
@@ -70,6 +72,7 @@ const definitions: ToolDefinition[] = [
         },
       },
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: false,

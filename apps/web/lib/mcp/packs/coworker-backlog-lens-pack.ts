@@ -11,12 +11,12 @@
 
 import { BACKLOG_STATUS_VALUES, BACKLOG_WORK_TYPE_VALUES } from "@/lib/explore/backlog";
 import { getCoworkerBacklogSlice } from "@/lib/coworker-record/surface-backlog";
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
+import type { RegisteredToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
 import { coworkerNotBoundRefusal, currentCoworkerId } from "./coworker-scope";
 
-const definitions: ToolDefinition[] = [
+const definitions: RegisteredToolDefinition[] = [
   {
     name: "list_my_backlog",
     description:
@@ -37,6 +37,7 @@ const definitions: ToolDefinition[] = [
         limit: { type: "number", description: "Max items to return (default 50, max 200)." },
       },
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: false,

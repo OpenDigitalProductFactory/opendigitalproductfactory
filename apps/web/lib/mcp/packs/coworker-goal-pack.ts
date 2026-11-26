@@ -12,10 +12,10 @@
 // coworker setting or checking its own completion condition cannot exceed its
 // authority. A non-agent caller (no context.agentId) is rejected.
 
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
+import type { RegisteredToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack } from "../tool-pack";
 
-const definitions: ToolDefinition[] = [
+const definitions: RegisteredToolDefinition[] = [
   {
     name: "set_task_goal",
     description:
@@ -34,6 +34,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["condition"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: null,
     sideEffect: true,
   },
@@ -41,6 +42,7 @@ const definitions: ToolDefinition[] = [
     name: "list_task_goals",
     description: "List YOUR OWN active goals (the calling coworker's unresolved completion conditions), newest first.",
     inputSchema: { type: "object", properties: {} },
+    workroomAccess: "outside-workroom",
     requiredCapability: null,
     sideEffect: false,
   },
@@ -56,6 +58,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["goalId", "output"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: null,
     sideEffect: true,
   },

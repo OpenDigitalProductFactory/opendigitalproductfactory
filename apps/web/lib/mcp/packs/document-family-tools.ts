@@ -11,7 +11,7 @@
 // Grants are single-sourced in lib/tak/document-tool-grants.ts, which the
 // gating map spreads; this module re-exports that slice for the pack.
 
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
+import type { RegisteredToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { FamilyDocumentResult } from "@/lib/documents/generation/family-document";
 import { DOCUMENT_TOOL_GRANTS } from "@/lib/tak/document-tool-grants";
 
@@ -77,7 +77,7 @@ const CONNECTOR = {
   required: ["from", "to"],
 };
 
-export const DOCUMENT_FAMILY_TOOL_DEFINITIONS: ToolDefinition[] = [
+export const DOCUMENT_FAMILY_TOOL_DEFINITIONS: RegisteredToolDefinition[] = [
   {
     name: "create_report",
     description: `Produce a branded report from an outline: a Word (.docx) file, a PDF and a preview image of each page, ${SAVED}. Sections carry paragraphs, bullets, a table, a chart or an image. ${REVISE}`,
@@ -114,6 +114,7 @@ export const DOCUMENT_FAMILY_TOOL_DEFINITIONS: ToolDefinition[] = [
       },
       required: ["title", "sections"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: null,
     executionMode: "immediate",
     sideEffect: true,
@@ -140,6 +141,7 @@ export const DOCUMENT_FAMILY_TOOL_DEFINITIONS: ToolDefinition[] = [
       },
       required: ["recipient", "paragraphs", "signatureName"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: null,
     executionMode: "immediate",
     sideEffect: true,
@@ -165,6 +167,7 @@ export const DOCUMENT_FAMILY_TOOL_DEFINITIONS: ToolDefinition[] = [
       },
       required: ["title"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: null,
     executionMode: "immediate",
     sideEffect: true,
@@ -191,6 +194,7 @@ export const DOCUMENT_FAMILY_TOOL_DEFINITIONS: ToolDefinition[] = [
       },
       required: ["title"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: null,
     executionMode: "immediate",
     sideEffect: true,

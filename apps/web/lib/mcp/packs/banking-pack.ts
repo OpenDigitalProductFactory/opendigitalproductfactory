@@ -16,7 +16,7 @@
 // owner approval. Grants mirror agent-grants.ts TOOL_TO_GRANTS (the gating
 // source); the tool-registry drift test asserts parity.
 
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
+import type { RegisteredToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack } from "../tool-pack";
 import {
   createBankAccountSchema,
@@ -24,12 +24,13 @@ import {
   matchTransactionSchema,
 } from "@/lib/finance/banking-validation";
 
-const definitions: ToolDefinition[] = [
+const definitions: RegisteredToolDefinition[] = [
   {
     name: "list_bank_accounts",
     description:
       "List the organization's bank/card accounts with their unmatched-transaction counts. Use to find the bankAccount id to import into or reconcile before any other banking tool.",
     inputSchema: { type: "object", properties: {}, required: [] },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_finance",
     sideEffect: false,
   },
@@ -42,6 +43,7 @@ const definitions: ToolDefinition[] = [
       properties: { id: { type: "string", description: "BankAccount database id" } },
       required: ["id"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_finance",
     sideEffect: false,
   },
@@ -61,6 +63,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["bankAccountId"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_finance",
     sideEffect: false,
   },
@@ -73,6 +76,7 @@ const definitions: ToolDefinition[] = [
       properties: { transactionId: { type: "string", description: "BankTransaction database id" } },
       required: ["transactionId"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_finance",
     sideEffect: false,
   },
@@ -81,6 +85,7 @@ const definitions: ToolDefinition[] = [
     description:
       "List the auto-categorization bank rules (by hit count). Rules classify imported transactions by matching payee/description/reference. Use to review or before creating a new rule.",
     inputSchema: { type: "object", properties: {}, required: [] },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_finance",
     sideEffect: false,
   },
@@ -93,6 +98,7 @@ const definitions: ToolDefinition[] = [
       properties: { bankAccountId: { type: "string", description: "BankAccount database id" } },
       required: ["bankAccountId"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_finance",
     sideEffect: false,
   },
@@ -120,6 +126,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["name"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_finance",
     sideEffect: true,
     // Money-of-record: no governed tool undoes an account setup, and it is
@@ -138,6 +145,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["bankAccountId", "csvContent"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_finance",
     sideEffect: true,
     // Money-of-record: imported transactions become the ledger with no governed
@@ -156,6 +164,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["transactionId", "paymentId"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_finance",
     sideEffect: true,
   },
@@ -168,6 +177,7 @@ const definitions: ToolDefinition[] = [
       properties: { transactionId: { type: "string", description: "BankTransaction database id" } },
       required: ["transactionId"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_finance",
     sideEffect: true,
   },
@@ -189,6 +199,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["name", "matchField", "matchValue"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_finance",
     sideEffect: true,
   },
@@ -200,6 +211,7 @@ const definitions: ToolDefinition[] = [
       properties: { id: { type: "string", description: "BankRule database id" } },
       required: ["id"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_finance",
     sideEffect: true,
   },

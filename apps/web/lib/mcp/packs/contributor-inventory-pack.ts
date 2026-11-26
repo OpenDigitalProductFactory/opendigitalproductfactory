@@ -19,7 +19,7 @@ import type {
 } from "@/lib/contributor-change-lanes/types";
 import type { ContributorInventorySource } from "@/lib/contributor-change-lanes/read-model";
 
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
+import type { RegisteredToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack } from "../tool-pack";
 
 const PR_DEFAULT_LIMIT = 20;
@@ -40,7 +40,7 @@ const READ_ONLY = {
   openWorldHint: false,
 } as const;
 
-const definitions: ToolDefinition[] = [
+const definitions: RegisteredToolDefinition[] = [
   {
     name: "list_pull_requests",
     description:
@@ -60,6 +60,7 @@ const definitions: ToolDefinition[] = [
       },
       required: [],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: false,
@@ -90,6 +91,7 @@ const definitions: ToolDefinition[] = [
       },
       required: [],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: false,
