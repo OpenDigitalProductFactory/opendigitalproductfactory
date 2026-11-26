@@ -237,10 +237,11 @@ model ExecutionHost {
   httpsEndpointRef    String?
   registeredAt        DateTime  @default(now())
   lastObservedAt      DateTime
-  retiredAt           DateTime?
+  lifecycle           RecordLifecycle @default(active)
+  lifecycleAt         DateTime?
 
   @@unique([installationRef, hostRef])
-  @@index([installationRef, retiredAt])
+  @@index([installationRef, lifecycle])
 }
 
 model RuntimeTarget {

@@ -19,25 +19,25 @@ function decide(overrides: Partial<Parameters<typeof decideExecutionHostRegistra
 
 describe("execution-host candidate registration", () => {
   it("records an authenticated candidate without qualification and normalizes observation order", () => {
-    expect(decide()).toEqual({ ok: true, action: "register", identity: local, observedAt, routes: [routes[1], routes[0]] });
+    expect(decide()).toEqual({ ok: true, data: { action: "register", identity: local, observedAt, routes: [routes[1], routes[0]] } });
   });
 
   it("does not register a peer install even when it asserts the local host ref", () => {
-    expect(decide({ authenticated: { ...local, source: "paired-install" } })).toEqual({ ok: false, reason: "not-local-host-agent" });
-    expect(decide({ authenticated: { ...local, installationRef: "paired-dev", source: "local-host-agent" } })).toEqual({ ok: false, reason: "not-local-host-agent" });
+    expect(decide({ authenticated: { ...local, source: "paired-install" } })).toEqual({ ok: false, error: "not-local-host-agent" });
+    expect(decide({ authenticated: { ...local, installationRef: "paired-dev", source: "local-host-agent" } })).toEqual({ ok: false, error: "not-local-host-agent" });
   });
 
   it("never changes the bound receiver on an existing registration", () => {
     const rotated = { ...local, receiverRef: "receiver-new" };
     expect(decide({ authenticated: { ...rotated, source: "local-host-agent" },
-      report: { hostRef: rotated.hostRef, receiverRef: rotated.receiverRef, routes }, existing: local })).toEqual({ ok: false, reason: "receiver-changed" });
-    expect(decide({ existing: local })).toMatchObject({ ok: true, action: "observe" });
+      report: { hostRef: rotated.hostRef, receiverRef: rotated.receiverRef, routes }, existing: local })).toEqual({ ok: false, error: "receiver-changed" });
+    expect(decide({ existing: local })).toMatchObject({ ok: true, data: { action: "observe" } });
   });
 
   it("requires bounded exact route refs and rejects qualification assertions in observations", () => {
     expect(readExecutionHostObservation([{ kind: "https", endpointRef: "https://untrusted.example" }])).toBeNull();
     expect(readExecutionHostObservation([...routes, routes[0]])).toBeNull();
-    expect(decide({ report: { ...local, routes, qualified: true, epoch: 9 } })).toEqual({ ok: false, reason: "invalid-report" });
-    expect(decide({ report: { hostRef: "other-host", receiverRef: local.receiverRef, routes } })).toEqual({ ok: false, reason: "identity-mismatch" });
+    expect(decide({ report: { ...local, routes, qualified: true, epoch: 9 } })).toEqual({ ok: false, error: "invalid-report" });
+    expect(decide({ report: { hostRef: "other-host", receiverRef: local.receiverRef, routes } })).toEqual({ ok: false, error: "identity-mismatch" });
   });
 });

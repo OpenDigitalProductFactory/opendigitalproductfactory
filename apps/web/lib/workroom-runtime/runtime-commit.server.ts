@@ -115,10 +115,10 @@ export function createProtectedLaunchCommitter(deps: {
         }
         const at = clock();
         const decision = decideProtectedExecutionBinding({ ...authority, target, now: at, workspaceState: room.workspaceState });
-        if (!decision.ok) return { outcome: "held", reason: decision.reason };
-        const { hostRef, sessionRef, stageAttemptRef } = decision.binding;
-        if (!decision.created) return { outcome: "already-bound", hostRef };
-        await tx.$executeRaw`UPDATE "WorkCapsule" SET "workspaceState" = jsonb_set(COALESCE("workspaceState", '{}'::jsonb), '{protectedExecution}', ${JSON.stringify(decision.record)}::jsonb, true) WHERE "id" = ${room.id}`;
+        if (!decision.ok) return { outcome: "held", reason: decision.error };
+        const { hostRef, sessionRef, stageAttemptRef } = decision.data.binding;
+        if (!decision.data.created) return { outcome: "already-bound", hostRef };
+        await tx.$executeRaw`UPDATE "WorkCapsule" SET "workspaceState" = jsonb_set(COALESCE("workspaceState", '{}'::jsonb), '{protectedExecution}', ${JSON.stringify(decision.data.record)}::jsonb, true) WHERE "id" = ${room.id}`;
         await insertEffects(tx, { roomRowId: room.id, commandId: `protected-launch:${payloadBinding.digest}`, generation: null, now: at,
           effects: [{ kind: PROTECTED_LAUNCH_EFFECT_KIND, payload: { sessionRef, stageAttemptRef } }] });
         return { outcome: "bound", hostRef };

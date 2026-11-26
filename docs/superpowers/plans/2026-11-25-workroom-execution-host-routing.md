@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # BI-5A866218 integrated S6 implementation plan
 
 **Backlog item:** BI-5A866218 · **Workroom:** WC-3B0AB38E

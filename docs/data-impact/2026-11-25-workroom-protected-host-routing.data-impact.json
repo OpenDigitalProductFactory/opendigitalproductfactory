@@ -16,7 +16,7 @@
   },
   "migration": {
     "name": "20261125174000_execution_hosts_and_protected_launch_effect",
-    "backfill": "None. Add an empty table with two install-scoped indexes and add one effect kind. Existing rooms, local sessions and effects are not rewritten. Disposable migration application is not claimed by unit tests.",
+    "backfill": "The first migration adds the host table and one effect kind. The forward lifecycle migration preserves each retirement timestamp as lifecycleAt, sets previously retired hosts to retired, and defaults other hosts to active. Existing rooms, local sessions and effects are not rewritten. Disposable migration application is not claimed by unit tests.",
     "rollback": "Forward-only ADD VALUE and new empty table. Keep all protected producers disabled until every incompatible Workroom reader has drained. Before rolling back code, disable protected producers and preserve a compatible drainer or verify no unsettled protected effects remain. Keep the host registration, attempt pin and acknowledgement evidence; a prior reader must never claim an unknown effect, repair a protected session locally or convert a held state to an outcome. No in-place receiver identity update."
   },
   "tests": [
@@ -43,7 +43,8 @@
         { "fieldId": "data:execution-host#httpsEndpointRef", "resolution": "governed", "reason": "Opaque HTTPS observation, never a URL or grant.", "provenance": "BI-5A866218 AC-3" },
         { "fieldId": "data:execution-host#registeredAt", "resolution": "not-applicable", "reason": "Technical registration timestamp.", "provenance": "BI-5A866218 registry writer" },
         { "fieldId": "data:execution-host#lastObservedAt", "resolution": "not-applicable", "reason": "Technical observation ordering time, not an authority revision or reachability proof.", "provenance": "BI-5A866218 registry writer" },
-        { "fieldId": "data:execution-host#retiredAt", "resolution": "not-applicable", "reason": "Technical registration lifecycle marker, not qualification revocation or attempt outcome.", "provenance": "BI-5A866218 registry writer" }
+        { "fieldId": "data:execution-host#lifecycle", "resolution": "not-applicable", "reason": "Canonical registration lifecycle state, not qualification revocation or attempt outcome.", "provenance": "BI-5A866218 registry writer" },
+        { "fieldId": "data:execution-host#lifecycleAt", "resolution": "not-applicable", "reason": "Timestamp when the registration left active, not qualification revocation or attempt outcome.", "provenance": "BI-5A866218 registry writer" }
       ]
     },
     {

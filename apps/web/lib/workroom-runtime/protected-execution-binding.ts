@@ -1,3 +1,4 @@
+import { err, ok, type ActionResult } from "@/lib/shared/action-result";
 import { canonicalJson } from "@dpf/integration-shared/canonical-json";
 import { z } from "zod";
 
@@ -114,10 +115,9 @@ export function readProtectedExecutionBindings(workspaceState: unknown): Protect
   return parsed.success ? parsed.data : null;
 }
 
-export type ProtectedBindingDecision =
-  | { ok: true; created: boolean; binding: ProtectedExecutionBinding; record: ProtectedExecutionBindings }
-  | { ok: false; reason: "invalid-binding" | "ambiguous-owner" | "unverified-owner" | "unqualified-host" |
-    "no-qualified-route" | "binding-conflict" | "binding-limit" };
+export type ProtectedBindingDecision = ActionResult<{
+  created: boolean; binding: ProtectedExecutionBinding; record: ProtectedExecutionBindings;
+}>;
 
 /** Decide from current, transaction-local Workroom and trusted registry/issuer facts. No effects run here. */
 export function decideProtectedExecutionBinding(input: ProtectedBindingInput): ProtectedBindingDecision {
@@ -125,33 +125,33 @@ export function decideProtectedExecutionBinding(input: ProtectedBindingInput): P
   const record = readProtectedExecutionBindings(input.workspaceState);
   const now = input.now.getTime();
   if (!parsedTarget.success || !record || !Number.isFinite(now) || parsedTarget.data.installationRef !== input.localInstallationRef) {
-    return { ok: false, reason: "invalid-binding" };
+    return err("invalid-binding");
   }
   const target = parsedTarget.data;
-  if (input.owners.length > 1) return { ok: false, reason: "ambiguous-owner" };
+  if (input.owners.length > 1) return err("ambiguous-owner");
   const owner = ownerSchema.safeParse(input.owners[0]);
   const candidate = candidateSchema.safeParse(input.candidate);
   if (!owner.success || !candidate.success || owner.data.host.installationRef !== target.installationRef ||
     !sameHost(owner.data.host, candidate.data) || !sameWorktree(owner.data.worktree, target.worktree)) {
-    return { ok: false, reason: "unverified-owner" };
+    return err("unverified-owner");
   }
   const qualification = qualificationSchema.safeParse(input.qualification);
   if (!qualification.success || !sameHost(owner.data.host, qualification.data) || qualification.data.status !== "active" ||
     qualification.data.expiresAt <= now || qualification.data.worktreeRef !== target.worktree.worktreeRef) {
-    return { ok: false, reason: "unqualified-host" };
+    return err("unqualified-host");
   }
   const observedRoutes = readExecutionHostObservation(candidate.data.routes) ?? [];
   const routes = observedRoutes.filter(observed => qualification.data.allowedRoutes.some(allowed =>
     observed.kind === allowed.kind && observed.endpointRef === allowed.endpointRef));
-  if (routes.length === 0) return { ok: false, reason: "no-qualified-route" };
+  if (routes.length === 0) return err("no-qualified-route");
   const binding: ProtectedExecutionBinding = {
     ...target, ...owner.data.host, qualificationRef: qualification.data.qualificationRef,
     qualificationEpoch: qualification.data.revision, routes,
   };
   const existing = findProtectedExecutionBinding(record, target);
   if (existing) return canonicalJson(protectedBindingIdentity(existing)) === canonicalJson(binding)
-    ? { ok: true, created: false, binding, record }
-    : { ok: false, reason: "binding-conflict" };
-  if (record.bindings.length >= MAX_BINDINGS) return { ok: false, reason: "binding-limit" };
-  return { ok: true, created: true, binding, record: { version: 1, bindings: [...record.bindings, { ...binding, launch: { phase: "queued" } }] } };
+    ? ok({ created: false, binding, record })
+    : err("binding-conflict");
+  if (record.bindings.length >= MAX_BINDINGS) return err("binding-limit");
+  return ok({ created: true, binding, record: { version: 1, bindings: [...record.bindings, { ...binding, launch: { phase: "queued" } }] } });
 }
