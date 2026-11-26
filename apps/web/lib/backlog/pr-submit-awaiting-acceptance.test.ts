@@ -1,5 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+const readPrChange = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/contributor-change-lanes/github-rest-reader", () => ({
+  readGithubPullRequestChange: readPrChange,
+}));
+
 const {
   mockBacklogFindMany,
   mockBacklogFindUnique,
@@ -81,6 +86,9 @@ function prPayload(overrides: Record<string, unknown> = {}) {
 
 describe("PR-submit awaiting-acceptance (BI-7161625D)", () => {
   beforeEach(() => {
+    readPrChange.mockReset().mockResolvedValue({
+      paths: ["apps/web/lib/example.ts"], title: "feat: implementation", state: "merged", isDraft: false,
+    });
     mockBacklogFindMany.mockReset();
     mockBacklogFindUnique.mockReset().mockResolvedValue({ status: "open" });
     mockBacklogFindFirst.mockReset();
@@ -107,6 +115,48 @@ describe("PR-submit awaiting-acceptance (BI-7161625D)", () => {
       "BI-SIG-463E478D",
     ]);
     expect(extractBacklogItemIdsFromText("no ids here")).toEqual([]);
+  });
+
+  it.each(["feature", "bug", "refactor"])("leaves a %s in coding when its Workroom PR contains only a plan", async (workType) => {
+    mockWorkroomFindMany.mockResolvedValue([{ backlogItemId: "BI-CA54ACC8", pullRequestNumber: 5126,
+      repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory" }]);
+    mockBacklogFindMany.mockResolvedValue([{ id: "row-1", itemId: "BI-CA54ACC8", status: "open", workType }]);
+    readPrChange.mockResolvedValue({ paths: ["docs/superpowers/plans/delivery.md"], title: "feat: plan delivery", state: "merged", isDraft: false });
+
+    const merged = prPayload({ action: "closed", pull_request: { ...prPayload().pull_request, merged: true, state: "closed" } });
+    const results = await Promise.all([applyGitHubPullRequestToBacklog(merged), sweepPrSubmittedBacklogItems()]);
+    expect(results.map(result => result.moved)).toEqual([[], []]);
+    expect(mockBacklogUpdate).not.toHaveBeenCalled();
+  });
+
+  it("requires positive implementation evidence in the Workroom sweep without blocking a doc item", async () => {
+    mockWorkroomFindMany.mockResolvedValue([{ backlogItemId: "BI-CA54ACC8", pullRequestNumber: 5126,
+      repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory" }]);
+    const item = { id: "row-1", itemId: "BI-CA54ACC8", status: "open" };
+    mockBacklogFindMany.mockResolvedValue([{ ...item, workType: "feature" }]);
+    readPrChange.mockResolvedValueOnce(null);
+    expect((await sweepPrSubmittedBacklogItems()).moved).toEqual([]);
+    expect((await sweepPrSubmittedBacklogItems()).moved).toEqual([item.itemId]);
+
+    mockBacklogFindMany.mockResolvedValue([{ ...item, workType: "doc" }]);
+    readPrChange.mockClear().mockResolvedValue(null);
+    expect((await sweepPrSubmittedBacklogItems()).moved).toEqual([item.itemId]);
+    expect(readPrChange).not.toHaveBeenCalled();
+  });
+
+  it("recognizes executable publication tooling under docs but not design fixtures or generated indices", async () => {
+    mockWorkroomFindMany.mockResolvedValue([]);
+    mockBacklogFindMany.mockResolvedValue([{ id: "row-1", itemId: "BI-CA54ACC8", status: "open", workType: "bug" }]);
+    for (const paths of [
+      ["docs/superpowers/specs/design.ts"],
+      ["docs/architecture/design.md", "apps/web/lib/docs/doc-index.generated.json"],
+      ["docs/architecture/design.md", "docs/architecture/generate-docx-from-markdown.mjs"],
+    ]) {
+      readPrChange.mockResolvedValueOnce({ paths, title: "fix: publication", state: "open", isDraft: false });
+    }
+    expect((await applyGitHubPullRequestToBacklog(prPayload())).moved).toEqual([]);
+    expect((await applyGitHubPullRequestToBacklog(prPayload())).moved).toEqual([]);
+    expect((await applyGitHubPullRequestToBacklog(prPayload())).moved).toEqual(["BI-CA54ACC8"]);
   });
 
   it("counts a body id only where the PR declares it delivers that item", () => {

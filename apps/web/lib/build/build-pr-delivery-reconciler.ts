@@ -1,15 +1,18 @@
 import {
   enablePullRequestAutoMerge,
+  hasCompleteConversationPage,
   observeGithubPullRequest,
   projectGithubPrReadiness,
   rerunFailedWorkflowJobs,
   updatePullRequestBranch,
+  type ConversationPageObservation,
   type GithubPrObservation,
   type GithubPrReadiness,
 } from "@/lib/build/github-pr-readiness";
 import {
   createBuildPrDeliveryState,
   readBuildPrDeliveryState,
+  type BuildPrConversationHold,
   type BuildPrDeliveryStateV1,
   type BuildPrDeliveryStatus,
   type BuildPrQueueHold,
@@ -20,9 +23,11 @@ import {
   type CaptureBuildPrDeps,
 } from "./capture-build-pr";
 import {
+  attentionKeyFor,
   decidePrFollowThrough,
   type PrFollowThroughDecision,
   type PrRepairAuthority,
+  type PrRepairDispatchResult,
   type PrRepairPacket,
 } from "./pr-follow-through";
 import { MAX_UNKNOWN_OBSERVATIONS, consecutiveUnknownObservations, nextUnknownObservation } from "./build-pr-delivery-recheck";
@@ -146,7 +151,7 @@ export function resolveBuildPrReconcilerMode(value = process.env.DPF_BUILD_PR_DE
   return normalized === "shadow" || normalized === "enforce" ? normalized : "off";
 }
 
-export type DispatchPrRepair = (packet: PrRepairPacket) => Promise<"dispatched" | "unavailable">;
+export type DispatchPrRepair = (packet: PrRepairPacket) => Promise<PrRepairDispatchResult>;
 
 /**
  * Apply the CI follow-through decision's own effects (BI-88341B5D §3.4–3.5):
@@ -208,6 +213,24 @@ async function applyFollowThroughEffects(input: {
       ? await input.dispatchRepair(decision.packet)
       : "unavailable";
     if (dispatched === "dispatched") return { decision, actuated: true, note: null };
+    if (dispatched === "repair-identity-unavailable" || dispatched === "repair-identity-refused") {
+      return {
+        decision: {
+          kind: "attention",
+          target: "process-overseer",
+          reason: dispatched,
+          headSha: decision.headSha,
+          followThrough: {
+            ...decision.followThrough,
+            hold: "awaiting-person",
+            attempts: input.prior.attempts,
+            attentionKey: attentionKeyFor(dispatched, decision.headSha),
+          },
+        },
+        actuated: false,
+        note: dispatched,
+      };
+    }
     return {
       decision: {
         ...decision,
@@ -278,8 +301,30 @@ export function projectBuildPrDeliveryReadiness(
 }
 
 /** The worker checks this before refreshing hosted review status or taking any other GitHub action. */
-export function holdsPrQueueAttempt(state: BuildPrDeliveryStateV1, readiness: GithubPrReadiness): boolean {
-  return observeQueueHold(state, readiness, "") !== null;
+export function holdsPrQueueAttempt(
+  state: BuildPrDeliveryStateV1,
+  readiness: GithubPrReadiness,
+  observation: ConversationPageObservation,
+): boolean {
+  return observeQueueHold(state, readiness, "") !== null || observeConversationHold(state, readiness, observation) !== null;
+}
+
+function observeConversationHold(
+  state: BuildPrDeliveryStateV1,
+  readiness: GithubPrReadiness,
+  observation: ConversationPageObservation,
+): BuildPrConversationHold | null {
+  if (readiness.kind !== "armed" || state.queueHold?.reason === "disarmed"
+    || state.queueHold?.headSha === readiness.headSha) return null;
+  const prior = state.conversationHold?.headSha === readiness.headSha ? state.conversationHold : null;
+  // An incomplete page isn't proof that an already-observed blocker cleared.
+  if (!hasCompleteConversationPage(observation)) return prior ?? null;
+  if (!readiness.conversationHold) return null;
+  return {
+    ...readiness.conversationHold, headSha: readiness.headSha, owner: "workroom-owner",
+    nextAction: "Address current findings, then have an authorized reviewer or writer resolve the conversations. The existing auto-merge request stays armed.",
+    routeReportId: prior?.routeReportId ?? null,
+  };
 }
 
 function observeQueueHold(
@@ -343,6 +388,7 @@ export async function executeBuildPrDeliveryAction(input: {
   dispatchRepair?: DispatchPrRepair;
   /** A durable, idempotent handoff. No report id leaves the worker responsible for retrying the route. */
   routeQueueHold?: (hold: BuildPrQueueHold) => Promise<string | null>;
+  routeConversationHold?: (hold: BuildPrConversationHold) => Promise<string | null>;
   /** True when an eligible PR-only custody room can close cleanly as undelivered on provider closure. */
   prOnlyCustody?: boolean;
 }): Promise<{
@@ -380,6 +426,7 @@ export async function executeBuildPrDeliveryAction(input: {
       state: {
         ...input.state,
         queueHold,
+        ...(input.state.conversationHold ? { conversationHold: null } : {}),
         ...(readiness.kind === "queue-hold" && readiness.event.kind === "removed"
           ? { lastQueueRemoval: { eventId: readiness.event.id, headSha: queueHold.headSha } } : {}),
         status: action.status,
@@ -387,6 +434,26 @@ export async function executeBuildPrDeliveryAction(input: {
         lastObservedHeadSha: queueHold.headSha,
         lastReadiness: readiness.kind,
         lastError: queueHold.reason,
+        unknownObservations: 0,
+        nextObservationAt: new Date(Date.parse(now) + QUEUE_HOLD_RECHECK_MS).toISOString(),
+        reconciliationAttempts: input.state.reconciliationAttempts + 1,
+      },
+    };
+  }
+  const conversationHold = observeConversationHold(input.state, readiness, input.observation);
+  if (conversationHold) {
+    if (!conversationHold.routeReportId && hasCompleteConversationPage(input.observation) && mayActuate
+      && input.repairAuthority !== "record" && input.routeConversationHold) {
+      conversationHold.routeReportId = await input.routeConversationHold(conversationHold).catch(() => null);
+    }
+    return {
+      action: { kind: "wait", status: "armed", headSha: conversationHold.headSha, reason: conversationHold.reason },
+      actuated: false,
+      followThrough: { kind: "none", followThrough: input.state.followThrough },
+      state: {
+        ...input.state, conversationHold, status: "armed",
+        lastObservedHeadSha: conversationHold.headSha,
+        lastObservedAt: now, lastReadiness: "armed", lastError: conversationHold.reason,
         unknownObservations: 0,
         nextObservationAt: new Date(Date.parse(now) + QUEUE_HOLD_RECHECK_MS).toISOString(),
         reconciliationAttempts: input.state.reconciliationAttempts + 1,
@@ -420,6 +487,7 @@ export async function executeBuildPrDeliveryAction(input: {
     ...(input.state.pendingQueueUpdate && readiness.headSha && readiness.headSha !== input.state.pendingQueueUpdate.fromHeadSha
       ? { pendingQueueUpdate: null } : {}),
     ...(input.state.queueHold ? { queueHold: null } : {}),
+    ...(input.state.conversationHold ? { conversationHold: null } : {}),
     reconciliationAttempts: input.state.reconciliationAttempts + 1,
     lastObservedHeadSha: readiness.headSha,
     lastReadiness: readiness.kind,
