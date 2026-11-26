@@ -68,6 +68,8 @@ export function stagedRestorePipe(spawnDocker: (args: string[], stdio: ["ignore"
   return new Promise(resolve => {
     const source = spawnDocker(from, ["ignore", "pipe", "pipe"]);
     const sink = spawnDocker(to, ["pipe", "ignore", "pipe"]);
+    const output = source.stdout;
+    const input = sink.stdin;
     let stderr = "", sourceCode: number | null | undefined, sinkCode: number | null | undefined;
     const timer = setTimeout(() => { source.kill("SIGTERM"); sink.kill("SIGTERM"); }, timeoutMs);
     const settle = () => {
@@ -79,12 +81,21 @@ export function stagedRestorePipe(spawnDocker: (args: string[], stdio: ["ignore"
     const finishInput = () => {
       if (inputDone) return;
       inputDone = true;
-      if (sourceCode === 0) sink.stdin?.end("\nCOMMIT;\n");
-      else sink.stdin?.end();
+      if (sourceCode === 0) input?.end("\nCOMMIT;\n");
+      else input?.end();
     };
-    sink.stdin?.on("error", () => source.kill("SIGTERM"));
-    sink.stdin?.write("BEGIN;\n");
-    source.stdout?.pipe(sink.stdin as NodeJS.WritableStream, { end: false });
+    input?.on("error", () => source.kill("SIGTERM"));
+    output?.on("error", () => {
+      // The process may still exit zero. A failed read must veto the commit.
+      sourceCode = 1;
+      stderr = (stderr + "\nFailed to read sandbox database dump output.\n").slice(-8192);
+      if (input) output.unpipe(input);
+      finishInput();
+      source.kill("SIGTERM");
+      settle();
+    });
+    input?.write("BEGIN;\n");
+    if (input && output) output.pipe(input, { end: false });
     for (const child of [source, sink]) child.stderr?.on("data", (chunk: Buffer) => { stderr = (stderr + chunk.toString("utf8")).slice(-8192); });
     source.once("error", () => { sourceCode = 1; finishInput(); settle(); });
     sink.once("error", () => { sinkCode = 1; settle(); });

@@ -1,6 +1,6 @@
 import { EventEmitter } from "node:events";
 import { PassThrough } from "node:stream";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { createSandboxDbOperator, sandboxDbThroughActuator, stagedRestorePipe } from "./sandbox-db-actuator";
 
@@ -75,14 +75,27 @@ describe("sandboxDbThroughActuator", () => {
 describe("stagedRestorePipe", () => {
   // A dump that writes the given SQL and exits with dumpCode; a psql that
   // records its input and exits 0 at EOF, as psql does with an open transaction.
-  async function restore(sql: string, dumpCode: number) {
+  async function restore(sql: string, dumpCode: number, failOutput = false) {
     let received = "";
+    let unhandledOutputError = false;
+    const killSource = vi.fn((): true => true);
     const spawnDocker = (args: string[]) => {
       const child = Object.assign(new EventEmitter(), {
         stdin: new PassThrough(), stdout: new PassThrough(), stderr: new PassThrough(), kill: () => true,
       });
       if (args.includes("pg_dump")) {
+        child.kill = killSource;
         setImmediate(() => {
+          if (failOutput) {
+            child.stdout.write(sql);
+            try {
+              child.stdout.emit("error", new Error("dump output failed"));
+            } catch {
+              unhandledOutputError = true;
+            }
+            child.emit("close", dumpCode);
+            return;
+          }
           child.stdout.end(sql);
           child.stdout.once("end", () => setImmediate(() => child.emit("close", dumpCode)));
         });
@@ -93,7 +106,7 @@ describe("stagedRestorePipe", () => {
       return child as never;
     };
     const result = await stagedRestorePipe(spawnDocker, ["exec", "pg", "pg_dump"], ["exec", "-i", "sb", "psql"]);
-    return { result, received };
+    return { result, received, unhandledOutputError, killSource };
   }
 
   it("commits only after the dump exits cleanly", async () => {
@@ -107,5 +120,13 @@ describe("stagedRestorePipe", () => {
     expect(result.exitCode).toBe(1);
     expect(received).toBe('BEGIN;\nINSERT INTO "A" VALUES (1);\nINSERT INTO "B" VALUES (2);\n');
     expect(received).not.toContain("COMMIT");
+  });
+
+  it("abandons the restore on a dump stdout error even if both children close with exit code zero", async () => {
+    const { result, received, unhandledOutputError, killSource } = await restore('INSERT INTO "A" VALUES (1);\n', 0, true);
+    expect(unhandledOutputError).toBe(false);
+    expect(result.exitCode).toBe(1);
+    expect(killSource).toHaveBeenCalledExactlyOnceWith("SIGTERM");
+    expect(received).toBe('BEGIN;\nINSERT INTO "A" VALUES (1);\n');
   });
 });
