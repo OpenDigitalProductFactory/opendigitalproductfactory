@@ -1,0 +1,24 @@
+{
+  "version": "1",
+  "decidedOption": "preserve-two-step-picker-and-share-navigation",
+  "scope": {
+    "files": ["apps/web/components/ui/form/SearchableSelect.tsx"]
+  },
+  "evidence": {
+    "kind": "sweep-measurement",
+    "baselineComparison": "improved",
+    "measured": {
+      "/finance/settings/tax": {
+        "defaultVisibleWords": 678,
+        "leadBandWords": 0,
+        "primaryActions": 2,
+        "visibleFields": 16,
+        "maxChoicesPerControl": 6,
+        "subLegibleControls": 0,
+        "buriedPrimaryAction": 0,
+        "axeViolations": 2
+      }
+    }
+  },
+  "notes": "Measured on contributor preview source 98d0db73864e2e085522656ab6f123f3cbb89fb0. Numerical budget axes did not regress. The separate route sweep flagged an accessibility-tree shape change, including the intentional change from a closed combobox role to a button. The structure baseline was not changed."
+}
