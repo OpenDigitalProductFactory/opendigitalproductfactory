@@ -1,4 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+// A legacy install, stated rather than read from the host's /proc, which the
+// fail-closed mount rule would otherwise make platform-dependent.
+vi.mock("@/lib/platform-runtime/actuator-client", async importOriginal => ({
+  ...await importOriginal<typeof import("@/lib/platform-runtime/actuator-client")>(),
+  usesPrivateActuator: async () => false,
+  usesPrivateActuatorSync: () => false,
+}));
 import { issuePreviewAutomationSignIn, assertPreviewAdmission, assertPreviewIssuerContainer, type PreviewAdmission } from "./preview-automation-sign-in";
 const mocks = vi.hoisted(() => ({
   lease: vi.fn(), room: vi.fn(), actor: vi.fn(), execute: vi.fn(), mint: vi.fn(),

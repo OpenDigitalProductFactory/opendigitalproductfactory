@@ -1,4 +1,11 @@
 import { beforeEach, describe, it, expect, vi } from "vitest";
+// A legacy install, stated rather than read from the host's /proc, which the
+// fail-closed mount rule would otherwise make platform-dependent.
+vi.mock("@/lib/platform-runtime/actuator-client", async importOriginal => ({
+  ...await importOriginal<typeof import("@/lib/platform-runtime/actuator-client")>(),
+  usesPrivateActuator: async () => false,
+  usesPrivateActuatorSync: () => false,
+}));
 
 const mockExec = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/shared/lazy-node", async (orig) => ({

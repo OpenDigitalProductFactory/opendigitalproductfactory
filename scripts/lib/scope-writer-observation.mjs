@@ -62,7 +62,8 @@ export function parseMountPoints(mountinfo) {
     const separator = fields.indexOf('-', 6);
     if (fields.length < 10 || separator < 6 || fields.length - separator - 1 < 3
       || !/^\d+$/.test(fields[0]) || !/^\d+$/.test(fields[1]) || !/^\d+:\d+$/.test(fields[2])
-      || !fields[3].startsWith('/') || !fields[4].startsWith('/')) return null;
+      // The root may be a non-path (nsfs: "net:[4026531992]"); the mount point is always absolute.
+      || fields[3].length === 0 || !fields[4].startsWith('/')) return null;
     points.push(fields[4]);
   }
   return points;

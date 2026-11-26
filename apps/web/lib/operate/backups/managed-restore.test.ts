@@ -5,6 +5,13 @@
  * mocking idiom of postgres-restore-runner.test.ts.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
+// A legacy install, stated rather than read from the host's /proc, which the
+// fail-closed mount rule would otherwise make platform-dependent.
+vi.mock("@/lib/platform-runtime/actuator-client", async importOriginal => ({
+  ...await importOriginal<typeof import("@/lib/platform-runtime/actuator-client")>(),
+  usesPrivateActuator: async () => false,
+  usesPrivateActuatorSync: () => false,
+}));
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";

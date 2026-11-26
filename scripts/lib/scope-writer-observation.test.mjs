@@ -480,6 +480,9 @@ it('detects the actuator mount with one fail-closed rule', async () => {
     assert.equal(usesPrivateActuatorSync({ read: () => table, platform: 'linux' }), true, JSON.stringify(table));
   }
   assert.equal(await usesPrivateActuator({ read: async () => `${plain}36 35 98:0 /mnt1 /mnt2 rw,noatime master:1 - ext3 /dev/root rw,errors=continue\n`, platform: 'linux' }), false);
+  // Real Linux tables carry namespace mounts whose root is not a path; they are well-formed.
+  const nsfs = '4026 29 0:4 net:[4026531992] /run/docker/netns/default rw shared:5 - nsfs nsfs rw\n';
+  assert.equal(await usesPrivateActuator({ read: async () => `${plain}${nsfs}`, platform: 'linux' }), false);
   // No /proc off Linux is a definite "not mounted".
   assert.equal(await usesPrivateActuator({ read: async () => { throw missing; }, platform: 'darwin' }), false);
   assert.equal(usesPrivateActuatorSync({ read: () => { throw missing; }, platform: 'win32' }), false);
