@@ -293,6 +293,7 @@ Source-only exit criteria: exact affected synthetic suites with the DB environme
 - Rationale: The ledger, the opt-in gate, the batch store, the cron and the revert are one safety envelope for a bulk mutator. None of them can ship alone without either running unguarded or shipping dead code, so the slice is delivered and reviewed as one change.
 - Dependencies: none (the follow-up BI-949B6B74 depends on this slice, not the reverse)
 - Coverage: the forward correction stays within the same atomic deliverable and adds no dependency. Record current coverage for the immutable amended plan before implementing it. The model-budget disposition is separate.
+- Receipt: blocked-by: the repository provider must be able to read this exact docs-only commit at the live docs Workroom head before fresh plan coverage can be issued.
 
 ## Verification
 
