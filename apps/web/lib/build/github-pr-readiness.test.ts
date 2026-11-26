@@ -52,6 +52,36 @@ describe("projectGithubPrReadiness", () => {
     },
   );
 
+  it("keeps an armed PR armed and names its green exact-head conversation hold", () => {
+    const url = "https://github.com/o/r/pull/42#discussion_r1";
+    expect(projectGithubPrReadiness(observed({
+      autoMergeEnabled: true, mergeStateStatus: "BLOCKED", unresolvedReviewThreads: 1,
+      unresolvedReviewThreadUrls: [url],
+    }))).toEqual({
+      kind: "armed", headSha: "abc123",
+      conversationHold: { reason: "review-threads-unresolved", count: 1, urls: [url] },
+    });
+  });
+
+  it.each([
+    { reviewThreadsComplete: false },
+    { checksComplete: false },
+    { unresolvedReviewThreads: 0 },
+    { checks: [] },
+    { checks: [{ name: "required", status: "IN_PROGRESS", conclusion: null }] },
+    { checks: [{ name: "required", status: "COMPLETED", conclusion: "FAILURE" }] },
+    { mergeStateStatus: "DIRTY" },
+    { mergeStateStatus: "BEHIND" },
+    { changesRequested: true },
+    { mergeQueueEntry: true },
+    { merged: true },
+    { state: "CLOSED" },
+  ] satisfies Partial<GithubPrObservation>[])("does not guess a conversation hold on %o", (other) => {
+    expect(projectGithubPrReadiness(observed({
+      autoMergeEnabled: true, mergeStateStatus: "BLOCKED", unresolvedReviewThreads: 2, ...other,
+    }))).not.toHaveProperty("conversationHold");
+  });
+
   it("classifies stale heads for safe update", () => {
     expect(projectGithubPrReadiness(observed({ mergeStateStatus: "BEHIND" }))).toEqual({
       kind: "behind",
@@ -136,6 +166,35 @@ describe("updatePullRequestBranch", () => {
 });
 
 describe("observeGithubPullRequest check detail (BI-88341B5D)", () => {
+  it("counts provider-unresolved conversations even if outdated, and keeps same-PR links", async () => {
+    const prUrl = "https://github.com/o/r/pull/42";
+    const url = prUrl + "#discussion_r42";
+    const pr = {
+      id: "PR_node", number: 42, url: prUrl, state: "OPEN", headRefOid: "author-head",
+      mergeStateStatus: "BLOCKED", autoMergeRequest: { enabledAt: "2026-11-26T08:00:00Z" },
+      reviewThreads: { pageInfo: { hasNextPage: false }, nodes: [
+        { isResolved: false, isOutdated: true, comments: { nodes: [{ url }] } },
+        { isResolved: false, comments: { nodes: [] } },
+        { isResolved: true, comments: { nodes: [{ url: prUrl + "#discussion_r43" }] } },
+      ] },
+      commits: { nodes: [{ commit: { statusCheckRollup: { contexts: {
+        pageInfo: { hasNextPage: false },
+        nodes: [{ name: "CI", status: "COMPLETED", conclusion: "SUCCESS", isRequired: true }],
+      } } } }] },
+    };
+    const fetchImpl = vi.fn().mockResolvedValue({
+      ok: true, json: async () => ({ data: { repository: { pullRequest: pr } } }),
+    });
+    const read = () => observeGithubPullRequest({ owner: "o", repo: "r", prNumber: 42, token: "t", fetchImpl: fetchImpl as never });
+    const observed = await read();
+    expect(observed.reviewThreadsComplete).toBe(true);
+    expect(projectGithubPrReadiness(observed)).toMatchObject({
+      kind: "armed", conversationHold: { count: 2, urls: [url] },
+    });
+    pr.reviewThreads.pageInfo.hasNextPage = true;
+    expect(projectGithubPrReadiness(await read())).not.toHaveProperty("conversationHold");
+  });
+
   it("keeps a removed group's failed check separate from green author-head checks", async () => {
     const fetchImpl = vi.fn().mockResolvedValue({
       ok: true, json: async () => ({ data: { repository: { pullRequest: {

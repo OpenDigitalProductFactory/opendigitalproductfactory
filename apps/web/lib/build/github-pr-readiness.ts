@@ -55,6 +55,7 @@ export type GithubPrObservation = {
   headParentShas?: string[];
   mergeStateStatus: string | null;
   unresolvedReviewThreads: number;
+  unresolvedReviewThreadUrls?: string[];
   reviewThreadsComplete: boolean;
   checksComplete: boolean;
   checks: GithubCheckObservation[];
@@ -65,12 +66,39 @@ export type GithubPrObservation = {
   queueEvent?: GithubQueueEvent | null;
 };
 
+export type GithubPrConversationHold = {
+  reason: "review-threads-unresolved";
+  count: number;
+  urls: string[];
+};
+
 export type GithubPrReadiness =
-  | { kind: "ready" | "behind" | "conflict" | "queued" | "armed" | "merged" | "closed"; headSha: string }
+  | { kind: "ready" | "behind" | "conflict" | "queued" | "merged" | "closed"; headSha: string }
+  | { kind: "armed"; headSha: string; conversationHold?: GithubPrConversationHold }
   | { kind: "queue-hold"; headSha: string; event: GithubQueueEvent }
   | { kind: "checking" | "unknown"; headSha: string | null; reason: string };
 
 const PASSING_CHECK_CONCLUSIONS = new Set(["SUCCESS", "NEUTRAL", "SKIPPED"]);
+
+function checkPassed(check: GithubCheckObservation): boolean {
+  return check.conclusion !== null && PASSING_CHECK_CONCLUSIONS.has(check.conclusion.toUpperCase());
+}
+
+/** Observation only: do not turn an armed request into a new queue action. */
+function armedConversationHold(observation: GithubPrObservation): GithubPrConversationHold | undefined {
+  const count = observation.unresolvedReviewThreads;
+  const blocking = observation.checks.filter(checkBlocksMerge);
+  const mergeState = (observation.mergeStateStatus ?? "").toUpperCase();
+  if (observation.queueEvent || !observation.reviewThreadsComplete || !Number.isSafeInteger(count) || count < 1
+    || !observation.checksComplete || blocking.length === 0
+    || !blocking.every(check => check.status.toUpperCase() === "COMPLETED" && checkPassed(check))
+    || !["BLOCKED", "CLEAN", "HAS_HOOKS", "UNSTABLE"].includes(mergeState)) return undefined;
+  return {
+    reason: "review-threads-unresolved", count,
+    urls: [...new Set((observation.unresolvedReviewThreadUrls ?? []).filter(url =>
+      url.startsWith(observation.url + "#")))].slice(0, 12),
+  };
+}
 
 export function projectGithubPrReadiness(observation: GithubPrObservation): GithubPrReadiness {
   const headSha = observation.headSha.trim();
@@ -82,7 +110,10 @@ export function projectGithubPrReadiness(observation: GithubPrObservation): Gith
   // A lingering auto-merge request from before the queue event is not fresh intent.
   const event = observation.queueEvent;
   const enabledAfterEvent = event && Date.parse(observation.autoMergeEnabledAt ?? "") > Date.parse(event.at);
-  if (observation.autoMergeEnabled && (!event || enabledAfterEvent)) return { kind: "armed", headSha };
+  if (observation.autoMergeEnabled && (!event || enabledAfterEvent)) {
+    const conversationHold = armedConversationHold(observation);
+    return conversationHold ? { kind: "armed", headSha, conversationHold } : { kind: "armed", headSha };
+  }
   if (event) return { kind: "queue-hold", headSha, event };
 
   const mergeState = (observation.mergeStateStatus ?? "").toUpperCase();
@@ -104,11 +135,7 @@ export function projectGithubPrReadiness(observation: GithubPrObservation): Gith
   if (blocking.some((check) => check.status.toUpperCase() !== "COMPLETED")) {
     return { kind: "checking", headSha, reason: "checks-pending" };
   }
-  if (
-    blocking.some(
-      (check) => !check.conclusion || !PASSING_CHECK_CONCLUSIONS.has(check.conclusion.toUpperCase()),
-    )
-  ) {
+  if (blocking.some((check) => !checkPassed(check))) {
     return { kind: "checking", headSha, reason: "checks-failing" };
   }
   if (!["CLEAN", "HAS_HOOKS", "UNSTABLE"].includes(mergeState)) {
@@ -171,7 +198,7 @@ query DpfPullRequestReadiness($owner:String!,$name:String!,$number:Int!){
           }
         }
       }
-      reviewThreads(first:100){ nodes { isResolved } pageInfo { hasNextPage } }
+      reviewThreads(first:100){ nodes { isResolved comments(first:1){ nodes { url } } } pageInfo { hasNextPage } }
       commits(last:1){
         nodes {
           commit {
@@ -246,7 +273,7 @@ type ObservationQueryData = {
       mergeQueueEntry?: { id?: string } | null;
       timelineItems?: { nodes?: Array<QueueTimelineNode | null> } | null;
       reviewThreads?: {
-        nodes?: Array<{ isResolved?: boolean } | null>;
+        nodes?: Array<{ isResolved?: boolean; comments?: { nodes?: Array<{ url?: string } | null> } } | null>;
         pageInfo?: { hasNextPage?: boolean };
       };
       commits?: {
@@ -334,7 +361,13 @@ export async function observeGithubPullRequest(input: {
     ...(parents?.every((parent): parent is string => typeof parent === "string") ? { headParentShas: parents } : {}),
     mergeStateStatus: pr.mergeStateStatus ?? null,
     unresolvedReviewThreads: (pr.reviewThreads?.nodes ?? []).filter((thread) => thread?.isResolved === false).length,
-    reviewThreadsComplete: pr.reviewThreads?.pageInfo?.hasNextPage !== true
+    unresolvedReviewThreadUrls: (pr.reviewThreads?.nodes ?? []).flatMap((thread) => {
+      const url = thread?.comments?.nodes?.[0]?.url;
+      return thread?.isResolved === false && typeof url === "string" ? [url] : [];
+    }),
+    reviewThreadsComplete: pr.reviewThreads?.pageInfo?.hasNextPage === false
+      && Array.isArray(pr.reviewThreads.nodes)
+      && pr.reviewThreads.nodes.every(thread => typeof thread?.isResolved === "boolean")
       && pr.latestReviews?.pageInfo?.hasNextPage !== true,
     changesRequested: pr.reviewDecision === "CHANGES_REQUESTED"
       || (pr.latestReviews?.nodes ?? []).some((review) => review?.state === "CHANGES_REQUESTED"),
