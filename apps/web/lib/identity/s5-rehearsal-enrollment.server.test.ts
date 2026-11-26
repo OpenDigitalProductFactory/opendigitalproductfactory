@@ -47,3 +47,59 @@ describe("isGovernedRequester (BI-9F7192F9 phase 1, single durable marker)", () 
     expect(findUnique).not.toHaveBeenCalled();
   });
 });
+
+describe("requester audit rows (BI-9F7192F9 phase 3, AC-E8)", async () => {
+  const { buildRequesterAuditRow, writeRequesterAudit, S5_REQUESTER_AUDIT_ACTION_KEYS } = await import("./s5-rehearsal-enrollment.server");
+  const { readS5RehearsalDecision } = await import("@/lib/workroom-runtime/s5-rehearsal-approver.server");
+  const { S5_REHEARSAL_APPROVAL_ACTION } = await import("@/lib/workroom-runtime/s5-rehearsal-approval-action");
+  const digest = "a".repeat(64);
+  const refs = {
+    rulingRef: "ruling:1", reservationRef: "reservation:1", attemptRef: "attempt:1", fixtureRef: "fixture:1",
+    installationRef: "installation:1", leaseRef: "lease:1", dbIdentityRef: "db:1",
+  };
+  const enroll = {
+    command: "enroll" as const, setupDigest: digest, ownerUserId: "owner-user", ownerPrincipalId: "owner-principal",
+    requesterUserId: "requester-user", refs,
+  };
+
+  it("builds one typed row per command with the fixed keys from the design", () => {
+    expect(S5_REQUESTER_AUDIT_ACTION_KEYS).toEqual({ enroll: "s5.rehearsal-requester.enroll", retire: "s5.rehearsal-requester.retire" });
+    const row = buildRequesterAuditRow(enroll);
+    expect(row).toMatchObject({
+      decisionId: `s5rr:enroll:${digest}`, actionKey: "s5.rehearsal-requester.enroll", decision: "allow",
+      actorType: "human", actorRef: "owner-user", objectRef: "requester-user",
+    });
+    const retire = buildRequesterAuditRow({ ...enroll, command: "retire", retirementReason: "rehearsal_complete" });
+    expect(retire).toMatchObject({ decisionId: `s5rr:retire:${digest}`, actionKey: "s5.rehearsal-requester.retire" });
+    expect((retire.rationale as Record<string, unknown>).retirementReason).toBe("rehearsal_complete");
+  });
+
+  it("carries references only: no password, hash, token or session material", () => {
+    const serialized = JSON.stringify(buildRequesterAuditRow(enroll)).toLowerCase();
+    for (const secret of ["password", "hash", "token", "session", "secret"]) expect(serialized).not.toContain(secret);
+  });
+
+  it("refuses a malformed digest, a missing ref, an unknown command or a retire without its reason", () => {
+    expect(() => buildRequesterAuditRow({ ...enroll, setupDigest: "abc" })).toThrow();
+    expect(() => buildRequesterAuditRow({ ...enroll, refs: { ...refs, leaseRef: "" } })).toThrow();
+    expect(() => buildRequesterAuditRow({ ...enroll, command: "activate" as never })).toThrow();
+    expect(() => buildRequesterAuditRow({ ...enroll, command: "retire" })).toThrow();
+  });
+
+  it("writes exactly one row through the caller's transaction", async () => {
+    const create = vi.fn(async () => ({}));
+    await writeRequesterAudit({ authorizationDecisionLog: { create } }, enroll);
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(create).toHaveBeenCalledWith({ data: buildRequesterAuditRow(enroll) });
+  });
+
+  it("is rejected by the S5 approval reader, so an audit row can never stand in for an approval", async () => {
+    const row = buildRequesterAuditRow(enroll);
+    const findUnique = vi.fn(async () => ({ ...row, agentContextRef: "AGT-1", authorityBindingId: "binding-1" }));
+    const decision = await readS5RehearsalDecision({ authorizationDecisionLog: { findUnique } } as never, {
+      id: "env-1", manifestActionId: S5_REHEARSAL_APPROVAL_ACTION, argsJson: {}, authorityDecisionId: row.decisionId,
+      inputFingerprint: "f", approvalBindingFingerprint: "b", delegatingUserId: "owner-user", coworkerAgentId: "AGT-1",
+    }, "owner-user");
+    expect(decision).toBeNull();
+  });
+});

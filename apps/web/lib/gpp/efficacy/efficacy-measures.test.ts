@@ -121,3 +121,29 @@ describe("computeEfficacyMeasures — guard measures", () => {
     expect(report.guards.map((g) => g.guardId)).toEqual(["loop:dear", "loop:cheap"]);
   });
 });
+
+describe("M-4 excludes S5 rehearsal requester audit rows (BI-9F7192F9 phase 3)", async () => {
+  const { loadEfficacyReport } = await import("./efficacy-measures-store");
+  it("filters both requester audit action keys out of every authorization-log query", async () => {
+    const calls: Array<{ op: string; args: { where?: Record<string, unknown> } }> = [];
+    const model = (name: string) => ({
+      count: async (args: { where?: Record<string, unknown> }) => { calls.push({ op: `${name}.count`, args }); return 0; },
+      groupBy: async (args: { where?: Record<string, unknown> }) => { calls.push({ op: `${name}.groupBy`, args }); return []; },
+    });
+    const db = {
+      $queryRaw: async () => [],
+      externalEvidenceRecord: model("externalEvidenceRecord"),
+      gppPermitObservation: model("gppPermitObservation"),
+      toolExecution: model("toolExecution"),
+      decisionInteraction: model("decisionInteraction"),
+      authorizationDecisionLog: model("authorizationDecisionLog"),
+      coworkerActionEnvelope: model("coworkerActionEnvelope"),
+    };
+    await loadEfficacyReport(db as never, { now: new Date("2026-11-26T00:00:00Z") });
+    const authz = calls.filter((c) => c.op.startsWith("authorizationDecisionLog."));
+    expect(authz).toHaveLength(3);
+    for (const call of authz) {
+      expect(call.args.where?.actionKey).toEqual({ notIn: ["s5.rehearsal-requester.enroll", "s5.rehearsal-requester.retire"] });
+    }
+  });
+});

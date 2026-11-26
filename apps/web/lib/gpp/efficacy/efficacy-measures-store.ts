@@ -15,6 +15,8 @@ export const DEFAULT_PERIOD_DAYS = 14;
 const NON_REFUSING_SHADOW_VERDICTS = ["valid", "ungoverned", "unsigned", "unmediated"] as const;
 const HELD_OUTCOMES = ["defer", "slip"];
 const NOT_ADMITTED_OUTCOMES = ["escalate", "defer", "slip", "decline", "veto"];
+/** BI-9F7192F9: S5 rehearsal requester custody audit rows are not authorization refusals; M-4 excludes them. */
+const M4_EXCLUDED_ACTION_KEYS = ["s5.rehearsal-requester.enroll", "s5.rehearsal-requester.retire"];
 
 export type EfficacyMeasuresDb = Pick<
   PrismaClient,
@@ -84,9 +86,11 @@ export async function loadEfficacyReport(
       where: { createdAt, outcomeType: { notIn: NOT_ADMITTED_OUTCOMES }, humanOutcome: { path: ["resolvedBy"], equals: "agent" } },
     }),
     db.coworkerActionEnvelope.groupBy({ by: ["status"], where: { createdAt }, _count: { _all: true } }),
-    db.authorizationDecisionLog.count({ where: { createdAt } }),
-    db.authorizationDecisionLog.count({ where: { createdAt, decision: "deny" } }),
-    db.authorizationDecisionLog.groupBy({ by: ["actionKey"], where: { createdAt, decision: "deny" }, _count: { _all: true } }),
+    db.authorizationDecisionLog.count({ where: { createdAt, actionKey: { notIn: M4_EXCLUDED_ACTION_KEYS } } }),
+    db.authorizationDecisionLog.count({ where: { createdAt, decision: "deny", actionKey: { notIn: M4_EXCLUDED_ACTION_KEYS } } }),
+    db.authorizationDecisionLog.groupBy({
+      by: ["actionKey"], where: { createdAt, decision: "deny", actionKey: { notIn: M4_EXCLUDED_ACTION_KEYS } }, _count: { _all: true },
+    }),
     db.gppPermitObservation.count({ where: { createdAt, enforcement: "enforced", verdict: { notIn: ["valid", "ungoverned"] } } }),
     db.gppPermitObservation.count({ where: { createdAt, enforcement: "shadow", toolExecutionId: { not: null } } }),
     db.gppPermitObservation.count({
