@@ -9,6 +9,7 @@ import { buildPrincipalContext } from "@/lib/principal-context";
 import { resolveGovernedAction } from "@/lib/governance-resolver";
 import { summarizeGovernedLifecycleAttempt } from "@/lib/user-governance";
 import { syncUserPrincipal } from "@/lib/identity/principal-linking";
+import { passwordPolicyErrors } from "@/lib/identity/password-policy";
 import { getT } from "@/lib/i18n/t.server";
 import { err, ok, type ActionResult } from "@/lib/shared/action-result";
 import {
@@ -44,16 +45,6 @@ async function hashPassword(password: string): Promise<string> {
   return Array.from(new Uint8Array(hashBuffer))
     .map((byte) => byte.toString(16).padStart(2, "0"))
     .join("");
-}
-
-function passwordPolicyErrors(password: string): string[] {
-  const errors: string[] = [];
-  if (password.length < 12) errors.push("Password must be at least 12 characters.");
-  if (!/[A-Z]/.test(password)) errors.push("Password must include an uppercase letter.");
-  if (!/[a-z]/.test(password)) errors.push("Password must include a lowercase letter.");
-  if (!/[0-9]/.test(password)) errors.push("Password must include a number.");
-  if (!/[^A-Za-z0-9]/.test(password)) errors.push("Password must include a symbol.");
-  return errors;
 }
 
 async function requireCapability(capability: "manage_users" | "manage_user_lifecycle"): Promise<SessionUserContext> {

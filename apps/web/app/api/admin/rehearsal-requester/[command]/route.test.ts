@@ -20,7 +20,7 @@ import {
   handleRequesterCommand,
   type RequesterBoundaryPorts,
 } from "@/lib/identity/s5-rehearsal-enrollment.server";
-import { POST } from "./route";
+import { GET, POST } from "./route";
 
 const ORIGIN = "https://dpf.test";
 const enrollContext = {
@@ -50,6 +50,10 @@ function ports(overrides: Partial<RequesterBoundaryPorts> = {}) {
     currentReservation: vi.fn(async () => "matches" as const),
     retainedRecord: vi.fn(async () => null),
     readiness: vi.fn(async () => ({ ready: true as const })),
+    requestTransaction: vi.fn(async (run) => {
+      const { commit: _commit, ...result } = await run({ sql: { query: async () => [] }, client: null, stage: "pre-hash" });
+      return result;
+    }),
     preBodyOwnerAndDb: vi.fn(async () => ({ ok: true as const })),
     verifyRequesterState: vi.fn(async () => ({ verified: false as const })),
     readBody: vi.fn(async (req: Request) => req.text()),
@@ -210,7 +214,7 @@ describe("S5 rehearsal requester boundary (BI-9F7192F9 phase 4, AC-E1)", () => {
     expect(p.execute).toHaveBeenCalledTimes(1);
     expect(p.execute).toHaveBeenCalledWith(expect.objectContaining({
       command: "enroll", userId: "owner-user", setupDigest: digest, password: "correct-horse",
-    }));
+    }), expect.objectContaining({ stage: "pre-hash" }));
   });
 });
 
@@ -242,5 +246,19 @@ describe("served route is inert until its proofs are served", () => {
     const response = await POST(request("retire", { body: "retirementReason=rehearsal_complete" }), { params: Promise.resolve({ command: "retire" }) });
     expect(response.status).toBe(409);
     expect(await response.json()).toMatchObject({ code: "preview_enrollment_fence_unavailable" });
+  });
+
+  it("serves the read-only status GET inert: production refuses, and owner binding holds before any connection", async () => {
+    const status = (digestParam = digest) => new Request(`${ORIGIN}/api/admin/rehearsal-requester/status?setupDigest=${digestParam}`,
+      { headers: { "sec-fetch-site": "same-origin" } });
+    loadEnvironmentClassResolution.mockResolvedValue({ environmentClass: "production" });
+    expect((await GET(status(), { params: Promise.resolve({ command: "status" }) })).status).toBe(403);
+    loadEnvironmentClassResolution.mockResolvedValue({ environmentClass: "development" });
+    auth.mockResolvedValue({ user: { id: "owner-user" } });
+    const held = await GET(status(), { params: Promise.resolve({ command: "status" }) });
+    expect(held.status).toBe(409);
+    expect(await held.json()).toMatchObject({ code: "owner_binding_unavailable" });
+    expect((await GET(status("not-a-digest"), { params: Promise.resolve({ command: "status" }) })).status).toBe(400);
+    expect((await GET(status(), { params: Promise.resolve({ command: "enroll" }) })).status).toBe(404);
   });
 });
