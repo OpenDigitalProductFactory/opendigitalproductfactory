@@ -98,7 +98,7 @@ export function shouldSkipTable(tableName: string): boolean {
 import { PrismaClient, type Prisma } from "../generated/client/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { randomUUID } from "node:crypto";
-import { assertSourceHasNoRequester, runSourceCheckedClone, withApplicationName, withRequesterDestinationFence } from "./sanitized-clone-cleanup";
+import { assertSourceHasNoRequester, discardRetiredEvidenceFromArgv, runSourceCheckedClone, withApplicationName, withRequesterDestinationFence } from "./sanitized-clone-cleanup";
 import { assertSanitizedCloneSourceIntegrity } from "./sanitized-clone-source-integrity";
 import { resetCloneInstallationIdentity } from "./sanitized-clone-identity-reset";
 
@@ -317,9 +317,10 @@ export async function runSanitizedClone(
     // The requester fence is held from before the destination preflight
     // through reset, copy and failure cleanup (BI-9F7192F9, AC-E3).
     await withRequesterDestinationFence({
-      fenceClient, supervisorClient, writerApplicationName: writerTag, discardRetiredEvidence: discardRetiredRehearsalEvidence,
+      fenceClient, supervisorClient, discardRetiredEvidence: discardRetiredRehearsalEvidence,
     }, (fence) => runSourceCheckedClone(
-      async () => { fence.assertHeld(); await resetDestinationData(dev, destinationTables.map(({ tablename }) => tablename)); },
+      // Destructive reset runs on the pinned fence session, atomically with its lock-ownership proof.
+      () => fence.resetDestination(buildDestinationResetSql(destinationTables.map(({ tablename }) => tablename))),
       () => assertSanitizedCloneSourceIntegrity(prod),
       async () => {
         const tables = await listPublicTables(prod, false);
@@ -331,7 +332,9 @@ export async function runSanitizedClone(
         // PostgreSQL owns user ranking; never materialize a User map in JS.
         const userCount = (await sanitizedSource.query('SELECT count(*) AS count FROM "User"')).rows;
         const sanitizeRows = createSanitizedCloneSanitizer(Number(userCount[0]?.count ?? 0));
-        const writer = createSanitizedCloneWriter(dev);
+        // Each write transaction registers its own backend and re-proves the fence before writing.
+        const writer = createSanitizedCloneWriter(dev, undefined, { openWriter: (session) => fence.registerWriter(session) });
+        let copySeq = 0;
         const copySanitizedTable = async (tableName: string, limit?: number) => {
           const metrics = { fetchMs: 0, fetches: 0, rows: 0, batches: 0, sanitizeMs: 0, insertMs: 0, transactionMs: 0, transactionAttempts: 0, transactionWorkMs: 0 };
           const started = performance.now();
@@ -347,6 +350,7 @@ export async function runSanitizedClone(
         };
 
         for (const { tablename } of tables) {
+          await fence.ensureHeld();
           if (!destinationTableNames.has(tablename)) {
             console.log(`  SKIP (source schema ahead): ${tablename}`);
             continue;
@@ -378,7 +382,7 @@ export async function runSanitizedClone(
 
           if (sensitivity === "public" || sensitivity === "internal") {
             console.log(`  COPY (${sensitivity}): ${tablename} (${rowCount} rows)`);
-            await copyTableCompatible(tablename, prodUrl, devUrl, prod, dev, writerTag);
+            await copyTableCompatible(tablename, prodUrl, devUrl, prod, dev, `${writerTag}:copy:${++copySeq}`, fence.admitCopy);
           } else if (sensitivity === "confidential") {
             console.log(`  OBFUSCATE (confidential): ${tablename} (${rowCount} rows)`);
             await copySanitizedTable(tablename);
@@ -441,15 +445,6 @@ async function listPublicTables(
   );
 }
 
-async function resetDestinationData(
-  client: RawDatabaseClient,
-  tableNames: readonly string[],
-): Promise<void> {
-  const resetSql = buildDestinationResetSql(tableNames);
-  if (!resetSql) return;
-  console.log(`[sanitized-clone] Resetting ${tableNames.filter((name) => !MIGRATION_OWNED_TABLES.has(name)).length} destination tables`);
-  await client.$executeRawUnsafe(resetSql);
-}
 
 type CloneColumnReader = { $queryRawUnsafe<T = unknown>(query: string, ...values: unknown[]): Promise<T> };
 
@@ -531,7 +526,8 @@ async function copyTableCompatible(
   devUrl: string,
   prod: RawDatabaseClient,
   dev: RawDatabaseClient,
-  writerTag: string,
+  writerName: string,
+  admitWriter: (applicationName: string) => Promise<void>,
 ): Promise<void> {
   const [sourceColumns, destinationColumns] = await Promise.all([
     getCloneColumns(prod, tableName),
@@ -539,16 +535,17 @@ async function copyTableCompatible(
   ]);
   const columns = resolveCompatibleCopyColumns(sourceColumns, destinationColumns, tableName);
 
+  // The destination writer connects and is admitted (registered, fence proven) before any data flows.
+  const destinationPsql = spawn("psql", buildDestinationCopyArgs(devUrl, tableName, columns), {
+    stdio: ["pipe", "ignore", "pipe"],
+    env: { ...buildPsqlEnvironment(), PGAPPNAME: writerName },
+  });
+  const destinationError = collectBoundedStderr(destinationPsql);
+  try { await admitWriter(writerName); } catch (error) { destinationPsql.kill(); throw error; }
   const sourcePsql = spawn("psql", buildSourceCopyArgs(prodUrl, tableName, columns), {
     stdio: ["ignore", "pipe", "pipe"],
   });
-  const destinationPsql = spawn("psql", buildDestinationCopyArgs(devUrl, tableName, columns), {
-    stdio: ["pipe", "ignore", "pipe"],
-    env: { ...buildPsqlEnvironment(), PGAPPNAME: writerTag },
-  });
-
   const sourceError = collectBoundedStderr(sourcePsql);
-  const destinationError = collectBoundedStderr(destinationPsql);
 
   try {
     await Promise.all([
@@ -641,6 +638,7 @@ export const SANITIZED_CLONE_WRITE_GROUP_MAX_MS = 1_000;
 export function createSanitizedCloneWriter(
   client: PrismaClient,
   policy: Readonly<SanitizedCloneInsertTransactionPolicy> = SANITIZED_CLONE_INSERT_TRANSACTION_POLICY,
+  hooks: { openWriter?: (session: { query(sql: string): Promise<{ rows: Array<Record<string, unknown>> }> }) => Promise<void> } = {},
 ) {
   const typesByTable = new Map<string, Map<string, ColumnTypeInfo>>();
   const transact = async (metrics: CloneWriteMetrics | undefined,
@@ -651,6 +649,7 @@ export function createSanitizedCloneWriter(
       await client.$transaction(async transaction => {
         const workStarted = performance.now();
         try {
+          await hooks.openWriter?.({ query: async (sql) => ({ rows: await transaction.$queryRawUnsafe<Array<Record<string, unknown>>>(sql) }) });
           await transaction.$executeRawUnsafe("SET LOCAL session_replication_role = replica");
           await write(transaction, workStarted);
         } finally {
@@ -782,7 +781,7 @@ async function getCloneColumns(
 // ── CLI Entry Point ──────────────────────────────────────────────────────────
 
 if (process.argv[1]?.endsWith("sanitized-clone.ts") || process.argv[1]?.endsWith("sanitized-clone.js")) {
-  runSanitizedClone({ discardRetiredRehearsalEvidence: process.argv.includes("--discard-retired-rehearsal-evidence") })
+  runSanitizedClone({ discardRetiredRehearsalEvidence: discardRetiredEvidenceFromArgv(process.argv) })
     .then(() => {
       console.log("[sanitized-clone] Done");
       process.exit(0);

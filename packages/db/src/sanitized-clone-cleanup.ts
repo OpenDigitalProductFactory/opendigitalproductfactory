@@ -41,7 +41,9 @@ export async function runSourceCheckedClone<T>(
 
 export const REQUESTER_DESTINATION_FENCE_KEY = "dpf:s5-rehearsal-requester:destination-fence";
 const REQUESTER_TABLE = '"S5RehearsalRequesterEnrollment"';
-const WRITER_EXIT_DEADLINE_MS = 10_000;
+const DRAIN_DEADLINE_MS = 10_000;
+const DRAIN_POLL_MS = 250;
+const COPY_ADMISSION_DEADLINE_MS = 5_000;
 
 type SqlClient = { query(sql: string, values?: unknown[]): Promise<{ rows: Array<Record<string, unknown>> }> };
 type FenceConnection = SqlClient & { on(event: "error" | "end", listener: () => void): unknown };
@@ -55,11 +57,16 @@ export class CloneFenceError extends Error {
   }
 }
 
-/** Tag every destination connection of one clone run so a lost fence stops exactly that run's writers. */
+/** Correlate one clone run's destination sessions; never used as termination authority. */
 export function withApplicationName(connectionString: string, applicationName: string): string {
   const url = new URL(connectionString);
   url.searchParams.set("application_name", applicationName);
   return url.toString();
+}
+
+/** True only when the explicit operator flag is present; the fixed product entry points pass none. */
+export function discardRetiredEvidenceFromArgv(argv: readonly string[]): boolean {
+  return argv.includes("--discard-retired-rehearsal-evidence");
 }
 
 /**
@@ -117,73 +124,188 @@ export async function assertSourceHasNoRequester(source: SqlClient): Promise<num
   return 0;
 }
 
+/** A destination writer backend, registered by its own session when it opens. */
+export type RegisteredWriter = { pid: number; backendStart: string; applicationName: string };
+
+const SELF_IDENTITY_SQL = `SELECT pid, backend_start::text AS "backendStart", application_name AS "applicationName"
+  FROM pg_stat_activity WHERE pid = pg_backend_pid()`;
+
+// A session-level advisory lock on a bigint key appears in pg_locks as
+// classid = high 32 bits, objid = low 32 bits, objsubid = 1.
+const OWNS_FENCE_PREDICATE = `EXISTS (SELECT 1 FROM pg_locks
+  WHERE locktype = 'advisory' AND pid = pg_backend_pid() AND granted AND mode = 'ExclusiveLock' AND objsubid = 1
+    AND ((classid::bigint << 32) | objid::bigint) = hashtextextended('${REQUESTER_DESTINATION_FENCE_KEY}', 0))`;
+
+/**
+ * Terminate only backends whose pid, backend_start and application name all
+ * still match a registration. A recycled pid or an unregistered session that
+ * shares the run tag is never touched. Returns the pids terminated.
+ */
+export async function terminateRegisteredWriters(
+  supervisor: SqlClient,
+  writers: readonly RegisteredWriter[],
+): Promise<number[]> {
+  if (writers.length === 0) return [];
+  // One statement signals every matching writer together, so stopping one
+  // writer cannot release a lock that lets another commit before its signal.
+  const { rows } = await supervisor.query(
+    `SELECT a.pid, pg_terminate_backend(a.pid) AS done
+       FROM pg_stat_activity a
+       JOIN unnest($1::int[], $2::timestamptz[], $3::text[]) AS w(pid, backend_start, application_name)
+         ON a.pid = w.pid AND a.backend_start = w.backend_start AND a.application_name = w.application_name
+      WHERE a.pid <> pg_backend_pid()`,
+    [writers.map((w) => w.pid), writers.map((w) => w.backendStart), writers.map((w) => w.applicationName)],
+  );
+  return rows.map((row) => Number(row.pid));
+}
+
+async function liveRegisteredWriters(supervisor: SqlClient, writers: readonly RegisteredWriter[]): Promise<RegisteredWriter[]> {
+  const live: RegisteredWriter[] = [];
+  for (const writer of writers) {
+    const { rows } = await supervisor.query(
+      "SELECT 1 FROM pg_stat_activity WHERE pid = $1 AND backend_start = $2::timestamptz AND application_name = $3",
+      [writer.pid, writer.backendStart, writer.applicationName],
+    );
+    if (rows.length > 0) live.push(writer);
+  }
+  return live;
+}
+
 export type RequesterFenceOptions = {
-  /** Pinned destination connection that holds the session lock. */
+  /** Pinned, non-reconnecting destination session that holds the session lock and runs every destructive reset. */
   fenceClient: FenceConnection;
-  /** Separate destination connection, opened at start, used only to stop this run's writers. */
+  /** Separate destination session, opened at start, used only to find and stop this run's registered writers. */
   supervisorClient: SqlClient;
-  /** application_name carried by every destination writer of this run (Prisma pool and COPY psql). */
-  writerApplicationName: string;
   discardRetiredEvidence: boolean;
   log?: (message: string) => void;
 };
 
+export type RequesterFence = {
+  /** Active proof that the fence session still owns the lock; throws fence_lost otherwise. */
+  ensureHeld(): Promise<void>;
+  /** Run a destructive reset on the fence session itself, atomically with the ownership proof. */
+  resetDestination(resetSql: string | null): Promise<void>;
+  /** Admit a writer session: proof, register its own backend identity, proof again, before any write. */
+  registerWriter(writer: SqlClient): Promise<void>;
+  /** Admit a COPY writer by its unique application name once connected, before any data flows. */
+  admitCopy(applicationName: string): Promise<void>;
+};
+
+function isFenceLost(error: unknown): boolean {
+  if (error instanceof CloneFenceError) return error.code === "fence_lost";
+  if (error instanceof AggregateError) return error.errors.some(isFenceLost);
+  return false;
+}
+
 /**
  * Hold the destination fence from before the preflight through reset, copy and
- * failure cleanup. If the fence connection is lost, stop with `fence_lost`:
- * run no cleanup, terminate only this run's writer backends, confirm they are
- * gone, and fail.
+ * failure cleanup. A classified loss always wins over a concurrent writer
+ * failure: no reset runs without proof on the fence session, later writers are
+ * refused before their first write, and every registered writer is drained
+ * before the run fails with fence_lost.
  */
 export async function withRequesterDestinationFence<T>(
   options: RequesterFenceOptions,
-  run: (fence: { assertHeld(): void }) => Promise<T>,
+  run: (fence: RequesterFence) => Promise<T>,
 ): Promise<T> {
+  const { fenceClient, supervisorClient } = options;
   const log = options.log ?? ((message: string) => console.log(`[sanitized-clone] ${message}`));
+  const writers: RegisteredWriter[] = [];
   let lost = false;
   let signalLost: () => void = () => {};
   const lostSignal = new Promise<void>((resolve) => { signalLost = resolve; });
   const markLost = () => { if (!lost) { lost = true; signalLost(); } };
-  options.fenceClient.on("error", markLost);
-  options.fenceClient.on("end", markLost);
-  const fence = {
-    assertHeld() {
-      if (lost) throw new CloneFenceError("fence_lost", "the destination fence connection was lost; no cleanup runs");
+  fenceClient.on("error", markLost);
+  fenceClient.on("end", markLost);
+  const lostError = (detail: string) => new CloneFenceError("fence_lost", detail);
+
+  const ensureHeld = async () => {
+    if (lost) throw lostError("the destination fence was already lost; nothing more is admitted");
+    let held = false;
+    try {
+      held = (await fenceClient.query(`SELECT ${OWNS_FENCE_PREDICATE} AS held`)).rows[0]?.held === true;
+    } catch { held = false; }
+    if (!held) { markLost(); throw lostError("the fence session no longer owns the destination fence"); }
+  };
+  const probeHeld = async () => { try { await ensureHeld(); return true; } catch { return false; } };
+
+  const fence: RequesterFence = {
+    ensureHeld,
+    async resetDestination(resetSql) {
+      if (lost) throw lostError("the destination fence was lost; no reset runs");
+      if (!resetSql) return ensureHeld();
+      try {
+        await fenceClient.query(
+          "DO $fence$ BEGIN IF NOT " + OWNS_FENCE_PREDICATE +
+          " THEN RAISE EXCEPTION 'fence_lost: destination fence not held by this session'; END IF; EXECUTE $reset$" +
+          resetSql + "$reset$; END $fence$",
+        );
+      } catch (error) {
+        if (await probeHeld()) throw error;
+        throw lostError("the destination fence was lost before the reset; nothing was truncated");
+      }
+    },
+    async registerWriter(writer) {
+      await ensureHeld();
+      const identity = (await writer.query(SELF_IDENTITY_SQL)).rows[0];
+      if (!identity) throw new Error("writer session identity could not be read");
+      writers.push({ pid: Number(identity.pid), backendStart: String(identity.backendStart), applicationName: String(identity.applicationName) });
+      await ensureHeld();
+    },
+    async admitCopy(applicationName) {
+      await ensureHeld();
+      const deadline = Date.now() + COPY_ADMISSION_DEADLINE_MS;
+      for (;;) {
+        const { rows } = await supervisorClient.query(
+          `SELECT pid, backend_start::text AS "backendStart" FROM pg_stat_activity WHERE application_name = $1`,
+          [applicationName],
+        );
+        if (rows.length === 1) {
+          writers.push({ pid: Number(rows[0]!.pid), backendStart: String(rows[0]!.backendStart), applicationName });
+          break;
+        }
+        if (rows.length > 1) throw new Error(`COPY writer name ${applicationName} is not unique`);
+        if (Date.now() > deadline) throw new Error(`COPY writer ${applicationName} did not connect`);
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+      await ensureHeld();
     },
   };
 
-  await options.fenceClient.query("SELECT pg_advisory_lock(hashtextextended($1, 0))", [REQUESTER_DESTINATION_FENCE_KEY]);
-  try {
-    const preflight = await preflightRequesterDestination(options.fenceClient, options);
-    if (preflight.retired > 0) log(`discarding ${preflight.retired} retired S5 rehearsal requester record(s) by explicit disposition`);
-    const work = run(fence);
-    work.catch(() => {}); // awaited below, or superseded by fence_lost
-    const outcome = await Promise.race([work.then((value) => ({ value })), lostSignal.then(() => null)]);
-    if (outcome && !lost) return outcome.value;
-    await stopRunWriters(options);
-    await Promise.race([work.catch(() => {}), new Promise((resolve) => setTimeout(resolve, WRITER_EXIT_DEADLINE_MS))]);
-    throw new CloneFenceError("fence_lost",
-      "the destination fence connection was lost during the clone; this run's writers were stopped and no cleanup ran");
-  } finally {
-    if (!lost) {
-      await options.fenceClient.query("SELECT pg_advisory_unlock(hashtextextended($1, 0))", [REQUESTER_DESTINATION_FENCE_KEY]);
+  const drain = async (settled: Promise<unknown>) => {
+    let done = false;
+    void settled.then(() => { done = true; });
+    const deadline = Date.now() + DRAIN_DEADLINE_MS;
+    const terminated = new Set<number>();
+    for (;;) {
+      const live = await liveRegisteredWriters(supervisorClient, writers);
+      for (const pid of await terminateRegisteredWriters(supervisorClient, live)) terminated.add(pid);
+      if (done && live.length === 0) return [...terminated];
+      if (Date.now() > deadline) {
+        throw lostError(`registered writers ${live.map((w) => w.pid).join(",") || "(none)"} did not exit within ${DRAIN_DEADLINE_MS} ms`);
+      }
+      await Promise.race([settled, new Promise((resolve) => setTimeout(resolve, DRAIN_POLL_MS))]);
     }
-  }
-}
+  };
 
-async function stopRunWriters({ supervisorClient, writerApplicationName }: RequesterFenceOptions): Promise<void> {
-  const { rows } = await supervisorClient.query(
-    `SELECT pid, pg_terminate_backend(pid) AS terminated
-       FROM pg_stat_activity
-      WHERE application_name = $1 AND pid <> pg_backend_pid()`,
-    [writerApplicationName],
-  );
-  const pids = rows.map((row) => Number(row.pid));
-  const deadline = Date.now() + WRITER_EXIT_DEADLINE_MS;
-  for (;;) {
-    const { rows: alive } = await supervisorClient.query(
-      "SELECT count(*)::int AS n FROM pg_stat_activity WHERE pid = ANY($1::int[])", [pids]);
-    if (Number(alive[0]?.n ?? 0) === 0) return;
-    if (Date.now() > deadline) throw new CloneFenceError("fence_lost", `writer backends ${pids.join(",")} did not exit`);
-    await new Promise((resolve) => setTimeout(resolve, 100));
+  await fenceClient.query("SELECT pg_advisory_lock(hashtextextended($1, 0))", [REQUESTER_DESTINATION_FENCE_KEY]);
+  try {
+    const preflight = await preflightRequesterDestination(fenceClient, options);
+    if (preflight.retired > 0) log(`discarding ${preflight.retired} retired S5 rehearsal requester record(s) by explicit operator disposition`);
+    const settled = run(fence).then((value) => ({ ok: true as const, value }), (error: unknown) => ({ ok: false as const, error }));
+    const first = await Promise.race([settled, lostSignal.then(() => null)]);
+    // Classified loss wins: a result or a failure counts only while the fence is provably held.
+    if (first && !(first.ok === false && isFenceLost(first.error)) && (await probeHeld())) {
+      if (first.ok) return first.value;
+      throw first.error;
+    }
+    markLost();
+    const terminated = await drain(settled);
+    log(`destination fence lost; stopped registered writer backend(s) ${terminated.join(",") || "(none)"}; no cleanup ran`);
+    throw lostError("the destination fence was lost during the clone; registered writers were stopped and no cleanup ran");
+  } finally {
+    if (!lost && (await probeHeld())) {
+      await fenceClient.query("SELECT pg_advisory_unlock(hashtextextended($1, 0))", [REQUESTER_DESTINATION_FENCE_KEY]);
+    }
   }
 }
