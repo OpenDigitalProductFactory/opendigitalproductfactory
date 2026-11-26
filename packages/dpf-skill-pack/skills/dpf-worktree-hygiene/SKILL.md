@@ -37,7 +37,7 @@ Creates are covered by [`dpf-worktree-per-session`](../dpf-worktree-per-session/
 | Path | Owner | Agent freestyle? |
 |------|--------|------------------|
 | **Primary reaper** — daily observe, Tier-A reap above `DPF_WORKTREE_JANITOR_MAX` or with `AUTO_REAP=1`; fails closed when liveness is unreadable. Runs with no AI client present (BI-99395B29) | Portal Inngest (`ops/worktree-janitor`) + env flags | No — enable flags; do not hand-cron |
-| **Accelerators** — merged-PR reap of one branch (`pull-request-merged-reap`), sandbox leftover GC (`ops/sandbox-build-gc`), and this session's own tree on **SessionEnd** when Tier-A. Never on `Stop`: that fires every turn, and a live tree becomes Tier-A the moment its own PR merges (BI-E5D810B8) | Portal Inngest + client hook (`worktree-session-hygiene.mjs`) | No — automatic; the hook only speeds things up, nothing depends on it |
+| **Accelerators** — merged-PR reap of one branch (`pull-request-merged-reap`), T3 host settlement, and sandbox leftover GC (`ops/sandbox-build-gc`). Provider hooks never remove a checkout. | Portal Inngest + T3 bridge | No — automatic and subject to the janitor rules |
 | **Workroom reaper** — transition dead workroom *records* (lease expired / build terminal / idle) `working`→`abandoned`; the DB half of hygiene (WS9) | Portal Inngest (`ops/taskrun-watchdog` tick) + `DPF_WORKCAPSULE_REAPER_*` flags | No — enable flags; observe via `list_work_capsules staleOnly=true` |
 | **Exceptional reclaim** — live Tier-A bulk prune, force-delete locked dirs, kill locking shells | Operator + explicit "go" | Only after dry-run report + operator approval |
 
@@ -66,7 +66,7 @@ Wire via host `.env` and/or gitignored `docker-compose.override.yml` on the **po
 ## When NOT to use
 
 - Creating a new session worktree → `dpf-worktree-per-session`.
-- Normal PR finish of **this** branch's worktree → session SessionEnd reaper or `dpf-finishing-a-development-branch`.
+- Normal PR finish of **this** branch's worktree → merge-triggered janitor or `dpf-finishing-a-development-branch`.
 - Portal self-upgrade / version skew → self-upgrade path, not janitor.
 
 ## Steps
@@ -99,7 +99,7 @@ Only after operator says **go** (or equivalent) on a dry-run report:
 node scripts/worktree-janitor.mjs --live --tier-a-only --json
 ```
 
-- Uses junction-safe remove under the hood.
+- Renames the registered checkout out of the way before purging it, and never follows dependency links. See the [janitor guide](../../../../docs/install/worktree-janitor-schedule.md) for audit and recovery.
 - Never use bare `git worktree remove --force` on Windows (BI-F6AC1A56).
 - Never target the root clone path.
 
@@ -194,7 +194,7 @@ Remove that junction with `cmd /c rmdir generated` — **never `rm -rf`**, which
 - **No freestyle `rm -rf` / mass process kill** as hygiene.
 - **Junction-safe only** for worktree directory removal on Windows.
 - **Hide complexity from lay users** — report outcomes (how many reaped, flags on/off), not raw flag names unless the operator is in ops mode.
-- **The platform owns reaping** — `ops/worktree-janitor` is the primary reaper; client session hooks only accelerate it (`platform-function-never-depends-on-a-client`).
+- **The platform owns reaping** — `ops/worktree-janitor` is the primary reaper; provider hooks only observe and log refusals (`platform-function-never-depends-on-a-client`).
 
 ## Output template
 

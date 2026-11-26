@@ -26,7 +26,7 @@ export type QueuePrDeps = {
   now?: Date;
   /** Passing gate results bound to this room at its head, after the review resolver's checks. */
   resolveGateEvidence(ids: string[], roomId: string): Promise<Array<{ id: string }>>;
-  observePr(input: { prNumber: number }): Promise<{ nodeId: string; state: string; merged: boolean; headSha: string; autoMergeEnabled: boolean; mergeQueueEntry: boolean }>;
+  observePr(input: { prNumber: number }): Promise<{ nodeId: string; state: string; merged: boolean; headSha: string; autoMergeEnabled: boolean; mergeQueueEntry: boolean; changesRequested?: boolean; reviewThreadsComplete?: boolean }>;
   enableAutoMerge(input: { nodeId: string; expectedHeadOid: string }): Promise<void>;
 };
 const EXTERNAL_SURFACES: Readonly<Record<string, string>> = {
@@ -67,6 +67,8 @@ export async function queueWorkroomPullRequest(params: Record<string, unknown>, 
   if (pr.headSha !== room.headSha) {
     return refuse("pull_request_head_differs", `PR #${room.pullRequestNumber} is at ${pr.headSha.slice(0, 12)}, the room at ${room.headSha.slice(0, 12)}. Re-sync the room and re-run the gate on the PR head.`);
   }
+  if (pr.changesRequested) return refuse("changes_requested", "An outstanding changes-requested review blocks queue enrollment.");
+  if (pr.reviewThreadsComplete === false) return refuse("review_evidence_unread", "Current review evidence is incomplete. Nothing was armed.");
   const candidates = await deps.db.externalEvidenceRecord.findMany({
     where: { workCapsuleId: room.id, operationType: "local_integration_ci" }, select: { id: true }, orderBy: { createdAt: "desc" }, take: 20,
   });
@@ -74,17 +76,23 @@ export async function queueWorkroomPullRequest(params: Record<string, unknown>, 
   if (!passing.length) {
     return refuse("gate_evidence_required", "No passing, unexpired gate result is bound to this room at its head. Run pnpm gate:wait on this commit first.");
   }
-  if (pr.autoMergeEnabled || pr.mergeQueueEntry) {
-    return { success: true, entityId: room.capsuleId, message: `PR #${room.pullRequestNumber} is already queued.`, data: { prNumber: room.pullRequestNumber, headSha: room.headSha, alreadyQueued: true } };
+  if (pr.mergeQueueEntry || pr.autoMergeEnabled) {
+    return {
+      success: true, entityId: room.capsuleId,
+      message: pr.mergeQueueEntry ? `PR #${room.pullRequestNumber} is already queued.`
+        : `Auto-merge is already armed on PR #${room.pullRequestNumber}; actual queue entry has not been observed.`,
+      data: { prNumber: room.pullRequestNumber, headSha: room.headSha, alreadyQueued: pr.mergeQueueEntry,
+        queueState: pr.mergeQueueEntry ? "enrolled" : "armed" },
+    };
   }
   await deps.enableAutoMerge({ nodeId: pr.nodeId, expectedHeadOid: room.headSha });
   await recordWorkCapsuleActivity(deps.db, {
     workCapsuleId: room.id, kind: "action", actor: deps.actor,
-    summary: `PR #${room.pullRequestNumber} queued for merge at ${room.headSha.slice(0, 12)}; the merge queue runs the required checks.`,
-    payload: { kind: "pull-request-queued", prNumber: room.pullRequestNumber, headSha: room.headSha, gateEvidenceId: passing[0].id },
+    summary: `PR #${room.pullRequestNumber} auto-merge armed at ${room.headSha.slice(0, 12)}; actual queue entry has not been observed.`,
+    payload: { kind: "pull-request-auto-merge-armed", prNumber: room.pullRequestNumber, headSha: room.headSha, gateEvidenceId: passing[0].id },
   });
-  return { success: true, entityId: room.capsuleId, message: `PR #${room.pullRequestNumber} queued for merge; the merge queue runs the required checks.`,
-    data: { prNumber: room.pullRequestNumber, headSha: room.headSha, gateEvidenceId: passing[0].id, alreadyQueued: false } };
+  return { success: true, entityId: room.capsuleId, message: `PR #${room.pullRequestNumber} auto-merge armed; actual queue entry has not been observed.`,
+    data: { prNumber: room.pullRequestNumber, headSha: room.headSha, gateEvidenceId: passing[0].id, alreadyQueued: false, queueState: "armed" } };
 }
 
 /**

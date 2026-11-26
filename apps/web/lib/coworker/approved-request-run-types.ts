@@ -14,6 +14,7 @@ export type ApprovedRequestRun =
   | { status: "not-run"; reason: ApprovedRequestNotRunReason; message: string };
 
 export type ApprovedRequestNotRunReason =
+  | "decision-only"
   | "task-bound"
   | "not-approved"
   | "expired"

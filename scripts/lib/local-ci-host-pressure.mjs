@@ -6,7 +6,11 @@ import { cpus, totalmem } from "node:os";
 import { availableMemoryBytes as readAvailableMemoryBytes } from "./host-available-memory.mjs";
 
 import { reconcileDeadLocalSandboxFence } from "./local-sandbox-fence.mjs";
-import { reconcileStaleLocalConvergenceLock } from "./local-convergence-lock.mjs";
+import {
+  dpf2ReservationBlocks,
+  inspectDpf2CiReservation,
+  reconcileStaleLocalConvergenceLock,
+} from "./local-convergence-lock.mjs";
 
 function finiteValues(values) {
   return values.filter((value) => typeof value === "number" && Number.isFinite(value));
@@ -106,6 +110,7 @@ export async function sampleLocalCiHostPressure({
   rootPath,
   sampleWindowMs = 1_000,
   convergenceLockPaths = [],
+  dpf2LockPath = null,
   fencePaths = [],
   evidenceIsolationHealthy = false,
   deps = {},
@@ -133,15 +138,20 @@ export async function sampleLocalCiHostPressure({
   const cpuStart = attempt(cpuTimes, undefined);
   await delay(sampleWindowMs);
   const cpuEnd = attempt(cpuTimes, undefined);
+  const disk = await attemptAsync(() => diskFreeBytes(rootPath), undefined);
+  const docker = attempt(dockerHealthy, false) === true;
+  const dpf2ReservationActive = dpf2ReservationBlocks(inspectDpf2CiReservation({ path: dpf2LockPath }));
 
   return {
     observedAt: now().toISOString(),
     totalMemoryBytes: attempt(totalMemoryBytes, undefined),
     availableMemoryBytes: attempt(freeMemoryBytes, undefined),
     sustainedCpuPercent: cpuPercentBetween(cpuStart, cpuEnd),
-    diskFreeBytes: await attemptAsync(() => diskFreeBytes(rootPath), undefined),
-    dockerHealthy: attempt(dockerHealthy, false) === true,
-    convergenceActive: attempt(convergenceActive, true) !== false,
+    diskFreeBytes: disk,
+    dockerHealthy: docker,
+    // Older configured brokers already contract on convergence pressure.
+    convergenceActive: dpf2ReservationActive || attempt(convergenceActive, true) !== false,
+    ...(dpf2ReservationActive ? { dpf2ReservationActive } : {}),
     fencesHealthy: attempt(fencesHealthy, false) === true,
     evidenceIsolationHealthy: attempt(evidenceHealthy, false) === true,
   };

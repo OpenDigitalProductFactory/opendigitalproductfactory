@@ -73,6 +73,40 @@ room:
 (`post-push-ci-failure`: 2, `queue-stale-base`: 1) are the budget. No new
 policy table.
 
+**Queue follow-through (BI-BE53F0A0).** Build Studio is the control point for
+authorized delivery regardless of where the request originated. A queued PR
+means GitHub confirms enrollment, not just that auto-merge is armed. The room
+records queue removal separately from PR-head checks, with the provider event,
+merge-group SHA, any available failing checks, and the accountable lane's next
+action. It routes a failed group to hosted CI and a disarmed or unconfirmed
+attempt to the Workroom owner through the existing escalation seam. Quiet and
+observe-only rooms retain the hold without sending it. A failed handoff is
+still pending and retried on the delivery tick. The room also keeps observing
+for an authorized new queue attempt or a confirmed merge. It does not re-arm a
+removed, disarmed, or unconfirmed attempt automatically or treat a queue-group
+failure as a verdict on the author head. Existing writers retain source repair,
+humans retain required decisions, and GitHub retains every protected check.
+
+The worker may arm only from a durable intent for the exact commit an eligible
+Build Studio publication produced. PR inventory and green checks do not grant
+that intent. Current changes-requested review blocks enrollment. A known
+removal stays bound to the old source when the same PR is rebound to a new
+author head. New bytes go through normal readiness without inheriting previous
+intent. A disarm stays held until there is a fresh explicit request.
+
+The repository has five enqueue paths: the Workroom delivery worker, the
+authorized `queue_workroom_pull_request` call, `pnpm land`, and the separately
+opted-in Assurance remediation gate, plus the weekly docs staleness workflow.
+Their mutations are fenced at the expected head. The worker carries an intent
+forward only after it observes the exact two-parent merge of the head and base
+recorded at its accepted update-branch request. It binds the replacement head
+before any review check for arming. Landing refuses to replace an old queued or armed head and names the
+authorized owner action. It never dequeues, pushes twice, or bypasses branch
+protection. GitHub records the shared account on historical #7232; that record
+does not identify which client or service used it. BI-6401919E tracks provider
+evidence to bind a delayed first removal observation back to the exact source
+that its merge group tested.
+
 ### 3.3 Inputs: events first, poll as the safety net
 
 - **Webhook.** The receiver adds `check_suite` (completed), `workflow_run`

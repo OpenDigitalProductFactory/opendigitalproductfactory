@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 import { ensureAcceptanceSweepScheduledTask } from "./seed-acceptance-sweep";
 import { ensureBookkeepingCycleScheduledTask } from "./seed-bookkeeping-cycle";
 import { ensureClientCapabilityReverifyScheduledTask } from "./seed-client-capability-reverify";
+import { ensureClosureScorecardScheduledTask } from "./seed-closure-scorecard";
 import { ensureDataModelMirrorScheduledTask } from "./seed-data-model-mirror";
 import { ensureDecisionEngineReviewScheduledTask } from "./seed-decision-engine-review";
 import { ensureDemandScoringStewardScheduledTask } from "./seed-demand-scoring-steward";
@@ -50,6 +51,7 @@ const SEEDS: Array<[string, (db: never, now?: Date) => Promise<unknown>]> = [
   ["acceptance-sweep", ensureAcceptanceSweepScheduledTask],
   ["bookkeeping-cycle", ensureBookkeepingCycleScheduledTask],
   ["client-capability-reverify", ensureClientCapabilityReverifyScheduledTask],
+  ["closure-scorecard", ensureClosureScorecardScheduledTask],
   ["data-model-mirror", ensureDataModelMirrorScheduledTask],
   ["decision-engine-review", ensureDecisionEngineReviewScheduledTask],
   ["demand-scoring-steward", ensureDemandScoringStewardScheduledTask],

@@ -44,6 +44,7 @@ function shouldContract(
   status: LocalCiGateStatus,
   evidence: unknown,
 ): boolean {
+  if (status === "blocked_dpf2_reservation") return false;
   // Both blocked classes are the same physical signal — the host could not
   // sustain the run. Starvation is observed by the watchdog; a signal death is
   // the same pressure arriving as a kill instead (BI-C59AC8AF). Contracting to

@@ -43,6 +43,14 @@ describe("pack transport receipt", () => {
     expect(mocks.updatePack.mock.calls.some(([args]) => args.data.status === "contributed")).toBe(false);
     expect(result.success).toBe(false);
   });
+  it("hands the exact published forge commit to delivery instead of inferring it from the PR", async () => {
+    const prUrl = "https://github.com/synthetic/receiver/pull/42";
+    const commitSha = "a".repeat(40);
+    mocks.forge.mockResolvedValue({ prUrl, prNumber: null, commitSha });
+    expect((await contributionHivePack.handlers.contribute_to_hive({}, "requester")).success).toBe(true);
+    expect(mocks.reconcile).toHaveBeenCalledWith(expect.objectContaining({ prUrl, publishedHeadSha: commitSha, eligible: true }));
+  });
+
   it("records contribution only together with the actual PR receipt", async () => {
     const prUrl = "https://github.com/synthetic/receiver/pull/42";
     mocks.forge.mockResolvedValue({ prUrl, prNumber: null });

@@ -2896,9 +2896,6 @@
     "scripts/lib/is-record.mjs": [
       "docs/architecture/data-model-stewardship-runbook.md"
     ],
-    "scripts/lib/junction-safe-worktree-remove.mjs": [
-      "docs/architecture/delivery-surfaces-runbook.md"
-    ],
     "scripts/lib/local-ci-slot-manifest.mjs": [
       "docs/operations/local-ci-sandbox-slots.md",
       "docs/operations/runtime-glossary.md"
@@ -3758,7 +3755,6 @@
       "packages/dpf-skill-pack/hooks/workroom-claim-guard.mjs",
       "packages/dpf-skill-pack/hooks/worktree-create.mjs",
       "scripts/lib/compose-safety.mjs",
-      "scripts/lib/junction-safe-worktree-remove.mjs",
       "scripts/lib/worktree-provision.mjs",
       "scripts/new-dev-worktree.sh"
     ],

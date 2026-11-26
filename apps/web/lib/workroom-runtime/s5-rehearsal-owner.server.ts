@@ -5,6 +5,8 @@ import { readS5CredentialCeiling, S5_WORKROOM_TOKEN_KIND } from "@/lib/auth/s5-r
 import { verifyIdentityStatement } from "@/lib/federation/instance-identity";
 import { fingerprintCoworkerInput } from "@/lib/govern/authority/coworker-authority-decision";
 import { verifyPermitMac } from "@/lib/gpp/permit-handle";
+import { GPP_PERMIT_TTL_MS } from "@/lib/gpp/permit-mint";
+import { computeParamHash } from "@/lib/gpp/param-hash";
 import { readGppPermitForEvidence } from "@/lib/gpp/permit-store";
 import { getAgentGaidMap } from "@/lib/identity/principal-linking";
 import { isRecord } from "@/lib/shared/coerce";
@@ -12,15 +14,18 @@ import { getToolGrantMapping, persistedAgentToolGrants } from "@/lib/tak/agent-g
 import { resolveAuthorityBindingEligibility } from "@/lib/work-management/coordinator-eligibility";
 import { resolveAgentWorkroomAccess } from "@/lib/work-management/workroom-agent-access.server";
 import { readStoredWorkroomDriveState } from "@/lib/work-management/workroom-drive-state";
+import { readS5RehearsalApprover } from "./s5-rehearsal-approver.server";
 import { verifyS5RehearsalQualification } from "./s5-rehearsal-qualification.server";
+import { S5_REHEARSAL_APPROVAL_ACTION } from "./s5-rehearsal-approval-action";
 import { createS5RehearsalAdmissionReader, s5ExactRehearsalAttempt, s5RehearsalAdmissionSnapshot,
   type S5RehearsalAdmissionReadPorts } from "./s5-rehearsal-admission-snapshot.server";
 
 export const S5_REHEARSAL_READ_PATH = "/api/internal/s5-rehearsal-admission";
 const MAX_PROOF_MS = 15_000;
-const OWNER_APPROVAL_ACTION = "s5-single-synthetic-rehearsal";
 const ref = z.string().min(1).max(256).regex(/^\S+$/u);
 const sha = z.string().regex(/^[a-f0-9]{40}$/u);
+export const s5RehearsalOperations = z.array(z.enum(["get_workroom", "read_room_messages", "post_room_message"]))
+  .min(1).max(3).refine(keys => new Set(keys).size === keys.length);
 export const s5RehearsalOwnerPin = z.strictObject({
   schemaVersion: z.literal("s5-rehearsal-owner.v1"),
   leaseId: ref, sourceSha: sha, status: z.literal("active"),
@@ -40,13 +45,17 @@ type OwnerReads = {
 /** The approved call is exact, including the 1-request/120s limits and receiver.
  * This only names a governed approval shape. The read route does not create,
  * approve, execute or reserve the envelope. */
-export function s5RehearsalApprovalParams(pin: S5RehearsalOwnerPin) {
+export function s5RehearsalApprovalParams(pin: Pick<S5RehearsalOwnerPin, "leaseId" | "sourceSha" | "signingPublicKey" | "shapeRef"> & {
+  snapshot: Omit<S5RehearsalOwnerPin["snapshot"], "qualification" | "expiresAt">; approverPrincipalId: string;
+  operations: z.infer<typeof s5RehearsalOperations>; approvalExpiresAt: number;
+}) {
   const { snapshot: s } = pin;
-  return { purpose: OWNER_APPROVAL_ACTION, requestLimit: 1, attemptLimit: 1, deadlineMs: 120_000, profile: s.profile,
+  return { purpose: S5_REHEARSAL_APPROVAL_ACTION, requestLimit: 1, attemptLimit: 1, deadlineMs: 120_000, profile: s.profile,
     leaseId: pin.leaseId, sourceSha: pin.sourceSha, receiverRef: s.receiverRef, hostRef: s.hostRef, resource: s.resource,
     signingPublicKey: pin.signingPublicKey, originRef: s.originRef, authority: s.authority,
     issuer: s.issuer, workroomId: s.workroomId, sessionRef: s.sessionRef, stageKey: s.stageKey, stageAttemptRef: s.stageAttemptRef,
-    subject: s.subject, syntheticTarget: s.syntheticTarget };
+    subject: s.subject, approverPrincipalId: pin.approverPrincipalId, syntheticTarget: s.syntheticTarget,
+    shapeRef: pin.shapeRef, operations: pin.operations, approvalExpiresAt: pin.approvalExpiresAt };
 }
 
 /** The private Workroom attempt pin locates records; it does not establish
@@ -74,7 +83,7 @@ export function createS5RehearsalOwnerReads(tx: Prisma.TransactionClient): Owner
       const room = rooms.get(s.workroomId);
       const task = room?.taskRun;
       if (!room || !task?.currentAgentId || !room.requestedByPrincipalId) return null;
-      const [row, envelope, agent, permit, principal, actingOwner] = await Promise.all([
+      const [row, envelope, agent, permit, principal] = await Promise.all([
         tx.mcpApiToken.findFirst({ where: { id: pin.tokenId, kind: S5_WORKROOM_TOKEN_KIND }, select: {
           kind: true, workroomRef: true, runRef: true, agentId: true, userId: true, scope: true, capability: true, resource: true,
           authorityBindingId: true, createdAt: true, expiresAt: true, revokedAt: true, scopes: true, workroomAuthorization: true,
@@ -87,16 +96,11 @@ export function createS5RehearsalOwnerReads(tx: Prisma.TransactionClient): Owner
         tx.principal.findUnique({ where: { principalId: s.subject.principalId }, select: {
           id: true, kind: true, status: true, aliases: { where: { aliasType: "gaid", issuer: "" }, take: 2, select: { aliasValue: true } },
         } }),
-        tx.principal.findUnique({ where: { id: room.requestedByPrincipalId }, select: {
-          principalId: true, status: true, kind: true,
-          aliases: { where: { aliasType: "user", aliasValue: task.userId, issuer: "" }, select: { id: true } },
-        } }),
       ]);
       const t = now.getTime();
       if (!row || row.userId !== task.userId || row.agentId !== task.currentAgentId || !agent || agent.status !== "active" || agent.archived
         || principal?.status !== "active" || principal.kind !== "agent" || principal.aliases.length !== 1
-        || principal.aliases[0]?.aliasValue !== s.subject.gaid || actingOwner?.status !== "active" || actingOwner.kind !== "human"
-        || actingOwner.principalId !== s.qualification.ownerPrincipalId || actingOwner.aliases.length !== 1) return null;
+        || principal.aliases[0]?.aliasValue !== s.subject.gaid) return null;
       const credential = readS5CredentialCeiling(row, { issuer: s.issuer, audience: s.receiverRef, hostRef: s.hostRef, resource: s.resource }, now);
       const projected = credential?.projection;
       if (!projected || credential.expiresAt.getTime() !== s.expiresAt || s.expiresAt > row.createdAt.getTime() + 120_000
@@ -107,16 +111,28 @@ export function createS5RehearsalOwnerReads(tx: Prisma.TransactionClient): Owner
         || projected.bindingRef !== s.authority.bindingRef || projected.permitRef !== s.authority.permitRef) return null;
       const marker = isRecord(envelope?.argsJson) ? envelope.argsJson.humanApproval : null;
       const approvalTime = isRecord(marker) && typeof marker.approvedAt === "string" ? Date.parse(marker.approvedAt) : Number.NaN;
-      if (!envelope || envelope.status !== "approved" || envelope.resolvedAt !== null || envelope.manifestActionId !== OWNER_APPROVAL_ACTION
-        || envelope.delegatingUserId !== task.userId || envelope.coworkerAgentId !== task.currentAgentId || !envelope.approvalBindingFingerprint
-        || envelope.inputFingerprint !== fingerprintCoworkerInput(s5RehearsalApprovalParams(pin)) || !envelope.expiresAt
-        || !isRecord(marker) || Object.keys(marker).length !== 2 || marker.userId !== task.userId || !(approvalTime > 0 && approvalTime <= t)) return null;
+      if (!envelope || envelope.status !== "approved" || envelope.resolvedAt !== null || envelope.manifestActionId !== S5_REHEARSAL_APPROVAL_ACTION
+        || envelope.delegatingUserId === task.userId || envelope.coworkerAgentId !== task.currentAgentId || !envelope.approvalBindingFingerprint
+        || !envelope.expiresAt || !envelope.authorityDecisionId || !isRecord(marker) || Object.keys(marker).length !== 2
+        || marker.userId !== envelope.delegatingUserId
+        || !(approvalTime > 0 && approvalTime < envelope.expiresAt.getTime() && approvalTime <= row.createdAt.getTime())) return null;
       if (!permit || verifyPermitMac(permit, null).result !== "ok" || permit.enforcement !== "enforced" || permit.revokedAt !== null
-        || permit.envelopeId !== envelope.id || permit.workroomId !== s.workroomId || permit.stageKey !== s.stageKey || permit.shapeRef !== pin.shapeRef
+        || permit.envelopeId !== envelope.id || permit.authorityDecisionId !== envelope.authorityDecisionId
+        || permit.bindingId !== S5_REHEARSAL_APPROVAL_ACTION || permit.subjectScope !== s.stageAttemptRef
+        || permit.workroomId !== s.workroomId || permit.stageKey !== s.stageKey || permit.shapeRef !== pin.shapeRef
         || permit.actorAgentId !== task.currentAgentId || permit.actorUserId !== task.userId || permit.actorGaid !== s.subject.gaid
         || permit.maxUses !== 1 || permit.useCount !== 0 || !(permit.notBefore.getTime() <= t && t < permit.expiresAt.getTime())
+        || !(permit.notBefore.getTime() <= approvalTime)
+        || permit.expiresAt.getTime() !== permit.notBefore.getTime() + GPP_PERMIT_TTL_MS
+        || s.expiresAt > permit.expiresAt.getTime()
         || !projected.operationKeys.every(key => permit.capabilities.some(c => c.tool === key))) return null;
-      const [binding, access, aliases, ownerUser] = await Promise.all([
+      const operations = s5RehearsalOperations.safeParse(permit.capabilities.map(c => c.tool));
+      if (!operations.success) return null;
+      const params = s5RehearsalApprovalParams({ ...pin, approverPrincipalId: s.qualification.ownerPrincipalId,
+        operations: operations.data, approvalExpiresAt: envelope.expiresAt.getTime() });
+      if (envelope.inputFingerprint !== fingerprintCoworkerInput(params)
+        || permit.paramHash !== computeParamHash(S5_REHEARSAL_APPROVAL_ACTION, params)) return null;
+      const [binding, access, aliases, taskUser, approver] = await Promise.all([
         tx.authorityBinding.findUnique({ where: { id: credential.authorityBindingId }, select: {
           bindingId: true, status: true, resourceRef: true, resourceType: true, scopeType: true, appliedAgentId: true,
           grants: { select: { grantKey: true, mode: true } },
@@ -126,12 +142,15 @@ export function createS5RehearsalOwnerReads(tx: Prisma.TransactionClient): Owner
         tx.user.findUnique({ where: { id: task.userId }, select: {
           isActive: true, automationVerificationId: true, automationProfile: true, automationSlot: true, automationExpiresAt: true,
         } }),
+        readS5RehearsalApprover(tx, envelope.delegatingUserId),
       ]);
-      if (!ownerUser?.isActive || ownerUser.automationVerificationId !== null || ownerUser.automationProfile !== null
-        || ownerUser.automationSlot !== null || ownerUser.automationExpiresAt !== null
+      if (!taskUser?.isActive || taskUser.automationVerificationId !== null || taskUser.automationProfile !== null
+        || taskUser.automationSlot !== null || taskUser.automationExpiresAt !== null
+        || !approver || approver.id === room.requestedByPrincipalId || approver.principalId !== s.qualification.ownerPrincipalId
         || !binding || binding.bindingId !== s.authority.bindingRef || binding.appliedAgentId !== agent.id
         || resolveAuthorityBindingEligibility(pin.shapeRef, [binding]) !== "eligible"
-        || access.decision.level !== "content" || access.agentPrincipalId !== s.subject.principalId
+        || access.decision.level !== "content" || access.authorityContext?.humanPrincipal?.id !== room.requestedByPrincipalId
+        || access.agentPrincipalId !== s.subject.principalId
         || aliases.get(task.currentAgentId) !== s.subject.gaid) return null;
       const grants = new Set(persistedAgentToolGrants(agent));
       const granted = new Set(binding.grants.filter(g => g.mode === "allow").map(g => g.grantKey));
@@ -141,8 +160,8 @@ export function createS5RehearsalOwnerReads(tx: Prisma.TransactionClient): Owner
       const exact = { issuer: s.issuer, workroomId: s.workroomId, sessionRef: s.sessionRef, stageKey: s.stageKey,
         stageAttemptRef: s.stageAttemptRef, subject: s.subject, syntheticTarget: s.syntheticTarget };
       const qualification = verifyS5RehearsalQualification({ record: pin.qualificationRecord, approval: {
-        purpose: OWNER_APPROVAL_ACTION, status: "approved", ref: envelope.id, ownerPrincipalId: actingOwner.principalId,
-        revision: approvalTime, binding: exact, validUntil: Math.min(envelope.expiresAt.getTime(), permit.expiresAt.getTime()),
+        purpose: S5_REHEARSAL_APPROVAL_ACTION, status: "approved", ref: envelope.id, ownerPrincipalId: approver.principalId,
+        revision: approvalTime, binding: exact, validUntil: permit.expiresAt.getTime(),
       } }, exact, t);
       if (!qualification || qualification.approvalRef !== projected.jsi.approvalRef
         || qualification.approvalRevision !== projected.jsi.approvalRevision || qualification.statusRevision !== projected.jsi.statusRevision
@@ -159,7 +178,7 @@ export type S5RehearsalOwnerPorts = {
   now?: () => Date;
 };
 
-function previewIdentity(env: S5RehearsalOwnerPorts["env"]) {
+export function previewIdentity(env: S5RehearsalOwnerPorts["env"]) {
   if (env.DPF_ENVIRONMENT !== "dev" || env.DPF_ENVIRONMENT_CLASS !== "development") return null;
   const leaseId = ref.safeParse(env.DPF_PREVIEW_LEASE_ID);
   const sourceSha = sha.safeParse(env.DPF_PREVIEW_SOURCE_SHA);

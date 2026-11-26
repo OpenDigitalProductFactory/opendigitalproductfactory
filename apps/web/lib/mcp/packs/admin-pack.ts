@@ -17,9 +17,9 @@
 // mirror agent-grants.ts TOOL_TO_GRANTS, which stays the gating source.
 
 import { prisma } from "@dpf/db";
-import { ACTUATOR_SERVICE_LOG_NAMES, hasPrivateActuatorMount, readActuatorProjectContainers, readActuatorServiceLogs } from "../../../../../scripts/lib/scope-writer-observation.mjs";
+import { ACTUATOR_SERVICE_LOG_NAMES, SCOPE_WRITER_OBSERVER_SOCKET, parseMountPoints, readActuatorProjectContainers, readActuatorServiceLogs } from "../../../../../scripts/lib/scope-writer-observation.mjs";
 
-import { lazyFsPromises, lazyPath, lazyChildProcess, lazyUtil, getCwd } from "@/lib/shared/lazy-node";
+import { lazyFsPromises, lazyOs, lazyPath, lazyChildProcess, lazyUtil, getCwd } from "@/lib/shared/lazy-node";
 import type { RegisteredToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
 import { parseAdminDiagnostic } from "../admin-command-diagnostic";
@@ -151,8 +151,20 @@ function logAdminActivity(
   }).then(() => {}).catch(() => {});
 }
 
-function hasPortalActuator(): Promise<boolean> {
-  return lazyFsPromises().readFile("/proc/self/mountinfo").then(hasPrivateActuatorMount, () => false);
+async function readAdminActuatorMount(): Promise<"mounted" | "absent" | "unknown"> {
+  try {
+    const points = parseMountPoints(await lazyFsPromises().readFile("/proc/self/mountinfo", "utf8"));
+    if (!points) return "unknown";
+    return points.includes(lazyPath().dirname(SCOPE_WRITER_OBSERVER_SOCKET)) ? "mounted" : "absent";
+  } catch (error) {
+    return (error as NodeJS.ErrnoException | null)?.code === "ENOENT" && lazyOs().platform() !== "linux" ? "absent" : "unknown";
+  }
+}
+
+async function holdDirectDocker(userId: string, tool: string, params: Record<string, unknown>, error: string): Promise<ToolResult> {
+  const message = "Direct Docker is unavailable unless the private actuator mount is confirmed absent.";
+  await logAdminActivity(userId, tool, params, "blocked", 1, message);
+  return { success: false, error, message };
 }
 
 async function adminViewLogs(params: Record<string, unknown>, userId: string): Promise<ToolResult> {
@@ -162,9 +174,10 @@ async function adminViewLogs(params: Record<string, unknown>, userId: string): P
     return { success: false, error: `Invalid service. Allowed: ${ACTUATOR_SERVICE_LOG_NAMES.join(", ")}`, message: `Unknown service "${service}".` };
   }
   try {
-    const usesActuator = await hasPortalActuator();
+    const mount = await readAdminActuatorMount();
+    if (mount === "unknown") return holdDirectDocker(userId, "admin_view_logs", { service, lines }, "admin_logs_require_actuator");
     let stdout: string;
-    if (usesActuator) {
+    if (mount === "mounted") {
       const logs = await readActuatorServiceLogs(service, lines) as { output?: unknown };
       if (typeof logs.output !== "string") throw new Error("actuator_log_service_unavailable");
       stdout = logs.output;
@@ -334,7 +347,9 @@ async function runAdminDatabaseMaintenance(action: "migrate" | "seed") {
   const migrate = action === "migrate";
   const args = ["--filter", "@dpf/db", ...(migrate ? ["exec", "prisma", "migrate", "deploy"] : ["run", "seed"])];
   const timeout = migrate ? 120_000 : 300_000;
-  if (await hasPortalActuator()) return promisify(execFile)("/usr/local/bin/pnpm", args, { cwd: "/app", timeout });
+  const mount = await readAdminActuatorMount();
+  if (mount === "unknown") throw new Error("Could not determine whether the private actuator is mounted.");
+  if (mount === "mounted") return promisify(execFile)("/usr/local/bin/pnpm", args, { cwd: "/app", timeout });
   return promisify(exec)(`docker compose exec -T portal pnpm ${args.join(" ")} 2>&1`, { cwd: composeCwd(), timeout });
 }
 
@@ -349,12 +364,16 @@ async function adminRunCommand(params: Record<string, unknown>, userId: string):
   }
 
   try {
+    const mount = diagnostic.file === "docker" ? await readAdminActuatorMount() : "absent";
+    if (mount === "unknown") {
+      return holdDirectDocker(userId, "admin_run_command", { command },
+        diagnostic.args[1] === "logs" ? "admin_logs_require_actuator" : "admin_docker_require_actuator");
+    }
     const { execFile: execFileCb } = lazyChildProcess();
     const { promisify } = lazyUtil();
     await logAdminActivity(userId, "admin_run_command", { command }, "success", 1, `Running: ${command.slice(0, 200)}`);
     const options = { cwd: composeCwd(), timeout: 60_000 };
-    const usesActuator = diagnostic.file === "docker" && await hasPortalActuator();
-    const { stdout, stderr } = usesActuator
+    const { stdout, stderr } = mount === "mounted"
       ? { stdout: await runActuatorDiagnostic(diagnostic.args), stderr: "" }
       : await promisify(execFileCb)(diagnostic.file, diagnostic.args, options);
     const output = (stdout + "\n" + stderr).trim();

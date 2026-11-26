@@ -54,16 +54,16 @@ export function parseMountPoints(mountinfo) {
   let text;
   try { text = mountinfo.toString(); } catch { return null; }
   if (typeof text !== 'string') return null;
-  const lines = text.split('\n').filter(line => line.length > 0);
-  if (lines.length === 0) return null;
+  const lines = (text.endsWith('\n') ? text.slice(0, -1) : text).split('\n');
+  const mountPath = /^\/(?:[^\\\s\u0000]|\\(?:040|011|012|134))*$/u;
   const points = [];
   for (const line of lines) {
     const fields = line.split(' ');
     const separator = fields.indexOf('-', 6);
-    if (fields.length < 10 || separator < 6 || fields.length - separator - 1 < 3
+    if (separator < 6 || fields.length !== separator + 4 || fields.some(field => !field || /[\s\u0000]/u.test(field))
       || !/^\d+$/.test(fields[0]) || !/^\d+$/.test(fields[1]) || !/^\d+:\d+$/.test(fields[2])
       // The root may be a non-path (nsfs: "net:[4026531992]"); the mount point is always absolute.
-      || fields[3].length === 0 || !fields[4].startsWith('/')) return null;
+      || !mountPath.test(fields[4]) || !/^(?:ro|rw)(?:,|$)/u.test(fields[5])) return null;
     points.push(fields[4]);
   }
   return points;

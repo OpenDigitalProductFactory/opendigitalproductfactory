@@ -178,6 +178,46 @@ TypeScript errors only surface in `next build`, not in `vitest` or IDE checks. R
 
 **Step zero for live-install functional verification.** Before driving any feature's happy path on the live install (gate #3 above for a runtime-bound change), run the preflight — `pnpm verify:preflight [-- --feature-sha <sha>] [-- --portal-url <url>]` — and follow its verdict via the `dpf-verify-on-live-install` skill. The preflight returns one deterministic verdict (`CAN-TEST` / `MUST-ADVANCE` / `BLOCKED`) and one next action, replacing the hand-rolled `git rev-parse` + `curl /api/platform/version` skew check. **The BLOCKED stop-rule is binding:** when the governed advance is blocked by an unrelated defect (e.g. main does not build in Docker), file a BI for that blocker and STOP the verification task — do not let it silently become a multi-hour build-infra fix. Single source of truth: [`docs/superpowers/specs/2026-06-06-procedural-functional-verification-design.md`](../superpowers/specs/2026-06-06-procedural-functional-verification-design.md).
 
+### DPF2 quiet windows on the shared Mac
+
+Before host preflight, local-CI execution, dependency convergence and each
+subsequent gate command, the host runner rechecks DPF2's `DPF2_CI_SLOT_LOCK`
+path, defaulting to `/tmp/dpf2-local-ci.lock` on macOS (BI-577A2F9F).
+Every client uses the same runner. A queued claim can also report
+`dpf2-ci-reservation` as the broker's zero-capacity reason. The portal uses
+the client's observation because it does not share the Mac's PID or temp-file
+namespace. The reservation can only reduce capacity.
+
+The observer uses DPF2's `scripts/ci-slot.mjs` ownership rules. A positive PID
+with a nonempty token is live when the PID exists, including when a signal-zero
+probe returns permission denied. An incomplete file stays blocking during the
+owner's two-second write grace. A dead PID or unparseable contents past that
+grace are stale. A missing file means no reservation. A parsed but unknown
+owner, unreadable file, or indeterminate PID probe waits conservatively.
+DPF2 defines the fixed default path so both projects can coordinate. DPF
+opens it read-only, without following symlinks or blocking on special files.
+The open has no creation flag and supplies a zero-permission creation mode as
+a backstop. That mode does not change the existing file's permissions. DPF
+checks the open descriptor before reading and treats non-regular files and
+files writable by the group or others as unreadable. DPF never rewrites,
+unlinks, or reclaims the file or publishes its token.
+
+Local phase waits report the reason, PID and acquisition time if readable,
+recheck every 30 seconds or at the deadline and resume on release within the wait
+budget. After admission, a phase gets up to 60 minutes from the start of its
+wait, capped by the outer gate deadline rather than the admission deadline.
+A deadline is an infrastructure result without a product verdict.
+If it expires after execution started, the run records
+`blocked_dpf2_reservation`. A reservation timeout does not shrink configured
+capacity, even on slot-1. A reservation appearing mid-phase does not cancel
+that phase.
+
+**This is a one-sided start check, not mutual exclusion.** DPF can observe
+DPF2's file absent and DPF2 can observe DPF idle before either takes its own
+reservation. Both can then start. Keep the Mac-wide check-in with the
+convergence coordinator until a shared admission boundary closes that race.
+This change grants no new authority over the host or the other repository.
+
 **The overseer orders shared test machines and bounds every hold (BI-218A4555, extending BI-995E9530).** Queues on `local-integration-ci` and `host-heavy-resource` are not first-come. Gates and local AI review turns go first and take turns; then served-target verification runs; then previews. Every 30 minutes waited lifts a waiter one step. A session (and its executor) that was just served waits a bounded extra time, so it cannot re-take the slot ahead of others. Past its class bound (gate 30 min, verification 45 min, preview 20 min, host check 45 min) a hold renews only while nobody from another session waits; otherwise renewal returns `lease_lost` / `yielded`, the lease `phase` records `yielded:<class>:hold-bound`, and the supervisor stops the work. A contended renewal is also capped at the bound. A queued claim returns its policy position, `estimatedWaitMs` and `queueReason`; `pnpm run pregate:status` prints them, and `list_nonprod_environment_leases` returns the `overseer` view for every queue. A deferred local AI dispatch holds one `inference-turn:local` row in the queue; while it leads, gates wait for at most 6 minutes for the review to take its turn. If a long hold stops while others were queued, that is the bound, not a fault. Policy: `apps/web/lib/nonprod/environment-lease-overseer.ts`; design: `docs/superpowers/specs/2026-11-12-test-machine-overseer-design.md`.
 
 **Waiting for a queued gate: resume its durable identity.** A queue admission is pending evidence. Exit 75 hands the same lease, candidate SHA, worktree and owner session to the canonical detached resumer when available. Observe the recorded task and `pregate:status`; do not loop over fresh `pregate` claims. If the resumer could not start, retain the recorded resume identity and report recovery unavailable instead of abandoning the request or making a new claim. Terminal claims stop. A new attempt follows reconciliation and has its own explicit identity. The current wrapper exits 7 for abandoned admission or an uncorroborated zero runner exit; only a SHA-bound PASS is a pass. A killed test child or missing failure receipt is inconclusive: read the slot log and stage receipt before calling it a product failure.
@@ -356,7 +396,7 @@ The thread that pushes should be able to end at the push. It could not, because 
 
 What filled the gap was `build/pr-delivery-reconcile`, a REST poll every five minutes, scoped to Workrooms carrying a linked feature build. Agent-authored pull requests were not covered at all. Two things depended on a fact that arrived late or never:
 
-- a worktree becomes Tier-A reapable **at the instant its PR merges**, and the SessionEnd reaper has already run and correctly declined by then;
+- if no liveness guard applies, a worktree can become Tier A when its PR merges, after the provider process has exited;
 - completion needs `mergedThroughGates`, so a merged item could sit with recorded evidence and no receipt.
 
 Now the receiver emits `build/pr-merged.received` carrying repository, number, head branch, head sha, merge commit and merge time. `readPullRequestMergedSignal` (`apps/web/lib/build/pull-request-merged-signal.ts`) is the pure decision and is deliberately strict about one thing: **a closed-unmerged pull request carries the same `action`**, and treating it as delivery would record evidence for abandoned work and reap the worktree holding the only copy of the branch. A rebase merge legitimately has no merge commit, so that field stays optional rather than making the payload look malformed.
@@ -375,9 +415,9 @@ The five-minute cron stays as a **backstop** for missed deliveries. That is the 
 
 `build/pr-merged.received` now has a second subscriber: `build/pr-merged-reap`.
 
-The SessionEnd hook remains the primary reaper and it is correct — but it can only reap a Tier-A tree, and Tier A requires `merged`. The normal sequence is gate, push, open PR, **end the thread**, and the PR merges in the queue later. At SessionEnd the branch is unmerged, so the hook correctly declines and nothing revisits that worktree. Measured: 2026-09-09 saw 101 worktrees with 48 merged and unreaped; a manual sweep took it to 55 and it was back to 157 by 2026-09-22.
+The merge event and the scheduled janitor are the platform-owned removal paths. Provider SessionEnd never removes a checkout because provider exit does not prove that its host thread has ended (BI-F52EF21B).
 
-**The subscriber does not implement its own rules.** It runs `scripts/worktree-janitor.mjs --branch <headRefName> --json --tier-a-only`, so every existing protection still decides: a live session heartbeat, an active Workroom claim, `.worktree-pinned`, an active lease, an open PR, a dirty tree. Removal goes through the junction-safe helper, which matters because each worktree carries roughly 28 junctions into the root clone's `node_modules` and a recursive delete that follows one is what wiped `packages/*` on 2026-08-15.
+**The subscriber does not implement its own rules.** It runs `scripts/worktree-janitor.mjs --branch <headRefName> --json --tier-a-only`, so every existing protection still decides: a live session heartbeat, an active Workroom claim, `.worktree-pinned`, an active lease, an open PR, a dirty tree. Eligible checkouts are renamed out of the way before unregistering and purging them. The janitor never follows their dependency links.
 
 That delegation is deliberate rather than tidy. `classifyWorktree` places its liveness gate **above** the merged/Tier-A check, and says why: *"the moment a live session's PR merges, its clean tree first becomes Tier-A eligible — exactly when it must NOT be reaped."* A merge-triggered reaper is precisely the caller that walks into that window, so it must go through the classifier, never around it.
 

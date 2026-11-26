@@ -301,7 +301,7 @@ async function recordLocalIntegrationResultHandler(
       taskRunId: stringValue("taskRunId") || undefined,
       candidateBranch,
       mode: mode as "single-branch" | "sibling-set" | "post-merge-main",
-      status: status as "passed" | "failed" | "conflict" | "blocked_sandbox_drift" | "blocked_control_plane_starvation",
+      status,
       summary,
       gateKey: stringValue("gateKey") || undefined,
       leaseId: stringValue("leaseId") || undefined,

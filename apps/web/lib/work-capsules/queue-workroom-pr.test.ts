@@ -12,7 +12,7 @@ function fixture() {
   const room = { id: "row-1", capsuleId: "WC-1920C35F", headSha: HEAD, pullRequestNumber: 7011 as number | null, repositoryFullName: "o/r",
     executorKind: "codex-desktop", leaseHolderPrincipalId: "human", leaseExpiresAt: null as Date | null, createdByPrincipalId: "human", requestedByPrincipalId: "human",
     archivedAt: null as Date | null, status: "ready" };
-  const pr = { nodeId: "PR_node", state: "OPEN", merged: false, headSha: HEAD, autoMergeEnabled: false, mergeQueueEntry: false };
+  const pr = { nodeId: "PR_node", state: "OPEN", merged: false, headSha: HEAD, autoMergeEnabled: false, mergeQueueEntry: false, changesRequested: false, reviewThreadsComplete: true };
   const activities: unknown[] = [];
   const deps = {
     db: {
@@ -42,12 +42,20 @@ describe("queue_workroom_pull_request (BI-53BED66C)", () => {
   });
 
   it("does nothing more when the PR is already queued", async () => {
-    f.deps.observePr.mockResolvedValue({ ...f.pr, autoMergeEnabled: true });
+    f.deps.observePr.mockResolvedValue({ ...f.pr, mergeQueueEntry: true });
     expect(await run(f)).toMatchObject({ success: true, data: { alreadyQueued: true } });
     expect(f.deps.enableAutoMerge).not.toHaveBeenCalled();
   });
 
+  it("does not describe merely armed auto-merge as a confirmed entry", async () => {
+    f.deps.observePr.mockResolvedValue({ ...f.pr, autoMergeEnabled: true });
+    expect(await run(f)).toMatchObject({ success: true, data: { alreadyQueued: false, queueState: "armed" } });
+    expect(f.deps.enableAutoMerge).not.toHaveBeenCalled();
+  });
+
   it.each([
+    ["review evidence is incomplete", (x: ReturnType<typeof fixture>) => x.deps.observePr.mockResolvedValue({ ...x.pr, reviewThreadsComplete: false }), "review_evidence_unread"],
+    ["review requested changes", (x: ReturnType<typeof fixture>) => x.deps.observePr.mockResolvedValue({ ...x.pr, changesRequested: true }), "changes_requested"],
     ["the PR head moved off the room head", (x: ReturnType<typeof fixture>) => x.deps.observePr.mockResolvedValue({ ...x.pr, headSha: "d".repeat(40) }), "pull_request_head_differs"],
     ["no passing gate is bound at the head", (x: ReturnType<typeof fixture>) => x.deps.resolveGateEvidence.mockResolvedValue([]), "gate_evidence_required"],
     ["the PR is closed", (x: ReturnType<typeof fixture>) => x.deps.observePr.mockResolvedValue({ ...x.pr, state: "CLOSED" }), "pull_request_not_open"],

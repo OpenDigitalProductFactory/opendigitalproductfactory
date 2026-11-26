@@ -232,7 +232,7 @@
           {
             "type": "command",
             "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/worktree-session-heartbeat.mjs\"",
-            "statusMessage": "Remove the ended session heartbeat"
+            "statusMessage": "Clear a standalone session heartbeat"
           }
         ]
       },
@@ -241,7 +241,7 @@
           {
             "type": "command",
             "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/worktree-session-hygiene.mjs\"",
-            "statusMessage": "Reap this checkout only when merged, clean and no longer in use"
+            "statusMessage": "Log why provider exit did not reap the checkout"
           }
         ]
       }

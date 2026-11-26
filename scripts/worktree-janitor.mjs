@@ -12,7 +12,7 @@
 //
 // FLAGS
 //   --dry-run                (default) Classify only; never remove.
-//   --live                   Remove eligible worktrees via junction-safe helper + branch -D.
+//   --live                   Remove eligible worktrees by retiring the checkout atomically, then deleting its branch.
 //                            A Tier B branch (or detached HEAD) with commits on no remote
 //                            is first saved at refs/janitor-backup/<YYYY-MM-DD>/<name>;
 //                            if that fails it is kept.
@@ -31,11 +31,14 @@
 // SAFETY
 //   * Dry-run by default.
 //   * Tier A only for scheduled auto-reap (merged + clean + no open PR/lease + not pinned).
-//   * Removals go through junction-safe-worktree-remove.mjs (BI-F6AC1A56).
+//   * The original checkout is renamed before any recursive deletion (BI-F52EF21B).
 //   * .worktree-pinned is always honored.
 //   * Unregistered orphan directories in the sibling worktree base are reported, never auto-deleted.
 
-import { closeSync, constants as fsConstants, existsSync, fstatSync, lstatSync, openSync, readdirSync, readFileSync } from "node:fs";
+import {
+  appendFileSync, closeSync, constants as fsConstants, existsSync, fstatSync, lstatSync,
+  mkdtempSync, openSync, readdirSync, readFileSync, realpathSync, renameSync, rmdirSync, rmSync, writeFileSync,
+} from "node:fs";
 import { spawnSync } from "node:child_process";
 import os from "node:os";
 import path from "node:path";
@@ -48,7 +51,7 @@ import {
   summarizeDecisions,
 } from "./lib/worktree-janitor-core.mjs";
 import {
-  isWorktreeSessionLive,
+  worktreeHeartbeatStatus,
   heartbeatTtlMs,
 } from "./lib/worktree-session-heartbeat.mjs";
 import { sanitizeForLog } from "./lib/safe-log.mjs";
@@ -200,6 +203,34 @@ function loadPrBranchIndex() {
   return { open, merged };
 }
 
+/**
+ * Require reachable work produced on this branch after its latest creation or
+ * copy. Fast-forward, reset and rebase-finish entries alone prove no authorship.
+ * If a rebase discarded the only authored commit IDs, err toward keeping it.
+ */
+export function branchWorkAtTip(root, branch, git = runGit) {
+  const ref = `refs/heads/${branch}`;
+  const reflog = git(["reflog", "show", "--format=%H%x09%gs", ref], root);
+  if (!reflog.ok) return "unknown";
+  const entries = reflog.stdout.split(/\r?\n/);
+  const creation = entries.findIndex((line) => /^[0-9a-f]{40,64}\tbranch: (?:created from|copied )/i.test(line));
+  if (creation < 0) return "unknown";
+  const base = entries[creation].split("\t")[0];
+  for (const entry of entries.slice(0, creation)) {
+    const owned = /^([0-9a-f]{40,64})\t(?:commit(?: \([^)]+\))?: |(?:cherry-pick|revert): )/.exec(entry);
+    if (!owned || owned[1] === base) continue;
+    const reachable = git(["merge-base", "--is-ancestor", owned[1], ref], root);
+    if (!reachable.ok) {
+      if (reachable.status !== 1) return "unknown";
+      continue;
+    }
+    const inherited = git(["merge-base", "--is-ancestor", owned[1], base], root);
+    if (inherited.status === 1) return "has-commits";
+    if (!inherited.ok) return "unknown";
+  }
+  return "no-commits";
+}
+
 function isMerged(root, branch, prIndex) {
   if (!branch) return false;
   const anc = runGit(["merge-base", "--is-ancestor", `refs/heads/${branch}`, "origin/main"], root);
@@ -221,9 +252,13 @@ function detachedHeadUnpushedStatus(wtPath) {
   return { hasUnpushedCommits: unpushed > 0, unpushedCommitsUnknown: false };
 }
 
+function checkoutStatus(wtPath, git = runGit) {
+  return git(["status", "--porcelain", "--untracked-files=all", "--ignore-submodules=none"], wtPath);
+}
+
 function isDirty(wtPath) {
-  const r = runGit(["status", "--porcelain"], wtPath);
-  return r.ok && r.stdout.length > 0;
+  const r = checkoutStatus(wtPath);
+  return !r.ok || r.stdout.length > 0;
 }
 
 /** True when a merge is in progress in this worktree (MERGE_HEAD present). For a
@@ -276,22 +311,27 @@ function pathHasLease(leasePayload, wtPath) {
 
 const DEFAULT_FRESH_GRACE_MS = 60 * 60_000;
 
-/** One-shot active OS process CWDs so the reaper never deletes a tree with a live shell/agent inside it. */
-export function loadActiveProcessCwds(platform = process.platform) {
-  const cwds = new Set();
-  if (platform === "win32") return cwds;
-  const r = spawnSync("lsof", ["-d", "cwd", "-Fn"], {
+/** Snapshot of visible OS process CWDs, or null when evidence is unavailable. */
+export function loadActiveProcessCwds(platform = process.platform, spawn = spawnSync) {
+  if (platform === "win32") return null;
+  const r = spawn("lsof", ["-d", "cwd", "-Fn"], {
     encoding: "utf8",
     windowsHide: true,
     timeout: 10_000,
     maxBuffer: 16 * 1024 * 1024,
   });
-  if (r.status === 0 && r.stdout) {
-    for (const line of r.stdout.split(/\r?\n/)) {
-      if (line.startsWith("n/")) cwds.add(normalizePath(line.slice(1)));
-    }
-  }
-  return cwds;
+  if (r.status !== 0 || r.error || r.stderr?.trim()) return null;
+  const cwds = new Set((r.stdout ?? "").split(/\r?\n/)
+    .filter((line) => line.startsWith("n/")).map((line) => normalizePath(line.slice(1))));
+  // Even the janitor and lsof have a CWD. Empty/unparseable output isn't proof.
+  return cwds.size ? cwds : null;
+}
+
+/** A default T3-managed path is not evidence its owning thread has settled. */
+export function isT3ManagedWorktree(wtPath) {
+  const isManaged = (p) => /(?:^|\/)\.t3\/worktrees(?:\/|$)/.test(normalizePath(p));
+  if (isManaged(path.resolve(wtPath))) return true;
+  try { return isManaged(realpathSync(wtPath)); } catch { return false; }
 }
 
 /** True when any running process CWD equals or is nested inside `wtPath`. */
@@ -332,13 +372,15 @@ export function isFreshCheckoutAtOriginMain(root, wtPath, { nowMs = Date.now(), 
   return head.ok && originMain.ok && Boolean(head.stdout) && head.stdout === originMain.stdout;
 }
 
-function gatherFacts(root, entry, prIndex, leasePayload, ttlMs, claims, runtimeOpts = {}) {
+export function gatherFacts(root, entry, prIndex, leasePayload, ttlMs, claims, runtimeOpts = {}) {
   const wtPath = entry.path;
   const branch = entry.detached ? null : entry.branch;
   const isRoot = path.resolve(wtPath) === path.resolve(root);
+  const branchWork = branch && !isRoot ? branchWorkAtTip(root, branch) : undefined;
   const detachedUnpushed = !branch && !isRoot
     ? detachedHeadUnpushedStatus(wtPath)
     : { hasUnpushedCommits: false, unpushedCommitsUnknown: false };
+  const heartbeat = isRoot ? "absent" : worktreeHeartbeatStatus(wtPath, { ttlMs });
   return {
     path: wtPath,
     branch,
@@ -346,12 +388,16 @@ function gatherFacts(root, entry, prIndex, leasePayload, ttlMs, claims, runtimeO
     pinned: existsSync(path.join(wtPath, ".worktree-pinned")),
     hasActiveLease: pathHasLease(leasePayload, wtPath),
     hasOpenPr: branch ? prIndex.open.has(branch) : false,
-    merged: branch ? isMerged(root, branch, prIndex) : (!isRoot ? isDetachedHeadMerged(wtPath) : false),
+    branchWork,
+    merged: branch ? branchWork === "has-commits" && isMerged(root, branch, prIndex) : (!isRoot && isDetachedHeadMerged(wtPath)),
     dirty: !isRoot ? isDirty(wtPath) : false,
     ageDays: !isRoot ? ageDays(wtPath) : 0,
     // Liveness + abandoned-merge signals — checked for every linked worktree
     // (named branch OR detached HEAD), never on the root clone.
-    hasLiveSession: !isRoot ? isWorktreeSessionLive(wtPath, { ttlMs }) : false,
+    hasLiveSession: heartbeat === "live",
+    heartbeatUnavailable: heartbeat === "unknown",
+    t3SettlementUnknown: !isRoot && isT3ManagedWorktree(wtPath),
+    processCwdUnavailable: !isRoot && !(runtimeOpts.activeCwds instanceof Set),
     hasActiveProcessCwd: !isRoot ? pathHasActiveProcessCwd(runtimeOpts.activeCwds, wtPath) : false,
     isFreshCheckout: !isRoot && !runtimeOpts.allowFresh
       ? isFreshCheckoutAtOriginMain(root, wtPath, { freshGraceMs: runtimeOpts.freshGraceMs })
@@ -534,22 +580,120 @@ export function backupUnpushedBranch(root, branch, date = new Date().toISOString
   return { ok: true, ref, unpushed };
 }
 
-function removeWorktree(root, wtPath, branch) {
-  const helper = path.join(here, "lib", "junction-safe-worktree-remove.mjs");
-  const rem = spawnSync(process.execPath, [helper, root, wtPath, "--force"], {
-    encoding: "utf8",
-    windowsHide: true,
-  });
-  const branchDel =
-    branch && rem.status === 0
-      ? runGit(["branch", "-D", branch], root)
-      : { ok: false, stdout: "", stderr: "skip branch delete" };
+/**
+ * No recursive deletion until the checkout has been atomically renamed out of
+ * view and Git has unregistered its old path. On interruption the original
+ * path is intact or absent, never partly deleted. A quarantine left behind
+ * identifies its original path and is not a registered Git checkout.
+ */
+export function retireWorktree(root, wtPath, {
+  git = runGit, purge = purgeQuarantine, onIntent = () => {}, loadCwds = loadActiveProcessCwds, ttlMs,
+} = {}) {
+  if (isT3ManagedWorktree(wtPath)) {
+    return { ok: false, refused: true, detail: "refusing removal: T3 thread settlement unverified" };
+  }
+  if (pathHasActiveProcessCwd(new Set([normalizePath(process.cwd())]), wtPath)) {
+    return { ok: false, refused: true, detail: "refusing removal: checkout contains the current working directory" };
+  }
+  const heartbeat = worktreeHeartbeatStatus(wtPath, { ttlMs });
+  if (heartbeat === "live" || heartbeat === "unknown") {
+    const reason = heartbeat === "live" ? "checkout has a live heartbeat" : "checkout heartbeat is unreadable";
+    return { ok: false, refused: true, detail: `refusing removal: ${reason}` };
+  }
+  const status = checkoutStatus(wtPath, git);
+  if (!status.ok) return { ok: false, refused: true, detail: "refusing removal: checkout status unreadable" };
+  if (status.stdout) return { ok: false, refused: true, detail: "refusing removal: checkout is dirty or has untracked files" };
+  const registration = () => git(["worktree", "list", "--porcelain", "-z"], root);
+  const registered = (r) => r.ok && r.stdout.split("\0").includes(`worktree ${wtPath.replaceAll("\\", "/")}`);
+  const common = git(["rev-parse", "--path-format=absolute", "--git-common-dir"], root);
+  const gitDir = git(["rev-parse", "--absolute-git-dir"], wtPath);
+  if (!common.ok || !gitDir.ok || path.resolve(path.dirname(gitDir.stdout)) !== path.resolve(common.stdout, "worktrees") ||
+      !registered(registration())) {
+    return { ok: false, refused: true, detail: "refusing removal: not a linked checkout registered in the owning repository" };
+  }
+
+  let quarantine;
+  let staged;
+  const note = "original-path";
+  try {
+    quarantine = mkdtempSync(path.join(path.dirname(wtPath), ".dpf-reap-"));
+    staged = path.join(quarantine, "checkout");
+    writeFileSync(path.join(quarantine, note), wtPath + "\n");
+    onIntent(quarantine);
+    const cwds = loadCwds();
+    if (!(cwds instanceof Set) || pathHasActiveProcessCwd(cwds, wtPath)) {
+      purgeQuarantine(quarantine);
+      const reason = cwds instanceof Set ? "active process CWD" : "process CWD snapshot unavailable";
+      return { ok: false, refused: true, detail: `refusing removal: ${reason}` };
+    }
+    renameSync(wtPath, staged);
+  } catch (err) {
+    if (quarantine) {
+      try { purgeQuarantine(quarantine); } catch { /* empty staging directory may remain */ }
+    }
+    return { ok: false, detail: `checkout not moved: ${err.message}` };
+  }
+
+  function rollback(reason, refused = false) {
+    try {
+      if (existsSync(wtPath) || !registered(registration())) {
+        return { ok: false, quarantine, detail: `${reason}; intact checkout kept in quarantine` };
+      }
+      renameSync(staged, wtPath);
+    } catch {
+      return { ok: false, quarantine, detail: `${reason}; rollback failed, intact checkout kept in quarantine` };
+    }
+    try { purgeQuarantine(quarantine); } catch { /* restored checkout is intact */ }
+    return { ok: false, refused, detail: `${reason}; checkout restored` };
+  }
+
+  const stagedStatus = checkoutStatus(staged, git);
+  const stagedHeartbeat = worktreeHeartbeatStatus(staged, { ttlMs });
+  if (!stagedStatus.ok || stagedStatus.stdout || stagedHeartbeat === "live" || stagedHeartbeat === "unknown") {
+    return rollback("refusing removal: quarantined checkout is dirty, live, or unreadable", true);
+  }
+
+  // The original path is absent, so Git only unregisters it. Never force.
+  const removal = git(["worktree", "remove", "--", wtPath], root);
+  if (!removal.ok) return rollback(removal.stderr || "Git refused to unregister the checkout");
+
+  try {
+    purge(quarantine);
+    return { ok: true, detail: "checkout retired" };
+  } catch (err) {
+    return { ok: false, quarantine, detail: `checkout retired; quarantine cleanup failed: ${err.message}` };
+  }
+}
+
+function purgeQuarantine(quarantine) {
+  // Node removes symlinks and Windows junctions themselves, not their contents.
+  // Keep the original-path marker until the recursive step has succeeded.
+  rmSync(path.join(quarantine, "checkout"), { recursive: true, force: true });
+  rmSync(path.join(quarantine, "original-path"), { force: true });
+  rmdirSync(quarantine);
+}
+
+function removeWorktree(root, wtPath, branch, onIntent, ttlMs) {
+  const rem = retireWorktree(root, wtPath, { onIntent, ttlMs });
+  const branchDel = branch && rem.ok ? runGit(["branch", "-D", branch], root) : null;
   return {
-    worktreeRemoved: rem.status === 0,
-    worktreeOut: (rem.stdout || rem.stderr || "").trim(),
-    branchDeleted: Boolean(branch && branchDel.ok),
-    branchOut: (branchDel.stdout || branchDel.stderr || "").trim(),
+    worktreeRemoved: rem.ok,
+    ...(rem.refused ? { refused: true } : {}),
+    worktreeOut: rem.detail,
+    ...(rem.quarantine ? { quarantine: rem.quarantine } : {}),
+    branchDeleted: Boolean(branchDel?.ok),
+    branchOut: branchDel ? branchDel.stdout || branchDel.stderr : "skip branch delete",
   };
+}
+
+function auditReap(commonDir, { path: wtPath, branch, tier, reason }, outcome, details = {}) {
+  const line = JSON.stringify({ at: new Date().toISOString(), path: wtPath, branch, tier, reason, outcome, ...details }) + "\n";
+  try {
+    if (!commonDir) throw new Error("common Git directory unavailable");
+    appendFileSync(path.join(commonDir, "dpf-worktree-reap.jsonl"), line, { mode: 0o600 });
+  } catch {
+    process.stderr.write(line);
+  }
 }
 
 async function main(argv = process.argv.slice(2)) {
@@ -594,6 +738,7 @@ async function main(argv = process.argv.slice(2)) {
   const policy = args.tierAOnly ? "tier-a-only" : "all";
   const decisions = [];
   const removals = [];
+  const commonDir = args.dryRun ? "" : runGit(["rev-parse", "--path-format=absolute", "--git-common-dir"], root).stdout;
 
   // A merge tells us exactly ONE worktree just became reapable. Scanning the
   // whole fleet to act on one is wasteful and widens the blast radius of a
@@ -651,6 +796,7 @@ async function main(argv = process.argv.slice(2)) {
           `[worktree-janitor] KEEP ${sanitizeForLog(facts.path)}: ${sanitizeForLog(backup.reason)} for ${sanitizeForLog(facts.branch ?? "detached HEAD")}`,
         );
         removals.push({ path: facts.path, branch: facts.branch, worktreeRemoved: false, branchDeleted: false, backup });
+        auditReap(commonDir, { ...row, reason: backup.reason }, "refused");
         continue;
       }
       if (backup?.ref) {
@@ -658,8 +804,14 @@ async function main(argv = process.argv.slice(2)) {
           `[worktree-janitor] backed up ${backup.unpushed} unpushed commit(s) of ${sanitizeForLog(facts.branch ?? "detached HEAD")} at ${backup.ref}`,
         );
       }
-      const result = removeWorktree(root, facts.path, facts.branch);
+      const result = removeWorktree(root, facts.path, facts.branch, (quarantine) => {
+        auditReap(commonDir, row, "started", { quarantine });
+      }, ttlMs);
+      const outcome = result.worktreeRemoved ? "removed" : result.refused ? "refused" : "not-removed";
+      auditReap(commonDir, result.refused ? { ...row, reason: result.worktreeOut } : row, outcome, result);
       removals.push({ path: facts.path, branch: facts.branch, ...result, ...(backup ? { backup } : {}) });
+    } else if (!args.dryRun) {
+      auditReap(commonDir, row, "refused");
     }
   }
 

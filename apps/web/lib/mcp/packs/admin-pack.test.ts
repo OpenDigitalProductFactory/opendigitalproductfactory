@@ -12,10 +12,10 @@ vi.mock("@dpf/db", () => ({
 }));
 
 const execution = vi.hoisted(() => ({ exec: vi.fn(), execFile: vi.fn() }));
-const actuator = vi.hoisted(() => ({ active: false, containers: vi.fn(), logs: vi.fn() }));
+const mounts = vi.hoisted(() => ({ readFile: vi.fn(), platform: vi.fn() }));
+const actuator = vi.hoisted(() => ({ containers: vi.fn(), logs: vi.fn() }));
 vi.mock("../../../../../scripts/lib/scope-writer-observation.mjs", async importOriginal => ({
   ...await importOriginal<object>(),
-  hasPrivateActuatorMount: () => actuator.active,
   readActuatorProjectContainers: actuator.containers,
   readActuatorServiceLogs: actuator.logs,
 }));
@@ -23,10 +23,8 @@ vi.mock("@/lib/shared/lazy-node", async (importOriginal) => ({
   ...await importOriginal<object>(),
   lazyChildProcess: () => execution,
   lazyUtil: () => ({ promisify: (fn: unknown) => fn }),
-  lazyFsPromises: () => ({ readFile: async (path: string) => {
-    if (path === "/proc/self/mountinfo") return Buffer.from("mount fixture");
-    throw new Error("unreadable fixture");
-  } }),
+  lazyFsPromises: () => ({ readFile: mounts.readFile }),
+  lazyOs: () => ({ platform: mounts.platform }),
 }));
 
 import { adminPack, composeCwd } from "./admin-pack";
@@ -59,7 +57,8 @@ const EXPECTED_SIDE_EFFECT: Record<string, boolean> = {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  actuator.active = false;
+  mounts.readFile.mockReset().mockResolvedValue("21 1 0:2 / / rw - overlay overlay rw\n");
+  mounts.platform.mockReset().mockReturnValue("linux");
   db.adminActivityCreate.mockResolvedValue({});
 });
 
@@ -172,7 +171,7 @@ describe("admin pack — handler behavior (delegation preserved)", () => {
   });
 
   it("reads project diagnostics and logs through typed paths in the qualified portal", async () => {
-    actuator.active = true;
+    mounts.readFile.mockResolvedValue("21 1 0:2 / /run/dpf-actuator rw - tmpfs tmpfs rw\n");
     const sandbox = { ID: "a".repeat(64), Name: "dpf-sandbox-1", Service: "sandbox", State: "running", Status: "Up" };
     const init = { ID: "b".repeat(64), Name: "dpf-init-1", Service: "portal-init", State: "exited", Status: "Exited" };
     actuator.containers.mockResolvedValue({ containers: [sandbox, init] });
@@ -182,12 +181,14 @@ describe("admin pack — handler behavior (delegation preserved)", () => {
     expect(await command("docker compose ps --all --services")).toMatchObject({ success: true, data: { output: "sandbox\nportal-init" } });
     expect(await command("docker compose logs sandbox --tail 50 --timestamps")).toMatchObject({ success: true, data: { output: "sandbox log" } });
     expect(actuator.logs).toHaveBeenCalledWith("sandbox", 50, { timestamps: true });
+    expect(await adminPack.handlers.admin_view_logs({ service: "sandbox" }, "u1"))
+      .toMatchObject({ success: true, data: { output: "sandbox log" } });
     expect(execution.execFile).not.toHaveBeenCalled();
     expect(execution.exec).not.toHaveBeenCalled();
   });
 
   it("runs only the packaged database maintenance commands in the qualified portal", async () => {
-    actuator.active = true;
+    mounts.readFile.mockResolvedValue("21 1 0:2 / /run/dpf-actuator rw - tmpfs tmpfs rw\n");
     execution.execFile.mockResolvedValue({ stdout: "complete", stderr: "" });
     for (const [tool, args] of [
       ["admin_run_migration", ["--filter", "@dpf/db", "exec", "prisma", "migrate", "deploy"]],
@@ -199,12 +200,76 @@ describe("admin pack — handler behavior (delegation preserved)", () => {
     expect(execution.exec).not.toHaveBeenCalled();
   });
 
+  it("does not allow the equivalent Compose logs diagnostic to bypass an unreadable mount table", async () => {
+    mounts.readFile.mockRejectedValue(Object.assign(new Error("mountinfo unavailable"), { code: "EACCES" }));
+    execution.execFile.mockResolvedValue({ stdout: "fixture logs", stderr: "" });
+    const res = await adminPack.handlers.admin_run_command({ command: "docker compose logs portal" }, "u1");
+    expect(res).toMatchObject({ success: false, error: "admin_logs_require_actuator" });
+    expect(execution.exec).not.toHaveBeenCalled();
+    expect(execution.execFile).not.toHaveBeenCalled();
+    expect(actuator.logs).not.toHaveBeenCalled();
+  });
+
   it("admin_view_logs rejects an unknown service without shelling out", async () => {
     const res = await adminPack.handlers.admin_view_logs({ service: "not-a-service" }, "u1");
     expect(res.success).toBe(false);
     expect(res.error).toContain("Invalid service");
     expect(db.adminActivityCreate).not.toHaveBeenCalled();
   });
+
+  it.each([["linux", "EACCES"], ["darwin", "EACCES"], ["linux", "ENOENT"], ["win32", "EIO"]] as const)(
+    "admin_view_logs refuses direct Docker on %s when mountinfo fails with %s",
+    async (platform, code) => {
+      mounts.platform.mockReturnValue(platform);
+      mounts.readFile.mockRejectedValue(Object.assign(new Error("mountinfo unavailable"), { code }));
+      execution.exec.mockResolvedValue({ stdout: "fixture logs" });
+      const res = await adminPack.handlers.admin_view_logs({ service: "portal" }, "u1");
+      expect(res).toMatchObject({ success: false, error: "admin_logs_require_actuator" });
+      expect(execution.exec).not.toHaveBeenCalled();
+      expect(execution.execFile).not.toHaveBeenCalled();
+      expect(db.adminActivityCreate).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ result: "blocked" }) }));
+    },
+  );
+
+  it.each(["", "garbled\n", "21 1 0:2 / / rw - overlay overlay rw\nnot a mount record\n",
+    "23 21 0:4 net:[4026531992] relative-mount rw - nsfs nsfs rw\n"])(
+    "admin_view_logs refuses direct Docker for an invalid snapshot %j",
+    async table => {
+      mounts.readFile.mockResolvedValue(table);
+      execution.exec.mockResolvedValue({ stdout: "fixture logs" });
+      expect(await adminPack.handlers.admin_view_logs({ service: "portal" }, "u1"))
+        .toMatchObject({ success: false, error: "admin_logs_require_actuator" });
+      expect(execution.exec).not.toHaveBeenCalled();
+    },
+  );
+
+  it("admin_view_logs accepts a Linux nsfs root when no private actuator mount exists", async () => {
+    mounts.platform.mockReturnValue("linux");
+    mounts.readFile.mockResolvedValue(
+      "21 1 0:2 / / rw - overlay overlay rw\n23 21 0:4 net:[4026531992] /run/docker/netns/fixture rw - nsfs nsfs rw\n",
+    );
+    execution.exec.mockResolvedValue({ stdout: "fixture logs" });
+    expect(await adminPack.handlers.admin_view_logs({ service: "portal" }, "u1"))
+      .toMatchObject({ success: true, data: { output: "fixture logs" } });
+    expect(execution.exec).toHaveBeenCalledOnce();
+  });
+
+  it.each(["linux", "darwin", "win32"] as const)(
+    "admin_view_logs still uses the legacy path for confirmed actuator absence on %s",
+    async platform => {
+      mounts.platform.mockReturnValue(platform);
+      if (platform === "linux") {
+        mounts.readFile.mockResolvedValue("21 1 0:2 / / rw shared:1 - overlay overlay rw\n22 21 0:3 / /with\\040space ro - tmpfs tmpfs rw\n");
+      } else {
+        mounts.readFile.mockRejectedValue(Object.assign(new Error("mountinfo not found"), { code: "ENOENT" }));
+      }
+      execution.exec.mockResolvedValue({ stdout: "fixture logs" });
+      expect(await adminPack.handlers.admin_view_logs({ service: "portal" }, "u1"))
+        .toMatchObject({ success: true, data: { output: "fixture logs" } });
+      expect(mounts.readFile).toHaveBeenCalledWith("/proc/self/mountinfo", "utf8");
+      expect(execution.exec).toHaveBeenCalledOnce();
+    },
+  );
 
   it("admin_query_db blocks a non-SELECT query and audit-logs the block", async () => {
     const res = await adminPack.handlers.admin_query_db({ sql: "DELETE FROM users" }, "u1");

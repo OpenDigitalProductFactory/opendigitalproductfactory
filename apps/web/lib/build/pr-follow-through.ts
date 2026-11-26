@@ -17,7 +17,7 @@ import {
   AUTONOMOUS_RECOVERY_POLICY_VERSION,
   type AutonomousRecoveryStateV1,
 } from "./autonomous-recovery-policy";
-import type { BuildPrDeliveryStatus } from "./build-pr-delivery-state";
+import type { BuildPrDeliveryStatus, BuildPrQueueHold } from "./build-pr-delivery-state";
 import { checkBlocksMerge, type GithubCheckObservation, type GithubPrReadiness } from "./github-pr-readiness";
 
 /** Infrastructure failures get one re-run per head; never the repair budget (§3.4). */
@@ -278,7 +278,7 @@ function repairPacket(headSha: string, failing: PrFailingCheck[], attempt: numbe
 
 /** One follow-through status for every room (§3.2), projected from the delivery record. */
 export function projectPrFollowThroughStatus(
-  delivery: { status: BuildPrDeliveryStatus; followThrough: PrFollowThroughV1 } | null,
+  delivery: { status: BuildPrDeliveryStatus; followThrough: PrFollowThroughV1; queueHold?: BuildPrQueueHold | null } | null,
 ): PrFollowThroughStatus | null {
   if (!delivery) return null;
   switch (delivery.status) {
@@ -288,13 +288,15 @@ export function projectPrFollowThroughStatus(
     case "closed":
       return "closed";
     case "escalated":
+    case "removed":
       return "awaiting-person";
     case "queued":
       return "queued";
     case "created":
+    case "armed":
     case "checking":
     case "updating":
-      return delivery.followThrough.hold ?? "watching";
+      return delivery.queueHold ? "awaiting-person" : delivery.followThrough.hold ?? "watching";
   }
 }
 

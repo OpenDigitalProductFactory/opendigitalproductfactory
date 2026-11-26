@@ -55,8 +55,8 @@ A purpose in this file is not proof that an approval row displays it.
 ## SessionEnd
 
 - Hook 1: [uncommitted-work-guard.mjs](uncommitted-work-guard.mjs) — Warn about uncommitted work before the session ends
-- Hook 2: [worktree-session-heartbeat.mjs](worktree-session-heartbeat.mjs) — Remove the ended session heartbeat
-- Hook 3: [worktree-session-hygiene.mjs](worktree-session-hygiene.mjs) — Reap this checkout only when merged, clean and no longer in use
+- Hook 2: [worktree-session-heartbeat.mjs](worktree-session-heartbeat.mjs) — Clear a standalone session heartbeat
+- Hook 3: [worktree-session-hygiene.mjs](worktree-session-hygiene.mjs) — Log why provider exit did not reap the checkout
 
 ## Stop
 
