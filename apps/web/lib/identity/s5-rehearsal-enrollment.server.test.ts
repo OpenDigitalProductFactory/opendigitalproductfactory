@@ -275,8 +275,9 @@ describe("fenced request transaction (BI-9F7192F9 phase 6, AC-E4)", async () => 
 describe.skipIf(!process.env.DPF_S5_REQUESTER_TEST_DATABASE_URL)("enrollment against PostgreSQL (phase 6, AC-E4)", async () => {
   const { Pool } = await import("pg");
   const server = await import("./s5-rehearsal-enrollment.server");
+  const { readRequesterStatus } = await import("./s5-rehearsal-requester-custody.server");
   const { encodeRequesterSetupContext, deriveRequesterSetupDigest, handleRequesterCommand, runFencedRequest, executeEnrollment,
-    evaluateRequesterState, readRequesterState, readRequesterStatus, requesterEmail, REQUESTER_FENCE_KEY } = server;
+    evaluateRequesterState, readRequesterState, requesterEmail, REQUESTER_FENCE_KEY } = server;
   type Ports = import("./s5-rehearsal-enrollment.server").RequesterBoundaryPorts;
   type Deps = import("./s5-rehearsal-enrollment.server").EnrollmentDeps;
   type Ctx = import("./s5-rehearsal-enrollment.server").EnrollSetupContext;

@@ -181,8 +181,14 @@ export type RequesterCommandInput =
   | { command: "retire"; userId: string; setupDigest: string; context: RetireSetupContext; retirementReason: (typeof S5_REQUESTER_RETIREMENT_REASONS)[number] };
 
 export type RequesterBoundaryResult = { status: number; body: Record<string, unknown> };
-/** A result decided inside the request transaction; only one carrying `commit` is committed, every other rolls back. */
-export type RequesterTxResult = RequesterBoundaryResult & { commit?: { ifCommitLost: RequesterBoundaryResult } };
+/**
+ * A result decided inside the request transaction; only one carrying `commit` is committed, every other rolls back.
+ * `after` runs once the transaction has ended, on a fresh snapshot, and its answer replaces the result.
+ */
+export type RequesterTxResult = RequesterBoundaryResult & {
+  commit?: { ifCommitLost: RequesterBoundaryResult };
+  after?: () => Promise<RequesterBoundaryResult>;
+};
 
 /** Injected effects, so the ordering is testable and the served adapters can deny until their owners land. */
 export type RequesterBoundaryPorts = {
@@ -215,8 +221,8 @@ const MAX_REF_LENGTH = 200;
 const ENROLL_CONTEXT_KEYS = ["v", "command", "rulingRef", "reservationRef", "reservationRevision", "attemptRef", "fixtureRef"];
 const RETIRE_CONTEXT_KEYS = ["v", "command", "setupDigest"];
 
-const held = (status: number, code: string): RequesterBoundaryResult => ({ status, body: { outcome: "held", code } });
-const refused = (status: number, code: string): RequesterBoundaryResult => ({ status, body: { outcome: "refused", code } });
+export const held = (status: number, code: string): RequesterBoundaryResult => ({ status, body: { outcome: "held", code } });
+export const refused = (status: number, code: string): RequesterBoundaryResult => ({ status, body: { outcome: "refused", code } });
 
 /** The setup digest is derived on the server from the verified refs; a caller-supplied digest is never accepted. */
 export function deriveRequesterSetupDigest(context: Pick<EnrollSetupContext, "rulingRef" | "reservationRef">): string {
@@ -525,7 +531,7 @@ export const servedOwnerReceiptPort = (installationRef: string): OwnerReceiptPor
 
 /** Must equal REQUESTER_DESTINATION_FENCE_KEY in packages/db/src/sanitized-clone-cleanup.ts (pinned by a test). */
 export const REQUESTER_FENCE_KEY = "dpf:s5-rehearsal-requester:destination-fence";
-const SETUP_LOCK_PREFIX = "s5rr-enroll:";
+export const SETUP_LOCK_PREFIX = "s5rr-enroll:";
 /** Read Committed; the transaction timeout deliberately exceeds the 5 s lock wait so a late waiter can still replay. */
 export const REQUEST_TRANSACTION_OPTIONS = { isolationLevel: "ReadCommitted", timeout: 15_000, maxWait: 5_000 } as const;
 export const SETUP_LOCK_TIMEOUT = "5s";
@@ -536,7 +542,7 @@ export type RequestScope = { sql: RequesterSql; client: unknown; stage: "pre-has
 export type RequesterTransactionRunner = <T>(run: (tx: { sql: RequesterSql; client: unknown }) => Promise<T>) => Promise<T>;
 
 class RequesterRollback extends Error {
-  constructor(readonly result: RequesterBoundaryResult) {
+  constructor(readonly result: RequesterBoundaryResult, readonly after?: () => Promise<RequesterBoundaryResult>) {
     super("s5 requester request rolled back");
   }
 }
@@ -561,22 +567,35 @@ export async function runFencedRequest(
 ): Promise<RequesterBoundaryResult> {
   let scope: RequestScope | null = null;
   let commitLost: RequesterBoundaryResult | null = null;
+  let after: (() => Promise<RequesterBoundaryResult>) | undefined;
   try {
-    return await transaction(async (tx) => {
+    const result = await transaction(async (tx) => {
       const fence = await tx.sql.query("SELECT pg_try_advisory_xact_lock_shared(hashtextextended($1, 0)) AS entered", [REQUESTER_FENCE_KEY]);
       if (fence[0]?.entered !== true) throw new RequesterRollback(held(409, "clone_in_progress"));
       scope = { sql: tx.sql, client: tx.client, stage: "pre-hash" };
-      const { commit, ...result } = await run(scope);
-      if (!commit) throw new RequesterRollback(result);
+      const { commit, after: then, ...decided } = await run(scope);
+      if (!commit) throw new RequesterRollback(decided, then);
       commitLost = commit.ifCommitLost;
-      return result;
+      after = then;
+      return decided;
     });
+    return after ? await settleAfter(after, result, log) : result;
   } catch (error) {
-    if (error instanceof RequesterRollback) return error.result;
+    if (error instanceof RequesterRollback) return error.after ? settleAfter(error.after, error.result, log) : error.result;
     if (commitLost) { log("commit_unverified"); return commitLost; }
     if ((scope as RequestScope | null)?.stage === "hashed") { log("create_failed"); return { status: 500, body: { outcome: "create_failed" } }; }
     log("request_failed");
     return held(503, "request_failed");
+  }
+}
+
+/** A post-transaction step must answer; if it throws, the decided result stands and only the code is logged. */
+async function settleAfter(after: () => Promise<RequesterBoundaryResult>, fallback: RequesterBoundaryResult, log: (code: string) => void) {
+  try {
+    return await after();
+  } catch {
+    log("after_failed");
+    return fallback;
   }
 }
 
@@ -727,63 +746,4 @@ export async function createRequesterWithPrisma(
     command: "enroll", setupDigest: input.setupDigest, ownerUserId: input.ownerUserId, ownerPrincipalId: input.ownerPrincipalId,
     requesterUserId: user.id, refs,
   });
-}
-
-/**
- * Lost-acknowledgement recovery, read only. On one pinned connection: the
- * session-level per-setup lock first (so it waits for an in-flight enroll),
- * then one REPEATABLE READ READ ONLY snapshot, then unlock. Never creates.
- */
-export async function readRequesterStatus(conn: RequesterSql, setupDigest: string): Promise<RequesterBoundaryResult> {
-  const key = SETUP_LOCK_PREFIX + setupDigest;
-  await conn.query("SELECT true AS locked FROM pg_advisory_lock(hashtextextended($1, 0))", [key]);
-  try {
-    await conn.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
-    let row: RequesterStateRow | null;
-    let present: boolean;
-    try {
-      present = (await conn.query(`SELECT 1 AS present FROM "S5RehearsalRequesterEnrollment" WHERE "setupDigest" = $1`, [setupDigest])).length > 0;
-      row = await readRequesterState(conn, setupDigest);
-      await conn.query("COMMIT");
-    } catch (error) {
-      await conn.query("ROLLBACK").catch(() => undefined);
-      throw error;
-    }
-    if (!present) return { status: 200, body: { outcome: "not_committed", setupDigest } };
-    return { status: 200, body: { outcome: "committed", setupDigest, verification: evaluateRequesterState(row, { setupDigest }) } };
-  } finally {
-    await conn.query("SELECT pg_advisory_unlock(hashtextextended($1, 0)) AS unlocked", [key]);
-  }
-}
-
-export type RequesterStatusPorts = {
-  environmentClass(): Promise<string>;
-  canonicalOrigin(request: Request): string | null;
-  sessionUserId(): Promise<string | null>;
-  /** Owner binding plus the lease-independent installation and DB proofs; denies until served. */
-  statusProofs(userId: string): Promise<{ ok: true } | { ok: false; code: string }>;
-  pinnedConnection<T>(run: (conn: RequesterSql) => Promise<T>): Promise<T>;
-};
-
-/** GET …/status?setupDigest=: gated like retirement, keyed only by the digest, never accepts a body. */
-export async function handleRequesterStatus(request: Request, rawCommand: string, ports: RequesterStatusPorts): Promise<RequesterBoundaryResult> {
-  if ((await ports.environmentClass()) === "production") return refused(403, "production_refused");
-  if (!hasExactSameOriginEvidence(request, ports.canonicalOrigin(request))) return refused(403, "origin_refused");
-  const userId = await ports.sessionUserId();
-  if (!userId) return refused(401, "session_required");
-  if (rawCommand !== "status") return refused(404, "unknown_command");
-  const setupDigest = new URL(request.url).searchParams.get("setupDigest");
-  if (!setupDigest || !/^[a-f0-9]{64}$/u.test(setupDigest)) return held(400, "setup_digest_invalid");
-  const proofs = await ports.statusProofs(userId);
-  if (!proofs.ok) return held(409, proofs.code);
-  return ports.pinnedConnection((conn) => readRequesterStatus(conn, setupDigest));
-}
-
-/** Served status ports: the proofs deny until owner binding (BI-C7100183) and the preview proofs are served. */
-export function servedRequesterStatusPorts(deps: Pick<RequesterStatusPorts, "environmentClass" | "canonicalOrigin" | "sessionUserId">): RequesterStatusPorts {
-  return {
-    ...deps,
-    statusProofs: async () => ({ ok: false, code: "owner_binding_unavailable" }),
-    pinnedConnection: async () => { throw new Error("status connection is not served"); },
-  };
 }

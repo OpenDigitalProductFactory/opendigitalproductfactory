@@ -6,12 +6,8 @@ import { prisma } from "@dpf/db";
 
 import { auth } from "@/lib/auth";
 import { resolveResourceOrigin } from "@/lib/auth/oauth-metadata";
-import {
-  handleRequesterCommand,
-  handleRequesterStatus,
-  servedRequesterBoundaryPorts,
-  servedRequesterStatusPorts,
-} from "@/lib/identity/s5-rehearsal-enrollment.server";
+import { handleRequesterCommand, servedRequesterBoundaryPorts } from "@/lib/identity/s5-rehearsal-enrollment.server";
+import { handleRequesterStatus, servedRequesterStatusPorts } from "@/lib/identity/s5-rehearsal-requester-custody.server";
 import { loadEnvironmentClassResolution } from "@/lib/install/environment-class";
 
 const servedDeps = {

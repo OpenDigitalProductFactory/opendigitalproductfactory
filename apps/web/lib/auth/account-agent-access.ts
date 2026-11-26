@@ -157,18 +157,45 @@ export async function endAccountAgentAccess(
   const user = await findAccount(db, input.userId);
   if (!user || user.id !== input.userId) return err("Unknown account.");
 
-  const where = { userId: user.id, revokedAt: null };
-  const [accessTokens, refreshTokens, clients] = await db.$transaction([
-    db.mcpApiToken.updateMany({ where, data: stamp.data }),
-    db.oAuthRefreshToken.updateMany({ where, data: stamp.data }),
-    db.oAuthClient.updateMany({
-      where: { ownerUserId: user.id, registrationKind: "credentials", revokedAt: null },
-      data: stamp.data,
-    }),
-  ]);
+  const [accessTokens, refreshTokens, clients] = await db.$transaction([...accountAgentAccessRevocations(db, user.id, stamp.data)]);
   return ok({
     revokedAccessTokens: accessTokens.count,
     revokedRefreshTokens: refreshTokens.count,
     revokedCredentialsClients: clients.count,
   });
+}
+
+export type AccountAgentAccessRevocationDb = {
+  mcpApiToken: Pick<Db["mcpApiToken"], "updateMany">;
+  oAuthRefreshToken: Pick<Db["oAuthRefreshToken"], "updateMany">;
+  oAuthClient: Pick<Db["oAuthClient"], "updateMany">;
+};
+
+/** The three revocation writes: live tokens, live refresh grants and owned headless credentials clients. */
+function accountAgentAccessRevocations(db: AccountAgentAccessRevocationDb, userId: string, data: { revokedAt: Date; revokedReason: string }) {
+  const where = { userId, revokedAt: null };
+  return [
+    db.mcpApiToken.updateMany({ where, data }),
+    db.oAuthRefreshToken.updateMany({ where, data }),
+    db.oAuthClient.updateMany({ where: { ownerUserId: userId, registrationKind: "credentials", revokedAt: null }, data }),
+  ] as const;
+}
+
+/**
+ * Transaction-scoped form for a caller that already holds a transaction and
+ * has already authorized the act (the S5 rehearsal requester retirement,
+ * BI-9F7192F9). Same writes as endAccountAgentAccess, on the caller's client.
+ */
+export async function revokeAccountAgentAccessInTransaction(
+  tx: AccountAgentAccessRevocationDb,
+  input: { userId: string; revokedAt: Date; revokedReason: string },
+): Promise<{ revokedAccessTokens: number; revokedRefreshTokens: number; revokedCredentialsClients: number }> {
+  const [accessTokens, refreshTokens, clients] = accountAgentAccessRevocations(tx, input.userId, {
+    revokedAt: input.revokedAt, revokedReason: input.revokedReason,
+  });
+  return {
+    revokedAccessTokens: (await accessTokens).count,
+    revokedRefreshTokens: (await refreshTokens).count,
+    revokedCredentialsClients: (await clients).count,
+  };
 }
