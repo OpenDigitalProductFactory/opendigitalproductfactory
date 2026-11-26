@@ -181,7 +181,6 @@ function hookEnv({ ws, home, pluginRoot, extra }) {
     CLAUDE_PROJECT_DIR: ws,
     DPF_MCP_ENDPOINT: "http://127.0.0.1:9/api/mcp/v1",
     DPF_HOOK_OUTPUT_WALK: "1", // the self-test does not recurse into itself
-    DPF_WORKTREE_SESSION_REAP: "0", // judge the SessionEnd report, never reap the fixture mid-walk
     ...extra,
   };
 }

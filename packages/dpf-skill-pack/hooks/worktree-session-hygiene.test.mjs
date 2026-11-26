@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
@@ -69,7 +69,7 @@ describe("worktree-session-hygiene", () => {
     );
   });
 
-  it("still reaps on SessionEnd, and still observes on SessionStart", () => {
+  it("audits on SessionEnd and observes on SessionStart", () => {
     for (const event of ["SessionStart", "SessionEnd"]) {
       assert.ok(
         hookCommandsFor(event).some((c) => c.includes("worktree-session-hygiene")),
@@ -85,90 +85,127 @@ describe("worktree-session-hygiene", () => {
     );
   });
 
-  it("a Stop payload never removes anything, even for a Tier-A cwd", () => {
-    // Belt-and-braces: even if the wiring regressed, the handler must not reap
-    // on a per-turn event. Exercised against the repo root, which exits early.
-    const root = join(here, "../../..");
-    const r = spawnSync(process.execPath, [script], {
-      encoding: "utf8",
-      cwd: root,
-      env: { ...process.env, DPF_SKIP_WORKTREE_SESSION_HYGIENE: "0" },
-      input: JSON.stringify({ hookEventName: "Stop", cwd: root }),
-      windowsHide: true,
-      timeout: 60_000,
-    });
-    assert.equal(r.status, 0);
-    assert.ok(
-      !/reaped Tier-A worktree/.test(r.stdout || ""),
-      `Stop must not report a reap; got: ${r.stdout}`,
-    );
-  });
 });
 
-// BI-296C9E24: an ending session reaped a merged, clean worktree that another
-// session was still working in (138 tracked files deleted, 2026-10-13).
-describe("SessionEnd reap respects other live sessions (BI-296C9E24)", () => {
-  const git = (cwd, ...args) => {
-    const r = spawnSync("git", args, { cwd, encoding: "utf8" });
-    assert.equal(r.status, 0, `git ${args.join(" ")}: ${r.stderr}`);
-    return r.stdout.trim();
-  };
+describe("SessionEnd checkout preservation (BI-F52EF21B)", () => {
+  function fixtureEnv(overrides = {}) {
+    const env = { ...process.env };
+    for (const name of ["GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR", "GIT_INDEX_FILE",
+      "GIT_OBJECT_DIRECTORY", "GIT_ALTERNATE_OBJECT_DIRECTORIES", "GIT_PREFIX", "GIT_NAMESPACE",
+      "T3CODE_THREAD_ID", "DPF_SKIP_WORKTREE_SESSION_HYGIENE", "DPF_SKIP_WORKTREE_SESSION_HEARTBEAT"]) {
+      delete env[name];
+    }
+    return { ...env, DPF_GUARDS_WORKSPACE_ANY: "1", DPF_WORKTREE_SESSION_REAP: "1", ...overrides };
+  }
 
-  /** A main repo plus a linked worktree on a branch already merged into origin/main. */
-  function tierAWorktree() {
-    const base = mkdtempSync(join(tmpdir(), "reap-live-"));
+  function git(cwd, ...args) {
+    const r = spawnSync("git", args, { cwd, encoding: "utf8", env: fixtureEnv() });
+    assert.equal(r.status, 0, "git " + args.join(" ") + ": " + r.stderr);
+    return r.stdout.trim();
+  }
+
+  function checkout(t, { merged = false } = {}) {
+    const base = realpathSync(mkdtempSync(join(tmpdir(), "dpf-session-end-")));
+    t.after(() => rmSync(base, { recursive: true, force: true }));
     const main = join(base, "main");
     const wt = join(base, "wt");
     mkdirSync(main);
+    mkdirSync(join(base, "no-hooks"));
     git(main, "init", "-q", "-b", "main");
+    git(main, "config", "core.hooksPath", join(base, "no-hooks"));
+    git(main, "config", "commit.gpgSign", "false");
     git(main, "config", "user.email", "t@example.test");
     git(main, "config", "user.name", "t");
-    writeFileSync(join(main, "tracked.txt"), "x\n");
+    writeFileSync(join(main, "tracked.txt"), "base");
     writeFileSync(join(main, ".gitignore"), ".dpf-session-heartbeat.json\n");
     git(main, "add", ".");
-    git(main, "commit", "-q", "-m", "base");
+    git(main, "commit", "-qm", "base");
+    git(main, "worktree", "add", "-qb", "topic", wt);
+    if (merged) {
+      writeFileSync(join(wt, "tracked.txt"), "topic");
+      git(wt, "commit", "-qam", "topic work");
+      git(main, "merge", "--ff-only", "topic");
+    }
     git(main, "update-ref", "refs/remotes/origin/main", "HEAD");
-    git(main, "worktree", "add", "-q", "-b", "topic", wt, "HEAD");
-    return { main, wt };
+    return { main, wt, log: join(main, ".git", "dpf-worktree-reap.jsonl") };
   }
 
-  function sessionEnd(wt, sessionId) {
-    return spawnSync(process.execPath, [script], {
-      input: JSON.stringify({ hook_event_name: "SessionEnd", session_id: sessionId, cwd: wt }),
-      env: { ...process.env, DPF_GUARDS_WORKSPACE_ANY: "1", DPF_WORKTREE_SESSION_REAP: "1", GH_TOKEN: "" },
+  function hook(main, cwd, event, env, file = script) {
+    const r = spawnSync(process.execPath, [file], {
+      cwd: main,
+      input: JSON.stringify({ hook_event_name: event, session_id: "ending", cwd }),
+      env: fixtureEnv(env),
       encoding: "utf8",
-      timeout: 60_000,
+      timeout: 30_000,
     });
+    assert.equal(r.status, 0, r.stderr);
+    return r;
   }
 
-  it("control: alone in its worktree, the ending session reaps it", () => {
-    const { wt } = tierAWorktree();
-    writeFileSync(join(wt, ".dpf-session-heartbeat.json"), JSON.stringify({ beatAt: Date.now(), sessionId: "ending" }));
-    sessionEnd(wt, "ending");
-    assert.equal(existsSync(join(wt, "tracked.txt")), false);
+  const records = (log) => readFileSync(log, "utf8").trim().split("\n").map(JSON.parse);
+
+  it("never calls a fresh branch merged on SessionStart", (t) => {
+    const { main, wt } = checkout(t);
+    const r = hook(main, wt, "SessionStart", { T3CODE_THREAD_ID: "thread-fixture" });
+    assert.doesNotMatch(r.stdout, /already merged|will be reaped/);
   });
 
-  it("keeps the worktree, every file intact, while another session's heartbeat is fresh", () => {
-    const { wt } = tierAWorktree();
-    const now = Date.now();
-    writeFileSync(
-      join(wt, ".dpf-session-heartbeat.json"),
-      JSON.stringify({
-        beatAt: now,
-        sessions: { live: { beatAt: now - 1000 }, ending: { beatAt: now } },
-      }),
-    );
-    const r = sessionEnd(wt, "ending");
-    assert.equal(existsSync(join(wt, "tracked.txt")), true, r.stdout);
-    assert.match(r.stdout, /another live session/);
+  it("keeps a T3 fresh checkout across turns and logs each refusal", (t) => {
+    const { main, wt, log } = checkout(t);
+    for (let turn = 0; turn < 3; turn++) {
+      hook(main, wt, "SessionEnd", { T3CODE_THREAD_ID: "thread-fixture" });
+      assert.equal(existsSync(join(wt, "tracked.txt")), true);
+      assert.equal(readFileSync(join(wt, "tracked.txt"), "utf8"), "base");
+      assert.equal(git(wt, "status", "--porcelain"), "");
+    }
+    const entries = records(log);
+    assert.equal(entries.length, 3);
+    for (const row of entries) {
+      assert.equal(row.path, wt);
+      assert.equal(row.branch, "topic");
+      assert.equal(row.tier, null);
+      assert.equal(row.outcome, "refused");
+      assert.match(row.reason, /T3/);
+    }
   });
 
-  it("a second reap of the same worktree while one is in flight does nothing", () => {
-    const { main, wt } = tierAWorktree();
-    const gitDir = git(wt, "rev-parse", "--absolute-git-dir");
-    writeFileSync(join(gitDir, "dpf-reap.lock"), String(Date.now()));
-    const r = sessionEnd(wt, "ending");
-    assert.equal(existsSync(join(wt, "tracked.txt")), true, r.stdout);
-    assert.ok(existsSync(main));
+  it("keeps an otherwise merged, clean checkout when SessionEnd names that cwd", (t) => {
+    const { main, wt, log } = checkout(t, { merged: true });
+    hook(main, wt, "SessionEnd");
+    assert.equal(existsSync(join(wt, "tracked.txt")), true);
+    assert.equal(readFileSync(join(wt, "tracked.txt"), "utf8"), "topic");
+    assert.equal(git(wt, "status", "--porcelain"), "");
+    assert.match(records(log)[0].reason, /session cwd/);
+  });
+
+  it("keeps tracked edits and untracked files, including with the legacy reap flag set", (t) => {
+    const { main, wt, log } = checkout(t, { merged: true });
+    writeFileSync(join(wt, "tracked.txt"), "local edit");
+    writeFileSync(join(wt, "untracked.txt"), "new local work");
+    const before = git(wt, "status", "--porcelain", "--untracked-files=all");
+    hook(main, wt, "SessionEnd");
+    assert.equal(git(wt, "status", "--porcelain", "--untracked-files=all"), before);
+    assert.equal(readFileSync(join(wt, "tracked.txt"), "utf8"), "local edit");
+    assert.equal(readFileSync(join(wt, "untracked.txt"), "utf8"), "new local work");
+    assert.equal(records(log)[0].outcome, "refused");
+  });
+
+  it("never attempts a reap or writes a reap record on Stop or an unknown event", (t) => {
+    const { main, wt, log } = checkout(t, { merged: true });
+    hook(main, wt, "Stop");
+    hook(main, wt, "Unknown");
+    assert.equal(existsSync(join(wt, "tracked.txt")), true);
+    assert.equal(existsSync(log), false);
+  });
+
+  it("preserves the T3 heartbeat when the provider process exits", (t) => {
+    const { main, wt } = checkout(t);
+    const heartbeat = join(here, "worktree-session-heartbeat.mjs");
+    const marker = join(wt, ".dpf-session-heartbeat.json");
+    const env = { T3CODE_THREAD_ID: "thread-fixture" };
+    hook(main, wt, "SessionStart", env, heartbeat);
+    assert.equal(existsSync(marker), true);
+    hook(main, wt, "SessionEnd", env, heartbeat);
+    assert.equal(existsSync(marker), true);
   });
 });
