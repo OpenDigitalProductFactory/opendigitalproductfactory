@@ -61,9 +61,9 @@ describe("provider capacity recovery disclosure", () => {
     render(<ProviderQuotaDetails connectionId="provider-default-chatgpt" recovery={{ ...recovery, models }} canWrite copy={copy} />);
     fireEvent.click(screen.getByText(copy.limitDetails));
     fireEvent.click(screen.getByLabelText(copy.capacityModel));
-    fireEvent.change(screen.getByRole("textbox", { name: copy.capacityModelSearch }), { target: { value: "Model 24" } });
+    fireEvent.change(screen.getByRole("combobox", { name: copy.capacityModelSearch }), { target: { value: "Model 24" } });
     fireEvent.click(screen.getByRole("option", { name: "Model 24 (model-24)" }));
-    expect((screen.getByLabelText(copy.capacityModel) as HTMLInputElement).value).toBe("Model 24 (model-24)");
+    expect(screen.getByLabelText(copy.capacityModel).textContent).toBe("Model 24 (model-24)");
     expect(mocks.recheck).not.toHaveBeenCalled();
   });
   it.each([false, true])("a read-only or restricted account cannot dispatch (write=%s)", canWrite => {
