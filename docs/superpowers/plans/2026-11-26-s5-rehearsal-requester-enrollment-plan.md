@@ -286,3 +286,13 @@ Every deliverable maps to BI-9F7192F9. The delivered code holds until these depe
 | Model-count budget | Owner, through P2 |
 
 The deferred UI and activation belong to BI-9F5D1052.
+
+### Traceability (plan coverage)
+
+All 11 phases form one atomic deliverable, `inactive-requester-enrollment`, mapped to BI-9F7192F9. No phase ships alone: each depends on the phase 1 record, and the never-active invariant needs the record, guards, enrollment, retirement and read seam together.
+
+- **Objectives:** OBJ-RR-ENROLL, OBJ-RR-NEVER-ACTIVE, OBJ-RR-RECORD, OBJ-RR-RETIRE, OBJ-RR-SEAM.
+- **Acceptance, by phase:** AC-E3 (phases 1 and 2), AC-E8 (phases 3 and 10), AC-E1 (phase 4), AC-E2 (phase 5), AC-E4 (phase 6), AC-E5 (phase 7), AC-E7 (phase 8), AC-E6 (phase 9).
+- **Contracts:** `POST /api/admin/rehearsal-requester/[command]`, `GET /api/admin/rehearsal-requester/status`, `S5RehearsalRequesterEnrollment`, `verifyRequesterState`.
+- **Flows:** `enroll`, `retire`, `status-read`, `clone-destination-fence`, `provisioner-read-seam`.
+- **Named Red tests:** R-FENCE-LOSS, R-STATUS-WAIT, R-ONE-FENCE, R-OWNER-COHERENT.
