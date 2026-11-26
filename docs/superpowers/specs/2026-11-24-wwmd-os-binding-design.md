@@ -1,5 +1,5 @@
 ---
-status: draft
+status: active
 ---
 
 # WWMD after DPF convergence
@@ -96,7 +96,7 @@ Core uses its independently trusted admission or profile policy and expected cla
 
 Run one versioned vector set through Core and both executor ingress wirings, not just the shared executor verifier. Carry exact canonical inner and outer body bytes, digest and signature, with expected policy, clock and claim provided separately. Assert the same authority disposition and zero launches or effects on holds. Include the valid paired-version positive and an unaffected explicit /1 fixture positive. Cover validly signed wrong inner or outer versions, omitted binding with /1 downgrade, sibling permit swaps and different attempt, scope or issuer, stale or revoked authority and unavailable current policy or lineage, WWWD/WSID/shadow substitutions, and false mode asserted by the request. Keep intentionally unsealed rows in the historical archive but never eligible to issue. Keep the exact restored head, both writer fences and rollback reconciliation in AC-W2-3 and AC-W2-4.
 
-This is a proposed wire contract for final concurrence by the DPF decision owner and DPF2 receiving design owner. Agree the exact schema, bounds, signed-byte vector and custody integration before implementation admission. No production data or live authority handoff is part of this proof.
+DPF2 receiving gave final design concurrence on `bbc42ad8`, recorded on WC-578907C5 as `wave2-dpf2-final-concurrence-bbc42ad8`. Phase 1 pre-code deliverables remain to pin the exact field schema and bounds and one complete signed-byte fixture, identify the protected expected-context source and lifetime at each ingress, and test duplicate, noncanonical and oversized input refusals at raw ingress before lossy JSON parsing. These deliverables do not reopen receiving design concurrence or replace governed approval. No production data or live authority handoff is part of this proof.
 
 ## Research & benchmarking
 
