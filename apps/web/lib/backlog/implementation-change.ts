@@ -4,7 +4,16 @@ import { trustedGitArgs } from "@/lib/work-capsules/git-scanner";
 
 const exec = promisify(execFile);
 const SHA = /^[0-9a-f]{40}$/i;
-const DOCS = /(?:^|\/)(?:docs?|documentation)\/|\.(?:md|mdx|rst|adoc|txt)$/i;
+const DOCS_ROOT = /^(?:docs?|documentation)\//i;
+const PROSE_EXTENSION = /\.(?:md|mdx|rst|adoc|txt)$/i;
+// A nested docs directory can be application source. Its generated docs
+// inventory and diagram manifests still do not prove implementation.
+const GENERATED_DOC_ARTIFACTS = new Set([
+  "apps/web/lib/docs/doc-index.generated.json",
+  "apps/web/lib/docs/doc-impact.generated.json",
+  "apps/web/lib/docs/diagram-versions.generated.mjs",
+  "apps/web/lib/docs/diagram-versions.generated.d.mts",
+]);
 // These directories also house executable publication tools. Do not mistake
 // changes to those programs for changes to their documents or generated output.
 const PUBLICATION_SOURCE = /^(?:docs\/architecture\/(?:generate-[^/]+\.mjs|agent-standard-publications\.mjs|fit-white-paper-docx-images\.py)|docs\/business-types\/_[^/]+\.mjs|apps\/web\/lib\/docs\/(?:diagram-assets|doc-link-resolver)\.mjs)$/;
@@ -18,7 +27,12 @@ export function requiresImplementationChange(workType: string | null | undefined
 export function hasImplementationChange(paths: readonly string[]): boolean {
   if (paths.some(path => !path || path.startsWith("/") || path.includes("\\")
     || path.split("/").some(part => !part || part === "." || part === ".."))) return false;
-  return paths.some(path => PUBLICATION_SOURCE.test(path) || (!DOCS.test(path) && IMPLEMENTATION.test(path)));
+  return paths.some(path => PUBLICATION_SOURCE.test(path) || (
+    !DOCS_ROOT.test(path)
+    && !PROSE_EXTENSION.test(path)
+    && !GENERATED_DOC_ARTIFACTS.has(path)
+    && IMPLEMENTATION.test(path)
+  ));
 }
 
 /** Only immutable tree objects are compared. Never run a worktree diff. */
