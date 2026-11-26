@@ -29,22 +29,22 @@ describe("OperatingHoursEditor save feedback", () => {
 describe("OperatingHoursEditor timezone options", () => {
   it("labels zones with a UTC-offset prefix and a de-underscored name", () => {
     render(<OperatingHoursEditor defaultSchedule={schedule} timezone="America/New_York" onSave={vi.fn()} />);
-    const picker = screen.getByRole("combobox", { name: /Business timezone/i }) as HTMLInputElement;
+    const picker = screen.getByRole("button", { name: /Business timezone/i });
     // Orthodox: "(UTC−05:00) America/New York" — offset prefix, no underscore.
-    expect(picker.value).toMatch(/^\(UTC[+−±]\d{2}:\d{2}\) America\/New York$/);
-    expect(picker.value).not.toContain("_");
+    expect(picker.textContent).toMatch(/^\(UTC[+−±]\d{2}:\d{2}\) America\/New York$/);
+    expect(picker.textContent).not.toContain("_");
   });
 
   it("keeps the full timezone corpus hidden until the picker is opened and searched", () => {
     render(<OperatingHoursEditor defaultSchedule={schedule} timezone="America/Chicago" onSave={vi.fn()} />);
-    const picker = screen.getByRole("combobox", { name: /Business timezone/i });
+    const picker = screen.getByRole("button", { name: /Business timezone/i });
 
     expect(screen.queryByRole("option", { name: /Europe\/London/ })).not.toBeInTheDocument();
 
     fireEvent.click(picker);
     expect(screen.getAllByRole("option")).toHaveLength(12);
 
-    fireEvent.change(screen.getByRole("textbox", { name: "Search timezones" }), {
+    fireEvent.change(screen.getByRole("combobox", { name: "Search timezones" }), {
       target: { value: "London" },
     });
 
