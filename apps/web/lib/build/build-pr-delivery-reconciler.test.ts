@@ -297,6 +297,38 @@ describe("executeBuildPrDeliveryAction — PR follow-through (BI-88341B5D)", () 
     expect(outcome.state.followThrough.attentionKey).toBe("follow-through:repair-propose:sha1");
   });
 
+  it("names a missing custody identity once and rechecks it on the same failing head without spending the attempt", async () => {
+    const dispatchRepair = vi.fn()
+      .mockResolvedValueOnce("repair-identity-unavailable")
+      .mockResolvedValueOnce("repair-identity-unavailable")
+      .mockResolvedValueOnce("dispatched");
+    const tick = (from?: typeof state) => run({ from, observed: redDefect, repairAuthority: "dispatch", dispatchRepair });
+    const first = await tick();
+    expect(first.followThrough).toMatchObject({ kind: "attention", target: "process-overseer", reason: "repair-identity-unavailable" });
+    expect(first.state.status).toBe("checking");
+    expect(first.state.followThrough.attempts.attempts["post-push-ci-failure"]).toBeUndefined();
+    const second = await tick(first.state);
+    expect(second.state.followThrough.attentionKey).toBe(first.state.followThrough.attentionKey);
+    expect(second.state.followThrough.attempts.attempts["post-push-ci-failure"]).toBeUndefined();
+    const recovered = await tick(second.state);
+    expect(recovered.state.followThrough.hold).toBe("repairing");
+    expect(recovered.state.followThrough.attentionKey).toBeNull();
+    expect(recovered.state.followThrough.attempts.attempts["post-push-ci-failure"]).toBe(1);
+    expect(dispatchRepair).toHaveBeenCalledTimes(3);
+    expect(recovered.calls).toHaveLength(0);
+  });
+
+  it("keeps an explicit custody authority refusal held without restarting the runtime on recheck", async () => {
+    const dispatchRepair = vi.fn().mockResolvedValue("repair-identity-refused");
+    const first = await run({ observed: redDefect, repairAuthority: "dispatch", dispatchRepair });
+    expect(first.followThrough).toMatchObject({ kind: "attention", target: "process-overseer", reason: "repair-identity-refused" });
+    const second = await run({ from: first.state, observed: redDefect, repairAuthority: "dispatch", dispatchRepair });
+    expect(second.followThrough).toMatchObject({ kind: "hold" });
+    expect(second.state.followThrough.attempts.attempts["post-push-ci-failure"]).toBeUndefined();
+    expect(second.state.followThrough.attentionKey).toBe(first.state.followThrough.attentionKey);
+    expect(dispatchRepair).toHaveBeenCalledTimes(1);
+  });
+
   it("decides the same way whichever client opened the PR: the inputs carry no client identity", async () => {
     // The follow-through record and decision take only the PR observation and
     // the room's boundary. Two rooms with the same PR facts and boundary get the

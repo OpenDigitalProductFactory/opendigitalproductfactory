@@ -6,13 +6,17 @@ const sha = (c: string) => c.repeat(40);
 const room = { repositoryFullName: "owner/repo", headSha: sha("a"), pullRequestNumber: 42 };
 const run = { runId: "SUR-1", status: "succeeded", dryRun: false, targetSha: sha("c"), deployedSha: sha("d"), completedAt: new Date("2026-10-03T20:00:00Z") };
 const observation = createPullRequestObservation({ repositoryFullName: "owner/repo", number: 42, url: "https://github.com/owner/repo/pull/42", title: "fix", headBranch: "fix", headSha: sha("a"), state: "merged", isDraft: false, mergeStateStatus: null, mergeCommitSha: sha("b"), mergedAt: "2026-10-03T19:00:00Z", providerUpdatedAt: "2026-10-03T19:00:00Z", observedAt: "2026-10-03T19:01:00Z" });
-const inputs = () => ({ workType: "feature", room, run, servedSha: sha("d"), observation, contains: vi.fn(async () => true as boolean | null) });
+const inputs = () => ({ workType: "feature", room, run, servedSha: sha("d"), observation,
+  contains: vi.fn(async () => true as boolean | null),
+  implementationChange: vi.fn(async () => true as boolean | null),
+});
 
 describe("canonical deployment closure", () => {
   it("binds repository, PR head, merged commit and immutable served deployment", async () => {
     const args = inputs();
     expect(await resolveDeploymentClosureProof(args)).toMatchObject({ kind: "deployed", runId: "SUR-1", pullRequestNumber: 42, mergeCommitSha: sha("b"), servedSha: sha("d") });
     expect(args.contains).toHaveBeenCalledWith("owner/repo", sha("b"), sha("c"));
+    expect(args.implementationChange).toHaveBeenCalledWith("owner/repo", sha("b"));
   });
   it.each([
     { servedSha: sha("e") },
@@ -32,6 +36,11 @@ describe("canonical deployment closure", () => {
   });
   it.each([false, null])("does not close when deployed lineage membership is %s", async (answer) => {
     expect((await resolveDeploymentClosureProof({ ...inputs(), contains: async () => answer })).kind).not.toBe("deployed");
+  });
+
+  it.each([false, null])("does not close implementation when its deployed PR change classification is %s", async (answer) => {
+    expect((await resolveDeploymentClosureProof({ ...inputs(), implementationChange: async () => answer })).kind).toBe("unavailable");
+    expect((await resolveDeploymentClosureProof({ ...inputs(), workType: "doc", implementationChange: async () => answer })).kind).toBe("deployed");
   });
 });
 

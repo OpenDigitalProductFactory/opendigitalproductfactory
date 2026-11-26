@@ -145,8 +145,8 @@ describe("ServiceLinesPanel action safety (BI-7D7EE150)", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("combobox", { name: "Service line to add" }));
-    fireEvent.change(screen.getByRole("textbox", { name: "Search service lines" }), {
+    fireEvent.click(screen.getByRole("button", { name: "Service line to add" }));
+    fireEvent.change(screen.getByRole("combobox", { name: "Search service lines" }), {
       target: { value: "software" },
     });
     fireEvent.click(screen.getByRole("option", { name: /Software Platform/ }));

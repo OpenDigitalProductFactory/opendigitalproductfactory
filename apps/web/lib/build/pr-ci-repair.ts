@@ -17,7 +17,7 @@
 // PR_CI_REPAIR_TOOL is pending until an auto_open_pr row settles it. The
 // publish side lives in pr-ci-follow-up.ts, which the ship path imports; this
 // module is the reconciler's dispatcher only, so the two stay out of a cycle.
-import type { PrRepairPacket } from "./pr-follow-through";
+import type { PrRepairDispatchResult, PrRepairPacket } from "./pr-follow-through";
 import type { GauntletFailure, RouteOutcome } from "./gauntlet-repair";
 import { isRecord } from "@/lib/shared/coerce";
 import type { RuntimeProvider } from "@/lib/executor-drivers/types";
@@ -207,6 +207,7 @@ export type WorkroomPrCiRepairDeps = {
   readRoomIdentity(capsuleId: string): Promise<WorkroomPrRepairRoomIdentity | null>;
   readJobLog(jobId: number): Promise<string | null>;
   resolveActor(principalId: string): Promise<WorkCapsuleActor | null>;
+  findAdmittedCoordinator?(roomId: string): Promise<string | null>;
   isSessionLive(capsuleId: string): boolean;
   selectProviderAccount(): Promise<{ provider: RuntimeProvider; connectionId: string } | null>;
   startSession(input: {
@@ -251,7 +252,7 @@ export type WorkroomPrCiRepairInput = {
 export async function dispatchWorkroomPrCiRepair(
   input: WorkroomPrCiRepairInput,
   deps: WorkroomPrCiRepairDeps = productionWorkroomRepairDeps(input.github),
-): Promise<"dispatched" | "unavailable"> {
+): Promise<PrRepairDispatchResult> {
   const defects = input.packet.failingChecks.filter((check) => check.class === "defect");
   if (defects.length === 0) return "unavailable";
 
@@ -270,6 +271,24 @@ export async function dispatchWorkroomPrCiRepair(
     || room.headSha.toLowerCase() !== input.packet.headSha.toLowerCase()
   ) {
     return "unavailable";
+  }
+
+  const live = deps.isSessionLive(input.capsuleId);
+  let coordinatorPrincipalId: string | null = null;
+  let actor: WorkCapsuleActor | null = null;
+  if (!live) {
+    actor = await deps.resolveActor(input.accountableOwnerPrincipalId);
+    if (!actor) {
+      // Custody and runtime authority are different facts. Use only the room's
+      // unique active coordinator, never an install admin or a new membership.
+      coordinatorPrincipalId = await deps.findAdmittedCoordinator?.(room.id) ?? null;
+      if (coordinatorPrincipalId && coordinatorPrincipalId !== input.accountableOwnerPrincipalId) {
+        actor = await deps.resolveActor(coordinatorPrincipalId);
+      }
+      // The reconciler records the named hold once and rechecks identity on its
+      // own tick. No runtime, repair attempt, or provider request is made here.
+      if (!actor) return "repair-identity-unavailable";
+    }
   }
 
   const findings: WorkroomPrRepairFinding[] = [];
@@ -306,24 +325,9 @@ export async function dispatchWorkroomPrCiRepair(
   let connectionId: string | null = null;
   let result: { success: boolean; error?: string; message: string };
 
-  if (deps.isSessionLive(input.capsuleId)) {
+  if (!actor) {
     result = await deps.sendTurn({ capsuleId: input.capsuleId, prompt });
   } else {
-    const actor = await deps.resolveActor(input.accountableOwnerPrincipalId);
-    if (!actor) {
-      await deps.recordActivity({
-        roomId: room.id,
-        summary: `[not-dispatched head=${input.packet.headSha}] accountable owner user unavailable for PR #${input.prNumber}.`,
-        payload: {
-          prNumber: input.prNumber,
-          prUrl: input.prUrl,
-          headSha: input.packet.headSha,
-          failedChecks: names,
-          reason: "accountable-owner-unavailable",
-        },
-      });
-      return "unavailable";
-    }
     const account = await deps.selectProviderAccount();
     if (!account) {
       await deps.recordActivity({
@@ -365,7 +369,9 @@ export async function dispatchWorkroomPrCiRepair(
         detail: result.message,
       },
     });
-    return "unavailable";
+    return ["unauthorized", "authorization_denied", "workroom_access_denied", "insufficient_token_scope"].includes(result.error ?? "")
+      ? "repair-identity-refused"
+      : "unavailable";
   }
 
   await deps.recordActivity({
@@ -381,6 +387,11 @@ export async function dispatchWorkroomPrCiRepair(
       provider,
       connectionId,
       dependencyBot,
+      ...(coordinatorPrincipalId ? {
+        custodyPrincipalId: input.accountableOwnerPrincipalId,
+        runtimeActorPrincipalId: coordinatorPrincipalId,
+        identityBasis: "active-workroom-coordinator",
+      } : {}),
     },
   });
   return "dispatched";
@@ -423,16 +434,25 @@ function productionWorkroomRepairDeps(github: PrCiRepairGithub | undefined): Wor
     async resolveActor(principalId) {
       const prisma = await db();
       const alias = await prisma.principalAlias.findFirst({
-        where: { principalId, aliasType: "user", principal: { status: "active" } },
+        where: { principalId, aliasType: "user", principal: { kind: "human", status: "active" } },
         select: { aliasValue: true },
       });
       if (!alias?.aliasValue) return null;
       const user = await prisma.user.findUnique({
         where: { id: alias.aliasValue },
-        select: { id: true, isActive: true },
+        select: { id: true, isActive: true, workHandedOverAt: true },
       });
-      if (!user?.isActive) return null;
+      if (!user?.isActive || user.workHandedOverAt) return null;
       return { userId: user.id, agentId: PR_CI_REPAIR_TOOL, principalId };
+    },
+    async findAdmittedCoordinator(roomId) {
+      const rows = await (await db()).workroomParticipant.findMany({
+        where: { workroomId: roomId, lifecycle: "active", roles: { has: "coordinator" } },
+        select: { principalId: true, lifecycle: true, roles: true },
+        take: 2,
+      });
+      const active = rows.filter((row) => row.lifecycle === "active" && row.roles.includes("coordinator"));
+      return active.length === 1 ? active[0]!.principalId : null;
     },
     isSessionLive(capsuleId) {
       const globalRuntime = globalThis as typeof globalThis & { __dpfWorkroomRuntime?: { isLive(id: string): boolean } };
