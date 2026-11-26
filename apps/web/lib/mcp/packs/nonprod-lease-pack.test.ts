@@ -42,6 +42,7 @@ const EXPECTED_TOOLS = [
   "claim_nonprod_environment_lease",
   "release_nonprod_environment_lease",
   "renew_nonprod_environment_lease",
+  "attest_preview_database",
 ];
 
 beforeEach(() => {
@@ -673,4 +674,69 @@ describe("exact persisted reservation readback", () => {
     expect(JSON.stringify(result)).not.toContain("private reader details");
     expect(result.data ?? {}).not.toHaveProperty("lease");
   });
+});
+
+describe("preview attestation tool and release contention", () => {
+  it("classifies only attestation as authority, leaving renew unchanged", () => {
+    const attest = nonprodLeasePack.definitions.find(tool => tool.name === "attest_preview_database");
+    const renew = nonprodLeasePack.definitions.find(tool => tool.name === "renew_nonprod_environment_lease");
+    expect(attest).toMatchObject({ consequence: "authority", sideEffect: true });
+    expect(renew?.consequence).toBeUndefined();
+    expect(renew?.inputSchema.properties).not.toHaveProperty("previewDatabaseObservation");
+    expect(nonprodLeasePack.grants.attest_preview_database).toEqual(["work_capsule_write"]);
+    expect(isToolAllowedByGrants("attest_preview_database", ["work_capsule_write"])).toBe(true);
+  });
+
+  it.each([undefined, null, [], 7, "value", { productionSystemIdentifier: "123" }])(
+    "refuses an invalid observation before any lease effect (%j)", async (previewDatabaseObservation) => {
+      const handler = nonprodLeasePack.handlers.attest_preview_database;
+      expect(handler).toBeTypeOf("function");
+      expect(await handler!({ previewDatabaseObservation }, "user-1")).toMatchObject({
+        success: false, error: "preview_database_observation_invalid",
+      });
+      expect(cleanup.readLease).not.toHaveBeenCalled();
+    },
+  );
+
+  it("preserves lease release contention for a bounded caller retry", async () => {
+    lease.releaseNonprodEnvironmentLease.mockRejectedValueOnce(
+      Object.assign(new Error("nonprod_release_wait_settlement_contended"), { retryable: true }),
+    );
+    const result = await nonprodLeasePack.handlers.release_nonprod_environment_lease!(
+      { leaseId: "NPEL-FIXTURE", ownerSessionId: "preview-owner" }, "user-1",
+    );
+    expect(result).toMatchObject({
+      success: false, error: "nonprod_release_wait_settlement_contended",
+      data: { leaseId: "NPEL-FIXTURE", retryable: true },
+    });
+    expect(result.message).not.toMatch(/do not|final/i);
+  });
+
+  it("does not change other release failure classification", async () => {
+    lease.releaseNonprodEnvironmentLease.mockRejectedValueOnce(new Error("unrelated"));
+    const result = await nonprodLeasePack.handlers.release_nonprod_environment_lease!(
+      { leaseId: "NPEL-FIXTURE", ownerSessionId: "preview-owner" }, "user-1",
+    );
+    expect(result).toMatchObject({ success: false, error: "release_failed", data: { retryable: false } });
+  });
+});
+
+it("retains the exact fingerprint through observation wire coercion and the approval audit", async () => {
+  const { coerceMcpToolArgs } = await import("@/lib/mcp-arg-coercion");
+  const { fingerprintCoworkerInput } = await import("@/lib/govern/authority/coworker-authority-decision");
+  const { retainedGovernedToolParameters, deriveToolAuditClass } = await import("@/lib/governed-tool-audit-parameters");
+  const tool = nonprodLeasePack.definitions.find(def => def.name === "attest_preview_database")!;
+  const observation = { schemaVersion: 1, leaseId: "NPEL-FIXTURE", runtimeId: "fixture-runtime",
+    sourceSha: "a".repeat(40), containerId: "b".repeat(64), volumeName: "fixture_dev_pgdata",
+    database: { systemIdentifier: "7391584902012345678", databaseOid: "16384",
+      databaseName: "dpf", postmasterStartEpoch: "1795679812.123456" } };
+  const rawParams = coerceMcpToolArgs({
+    previewDatabaseObservation: JSON.stringify({ ...observation, database: JSON.stringify(observation.database) }),
+  }, tool.inputSchema);
+  expect(rawParams).toEqual({ previewDatabaseObservation: observation });
+  const auditClass = deriveToolAuditClass(tool);
+  expect(auditClass).toBe("ledger");
+  const retained = retainedGovernedToolParameters({ tool, rawParams }, auditClass);
+  expect(retained).toEqual(rawParams);
+  expect(fingerprintCoworkerInput(retained!)).toBe(fingerprintCoworkerInput(rawParams));
 });

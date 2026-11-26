@@ -82,7 +82,12 @@ case "$tool" in
     printf '%s\\n' '{"jsonrpc":"2.0","result":{"content":[{"type":"text","text":"{\\"success\\":true,\\"data\\":{\\"leases\\":[{\\"leaseId\\":\\"NPEL-OTHER\\",\\"environmentKey\\":\\"local-integration-ci\\",\\"ownerProvider\\":\\"codex\\",\\"ownerSessionId\\":\\"other-session\\"}]}}"}]}}'
     ;;
   release_nonprod_environment_lease)
-    printf '%s\\n' '{"jsonrpc":"2.0","result":{"content":[{"type":"text","text":"{\\"success\\":true,\\"entityId\\":\\"NPEL-MINE\\",\\"data\\":{\\"admission\\":{\\"status\\":\\"admitted\\"},\\"lease\\":{\\"expiresAt\\":\\"2099-01-01T00:00:00.000Z\\"}}}"}]}}'
+    attempts="$(wc -l < "${callsFile}" | tr -d ' ')"
+    if [ "\${DPF_TEST_RELEASE_CONTENTION:-0}" -ge "$attempts" ]; then
+      printf '%s\n' '{"jsonrpc":"2.0","result":{"structuredContent":{"success":false,"error":"nonprod_release_wait_settlement_contended","data":{"retryable":true}}}}'
+    else
+      printf '%s\\n' '{"jsonrpc":"2.0","result":{"content":[{"type":"text","text":"{\\"success\\":true,\\"entityId\\":\\"NPEL-MINE\\",\\"data\\":{\\"admission\\":{\\"status\\":\\"admitted\\"},\\"lease\\":{\\"expiresAt\\":\\"2099-01-01T00:00:00.000Z\\"}}}"}]}}'
+    fi
     ;;
   renew_nonprod_environment_lease)
     if [ "\${DPF_TEST_RENEW_FAIL:-}" = "1" ]; then
@@ -307,6 +312,36 @@ test("dev-portal-lease.sh release releases the named lease", () => {
   assert.equal(calls[0].params.arguments.leaseId, "NPEL-MINE");
 });
 
+test("retries release contention with the same lease and ownership without exceeding three calls", () => {
+  const temp = mkdtempSync(join(tmpdir(), "dpf-preview-release-retry-"));
+  const stubs = makeStubs(temp, "claimed");
+  const result = runLease(["release", "--lease-id", "NPEL-MINE"], {
+    env: baseEnv(stubs, { DPF_TEST_RELEASE_CONTENTION: "2" }),
+  });
+  assert.equal(result.status, 0, result.stderr);
+  const calls = readFileSync(stubs.callsFile, "utf8").trim().split("\n").map(JSON.parse);
+  assert.equal(calls.length, 3);
+  for (const call of calls) assert.deepEqual(call.params, calls[0].params);
+});
+
+test("refuses a gate-prefixed claim before contacting MCP", () => {
+  const temp = mkdtempSync(join(tmpdir(), "dpf-preview-key-"));
+  const stubs = makeStubs(temp, "claimed");
+  const result = runLease(["claim"], { env: baseEnv(stubs, { DPF_DEV_PORTAL_CLAIM_KEY: "gate:fixture" }) });
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /dev-portal: namespace/);
+  assert.equal(existsSync(stubs.callsFile), false);
+});
+
+test("S5 opt-in never silently switches the default lease lane", () => {
+  const temp = mkdtempSync(join(tmpdir(), "dpf-preview-lane-"));
+  const stubs = makeStubs(temp, "claimed");
+  const result = runLease(["refresh", "--s5-rehearsal-preview"], { env: baseEnv(stubs) });
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /s5_preview_active_candidate_required: .*active-candidate lease lane/);
+  assert.equal(existsSync(stubs.callsFile), false);
+});
+
 test("an existing queued refresh consumer makes one claim and never invokes Docker", () => {
   const temp = mkdtempSync(join(tmpdir(), "dpf-dev-portal-queued-"));
   const stubs = makeStubs(temp, "queued");
@@ -324,7 +359,7 @@ test('the shell resumes with its original wait deadline and lease/task identity'
   const deadline = new Date(Date.now() + 90 * 60_000).toISOString();
   const result = runLease(['refresh'], { env: baseEnv(stubs, { DPF_DURABLE_RESUME: '1',
     DPF_DEV_PORTAL_WAIT_DEADLINE: deadline, DPF_DEV_PORTAL_RESUME_LEASE_ID: 'NPEL-WAIT',
-    DPF_DEV_PORTAL_TASK_RUN_ID: 'TR-NONPROD-WAIT', DPF_DEV_PORTAL_CLAIM_KEY: 'preview:fixed' }) });
+    DPF_DEV_PORTAL_TASK_RUN_ID: 'TR-NONPROD-WAIT', DPF_DEV_PORTAL_CLAIM_KEY: 'dev-portal:fixture:fixed' }) });
   assert.equal(result.status, 75, result.stderr);
   const calls = readFileSync(stubs.callsFile, 'utf8').trim().split('\n').map(JSON.parse);
   assert.equal(calls.length, 1);
@@ -333,7 +368,7 @@ test('the shell resumes with its original wait deadline and lease/task identity'
   assert.equal(args.requestedTtlMs, 120_000);
   assert.equal(args.resumeLeaseId, 'NPEL-WAIT');
   assert.equal(args.taskRunId, 'TR-NONPROD-WAIT');
-  assert.equal(args.claimKey, 'preview:fixed');
+  assert.equal(args.claimKey, 'dev-portal:fixture:fixed');
   assert.equal(existsSync(stubs.dockerCallsFile), false);
 });
 

@@ -73,6 +73,7 @@ Options:
   --owner-session-id ID   Client thread (detected by canonical identity helper).
   --expires-minutes N     Admission wait budget, at most 120 minutes (default: 120).
   --lease-id ID           Lease id to release (release only).
+  --s5-rehearsal-preview  Opt in to governed database attestation (refresh only).
   --mcp-url URL           MCP endpoint (default: DPF_MCP_URL or local portal).
   --help                  Show this help.
 
@@ -215,6 +216,7 @@ while [ "$#" -gt 0 ]; do
     --owner-provider) OWNER_PROVIDER="${2:-}"; shift 2 ;;
     --owner-session-id) OWNER_SESSION_ID="${2:-}"; shift 2 ;;
     --expires-minutes) EXPIRES_MINUTES="${2:-}"; shift 2 ;;
+    --s5-rehearsal-preview) export DPF_DEV_PORTAL_S5_REHEARSAL=1; shift ;;
     --lease-id) LEASE_ID="${2:-}"; shift 2 ;;
     --mcp-url) MCP_URL="${2:-}"; shift 2 ;;
     --help|-h) usage; exit 0 ;;
@@ -223,6 +225,10 @@ while [ "$#" -gt 0 ]; do
 done
 
 [ -n "$COMMAND" ] || { usage; exit 2; }
+if [ "${DPF_DEV_PORTAL_S5_REHEARSAL:-}" = "1" ]; then
+  [ "$COMMAND" = "refresh" ] || die "S5 rehearsal preview mode requires refresh"
+  [ "$ENVIRONMENT_KEY" = "active-candidate" ] || die "s5_preview_active_candidate_required: S5 rehearsal preview mode requires the active-candidate lease lane"
+fi
 
 
 identity_module="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)/lib/agent-identity.mjs"
@@ -240,12 +246,25 @@ esac
 
 release_lease() {
   lease_id_to_release="$1"
-  release_response="$(mcp_call release_nonprod_environment_lease "{\"leaseId\":$(json_escape "$lease_id_to_release"),\"ownerSessionId\":$(json_escape "$OWNER_SESSION_ID")}" | extract_tool_result)"
-  release_success="$(printf '%s' "$release_response" | field success)"
-  if [ "$release_success" != "true" ]; then
-    printf '%s\n' "Release action: lease $lease_id_to_release, owner session $OWNER_SESSION_ID; $release_response" >&2
-    return 1
-  fi
+  release_args="{\"leaseId\":$(json_escape "$lease_id_to_release"),\"ownerSessionId\":$(json_escape "$OWNER_SESSION_ID")}"
+  release_attempt=1
+  while :; do
+    release_response="$(mcp_call release_nonprod_environment_lease "$release_args" | extract_tool_result)" || return 1
+    release_success="$(printf '%s' "$release_response" | field success)" || return 1
+    [ "$release_success" != "true" ] || break
+    release_error="$(printf '%s' "$release_response" | field error)" || return 1
+    release_retryable="$(printf '%s' "$release_response" | node -e '
+const result = JSON.parse(require("node:fs").readFileSync(0, "utf8"));
+process.stdout.write(String(result.success === false && result.data?.retryable === true));
+')" || return 1
+    if [ "$release_error" != "nonprod_release_wait_settlement_contended" ] \
+      || [ "$release_retryable" != "true" ] || [ "$release_attempt" -ge 3 ]; then
+      printf '%s\n' "Release action: lease $lease_id_to_release, owner session $OWNER_SESSION_ID; $release_response" >&2
+      return 1
+    fi
+    sleep "$release_attempt"
+    release_attempt=$((release_attempt + 1))
+  done
   printf 'released %s\n' "$lease_id_to_release"
 }
 
@@ -297,6 +316,10 @@ process.stdout.write(JSON.stringify(previewLeaseRequestTiming({ waitMinutes: pro
   # belongs.
   base_claim_key="dev-portal:${WORKTREE_PATH}:${BRANCH}"
   claim_key="${CLAIM_KEY:-$base_claim_key}"
+  case "$claim_key" in
+    dev-portal:?*) ;;
+    *) die "preview claim key must use the dev-portal: namespace" ;;
+  esac
   while :; do
     host_pressure_json="$(sample_host_pressure)" \
       || die "could not measure host pressure for governed preview admission"
@@ -312,7 +335,6 @@ const args = {
   ...JSON.parse(process.argv[8]),
   worktreePath: process.argv[4],
   branchName: process.argv[5],
-  cleanupCommand: "docker compose -p dpf --profile dev rm -sf dev-portal",
   hostPressure: JSON.parse(process.argv[10]),
   ...(process.argv[11] ? {resumeLeaseId: process.argv[11]} : {}),
   ...(process.argv[12] ? {taskRunId: process.argv[12]} : {}),

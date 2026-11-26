@@ -140,6 +140,139 @@ describe.skipIf(!url)("forward-only reservation admission history — isolated P
     expect(stop).toHaveBeenCalledExactlyOnceWith(id);
   });
 
+  it.each(["immediate", "queued"] as const)("publishes only for the current completed preview admission (%s)", async mode => {
+    const { attestOwnedPreviewDatabase } = await import("./environment-lease-provenance");
+    const { previewLogicalRuntimeId, PREVIEW_DATABASE_PROOF_KEY, readLeaseOwningSystemIdentifier } = await import("./preview-db-attestation");
+    const sourceSha = "a".repeat(40), worktreePath = "/fixtures/preview", branchName = "codex/preview";
+    const owner = { authenticatedUserId: "fixture-user", authenticatedAgentId: "fixture-agent" };
+    const now = new Date(), expiresAt = new Date(now.getTime() + 120_000);
+    const input = { ...owner, db: f.db, environmentKey: "active-candidate" as const, ownerProvider: "codex" as const,
+      ownerSessionId: "actual-preview-owner", claimKey: `dev-portal:${randomUUID()}`,
+      purpose: `Contributor preview (:3001) bound to ${worktreePath} @ ${branchName} (${sourceSha})`,
+      url: "http://localhost:3001", ports: [3001], worktreePath, branchName, expiresAt,
+      waitDeadlineAt: new Date(now.getTime() + 600_000), now };
+    const blocker = mode === "queued" ? await claimNonprodEnvironmentLease({
+      ...input, claimKey: `dev-portal:${randomUUID()}`, ownerSessionId: "fixture-blocker",
+    }) : null;
+    const claim = await claimNonprodEnvironmentLease(input);
+    expect(claim.status).toBe(mode === "queued" ? "queued" : "admitted");
+    if (blocker) await releaseNonprodEnvironmentLease({
+      ...owner, db: f.db, leaseId: blocker.lease.leaseId, ownerSessionId: "fixture-blocker",
+    });
+    const live = await f.db.nonProductionEnvironmentLease.findUniqueOrThrow({ where: { leaseId: claim.lease.leaseId } });
+    expect(live).toMatchObject({ status: "active", cleanupCommand: null, slotManifestVersion: null });
+    const onDisk = () => f.db.taskRun.findUniqueOrThrow({ where: { taskRunId: live.taskRunId! } });
+    expect(await onDisk()).toMatchObject({ status: "completed", progressPayload: { nonprodLeaseWait: { state: "admitted" } } });
+    const ownerCluster = (await f.pool.query<{ system_identifier: string }>(
+      "SELECT system_identifier::text FROM pg_catalog.pg_control_system()")).rows[0]!.system_identifier;
+    const database = { systemIdentifier: ownerCluster === "7391584902012345678" ? "7391584902012345679" : "7391584902012345678",
+      databaseOid: "16384", databaseName: "dpf", postmasterStartEpoch: "1795679812.123456" };
+    const rawWitness = await f.db.$transaction(async tx => {
+      const raw = await tx.$queryRawUnsafe<Array<{ systemIdentifier: string }>>(
+        'SELECT system_identifier::text AS "systemIdentifier" FROM pg_catalog.pg_control_system()');
+      return { raw, observed: await readLeaseOwningSystemIdentifier({ $queryRawUnsafe: sql => tx.$queryRawUnsafe(sql) }) };
+    });
+    expect(rawWitness).toEqual({ raw: [{ systemIdentifier: ownerCluster }], observed: ownerCluster });
+    const observation = { schemaVersion: 1, leaseId: live.leaseId, runtimeId: previewLogicalRuntimeId(live),
+      sourceSha, containerId: "b".repeat(64), volumeName: "fixture_dev_pgdata", database };
+    const request = { db: f.db, ...owner, observation };
+    expect(await attestOwnedPreviewDatabase({ ...request, authenticatedUserId: "other-user" }))
+      .toBe("preview_database_owner_unverified");
+    const fixtureUrl = new URL(url!);
+    if (mode === "immediate" && process.env.DPF_PREVIEW_ATTESTATION_TEST_DATABASE_URL === url
+      && ["localhost", "127.0.0.1"].includes(fixtureUrl.hostname) && fixtureUrl.port
+      && /^\/dpf_preview_attestation_[a-f0-9]{12,32}$/.test(fixtureUrl.pathname)) {
+      const { renewNonprodEnvironmentLease } = await import("./environment-lease");
+      const renewed = await renewNonprodEnvironmentLease({ db: f.db, leaseId: live.leaseId,
+        ownerSessionId: input.ownerSessionId, ttlMs: 120_000 });
+      expect(renewed.status).toBe("renewed");
+      const role = "attestation_no_control_fixture";
+      await f.pool.query(`CREATE ROLE ${role} NOLOGIN`);
+      try {
+        await f.pool.query(`GRANT USAGE ON SCHEMA "${schema}" TO ${role}`);
+        await f.pool.query(`GRANT SELECT ON ALL TABLES IN SCHEMA "${schema}" TO ${role}`);
+        await f.pool.query("REVOKE EXECUTE ON FUNCTION pg_catalog.pg_control_system() FROM PUBLIC");
+        const access = await f.pool.query<{ allowed: boolean }>(
+          "SELECT has_function_privilege($1, 'pg_catalog.pg_control_system()', 'EXECUTE') AS allowed", [role]);
+        expect(access.rows[0]?.allowed).toBe(false);
+        const restrictedDb = { $transaction: (run: (tx: Omit<typeof f.db, "$transaction" | "$connect" | "$disconnect" | "$on" | "$use" | "$extends">) => Promise<string>) =>
+          f.db.$transaction(async tx => {
+            await tx.$executeRawUnsafe(`SET LOCAL ROLE ${role}`);
+            return run(tx);
+          }),
+        } as unknown as typeof f.db;
+        expect(await attestOwnedPreviewDatabase({ ...request, db: restrictedDb }))
+          .toBe("preview_database_owner_cluster_unavailable");
+        const stillRenewed = await f.db.nonProductionEnvironmentLease.findUniqueOrThrow({ where: { id: live.id } });
+        if (renewed.status === "renewed") expect(stillRenewed.expiresAt).toEqual(renewed.lease.expiresAt);
+        expect((await onDisk()).progressPayload).not.toHaveProperty(PREVIEW_DATABASE_PROOF_KEY);
+      } finally {
+        await f.pool.query("GRANT EXECUTE ON FUNCTION pg_catalog.pg_control_system() TO PUBLIC");
+        await f.pool.query(`DROP OWNED BY ${role}`);
+        await f.pool.query(`DROP ROLE ${role}`);
+      }
+    }
+    expect(await attestOwnedPreviewDatabase({ ...request, observation: { ...observation,
+      database: { ...database, systemIdentifier: ownerCluster } } })).toBe("preview_database_production_cluster");
+    expect((await onDisk()).progressPayload).not.toHaveProperty(PREVIEW_DATABASE_PROOF_KEY);
+    expect(await attestOwnedPreviewDatabase(request)).toBe("preview_database_published");
+    expect(await attestOwnedPreviewDatabase(request)).toBe("preview_database_unchanged");
+    const newer = { ...observation, database: { ...database, postmasterStartEpoch: "1795679812.123457" } };
+    expect(await attestOwnedPreviewDatabase({ ...request, observation: newer })).toBe("preview_database_published");
+    expect(await attestOwnedPreviewDatabase(request)).toBe("preview_database_observation_stale");
+    expect((await onDisk()).progressPayload).toMatchObject({ [PREVIEW_DATABASE_PROOF_KEY]: { database: newer.database } });
+    await f.db.platformConfig.create({ data: { key: "portal.quiescence", value: { level: "draining" } } });
+    expect(await attestOwnedPreviewDatabase(request)).toBe("preview_database_portal_quiescing");
+    await f.db.platformConfig.delete({ where: { key: "portal.quiescence" } });
+    await f.db.nonProductionEnvironmentLease.update({ where: { id: live.id }, data: { expiresAt: new Date(Date.now() - 1) } });
+    expect(await attestOwnedPreviewDatabase(request)).toBe("preview_database_lease_not_current");
+    expect((await onDisk()).progressPayload).toMatchObject({ [PREVIEW_DATABASE_PROOF_KEY]: { database: newer.database } });
+    expect(await releaseNonprodEnvironmentLease({ ...owner, db: f.db, leaseId: live.leaseId, ownerSessionId: input.ownerSessionId }))
+      .toMatchObject({ status: "released" });
+    expect(await attestOwnedPreviewDatabase(request)).toBe("preview_database_lease_not_current");
+  });
+
+  it("rolls back release when PostgreSQL refuses every non-expiry wait settlement", async () => {
+    const claim = await realClaim(f, true);
+    expect(claim.status).toBe("queued");
+    const db = { ...domainDb(f), taskRun: f.db.taskRun };
+    const now = new Date();
+    const wait = await checkpointNonprodLeaseWait({
+      db, userId: "rollback-fixture-user", lease: claim.lease, queuePosition: 1,
+      now, waitDeadlineAt: new Date(now.getTime() + 60_000),
+    });
+    const getLease = () => f.db.nonProductionEnvironmentLease.findUniqueOrThrow({
+      where: { leaseId: claim.lease.leaseId },
+    });
+    const before = await getLease();
+    const beforeTask = await f.db.taskRun.findUniqueOrThrow({ where: { taskRunId: wait.taskRunId } });
+    const release = () => releaseNonprodEnvironmentLease({
+      db, leaseId: claim.lease.leaseId, ownerSessionId: "this-session", now,
+    });
+
+    // A real zero-row CAS without poisoning the PostgreSQL transaction.
+    await f.pool.query(`CREATE FUNCTION hold_release_wait_fixture() RETURNS trigger
+      LANGUAGE plpgsql AS $$ BEGIN
+        IF NEW.status::text = 'completed' THEN RETURN NULL; END IF;
+        RETURN NEW;
+      END $$`);
+    try {
+      await f.pool.query(`CREATE TRIGGER hold_release_wait_fixture BEFORE UPDATE ON "TaskRun"
+        FOR EACH ROW EXECUTE FUNCTION hold_release_wait_fixture()`);
+      await expect(release()).rejects.toThrow("nonprod_release_wait_settlement_contended");
+      const after = await getLease();
+      expect(after).toMatchObject({ status: before.status, phase: before.phase,
+        releasedAt: before.releasedAt, cancelledAt: before.cancelledAt, activeKey: before.activeKey });
+      expect(await f.db.taskRun.findUniqueOrThrow({ where: { taskRunId: wait.taskRunId } })).toEqual(beforeTask);
+    } finally {
+      await f.pool.query('DROP TRIGGER IF EXISTS hold_release_wait_fixture ON "TaskRun"');
+      await f.pool.query("DROP FUNCTION hold_release_wait_fixture()");
+    }
+
+    expect(await release()).toMatchObject({ status: "cancelled" });
+    expect(await release()).toMatchObject({ status: "cancelled" });
+  });
+
   it("the real queued claim and cancellation producer creates a genuinely eligible request", async () => {
     const claim = await realClaim(f, true);
     expect(claim.status).toBe("queued");

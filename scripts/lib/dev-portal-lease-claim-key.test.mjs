@@ -50,6 +50,12 @@ test("terminal keys are stopped instead of scanned or replaced", () => {
   assert.match(script, /terminal lease claim; stop/);
 });
 
+test("preview claim guards its dev-portal namespace and never sends a cleanup command", () => {
+  const claim = script.slice(script.indexOf("claim_lease()"), script.indexOf("claim_lease()") + 14000);
+  assert.match(claim, /case "\$claim_key" in[\s\S]*dev-portal:\?\*[\s\S]*die/);
+  assert.doesNotMatch(claim, /cleanupCommand:/);
+});
+
 import { protectedServiceIdentity, REQUIRED_PREVIEW_DELIVERY_TOOLS, assertToolReadiness, assertPreviewConfig, assertPreviewContainer, assertAdmittedWorktreePath, previewOverride, runPreviewLifecycle, stopOwnedPreviewContainers, commandRunner } from './dev-preview-runtime.mjs';
 
 test('preview diagnostics retain the failed exit code without child output or arguments', async () => {
@@ -508,6 +514,7 @@ test('the policy claim-key suite runs without installed workspace dependencies',
     mkdirSync(shared, { recursive: true });
     cpSync(join(source, '../../packages/integration-shared/src/delivery-readiness-contract.cjs'), join(shared, 'delivery-readiness-contract.cjs'));
     cpSync(join(source, '../../packages/integration-shared/src/preview-mount-identity.cjs'), join(shared, 'preview-mount-identity.cjs'));
+    cpSync(join(source, '../../packages/integration-shared/src/preview-db-identity.cjs'), join(shared, 'preview-db-identity.cjs'));
     // mcp-credential.mjs re-exports the client_credentials exchange from the skill pack (BI-84C1F526).
     const packLib = join(fixture, 'packages/dpf-skill-pack/scripts/lib');
     mkdirSync(packLib, { recursive: true });
@@ -1143,4 +1150,21 @@ test('preview prerequisite failure preserves the error without requesting immedi
     DPF_MCP_URL: 'http://127.0.0.1:' + server.address().port + '/api/mcp/v1',
   }), { code: 'ENOENT' });
   assert.deepEqual(calls, [], 'missing retained admission must not request release or broaden readback');
+});
+
+test("ordinary preview never gathers an attestation and an S5 observation omits task context", async () => {
+  const { submitPreviewDatabaseObservation } = await import("./dev-preview-runtime.mjs");
+  const calls = [];
+  const call = async (tool, args) => { calls.push([tool, args]); return { success: true }; };
+  const observation = { schemaVersion: 1, leaseId: "NPEL-FIXTURE", runtimeId: "fixture",
+    sourceSha: "a".repeat(40), containerId: "c".repeat(64), volumeName: "fixture_dev_pgdata",
+    database: { systemIdentifier: "7391584902012345678", databaseOid: "16384", databaseName: "dpf", postmasterStartEpoch: "1795679812.123456" } };
+  let probes = 0;
+  const probe = async () => { probes++; return { ...observation, taskRunId: "no", routeContext: "no", chainId: "no" }; };
+  await submitPreviewDatabaseObservation({ enabled: false, call, probe });
+  assert.equal(probes, 0);
+  assert.deepEqual(calls, []);
+  await submitPreviewDatabaseObservation({ enabled: true, call, probe });
+  assert.equal(probes, 1);
+  assert.deepEqual(calls, [["attest_preview_database", { previewDatabaseObservation: observation }]]);
 });

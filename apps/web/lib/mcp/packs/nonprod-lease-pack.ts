@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { isNonprodEnvironmentKey } from "@/lib/nonprod/environment-lease-lock";
 // Shared nonproduction environment lease tool pack — BI-ARCH-TOOLPACKS.
 //
@@ -544,6 +545,10 @@ async function releaseNonprodEnvironmentLeaseHandler(params: Record<string, unkn
         data: { retryable: false, leaseId },
       };
     }
+    if (detail === "nonprod_release_wait_settlement_contended") {
+      return { success: false, error: detail, message: "Release rolled back because wait settlement was contended.",
+        data: { retryable: true, leaseId } };
+    }
     const errorCode = detail === "nonprod_lease_not_owner" ? detail : "release_failed";
     return {
       success: false,
@@ -615,11 +620,36 @@ async function renewNonprodEnvironmentLeaseHandler(params: Record<string, unknow
   };
 }
 
+const attestPreviewDatabaseHandler: ToolPackHandler = async (params, userId, context) => {
+  const { parsePreviewDatabaseObservation } = await import("@/lib/nonprod/preview-db-attestation");
+  const observation = Object.keys(params).some(key => key !== "previewDatabaseObservation")
+    ? null : parsePreviewDatabaseObservation(params.previewDatabaseObservation);
+  const audit = (reason: string) => ({
+    previewDatabaseObservation: {
+      leaseId: observation?.leaseId ?? null, userId, agentId: context?.agentId ?? null, reason,
+      tupleDigest: observation ? createHash("sha256").update(JSON.stringify([
+        observation.database.systemIdentifier, observation.database.databaseOid,
+        observation.database.databaseName, observation.database.postmasterStartEpoch,
+      ])).digest("hex") : null,
+    },
+  });
+  if (!observation) return { success: false, error: "preview_database_observation_invalid",
+    message: "Preview database observation is missing or invalid.", data: audit("preview_database_observation_invalid") };
+  const { attestOwnedPreviewDatabase } = await import("@/lib/nonprod/environment-lease-provenance");
+  const { prisma } = await import("@dpf/db");
+  const result = await attestOwnedPreviewDatabase({ db: prisma, observation,
+    authenticatedUserId: userId, authenticatedAgentId: context?.agentId });
+  const success = result === "preview_database_published" || result === "preview_database_unchanged";
+  return { success, ...(success ? {} : { error: result }), message: success
+    ? "Preview database observation is recorded." : `Preview database observation held (${result}).`, data: audit(result) };
+};
+
 const handlers: Record<string, ToolPackHandler> = {
   list_nonprod_environment_leases: (params) => listNonprodEnvironmentLeases(params),
   lookup_change_origin: (params) => lookupChangeOriginHandler(params),
   claim_nonprod_environment_lease: (params, userId, context) => claimNonprodEnvironmentLeaseHandler(params, userId, context),
   release_nonprod_environment_lease: (params, userId, context) => releaseNonprodEnvironmentLeaseHandler(params, userId, context),
+  attest_preview_database: attestPreviewDatabaseHandler,
   renew_nonprod_environment_lease: (params) => renewNonprodEnvironmentLeaseHandler(params),
 };
 
@@ -633,5 +663,6 @@ export const nonprodLeasePack: ToolPack = {
     claim_nonprod_environment_lease: ["work_capsule_write"],
     release_nonprod_environment_lease: ["work_capsule_write"],
     renew_nonprod_environment_lease: ["work_capsule_write"],
+    attest_preview_database: ["work_capsule_write"],
   },
 };
