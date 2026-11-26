@@ -1,3 +1,7 @@
+---
+status: draft
+---
+
 # Governed Hermes-Style Coworker Learning Loop Design
 
 | Field | Value |
@@ -849,3 +853,45 @@ Start with Slice 1 and Slice 2 together as the first agile increment, executed u
 This is bigger than a tiny patch but still bounded. It creates the measurement spine for everything else and proves the corporate-governed version of Hermes-style self-improvement without prematurely introducing curator mutation, marketplace import, or offline optimization. Crucially it adds **zero new proposal substrate** — proposals reuse `ImprovementProposal`, signals reuse the flywheel — so the increment validates the reuse-first principle before any later slice is allowed to add a new model.
 
 Slice 3 (proposals + `SkillRevision`) and Slice 4 (curator + `lifecycleState`) can run in parallel worktrees once Slice 1+2 lands, since they share no schema collisions.
+
+## 17. Addendum 2026-11-26: re-review against current Hermes, and what moves to DPF2
+
+A second read-only review of NousResearch/hermes-agent (read at its 2026-11-26 head; the Hermes repo changes daily) compared it with DPF and with the DPF2 redesign. It adds no new substrate. It records what is already built here, one confirmed gap that stays in DPF, and the operating-discipline requirements that belong to DPF2 because the cutover retires the DPF mechanisms they would patch.
+
+### 17.1 Rule for where Hermes-derived work lands
+
+DPF keeps identity, job qualification, approval, Workroom intent and acceptance. The execution claim and lease, `WorkroomEffect`, the supervisor, the standing drive and the cron writer move to DPF2 one seam at a time (`2026-11-22-dpf-to-dpf2-convergence-export-and-cutover-readiness.md` section 3). A Hermes-derived requirement that targets a displaced mechanism is built once, in the DPF2 redesign. It is never patched into the DPF mechanism that is being retired. DPF-side work is limited to the skills plane, which no seam displaces.
+
+### 17.2 Already built in DPF (verified against the repository 2026-11-26)
+
+| Slice in this spec | Evidence |
+| --- | --- |
+| Slice 4 curator, lifecycle states, dry-run, pin and quarantine | `apps/web/lib/skills/curator.ts`, `lifecycle.ts`, `apps/web/lib/queue/functions/skill-curator.ts` (daily cron) |
+| Slice 1 skill telemetry and metrics | `apps/web/lib/skills/usage-events.ts`, `skill-metrics.ts` |
+| Slice 3 proposals and revisions | `apps/web/lib/skills/proposals.ts` |
+| Slice 5 evidence search | `apps/web/lib/skills/evidence-search.ts` |
+| Cache boundary between static and per-turn prompt halves | `apps/web/lib/tak/prompt-boundary.ts`, ordering tests in `prompt-assembler.test.ts` |
+| Secret redaction from connector text and audit parameters | `apps/web/lib/integrations/kernel/redaction.ts`, `governed-tool-audit-parameters.ts` |
+
+### 17.3 Confirmed DPF gap (BI-4D628A3E)
+
+`classifySkillLifecycle` rule 2 archives a skill with no content, no assignments and no invocations in 30 days, and `ClassifyInput` carries no creation time. A skill created minutes ago is archived on the next daily run. Hermes gives never-used skills a grace floor, because zero use is absence of evidence. The fix adds the creation time to `ClassifyInput` and gates rule 2 on age. Hermes' other curator refinements do not apply here: `ScheduledAgentTask` carries no skill references to exempt, and the curator is already a daily cron with a dry-run pass.
+
+### 17.4 Requirements routed to DPF2 (tracker BI-97B9AA74)
+
+Routing was confirmed 2026-11-26 by the convergence coordination thread. No new lane, no first-handoff prerequisite and no implementation authorization was added. All items follow the First Workroom handoff.
+
+1. to 3. Control scheduler lane (`lane/control-scheduler-wake`, parked): company-scoped tick, claim and receipt identity; per-company pause and error latch; per-job catch-up grace with a recorded reason for every coalesced or skipped slot. Hermes learned the equivalent class the hard way: in-flight state keyed by `(home, job)`, a claim released under the key it was registered with, scope bound for the whole tick.
+4. R023/R024: persisted consecutive-failure count and sticky terminal classes that need human re-admission, extending existing hold, dead-letter and authority classes only where uncovered.
+5. R022: prove original process identity (pid plus start-time) before signalling; refuse stale or ambiguous identity.
+6. R037: scoped store quarantine with no write or final checkpoint on structural corruption, and separately rebuildable derived indexes, after verifying existing restore integrity.
+7. Unassigned: child-run lifecycle (handle, status, wait, cooperative cancel that never claims completion, steer, immutable hashed result). DPF2 coordinator decides ownership after the handoff.
+8. Deferred until `s5-route-handoff@0.1.0` settles: `constraints`, `boundaries` and `stop_when` in the job and work-package contract.
+
+### 17.5 Open verification, not yet a backlog item
+
+Whether the static half of the system prompt is pinned against per-turn input. The existing tests check block order around the boundary marker, but there is no test that the static half is independent of per-turn inputs and no tool-surface snapshot. File an item only if that check shows a real gap. The coordinator notes the prompt assembler already has an eligible-skills list, an active-skill path and Hermes reflection hooks, so skills-plane work must target demonstrably missing governed behavior only.
+
+### 17.6 Model access
+
+DPF2 uses the pinned vendor CLIs only (owner direction 2026-11-25). Hermes' provider-routing, credential-pool and fallback machinery is therefore out of scope for DPF2. Its single-user trust model (an LLM-judged approval mode, any admitted chat member may approve) conflicts with grant intersection and is not adopted.
