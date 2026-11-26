@@ -4,7 +4,7 @@ status: draft
 
 # Owner-operated inactive enrollment and retirement of the S5 rehearsal requester
 
-**Status:** design for independent review, revision 7. It addresses the sixth review of `3211e083` (REQUEST_CHANGES).
+**Status:** design for independent review, revision 8. It addresses the seventh review of `b175b4dd` (REQUEST_CHANGES) under the coordinator's fixed clone-scope rulings.
 
 - **Backlog item:** BI-9F7192F9.
 - **Workroom:** WC-4EBA473D.
@@ -161,21 +161,41 @@ The record is the single durable marker of a governed requester. `isGovernedRequ
   - Test fixtures tear down by dropping their schema or database.
 - **Clone:** `packages/db/src/sanitized-clone.ts` skips `restricted` tables (`:92`) and reloads every other eligible table (`:331`), so on its own it would copy a requester's `User` without the marker. Its destination reset (`runWithDestinationCleanup`, `sanitized-clone-cleanup.ts:5`) runs **before** the existing source-check callback. It also truncates, and `TRUNCATE` does not fire `BEFORE DELETE`. The canonical preview is `dev-postgres`, cloned from production (`docker-compose.yml:800`). That preview is where a requester would live.
 
-  The clone contract has three parts. All of it runs **before** `runWithDestinationCleanup`, so a refusal leaves every destination row intact.
-  1. **Source check in the copy snapshot.** First open the source's `REPEATABLE READ READ ONLY` snapshot, the one the copy already uses (`sanitized-clone.ts:295`). Inside it, count `S5RehearsalRequesterEnrollment` rows: if `to_regclass` finds no table, the count is zero, so a source from before this migration still clones. More than zero means refuse. The copy then reuses this same snapshot, so a later enrollment cannot appear in the copy. In practice a production source always has zero rows, because enrollment refuses on production, so ordinary previews are unaffected.
-  2. **Destination disposition.** Read the destination's enrollment rows:
-     - An **active** requester anywhere means refuse. The operator must retire it first.
-     - **Only retired** rows means the reset is refused unless the operator passes the explicit disposition `--discard-retired-rehearsal-evidence`, which records that the per-DB evidence is being discarded. There is no implicit discard.
+  The clone contract **keeps the clone's existing ordering and snapshot handling unchanged**. It adds one destination fence and one source count.
+
+  1. **Destination fence: one lock for every clone entry point.**
+     - The fence is a session-level advisory lock in the **destination** database, on the fixed, documented key `hashtextextended('dpf:s5-rehearsal-requester:destination-fence', 0)`.
+     - It is held on a dedicated, pinned destination connection from **before** the destination preflight, through reset, copy and failure cleanup. It is released only at the end.
+     - Every supported clone entry point takes it:
+       - the direct `dev-init` path (`docker-compose.yml:800`, which runs `sanitized-clone.ts`);
+       - the cleanup wrapper path (`runSourceCheckedClone` → `runWithDestinationCleanup`, `sanitized-clone-cleanup.ts:9`).
+     - If the fence connection is lost, the clone stops with `fence_lost`. It does **not** run failure cleanup, because cleanup would truncate without the fence. The destination is left for the operator to inspect.
+     - **Enrollment and retirement** take the same key as a transaction-scoped shared try-lock (`pg_try_advisory_xact_lock_shared`) before any other work. If they can't get it, they hold with `clone_in_progress`, before any body read or hash.
+  2. **Destination preflight, under the fence and before reset.** Read the destination's enrollment rows:
+     - An **active** requester refuses. The operator retires it first.
+     - **Only retired** rows refuse unless the operator passes `--discard-retired-rehearsal-evidence`, which records that the per-DB evidence is being discarded. There is no implicit discard.
      - No rows, or no table, means proceed.
-  3. **Concurrent enrollment.** Enrollment requires lease currency fenced against teardown and replacement (BI-60FC9291), and a destination reset is a teardown of the leased preview. So no enrollment can commit while a reset is in progress. Without that fence, enrollment holds.
+
+     A refusal happens before `runWithDestinationCleanup`, so it leaves every destination row intact.
+  3. **Source count, inside the existing copy snapshot.**
+     - The count runs at the point the existing `REPEATABLE READ READ ONLY` snapshot is first used (`sanitized-clone.ts:295`).
+     - It counts `S5RehearsalRequesterEnrollment` rows. If `to_regclass` finds no table, the count is zero, so a source from before this migration still clones.
+     - A count above zero aborts the clone through the existing failure cleanup. That loses nothing protected: under the fence, the destination was already proven to hold no requester, apart from an explicitly discarded retired-only one.
+     - A production source always counts zero, because enrollment refuses on production, so ordinary previews are unaffected.
+
+  **Out of scope.** The clone's existing copy-consistency window is a pre-existing property of the clone, not something this item changes. Today the binary `COPY` and per-table counts use connections other than the snapshot. This item neither widens nor narrows that window.
 
   Tests:
-  - A refusal leaves the destination rows intact.
+  - A destination preflight refusal leaves the destination rows intact.
   - A destination with an active requester is protected.
   - A destination with only retired requesters needs the explicit disposition.
+  - **Race through the direct `dev-init` path:**
+    - an enrollment attempted while the clone holds the fence gets `clone_in_progress` and makes no write;
+    - a clone that starts while an enrollment transaction holds the shared lock waits, then its preflight sees the committed requester and refuses.
+  - A requester-bearing source aborts, and leaves no requester in the destination.
   - A pre-migration source still clones.
   - A production-sourced ordinary preview is unaffected.
-  - An enrollment created after the snapshot does not appear in the copy.
+  - A lost fence connection stops the clone without running cleanup.
 - **Portability:** evidence is retained only on the original installation and database. It is not portable across a clone or reset. A reset or a fresh database has no governed requester.
 - **Parent spec reconciliation:** this change edits the parent provisioner design (`2026-11-25-s5-rehearsal-draft-provisioner-design.md`) in two places:
   - its "no migration" statement (`:17`) points to this record;
@@ -208,7 +228,14 @@ Each successful command writes one typed, transaction-bound `AuthorizationDecisi
    - That review binds the authenticated resolver to the candidate's local Principal and to this installation.
    - The abstained decision `DI-7895859F4446` is not reused.
    - **BI-C7100183** gates the served adapter for this receipt. Until it lands, the owner port denies.
-3. **Live checks on the acting session:**
+3. **Live checks on the acting session, read coherently.** After the per-setup lock, **one SQL statement** reads everything below together, in one snapshot:
+   - the singleton organization count and its `topAccountablePrincipalId`;
+   - the candidate Principal's kind and status, and its local `user` alias;
+   - the acting User's activity, automation and handover fields;
+   - the acting User's platform-role IDs;
+   - the governed-requester marker.
+
+   The decision is a pure evaluation of that single row set, so it can never combine owner and grant facts from different moments. It requires all of the following:
    - the same Principal as the candidate;
    - live `manage_users` and `manage_platform`, read from the database **through the actor's platform-role grants**. `can()` returns true for every superuser (`lib/govern/permissions.ts:136`), so it is not used on its own. A superuser with no role does not qualify;
    - no automation fields;
@@ -216,6 +243,7 @@ Each successful command writes one typed, transaction-bound `AuthorizationDecisi
    - not a governed requester.
 
 **Tests** (each case holds or refuses):
+- the owner mapping changes between what used to be separate candidate and grant reads (an `organization-accountable-owner.ts:47` write interleaved with the evaluation). The decision uses only one coherent row set, and never accepts a combination that was never true at one moment
 - missing receipt
 - receipt naming the wrong Principal
 - receipt for the wrong install
@@ -257,7 +285,12 @@ The locator is deliberately not proof of session continuity or of which tab rend
 **Before any body read**, in this order:
 
 1. Refuse in production.
-2. Require **positive, exact** same-origin evidence. Either `Origin` must equal the canonical portal origin, or `Sec-Fetch-Site` must be `same-origin`. A missing `Origin` together with missing Fetch Metadata refuses, as does `Origin: null` or a foreign origin. This is stricter than the OAuth authorize POST precedent, which allows both headers to be absent.
+2. Require **positive, exact** same-origin evidence:
+   - If an `Origin` header is **present**, it must equal the canonical portal origin. A present `null` or foreign `Origin` refuses **even if** `Sec-Fetch-Site` is `same-origin`.
+   - If `Origin` is absent, `Sec-Fetch-Site` must be `same-origin`.
+   - If both are absent, refuse.
+
+   This is stricter than the OAuth authorize POST precedent, which allows both headers to be absent.
 3. Require a session.
 4. Bind the command from the path.
 5. Parse the `setupContext` from the query under a strict schema. A malformed context holds.
@@ -266,7 +299,7 @@ The locator is deliberately not proof of session continuity or of which tab rend
    - **Retire:** a retained record must exist for the digest. Retirement does not depend on the reservation.
 7. Check the command's readiness.
 8. Run the pre-body owner and exact-DB read-only transaction.
-9. **Enroll pre-parse replay.** If a record already exists for the digest, run the **shared read-only verification**, `verifyRequesterState`. Retirement's fresh readback uses the same function. It checks:
+9. **Enroll pre-parse replay.** If a record already exists for the digest, run the **shared read-only verification**, `verifyRequesterState`. Retirement's fresh readback uses the same function. It runs in a single `REPEATABLE READ READ ONLY` transaction, so all its reads share one snapshot and it cannot assemble a pass from different states. It checks:
    - the record's refs match the target;
    - the User and the Principal are inactive;
    - the Principal's only alias is the exact local `user` alias for that User;
@@ -293,6 +326,8 @@ The locator is deliberately not proof of session continuity or of which tab rend
 Under `Serializable`, a transaction's snapshot is taken by its first statement, which here is the lock call itself. That snapshot is taken **before** an advisory lock is granted, so a waiter could still miss the winner's committed row. Enrollment therefore runs in **Read Committed**, where every statement after the lock sees the latest committed state. Checks on proofs owned elsewhere use those owners' commit-time fences rather than a snapshot.
 
 1. **Claim the exact create attempt before hashing.**
+   - First take the destination fence as a shared try-lock; if it isn't available, return `clone_in_progress`.
+   - Run the interactive Prisma transaction with `timeout: 15_000` and `maxWait: 5_000`. The timeout deliberately exceeds the 5 s lock wait, so a waiter near the deadline can still replay.
    - Set `SET LOCAL lock_timeout = '5s'`, then take `pg_advisory_xact_lock(hashtextextended('s5rr-enroll:' || setupDigest, 0))`. The `setupDigest` here is the one the server derived.
    - If the lock wait times out, return `enroll_busy` and hold. No hash.
    - A 64-bit key collision only serializes two different enrollments. Identity lookups use the full digest, so a collision never merges them.
@@ -319,7 +354,22 @@ Under `Serializable`, a transaction's snapshot is taken by its first statement, 
 - **Success:** `created` is the only successful outcome that hashes.
 - **Hashed:**
   - `create_failed`: a failure after the hash and **before** commit was attempted, such as a constraint, a trigger or a statement error. The rollback is confirmed. The response is a generic code, and the log records the code only. Neither ever contains the password, the hash or the body.
-  - `create_unverified`: the commit was sent but its acknowledgement was lost, for example on a connection error. The request **does not claim rollback**. It reports `create_unverified`, and the next request for that setup re-observes the outcome through the step 9 replay path.
+  - `create_unverified`: the commit was sent but its acknowledgement was lost, for example on a connection error. The request **does not claim rollback**. It reports `create_unverified`, together with the server-derived `setupDigest`, for recovery.
+
+**Lost-acknowledgement recovery: read only, never creates.**
+
+`GET /api/admin/rehearsal-requester/status?setupDigest=<digest>` is the recovery path.
+- **Gated like retirement:**
+  - production refusal;
+  - positive same-origin evidence;
+  - owner binding;
+  - the lease-independent installation and DB proofs.
+- **Keyed only by the digest:** it does not depend on the current reservation, so it still works after the reservation is released or replaced.
+- **Waits for the original transaction:** it takes the per-setup advisory lock in a read-only transaction. That lock is held until the original transaction ends, so the read cannot overtake a commit that is still completing.
+- **Reports one of:**
+  - `committed`, with the `verifyRequesterState` result;
+  - `not_committed`, if no record exists once the lock has been acquired.
+- **Never writes:** it never creates, never accepts a body and never calls a mutator. After `not_committed`, a new enrollment still has to pass the full boundary, including the current reservation comparison. Stale evidence can never create.
 
 **Password promise.** After bounded parsing, the password is used only in step 6 of the transaction that owns the create. It is never compared, never stored except as the new bcrypt hash, and never logged or echoed. It never appears in a response, a receipt or telemetry.
 
@@ -329,7 +379,8 @@ Under `Serializable`, a transaction's snapshot is taken by its first statement, 
 - A lock-wait timeout returns `enroll_busy` with zero hasher calls.
 - The reservation is released after the last comparison. Expect no commit.
 - A forced failure after the hash gives `create_failed`, with no secret in the logs or the response.
-- A simulated lost commit acknowledgement gives `create_unverified`. On retry, the request re-observes.
+- A simulated lost commit acknowledgement gives `create_unverified`. The reservation is then released **between** the lost acknowledgement and the recovery. The status path still reports `committed` with its verification, and a new enroll POST holds on the reservation check without creating anything.
+- The transaction timeout exceeds the lock wait, so a waiter that gets the lock near 5 s still completes as `replay`.
 - Spies on the hasher, the logger and the response body.
 
 The email address is `rehearsal-<first 16 hex>@s5-rehearsal.invalid`. It is a label only.
@@ -359,12 +410,13 @@ Retirement runs in one **Read Committed** transaction:
    - the full terminal tuple is present.
 
    Return `retired` **only** if all of that passes. Otherwise:
-   - after a commit in this request, return `committed_unverified`;
-   - on a repeat, hold, naming the failed check.
+   - after a commit in this request, return `committed_unverified` with reason `requester_state_unverified`, meaning retirement committed but verification failed;
+   - on a repeat, hold with reason `requester_state_unverified`.
 
    A retry re-observes the record and never rewrites it.
 
 **Tests:**
+- alias drift injected **between the commit and the fresh readback** returns `committed_unverified` (`requester_state_unverified`), not `retired`;
 - populated defensive revocation;
 - concurrent and repeated retirement;
 - no reservation, no lease, purged audit rows, attempt or fixture drift;
@@ -439,7 +491,7 @@ These are excluded from this item:
   - Retirement uses lease-independent proofs.
   - The served adapter holds.
 - **AC-E2. Owner binding.**
-  - Owner resolution uses the canonical singleton reader.
+  - Owner resolution uses the canonical singleton reader, and its predicates are evaluated from one coherent statement after the lock.
   - Ambiguous or invalid mappings hold.
   - There is no superuser fallback, and a superuser with no role does not qualify through `can()`.
   - The missing, wrong-Principal and wrong-install receipt cases hold.
@@ -449,15 +501,18 @@ These are excluded from this item:
   - The update and delete triggers and the all-or-none CHECK hold.
   - There is no lifecycle index.
   - Restrict behaves as specified.
-  - The clone's checks run before destination reset, so a refusal leaves the destination intact.
-  - The source check runs inside the copy snapshot.
+  - Every clone entry point, including direct `dev-init`, holds the destination fence from the preflight through cleanup. Enrollment and retirement use the shared try-lock.
+  - The destination preflight runs before reset, so a refusal leaves the destination intact.
+  - The source count runs inside the existing copy snapshot at its first use, and a non-zero count aborts through the existing cleanup.
   - A requester-bearing source refuses. A pre-migration source still clones, and ordinary production-sourced previews are unaffected.
   - A destination with an active requester is protected. One with only retired requesters needs the explicit discard disposition.
 - **AC-E4. Enrollment.**
   - The create runs in Read Committed, with the lock taken before any hash and the lock wait bounded (`enroll_busy`). Reads after the lock are fresh.
   - When request B is already waiting before A commits, exactly one hash happens.
   - The one-shot reservation revision is fenced through commit. A release after the last comparison cannot commit.
-  - A post-hash failure is rolled back, returns `create_failed`, and leaks nothing. A lost commit acknowledgement returns `create_unverified` and the next request re-observes.
+  - A post-hash failure is rolled back, returns `create_failed`, and leaks nothing.
+  - A lost commit acknowledgement returns `create_unverified`. The read-only status path recovers it by digest even after the reservation is released, and never creates.
+  - The Prisma transaction timeout exceeds the lock wait. A clone in progress gives `clone_in_progress`.
   - Replay, retired and hold never hash. Enroll returns `retired` only after the shared verification.
   - Drift, collision, an orphan email and a mismatch all hold.
 - **AC-E5. Never active.** Every issuer in the table refuses, including the headless, customer and social cases. The workforce and employee-sync paths refuse, both before and after retirement.

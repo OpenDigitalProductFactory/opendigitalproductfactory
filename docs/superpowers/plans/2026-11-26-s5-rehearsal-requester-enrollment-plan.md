@@ -4,7 +4,7 @@ status: draft
 
 # Plan: owner-operated inactive enrollment and retirement of the S5 rehearsal requester
 
-Backlog item BI-9F7192F9, Workroom WC-4EBA473D. Design: `docs/superpowers/specs/2026-11-26-s5-rehearsal-requester-enrollment-design.md`, revision 7. Shape: delivery-small.
+Backlog item BI-9F7192F9, Workroom WC-4EBA473D. Design: `docs/superpowers/specs/2026-11-26-s5-rehearsal-requester-enrollment-design.md`, revision 8. Shape: delivery-small.
 
 This plan covers server-side work only. It ships inert, and the requester is never active.
 
@@ -18,7 +18,7 @@ Activation, sessions, delegation and issuance belong to BI-9F5D1052.
 
 ## Preconditions (hold Red until all are met)
 
-- **P1. Design approved.** The independent re-review approves revision 7.
+- **P1. Design approved.** The independent re-review approves revision 8.
 - **P2. Schema and model count.**
   - The coordinator confirms the model shape (approved in principle).
   - The owner approves a `prismaModelCount` raise from 649 to 650.
@@ -60,20 +60,29 @@ Activation, sessions, delegation and issuance belong to BI-9F5D1052.
      - linked deletes refused, unrelated deletes succeed;
      - a read error reported as an error;
      - teardown drops the schema.
-2. **Clone preflight (AC-E3).**
-   - Build, in `sanitized-clone.ts`, **before** `runWithDestinationCleanup`:
-     - open the source's `REPEATABLE READ READ ONLY` copy snapshot first;
-     - inside it, count requester rows (`to_regclass`-guarded; a missing table counts as zero) and refuse when any exist;
-     - read the destination disposition: an active requester refuses; only retired rows need `--discard-retired-rehearsal-evidence`;
-     - the copy then reuses the same snapshot.
-   - Concurrent enrollment is excluded by BI-60FC9291's lease-teardown fence.
+2. **Clone fence and checks (AC-E3).** The clone's ordering and snapshot handling are unchanged (coordinator ruling).
+   - Build:
+     - A destination session advisory lock on the fixed key `hashtextextended('dpf:s5-rehearsal-requester:destination-fence', 0)`.
+       - Hold it on a pinned destination connection from before the preflight through reset, copy and failure cleanup.
+       - Take it on every entry point: the direct `dev-init` path and `runSourceCheckedClone`/`runWithDestinationCleanup`.
+       - If the fence is lost, stop with `fence_lost` and run no cleanup.
+     - The destination preflight under the fence:
+       - an active requester refuses;
+       - retired-only requires `--discard-retired-rehearsal-evidence`.
+     - The source requester count, inside the existing `REPEATABLE READ` snapshot at its first use, guarded by `to_regclass`.
+       - A count above zero aborts through the existing failure cleanup.
    - Tests:
-     - a refusal leaves destination rows intact;
-     - a destination with an active requester is protected;
-     - a retired-only destination needs the explicit disposition;
+     - a refusal leaves the destination intact;
+     - an active destination is protected;
+     - retired-only needs the flag;
+     - **race through direct `dev-init`**:
+       - enrollment during a clone gives `clone_in_progress` with no write;
+       - a clone that waits on an in-flight enrollment refuses at preflight;
+     - a requester-bearing source aborts with no requester in the destination;
      - a pre-migration source clones;
-     - a production-sourced ordinary preview is unaffected;
-     - an enrollment made after the snapshot does not appear in the copy.
+     - an ordinary production-sourced preview is unaffected;
+     - fence loss runs no cleanup.
+   - Out of scope: the clone's existing copy-consistency window, which predates this item.
 3. **Audit writer (AC-E8).**
    - Build: a typed insert for both keys, and the M-4 exclusion.
    - Tests: the approval reader rejects the row; projector and API tests; the M-4 exclusion.
@@ -83,7 +92,7 @@ Activation, sessions, delegation and issuance belong to BI-9F5D1052.
      - enroll and retire readiness;
      - the `[command]` handler, `@exposure authenticated`.
    - Order of checks:
-     - production; positive exact same-origin evidence (missing, `null` or foreign origin refuses); session; command;
+     - production; positive exact same-origin evidence (a present `null` or foreign `Origin` refuses even with `Sec-Fetch-Site: same-origin`, and missing both refuses); session; command;
      - strict `setupContext` from the query, with `setupDigest` derived on the server from the verified refs;
      - comparison with current owner evidence;
      - readiness;
@@ -99,28 +108,36 @@ Activation, sessions, delegation and issuance belong to BI-9F5D1052.
      - the sole `manage_platform` human, used only when the mapping is unset;
      - no superuser fallback;
      - the receipt port, which denies and is gated on **BI-C7100183**;
-     - live actor checks, with capabilities taken from role grants (not `can()` alone).
+     - live actor checks, with capabilities taken from role grants (not `can()` alone), all read in **one SQL statement** after the lock and evaluated purely from that single row set.
    - Tests:
      - missing receipt, wrong Principal, wrong install;
      - ambiguous organization;
      - invalid mapping;
      - several candidates;
      - non-owner, automation, handed-over and requester actors;
-     - a superuser with no role.
+     - a superuser with no role;
+     - an owner-mapping change interleaved between what used to be separate candidate and grant reads, which never yields an accepted combination.
 6. **Enrollment (AC-E4).**
    - Build: a **Read Committed** create.
-     1. `SET LOCAL lock_timeout`, then take the per-setup advisory lock before any hash. A timeout returns `enroll_busy`.
+     1. Take the destination fence as a shared try-lock (`clone_in_progress` if it is unavailable). Use a Prisma transaction with `timeout: 15_000` and `maxWait: 5_000`, which exceeds the lock wait. Then `SET LOCAL lock_timeout = '5s'` and take the per-setup advisory lock before any hash; a timeout returns `enroll_busy`.
      2. Fresh reads after the lock: owner checks, reservation comparison, the record.
      3. The commit-time fences for the one-shot reservation revision (BI-588688A7), lease currency, installation and DB identity.
      4. The single hash.
      5. Create the inactive User and Principal, then write the record and audit row.
-   - Outcomes: `create_failed` (rollback confirmed) and `create_unverified` (commit acknowledgement lost, re-observed on retry).
+   - Outcomes: `create_failed` (rollback confirmed) and `create_unverified` (commit acknowledgement lost).
+   - Recovery: read-only `GET …/status?setupDigest=`.
+     - Gated like retirement.
+     - Keyed by digest and independent of the reservation.
+     - Waits on the per-setup lock so it cannot overtake an in-flight commit.
+     - Reports `committed` (with `verifyRequesterState`) or `not_committed`.
+     - Never creates.
    - Tests:
      - Request B waits before A commits (asserted through `pg_locks` or a barrier). Exactly one hash. B gets `replay` with zero hasher calls.
      - A lock timeout gives `enroll_busy` with no hash.
      - A reservation released after the last comparison does not commit.
      - A forced post-hash failure gives `create_failed`, with no secret logged or returned.
-     - A simulated lost commit acknowledgement gives `create_unverified`, and the retry re-observes.
+     - A simulated lost commit acknowledgement gives `create_unverified`. The reservation is released **between** the lost acknowledgement and recovery. Status still reports `committed` with its verification, and a new POST holds without creating.
+     - A waiter that gets the lock near 5 s still completes as `replay` within the transaction timeout.
      - Drift, collision, orphan email and mismatch each hold.
      - Replay still works after the audit rows are purged.
 7. **Never-active invariant (AC-E5).**
@@ -138,14 +155,16 @@ Activation, sessions, delegation and issuance belong to BI-9F5D1052.
      - Read Committed `FOR UPDATE` on the record;
      - authority, DB, installation and exact-alias checks run **before** the already-retired branch;
      - separate binding revocation, the helper, deactivation of this account only, and a single terminal write plus audit row;
-     - a fresh readback through the shared `verifyRequesterState`. It returns `retired` only on full verification, otherwise `committed_unverified` or a hold.
+     - a fresh readback through the shared `verifyRequesterState`, run in one `REPEATABLE READ READ ONLY` snapshot. It returns `retired` only on full verification. Otherwise it returns `committed_unverified` with reason `requester_state_unverified`, or a hold on a repeat.
+     - Retirement also takes the destination fence as a shared try-lock (`clone_in_progress`).
    - Tests:
      - populated revocation;
      - concurrent and repeated retirement;
      - no reservation and no lease;
      - purged audit rows;
      - drift;
-     - a `committed_unverified` retry where the actor lost authority (refuses) or the alias drifted (holds, not `retired`).
+     - a `committed_unverified` retry where the actor lost authority (refuses) or the alias drifted (holds, not `retired`);
+     - alias drift injected between the commit and the fresh readback, giving `committed_unverified` (`requester_state_unverified`).
 10. **Read seam (AC-E8).**
     - Build: `readS5RehearsalEnrollment`.
     - Tests: no bearer fields, no mutator, `audit-expired`, and the provisioner holds.
