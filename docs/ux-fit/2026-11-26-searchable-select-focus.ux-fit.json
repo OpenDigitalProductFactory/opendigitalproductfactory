@@ -20,5 +20,5 @@
       }
     }
   },
-  "notes": "Measured on contributor preview source 98d0db73864e2e085522656ab6f123f3cbb89fb0. Numerical budget axes did not regress. The separate route sweep flagged an accessibility-tree shape change, including the intentional change from a closed combobox role to a button. The structure baseline was not changed."
+  "notes": "Measured on contributor preview source 98d0db73864e2e085522656ab6f123f3cbb89fb0. Numerical budget axes did not regress. Canonical CI run 45839114085 confirmed the only structural differences in existing routes were the intentional picker role changes in tax settings and operating hours. Their snapshots were refreshed without changing numerical budgets."
 }

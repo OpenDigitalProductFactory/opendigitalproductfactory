@@ -112,9 +112,22 @@ export async function verifyProviderQuotaRecovery() {
           check(await details.getByRole("link", { name: copy.providerUsage }).getAttribute("href") === "https://chatgpt.com/codex/settings/usage", "Provider usage target changed");
           check(transport.counts().requests === countBefore, "Viewing limits or reset guidance sent inference");
           if (scenario === "limited" || scenario === "recovered") {
-            await details.getByLabel(copy.capacityModel, { exact: true }).click();
-            await details.getByRole("textbox", { name: copy.capacityModelSearch, exact: true }).fill(fixture.modelId);
-            await details.getByRole("option", { name: `Recovery verification model (${fixture.modelId})`, exact: true }).click();
+            const modelPicker = details.getByRole("button", { name: copy.capacityModel, exact: true });
+            const modelSearch = details.getByRole("combobox", { name: copy.capacityModelSearch, exact: true });
+            await modelPicker.focus();
+            await page.keyboard.press("ArrowDown");
+            await modelSearch.waitFor({ state: "visible" });
+            check(await modelSearch.evaluate((element) => element === document.activeElement), "Opening the model picker did not focus search");
+            await page.keyboard.press("Escape");
+            check(await modelPicker.evaluate((element) => element === document.activeElement), "Escape did not restore model picker focus");
+            await page.keyboard.press("Enter");
+            await modelSearch.fill(fixture.modelId);
+            const modelOption = details.getByRole("option", { name: `Recovery verification model (${fixture.modelId})`, exact: true });
+            await modelOption.waitFor({ state: "visible" });
+            const optionId = await modelOption.getAttribute("id");
+            check(optionId && await modelSearch.getAttribute("aria-activedescendant") === optionId, "Focused search did not identify the active model");
+            await modelSearch.press("Enter");
+            check(await modelPicker.evaluate((element) => element === document.activeElement), "Choosing a model did not restore picker focus");
             await details.getByRole("button", { name: copy.capacityCheck, exact: true }).click();
             await details.getByRole(scenario === "recovered" ? "status" : "alert").filter({ hasText: scenario === "recovered" ? "completed a Responses capacity check" : "did not confirm capacity" }).waitFor({ timeout: 45_000 });
             check(transport.counts().requests === countBefore + 1, "Check now did not send exactly one fixed synthetic request");

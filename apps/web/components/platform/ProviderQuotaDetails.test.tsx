@@ -49,7 +49,7 @@ describe("provider capacity recovery disclosure", () => {
   it("sends only the explicitly selected account/model and hourly choice", async () => {
     render(<ProviderQuotaDetails connectionId="provider-default-chatgpt" recovery={recovery} canWrite copy={copy} />);
     fireEvent.click(screen.getByText(copy.limitDetails));
-    fireEvent.click(screen.getByLabelText(copy.capacityModel));
+    fireEvent.click(screen.getByRole("button", { name: copy.capacityModel }));
     fireEvent.click(screen.getByRole("option", { name: "Other model (other-model)" }));
     fireEvent.click(screen.getByLabelText(copy.capacityHourly));
     fireEvent.click(screen.getByRole("button", { name: copy.capacityCheck }));
@@ -60,10 +60,11 @@ describe("provider capacity recovery disclosure", () => {
     const models = Array.from({ length: 25 }, (_, i) => ({ modelId: `model-${i}`, name: `Model ${i}` }));
     render(<ProviderQuotaDetails connectionId="provider-default-chatgpt" recovery={{ ...recovery, models }} canWrite copy={copy} />);
     fireEvent.click(screen.getByText(copy.limitDetails));
-    fireEvent.click(screen.getByLabelText(copy.capacityModel));
+    const picker = screen.getByRole("button", { name: copy.capacityModel });
+    fireEvent.click(picker);
     fireEvent.change(screen.getByRole("combobox", { name: copy.capacityModelSearch }), { target: { value: "Model 24" } });
     fireEvent.click(screen.getByRole("option", { name: "Model 24 (model-24)" }));
-    expect(screen.getByLabelText(copy.capacityModel).textContent).toBe("Model 24 (model-24)");
+    expect(picker.textContent).toBe("Model 24 (model-24)");
     expect(mocks.recheck).not.toHaveBeenCalled();
   });
   it.each([false, true])("a read-only or restricted account cannot dispatch (write=%s)", canWrite => {

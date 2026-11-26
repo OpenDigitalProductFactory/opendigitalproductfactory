@@ -35,8 +35,10 @@ describe("SearchableSelect", () => {
   }
 
   it("puts the active option on the focused search control without moving selection", () => {
-    const { search, onValueChange } = renderPicker();
+    const { search, trigger, onValueChange } = renderPicker();
     expect(search).toHaveFocus();
+    expect(trigger).toHaveAccessibleDescription("(UTC-06:00) America/Chicago");
+    expect(trigger).toHaveAttribute("aria-expanded", "true");
     const chicago = screen.getByRole("option", { name: /Chicago/ });
     const london = screen.getByRole("option", { name: /London/ });
     expect(search).toHaveAttribute("aria-activedescendant", chicago.id);
@@ -48,6 +50,26 @@ describe("SearchableSelect", () => {
     expect(screen.queryByRole("option", { name: "Disabled timezone" })).not.toBeInTheDocument();
     expect(onValueChange).not.toHaveBeenCalled();
     expect(new FormData(screen.getByRole("form") as HTMLFormElement).get("timezone")).toBe("America/Chicago");
+  });
+
+  it("announces no matches without exposing an empty listbox", () => {
+    const { search, trigger, onValueChange } = renderPicker();
+    fireEvent.change(search, { target: { value: "no such timezone" } });
+    expect(search).toHaveFocus();
+    expect(screen.getByRole("status")).toHaveTextContent("No matches");
+    expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
+    expect(search).not.toHaveAttribute("aria-controls");
+    expect(search).not.toHaveAttribute("aria-activedescendant");
+    expect(search).toHaveAttribute("aria-expanded", "false");
+    expect(fireEvent.keyDown(search, { key: "Enter" })).toBe(false);
+    expect(onValueChange).not.toHaveBeenCalled();
+
+    fireEvent.change(search, { target: { value: "london" } });
+    expect(search).toHaveAttribute("aria-controls", screen.getByRole("listbox").id);
+    expect(search).toHaveAttribute("aria-expanded", "true");
+    fireEvent.keyDown(search, { key: "Escape" });
+    expect(trigger).toHaveFocus();
+    expect(trigger).toHaveAttribute("aria-expanded", "false");
   });
 
   it.each(["Escape", "Enter"])("returns focus to the trigger after %s", (key) => {

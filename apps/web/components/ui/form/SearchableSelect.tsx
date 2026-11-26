@@ -100,6 +100,7 @@ export function SearchableSelect({
       .map(({ option }) => ({ ...option, id: option.value }));
   }, [maxVisibleOptions, options, preferenceRank, query]);
 
+  const hasResults = visibleOptions.length > 0;
   const combobox = useCombobox({
     options: visibleOptions,
     open,
@@ -204,6 +205,8 @@ export function SearchableSelect({
               ref={searchRef}
               type="text"
               {...combobox.controlProps}
+              aria-expanded={hasResults}
+              aria-controls={hasResults ? combobox.listboxId : undefined}
               aria-label={searchLabel}
               value={query}
               onChange={(event) => {
@@ -216,51 +219,53 @@ export function SearchableSelect({
               placeholder="Search..."
             />
           </div>
-          <ul
-            id={combobox.listboxId}
-            role="listbox"
-            className="max-h-72 overflow-auto py-1"
-            aria-label={searchLabel}
-          >
-            {visibleOptions.map((option, index) => {
-              const active = index === combobox.activeIndex;
-              const selectedOption = option.value === value;
-              return (
-                <li
-                  key={option.value}
-                  id={combobox.optionId(index)}
-                  ref={active ? activeOptionRef : undefined}
-                  role="option"
-                  aria-selected={selectedOption}
-                  onMouseDown={(event) => event.preventDefault()}
-                  onMouseEnter={() => combobox.setActiveIndex(index)}
-                  onClick={() => combobox.select(option)}
-                  className={cx(
-                    "flex cursor-pointer items-start gap-2 px-3 py-2 text-sm",
-                    active
-                      ? "bg-[var(--dpf-accent)] text-[var(--dpf-on-accent,var(--dpf-surface-1))]"
-                      : "text-[var(--dpf-text)] hover:bg-[var(--dpf-surface-2)]",
-                  )}
-                >
-                  <Check
-                    aria-hidden="true"
-                    className={cx("mt-0.5 size-4 shrink-0", selectedOption ? "opacity-100" : "opacity-0")}
-                  />
-                  <span className="min-w-0">
-                    <span className="block truncate font-medium">{option.label}</span>
-                    {option.description ? (
-                      <span className={cx("block truncate text-xs", active ? "opacity-80" : "text-[var(--dpf-muted)]")}>
-                        {option.description}
-                      </span>
-                    ) : null}
-                  </span>
-                </li>
-              );
-            })}
-          </ul>
-          {visibleOptions.length === 0 ? (
-            <div role="status" className="px-3 py-3 text-sm text-[var(--dpf-muted)]">{emptyMessage}</div>
+          {hasResults ? (
+            <ul
+              id={combobox.listboxId}
+              role="listbox"
+              className="max-h-72 overflow-auto py-1"
+              aria-label={searchLabel}
+            >
+              {visibleOptions.map((option, index) => {
+                const active = index === combobox.activeIndex;
+                const selectedOption = option.value === value;
+                return (
+                  <li
+                    key={option.value}
+                    id={combobox.optionId(index)}
+                    ref={active ? activeOptionRef : undefined}
+                    role="option"
+                    aria-selected={selectedOption}
+                    onMouseDown={(event) => event.preventDefault()}
+                    onMouseEnter={() => combobox.setActiveIndex(index)}
+                    onClick={() => combobox.select(option)}
+                    className={cx(
+                      "flex cursor-pointer items-start gap-2 px-3 py-2 text-sm",
+                      active
+                        ? "bg-[var(--dpf-accent)] text-[var(--dpf-on-accent,var(--dpf-surface-1))]"
+                        : "text-[var(--dpf-text)] hover:bg-[var(--dpf-surface-2)]",
+                    )}
+                  >
+                    <Check
+                      aria-hidden="true"
+                      className={cx("mt-0.5 size-4 shrink-0", selectedOption ? "opacity-100" : "opacity-0")}
+                    />
+                    <span className="min-w-0">
+                      <span className="block truncate font-medium">{option.label}</span>
+                      {option.description ? (
+                        <span className={cx("block truncate text-xs", active ? "opacity-80" : "text-[var(--dpf-muted)]")}>
+                          {option.description}
+                        </span>
+                      ) : null}
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
           ) : null}
+          <div role="status" className={hasResults ? undefined : "px-3 py-3 text-sm text-[var(--dpf-muted)]"}>
+            {hasResults ? null : emptyMessage}
+          </div>
         </div>
       ) : null}
     </div>
