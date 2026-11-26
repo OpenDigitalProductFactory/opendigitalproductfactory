@@ -97,6 +97,10 @@ export async function readLeaseOwningSystemIdentifier(tx: QueryPort): Promise<st
   }
 }
 
+/** Use the actual write transaction and open a savepoint before calling.
+ * A PostgreSQL read error becomes a refusal here, but may leave the transaction
+ * aborted. Roll back to the savepoint on refusal before any further SQL.
+ */
 export async function matchesPreviewDatabase(input: {
   tx: QueryPort; proof: PreviewDatabaseProof | null; binding: PreviewDatabaseBinding;
 }): Promise<boolean> {

@@ -1168,3 +1168,68 @@ test("ordinary preview never gathers an attestation and an S5 observation omits 
   assert.equal(probes, 1);
   assert.deepEqual(calls, [["attest_preview_database", { previewDatabaseObservation: observation }]]);
 });
+
+test("the S5 opt-in survives the queued registration and child refresh as a pinned flag", async () => {
+  const { resumePreviewQueue } = await import("../dev-preview-queue-resume.mjs");
+  let registration, child;
+  const s5Pin = { ...pin, s5Rehearsal: true };
+  const queued = await resumePreviewQueue(s5Pin, { now, readSource: source, observerDirectory: "/observers",
+    env: { DPF_DEV_PORTAL_ENVIRONMENT_KEY: "active-candidate" },
+    spawnResumer: args => { registration = args; return { spawned: true, survivesSession: true }; },
+  });
+  assert.equal(queued.spawned, true);
+  assert.ok(registration.gateArgv.includes("--s5-rehearsal-preview"));
+  await resumePreviewQueue(s5Pin, { now, readSource: source,
+    env: { DPF_DURABLE_RESUME: "1", DPF_DEV_PORTAL_ENVIRONMENT_KEY: "active-candidate" },
+    runChild: args => { child = args; return 75; },
+  });
+  assert.ok(child.args.includes("--s5-rehearsal-preview"));
+  assert.equal(child.env.DPF_DEV_PORTAL_ENVIRONMENT_KEY, "active-candidate");
+});
+
+test("the preview PostgreSQL probe verifies project, volume and container before sending anything", async () => {
+  const { probePreviewDatabase } = await import("./dev-preview-runtime.mjs");
+  const id = "a".repeat(64), projectName = "fixture-project";
+  const valid = { Id: id, State: { Running: true }, Config: { Labels: {
+    "com.docker.compose.project": projectName, "com.docker.compose.service": "dev-postgres",
+  } }, Mounts: [{ Type: "volume", Destination: "/var/lib/postgresql/data", Name: `${projectName}_dev_pgdata` }] };
+  const database = { systemIdentifier: "7391584902012345678", databaseOid: "16384",
+    databaseName: "dpf", postmasterStartEpoch: "1795679812.123456" };
+  const probe = (snapshots, sqlOutput = JSON.stringify(database), trace = []) => probePreviewDatabase({
+    projectName, sourceSha: "b".repeat(40), lease: { leaseId: "NPEL-FIXTURE" },
+    compose: async args => { assert.deepEqual(args, ["ps", "-q", "dev-postgres"]); return id.slice(0, 12); },
+    runner: { run: async args => {
+      trace.push(args);
+      if (args[0] === "inspect") return JSON.stringify([snapshots.shift()]);
+      assert.deepEqual(args.slice(0, 4), ["exec", id, "psql", "-X"]);
+      return sqlOutput;
+    } },
+  });
+  assert.deepEqual((await probe([valid, valid])).database, database);
+  for (const bad of [
+    { ...valid, Config: { Labels: { ...valid.Config.Labels, "com.docker.compose.service": "postgres" } } },
+    { ...valid, Config: { Labels: { ...valid.Config.Labels, "com.docker.compose.project": "dpf" } } },
+    { ...valid, Mounts: [{ ...valid.Mounts[0], Name: "dpf_dev_pgdata" }] },
+  ]) {
+    const trace = [];
+    await assert.rejects(probe([bad], undefined, trace), /preview_database_binding_unverified/);
+    assert.equal(trace.some(args => args[0] === "exec"), false);
+  }
+  await assert.rejects(probe([valid, { ...valid, Id: id.slice(0, 12) + "c".repeat(52) }]),
+    /preview_database_binding_changed/);
+  await assert.rejects(probe([valid], "not JSON"), SyntaxError);
+});
+
+test("the S5 observation trigger fires once only after ready and a successful renewal", async () => {
+  const { createPreviewDatabaseAttestationTrigger } = await import("./dev-preview-runtime.mjs");
+  let calls = 0;
+  const afterRenewal = createPreviewDatabaseAttestationTrigger({ enabled: true, submit: async () => { calls++; } });
+  await afterRenewal(false, { success: true });
+  await afterRenewal(true, { success: false });
+  assert.equal(calls, 0);
+  await Promise.all([afterRenewal(true, { success: true }), afterRenewal(true, { success: true })]);
+  assert.equal(calls, 1);
+  const ordinary = createPreviewDatabaseAttestationTrigger({ enabled: false, submit: async () => { calls++; } });
+  await ordinary(true, { success: true });
+  assert.equal(calls, 1);
+});

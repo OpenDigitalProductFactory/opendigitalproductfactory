@@ -384,3 +384,13 @@ test('invalid or expired preview timing stops before a claim or Docker mutation'
     assert.equal(existsSync(stubs.dockerCallsFile), false);
   }
 });
+
+test("inherited S5 mode does not block release or status", () => {
+  for (const args of [["release", "--lease-id", "NPEL-MINE"], ["status"]]) {
+    const temp = mkdtempSync(join(tmpdir(), "dpf-preview-s5-inherited-"));
+    const stubs = makeStubs(temp, "claimed");
+    const result = runLease(args, { env: baseEnv(stubs, { DPF_DEV_PORTAL_S5_REHEARSAL: "1" }) });
+    assert.equal(result.status, 0, result.stderr);
+    assert.ok(existsSync(stubs.callsFile));
+  }
+});

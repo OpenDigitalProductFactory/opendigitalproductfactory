@@ -19,8 +19,9 @@ vi.mock("@/lib/nonprod/durable-wait", async (importOriginal) => ({
   ...await importOriginal<typeof import("@/lib/nonprod/durable-wait")>(),
   ...durableWait,
 }));
-const cleanup = vi.hoisted(() => ({ readLease: vi.fn(), readWait: vi.fn(), stance: vi.fn() }));
+const cleanup = vi.hoisted(() => ({ readLease: vi.fn(), readWait: vi.fn(), stance: vi.fn(), transaction: vi.fn() }));
 vi.mock("@dpf/db", () => ({ prisma: {
+  $transaction: cleanup.transaction,
   nonProductionEnvironmentLease: { findUnique: cleanup.readLease },
   taskRun: { findUnique: cleanup.readWait },
 } }));
@@ -739,4 +740,34 @@ it("retains the exact fingerprint through observation wire coercion and the appr
   const retained = retainedGovernedToolParameters({ tool, rawParams }, auditClass);
   expect(retained).toEqual(rawParams);
   expect(fingerprintCoworkerInput(retained!)).toBe(fingerprintCoworkerInput(rawParams));
+});
+
+const validPreviewObservation = {
+  schemaVersion: 1, leaseId: "NPEL-FIXTURE", runtimeId: "fixture-runtime",
+  sourceSha: "a".repeat(40), containerId: "b".repeat(64), volumeName: "fixture_dev_pgdata",
+  database: { systemIdentifier: "7391584902012345678", databaseOid: "16384",
+    databaseName: "dpf", postmasterStartEpoch: "1795679812.123456" },
+};
+
+it.each([
+  { previewDatabaseObservation: { ...validPreviewObservation, productionSystemIdentifier: "123" } },
+  { previewDatabaseObservation: validPreviewObservation, extraTopLevel: true },
+])("rejects extra keys even when every observation field is valid", async params => {
+  const handler = nonprodLeasePack.handlers.attest_preview_database!;
+  expect(await handler(params, "user-1", { agentId: "fixture-agent" })).toMatchObject({
+    success: false, error: "preview_database_observation_invalid",
+  });
+});
+
+it.each([["P2034", true], ["P2024", true], ["P2028", false], ["unknown", false]])(
+  "retains audited attestation failure and classifies retryability for %s", async (code, retryable) => {
+  const handler = nonprodLeasePack.handlers.attest_preview_database!;
+  cleanup.transaction.mockRejectedValueOnce(Object.assign(new Error("internal database detail"), { code }));
+  expect(await handler({ previewDatabaseObservation: validPreviewObservation }, "user-1", { agentId: "fixture-agent" }))
+    .toMatchObject({ success: false, error: "preview_database_attestation_failed",
+      data: { retryable, previewDatabaseObservation: {
+        leaseId: "NPEL-FIXTURE", userId: "user-1", agentId: "fixture-agent",
+        reason: "preview_database_attestation_failed", tupleDigest: expect.stringMatching(/^[a-f0-9]{64}$/),
+      } },
+    });
 });

@@ -464,8 +464,17 @@ async function runAdmittedPreview(env, cleanupState) {
         try { return (await runner.run(['inspect', '--format', '{{.State.Running}}', initName])) === 'true'; } catch { return false; }
       };
       let readyForAttestation = false;
-      let observationSubmitted = false;
-      const s5Rehearsal = env.DPF_DEV_PORTAL_S5_REHEARSAL === "1";
+      const attestAfterRenewal = createPreviewDatabaseAttestationTrigger({
+        enabled: env.DPF_DEV_PORTAL_S5_REHEARSAL === "1",
+        submit: () => submitPreviewDatabaseObservation({ enabled: true, call,
+          probe: () => probePreviewDatabase({ compose, runner,
+            projectName: state.composeProjectName || 'dpf', lease: admitted, sourceSha: sha }),
+        }).then(result => {
+          const type = result?.success ? 'preview-database-attested'
+            : result?.error === 'approval_required' ? 'preview-database-approval-pending' : 'preview-database-attestation-held';
+          console.error(JSON.stringify({ type }));
+        }).catch(() => console.error(JSON.stringify({ type: 'preview-database-attestation-held' }))),
+      });
       const outcome = await supervisePreviewRun({
         binding: admitted, call,
         ttlMs: admittedLeaseTtlMs(expiresAt, 120000), expiresAt,
@@ -511,17 +520,7 @@ async function runAdmittedPreview(env, cleanupState) {
           if (stalled) return { success: false, error: stalled };
           const renewed = await call('renew_nonprod_environment_lease', { leaseId, ownerSessionId, ttlMinutes: 2,
             hostPressure: await sampleLocalCiHostPressure({ rootPath: worktree, evidenceIsolationHealthy: true }) });
-          if (s5Rehearsal && readyForAttestation && !observationSubmitted && renewed?.success === true) {
-            observationSubmitted = true;
-            void submitPreviewDatabaseObservation({ enabled: true, call,
-              probe: () => probePreviewDatabase({ compose, runner,
-                projectName: state.composeProjectName || 'dpf', lease: admitted, sourceSha: sha }),
-            }).then(result => {
-              const type = result?.success ? 'preview-database-attested'
-                : result?.error === 'approval_required' ? 'preview-database-approval-pending' : 'preview-database-attestation-held';
-              console.error(JSON.stringify({ type }));
-            }).catch(() => console.error(JSON.stringify({ type: 'preview-database-attestation-held' })));
-          }
+          void attestAfterRenewal(readyForAttestation, renewed);
           return renewed;
         }, terminate,
         onEvent: event => { const summary = previewLeaseEventSummary(event); if (summary) console.error(JSON.stringify(summary)); },
@@ -533,6 +532,15 @@ async function runAdmittedPreview(env, cleanupState) {
       await reclaimPreviewDeclaration({ declaration, runtimeMayHaveWriters, stopOwned });
     } finally { await rm(overridePath, { force: true }); }
   }
+}
+
+export function createPreviewDatabaseAttestationTrigger({ enabled, submit }) {
+  let submitted = false;
+  return async (ready, renewed) => {
+    if (!enabled || !ready || submitted || renewed?.success !== true) return;
+    submitted = true;
+    return submit();
+  };
 }
 
 export async function probePreviewDatabase({ compose, runner, projectName, lease, sourceSha }) {

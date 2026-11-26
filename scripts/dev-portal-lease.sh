@@ -37,6 +37,7 @@ EXPIRES_MINUTES="${DPF_DEV_PORTAL_EXPIRES_MINUTES:-120}"
 RESUME_LEASE_ID="${DPF_DEV_PORTAL_RESUME_LEASE_ID:-}"
 TASK_RUN_ID="${DPF_DEV_PORTAL_TASK_RUN_ID:-}"
 CLAIM_KEY="${DPF_DEV_PORTAL_CLAIM_KEY:-}"
+S5_REHEARSAL_FLAG=""
 URL="${DPF_DEV_PORTAL_URL:-http://localhost:3001}"
 PORTS="${DPF_DEV_PORTAL_PORTS:-3001}"
 WORKTREE_PATH="${DPF_DEV_WORKTREE:-}"
@@ -216,7 +217,7 @@ while [ "$#" -gt 0 ]; do
     --owner-provider) OWNER_PROVIDER="${2:-}"; shift 2 ;;
     --owner-session-id) OWNER_SESSION_ID="${2:-}"; shift 2 ;;
     --expires-minutes) EXPIRES_MINUTES="${2:-}"; shift 2 ;;
-    --s5-rehearsal-preview) export DPF_DEV_PORTAL_S5_REHEARSAL=1; shift ;;
+    --s5-rehearsal-preview) S5_REHEARSAL_FLAG=--s5-rehearsal-preview; shift ;;
     --lease-id) LEASE_ID="${2:-}"; shift 2 ;;
     --mcp-url) MCP_URL="${2:-}"; shift 2 ;;
     --help|-h) usage; exit 0 ;;
@@ -225,8 +226,7 @@ while [ "$#" -gt 0 ]; do
 done
 
 [ -n "$COMMAND" ] || { usage; exit 2; }
-if [ "${DPF_DEV_PORTAL_S5_REHEARSAL:-}" = "1" ]; then
-  [ "$COMMAND" = "refresh" ] || die "S5 rehearsal preview mode requires refresh"
+if [ "$COMMAND" = "refresh" ] && [ -n "${S5_REHEARSAL_FLAG:-}" ]; then
   [ "$ENVIRONMENT_KEY" = "active-candidate" ] || die "s5_preview_active_candidate_required: S5 rehearsal preview mode requires the active-candidate lease lane"
 fi
 
@@ -364,7 +364,7 @@ process.stdout.write(JSON.stringify(args));
             --worktree "$WORKTREE_PATH" --branch "$BRANCH" --sha "$SOURCE_SHA" \
             --owner-provider "$OWNER_PROVIDER" --owner-session-id "$OWNER_SESSION_ID" \
             --resume-lease-id "$CLAIMED_LEASE_ID" --task-run-id "$task_run_id" \
-            --claim-key "$claim_key" --mcp-url "$MCP_URL" --wait-deadline "$wait_deadline"
+            --claim-key "$claim_key" --mcp-url "$MCP_URL" --wait-deadline "$wait_deadline" ${S5_REHEARSAL_FLAG:+"$S5_REHEARSAL_FLAG"}
         fi
         printf '%s\n' "Queued lease ${CLAIMED_LEASE_ID}; retain this same claim. No runtime has started." >&2
         return 75
@@ -451,6 +451,11 @@ case "$COMMAND" in
     export DPF_DEV_PORTAL_LEASE_ID="$CLAIMED_LEASE_ID"
     export DPF_DEV_PORTAL_LEASE_EXPIRES_AT="$CLAIMED_EXPIRES_AT"
     export DPF_MCP_URL="$MCP_URL"
+    if [ -n "${S5_REHEARSAL_FLAG:-}" ]; then
+      export DPF_DEV_PORTAL_S5_REHEARSAL=1
+    else
+      unset DPF_DEV_PORTAL_S5_REHEARSAL
+    fi
     node "$(dirname -- "$0")/lib/dev-preview-runtime.mjs"
     exit "$?"
     ;;

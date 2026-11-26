@@ -635,13 +635,23 @@ const attestPreviewDatabaseHandler: ToolPackHandler = async (params, userId, con
   });
   if (!observation) return { success: false, error: "preview_database_observation_invalid",
     message: "Preview database observation is missing or invalid.", data: audit("preview_database_observation_invalid") };
-  const { attestOwnedPreviewDatabase } = await import("@/lib/nonprod/environment-lease-provenance");
-  const { prisma } = await import("@dpf/db");
-  const result = await attestOwnedPreviewDatabase({ db: prisma, observation,
-    authenticatedUserId: userId, authenticatedAgentId: context?.agentId });
-  const success = result === "preview_database_published" || result === "preview_database_unchanged";
-  return { success, ...(success ? {} : { error: result }), message: success
-    ? "Preview database observation is recorded." : `Preview database observation held (${result}).`, data: audit(result) };
+  try {
+    const { attestOwnedPreviewDatabase } = await import("@/lib/nonprod/environment-lease-provenance");
+    const { prisma } = await import("@dpf/db");
+    const result = await attestOwnedPreviewDatabase({ db: prisma, observation,
+      authenticatedUserId: userId, authenticatedAgentId: context?.agentId });
+    const success = result === "preview_database_published" || result === "preview_database_unchanged";
+    return { success, ...(success ? {} : { error: result }), message: success
+      ? "Preview database observation is recorded." : `Preview database observation held (${result}).`, data: audit(result) };
+  } catch (error) {
+    const reason = "preview_database_attestation_failed";
+    const code = isRecord(error) ? error.code : undefined;
+    // Retry only rolled-back/transient database outcomes. An uncertain commit
+    // or unknown error does not tell the caller it is safe to replay.
+    const retryable = code === "P2034" || code === "P2024";
+    return { success: false, error: reason, message: "Preview database attestation did not complete.",
+      data: { ...audit(reason), retryable } };
+  }
 };
 
 const handlers: Record<string, ToolPackHandler> = {

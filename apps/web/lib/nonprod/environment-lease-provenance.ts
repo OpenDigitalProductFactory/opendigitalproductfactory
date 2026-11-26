@@ -231,14 +231,26 @@ export async function attestOwnedPreviewDatabase(input: {
       return "preview_database_runtime_mismatch";
     }
     const taskRunId = lease.taskRunId;
+    let readRefusal: string | null = null;
     const read = async () => {
       const task = await tx.taskRun.findUnique({ where: { taskRunId } });
-      if (!task || task.status !== "completed" || !isRecord(task.progressPayload)
-        || !await previewWaitMatchesOwner({ db: { taskRun: { findUnique: async () => task } }, lease,
-          userId: authenticatedUserId, agentId: authenticatedAgentId, ownerSessionId: lease.ownerSessionId })) return null;
+      if (!task || !isRecord(task.progressPayload)) {
+        readRefusal = "preview_database_owner_unverified";
+        return null;
+      }
+      if (task.status !== "completed" || parseNonprodLeaseWait(task.progressPayload)?.state !== "admitted") {
+        readRefusal = "preview_database_wait_not_admitted";
+        return null;
+      }
+      if (!await previewWaitMatchesOwner({ db: { taskRun: { findUnique: async () => task } }, lease,
+        userId: authenticatedUserId, agentId: authenticatedAgentId, ownerSessionId: lease.ownerSessionId })) {
+        readRefusal = "preview_database_owner_unverified";
+        return null;
+      }
+      readRefusal = null;
       return { status: task.status, progressPayload: task.progressPayload };
     };
-    if (!await read()) return "preview_database_owner_unverified";
+    if (!await read()) return readRefusal ?? "preview_database_owner_unverified";
     const quiescence = await tx.platformConfig.findUnique({ where: { key: QUIESCENCE_CONFIG_KEY }, select: { value: true } });
     if (quiescence && (!isRecord(quiescence.value) || quiescence.value.level !== "normal")) {
       return "preview_database_portal_quiescing";
@@ -269,7 +281,7 @@ export async function attestOwnedPreviewDatabase(input: {
           return true;
         },
       });
-      return disposition;
+      return readRefusal ?? disposition;
     } finally {
       if (disposition !== "preview_database_published") {
         await tx.$executeRawUnsafe("ROLLBACK TO SAVEPOINT preview_database_proof");

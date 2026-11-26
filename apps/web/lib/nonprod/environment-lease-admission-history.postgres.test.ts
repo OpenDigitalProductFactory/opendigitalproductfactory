@@ -178,6 +178,27 @@ describe.skipIf(!url)("forward-only reservation admission history — isolated P
     const request = { db: f.db, ...owner, observation };
     expect(await attestOwnedPreviewDatabase({ ...request, authenticatedUserId: "other-user" }))
       .toBe("preview_database_owner_unverified");
+    const waitChangedDb = { $transaction: (run: (tx: object) => Promise<string>) =>
+      f.db.$transaction(async tx => {
+        let reads = 0;
+        const taskRun = new Proxy(tx.taskRun, { get(target, prop, receiver) {
+          if (prop !== "findUnique") return Reflect.get(target, prop, receiver);
+          return async (args: Parameters<typeof target.findUnique>[0]) => {
+            if (++reads === 2) await target.update({
+              where: { taskRunId: live.taskRunId! }, data: { status: "submitted" },
+            });
+            return target.findUnique(args);
+          };
+        } });
+        return run(new Proxy(tx, { get(target, prop, receiver) {
+          return prop === "taskRun" ? taskRun : Reflect.get(target, prop, receiver);
+        } }));
+      }),
+    } as unknown as typeof f.db;
+    expect(await attestOwnedPreviewDatabase({ ...request, db: waitChangedDb }))
+      .toBe("preview_database_wait_not_admitted");
+    expect(await onDisk()).toMatchObject({ status: "completed" });
+    expect((await onDisk()).progressPayload).not.toHaveProperty(PREVIEW_DATABASE_PROOF_KEY);
     const fixtureUrl = new URL(url!);
     if (mode === "immediate" && process.env.DPF_PREVIEW_ATTESTATION_TEST_DATABASE_URL === url
       && ["localhost", "127.0.0.1"].includes(fixtureUrl.hostname) && fixtureUrl.port
@@ -229,6 +250,22 @@ describe.skipIf(!url)("forward-only reservation admission history — isolated P
     expect((await onDisk()).progressPayload).toMatchObject({ [PREVIEW_DATABASE_PROOF_KEY]: { database: newer.database } });
     expect(await releaseNonprodEnvironmentLease({ ...owner, db: f.db, leaseId: live.leaseId, ownerSessionId: input.ownerSessionId }))
       .toMatchObject({ status: "released" });
+    expect(await attestOwnedPreviewDatabase(request)).toBe("preview_database_lease_not_current");
+
+    // Non-gate active-candidate rows cannot re-enter the queue under the same
+    // lease ID. A newly requested attempt owns a fresh, proofless TaskRun.
+    const replay = await claimNonprodEnvironmentLease({ ...input, resumeLeaseId: live.leaseId });
+    expect(replay).toMatchObject({ status: "terminal", lease: { leaseId: live.leaseId, status: "released" } });
+    const holder = await claimNonprodEnvironmentLease({
+      ...input, claimKey: `dev-portal:${randomUUID()}`, ownerSessionId: "fresh-attempt-holder",
+    });
+    expect(holder.status).toBe("admitted");
+    const replacement = await claimNonprodEnvironmentLease({ ...input, claimKey: `dev-portal:${randomUUID()}` });
+    expect(replacement).toMatchObject({ status: "queued" });
+    expect(replacement.lease.leaseId).not.toBe(live.leaseId);
+    expect(replacement.lease.taskRunId).not.toBe(live.taskRunId);
+    const replacementTask = await f.db.taskRun.findUniqueOrThrow({ where: { taskRunId: replacement.lease.taskRunId! } });
+    expect(replacementTask.progressPayload).not.toHaveProperty(PREVIEW_DATABASE_PROOF_KEY);
     expect(await attestOwnedPreviewDatabase(request)).toBe("preview_database_lease_not_current");
   });
 
