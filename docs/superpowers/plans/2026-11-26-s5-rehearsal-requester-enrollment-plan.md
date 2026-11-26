@@ -4,189 +4,141 @@ status: draft
 
 # Plan: owner-operated inactive enrollment and retirement of the S5 rehearsal requester
 
-- **Backlog item:** BI-9F7192F9, Workroom WC-4EBA473D.
-- **Design:** `docs/superpowers/specs/2026-11-26-s5-rehearsal-requester-enrollment-design.md`, revision 5.
-- **Shape:** delivery-small.
-- **Delivery state:** both commands ship inert. The requester is never active.
-- **Out of scope:** activation, sessions, delegation and issuance belong to BI-9F5D1052, which is blocked on the owner's least-privilege decision.
+Backlog item BI-9F7192F9, Workroom WC-4EBA473D. Design: `docs/superpowers/specs/2026-11-26-s5-rehearsal-requester-enrollment-design.md`, revision 6. Shape: delivery-small.
+
+This plan covers server-side work only. It ships inert, and the requester is never active.
+
+The following are deferred to activation readiness:
+- the operator UI
+- UX-fit
+- the purpose contract
+- the Admin guide
+
+Activation, sessions, delegation and issuance belong to BI-9F5D1052.
 
 ## Preconditions (hold Red until all are met)
 
-- **P1. Design approved.** The independent re-review approves revision 5.
-- **P2. Schema approved.** The migration is approved in principle. Before claiming the schema paths:
-  - the coordinator confirms the model shape in revision 5;
-  - the owner of `prismaModelCount` (portfolio-management) approves the baseline increase, because the ratchet is non-increasing at 649.
-- **P3. Scope claimed.**
-  - The coordinator relays that self-upgrade SUR-6C7547D1 has finished and its portal drain has cleared.
-  - Every extra path below is checked for overlap, then claimed normally through `claim_workroom_scope`. No forced claims.
-- **P4. Related tests and dispatch confirmed.**
-  - `find_related_tests` has resolved every changed path.
-  - Next.js 16.4.6 dispatch has been re-verified.
-  - The API route is confirmed to be outside the UX sweep.
-- **P5. Safe test environment.**
-  - No DPF2 quiet window is open.
-  - `/tmp/dpf2-local-ci.lock` is absent. Read the lock only.
-  - Tests use throwaway PostgreSQL containers or the dev DB, with synthetic data only, never `dpf-postgres-1`.
+- **P1. Design approved.** The independent re-review approves revision 6.
+- **P2. Schema and model count.**
+  - The coordinator confirms the model shape (approved in principle).
+  - The owner approves a `prismaModelCount` raise from 649 to 650.
+  - The generator accepts a raise only with all three of:
+    - `--owner` (proposed: `portfolio-management`);
+    - `--expiry <YYYY-MM-DD>`;
+    - `--contraction <BI-…/EP-…>`, naming the work that folds the model back in (`scripts/measure-platform-substrate.mjs:80`, `:99`).
+  - Regenerate through the canonical procedure:
+    `node scripts/measure-platform-substrate.mjs --update --owner <owner> --expiry <date> --contraction <BI>`
+    Never hand-edit `scripts/platform-substrate-baseline.json`.
+  - **Red stays held without the approved budget.**
+- **P3. Scope.**
+  - Claim the schema, migration, stewardship and clone paths through the normal path after the coordinator's go.
+  - Release the deferred-UI claims (listed below).
+- **P4. Before Red.** Run `find_related_tests` for every changed path, and re-verify Next.js 16.4.6 dispatch.
+- **P5. Environment.**
+  - No DPF2 window is open.
+  - The lock `/tmp/dpf2-local-ci.lock` is absent. Read it only; never touch it.
+  - Use only throwaway PostgreSQL or the dev DB, with synthetic data. Never use `dpf-postgres-1`.
 
-## Phases
+## Phases (test-first; each Red fails for the stated reason)
 
-Each phase starts with a Red test that fails for the stated reason.
-
-### 1. Retained record and migration (AC-E3)
-
-**Build:**
-- The model, the `S5RehearsalRequesterRetirementReason` enum, and back-relations on `User` and `Principal`.
-- A migration that adds the all-or-none CHECK and a BEFORE UPDATE trigger enforcing immutable facts and an `active → retired`-only transition.
-- The `@dpf` tag.
-- Field-level asset registration in `apps/web/lib/govern/data/s5-rehearsal-requester-assets.ts`, wired into `assets.ts`.
-- The data-impact manifest and migration-safety notes.
-- The `prismaModelCount` baseline change.
-- `isGovernedRequester`.
-
-**Tests** (migrated schema in a throwaway container):
-- The digest is unique.
-- A fact-column update is rejected.
-- Partial terminal tuples are rejected.
-- `retired → active` is rejected.
-- Deleting a linked User or Principal is refused, while unrelated deletes succeed.
-- A read error is reported as an error.
-- Fixture teardown drops the schema.
-
-### 2. Audit writer (AC-E7)
-
-**Build:**
-- A typed insert for both keys, with deterministic `decisionId`s.
-- The M-4 exclusion.
-
-**Tests:**
-- The approval reader rejects these rows.
-- Projector and governance API tests.
-- The M-4 exclusion holds.
-
-### 3. Boundary and fence (AC-E1)
-
-**Build:**
-- The `PreviewEnrollmentFence`, served as a denying adapter.
-- Enroll readiness: lease-joined attestation, DB identity and lease currency.
-- Retire readiness: lease-independent installation and DB attestation, equal to the record's refs.
-- The `[command]` handler:
-  - pre-body production, origin, session, command and pinned setup, readiness, and owner/DB checks;
-  - for enroll, a read-only pre-parse replay;
-  - then a bounded body read.
-
-**Tests:**
-- Pre-body refusals and pre-parse replay make zero reader, hasher or mutator calls.
-- Invalid bodies are read, with zero hasher calls and zero writes.
-
-### 4. Owner binding (AC-E2)
-
-**Build:**
-- Candidate resolution:
-  - `Organization.topAccountablePrincipalId` first;
-  - otherwise the sole active human with live `manage_platform`;
-  - hold on zero, multiple or mismatch;
-  - no superuser fallback.
-- A port for the owner-confirmed governed receipt. The served adapter denies.
-- Live capability, automation and handover checks.
-- Ports for the reservation and the fixture review.
-
-**Tests:**
-- Each candidate case.
-- No oldest-superuser fallback.
-- Refusals for non-owner, automation, handed-over and requester actors.
-
-### 5. Enrollment (AC-E3, AC-E4)
-
-**Build:**
-- A serializable create: an inactive, roleless User; `syncUserPrincipal` with the Principal set inactive; the record and the audit row.
-
-**Tests:**
-- Exact replay, both pre-parse and concurrent, writes nothing and never calls the hasher.
-- These all hold: drift, a forced prefix collision, an orphan email, and a conflict re-observation.
-- The transaction is atomic.
-- Replay still works after the audit rows are purged.
-- On every non-create outcome the password is never hashed, compared, stored, logged or echoed. Assert this with spies on the hasher, the logger and the response body.
-
-### 6. Never-active invariant (AC-E4)
-
-These are regression tests only, run in this item's own test files against seeded synthetic data. No issuer file is edited. An enrolled requester is refused by:
-- workforce sign-in;
-- mobile login and refresh;
-- LDAP bind;
-- automation sign-in;
-- OAuth consent GET/POST, code exchange, refresh and bearer;
-- headless `client_credentials`;
-- customer password and social sign-in.
-
-### 7. Guards (AC-E6)
-
-**Build:**
-- `isGovernedRequester` refusals in `users.ts`:
-  - lifecycle, role, admin reset, issue reset and complete reset (including old tokens);
-  - request reset, which stays neutral.
-- Workforce profile create and relink refusals in `workforce.ts`.
-- `syncEmployeePrincipal` refuses a governed requester's Principal.
-
-**Tests:** every guard, both before and after retirement.
-
-### 8. Retirement (AC-E5)
-
-**Build:**
-- A transaction-scoped token and owned-client revocation helper extracted from `account-agent-access.ts`. The export's behaviour is unchanged and its existing tests pass.
-- A Read Committed retire transaction:
-  1. `FOR UPDATE` on the record, then fresh reads.
-  2. Re-check authority and DB identity.
-  3. Check the exact single local `user` alias.
-  4. Revoke `AuthorityBinding` rows separately.
-  5. Call the helper.
-  6. Deactivate this account only.
-  7. Write the terminal tuple once, plus the audit row.
-- Fresh readback of bindings, tokens, owned clients, both identities and the tuple, with `committed_unverified` on failure.
-
-**Tests** (throwaway PostgreSQL):
-- Populated defensive revocation.
-- Concurrent and repeat retire.
-- No reservation and no lease.
-- Purged audit rows.
-- Attempt or fixture drift.
-- An extra-alias hold.
-- A forced post-commit readback failure that re-observes on retry.
-
-### 9. Read seam (AC-E7)
-
-**Build:** `readS5RehearsalEnrollment`.
-
-**Tests:**
-- No bearer fields.
-- No mutator.
-- `audit-expired`.
-- The provisioner holds on an inactive requester.
-
-### 10. UI (AC-E8)
-
-**Build:**
-- The page and the panel.
-- The owner-only `/admin` link.
-- The purpose contract and its index entry.
-- Regenerated route companions and an updated eligible-route count.
-
-**Tests:**
-- Fence and owner gating.
-- Hold state shows no password field.
-- Production returns `notFound()`.
-
-### 11. Documentation
-
-- Update `docs/user-guide/admin/index.md`.
-- Edit the parent spec (`2026-11-25-s5-rehearsal-draft-provisioner-design.md:17`): its "no migration" line must point to the retained record.
+1. **Record and migration (AC-E3).**
+   - Build:
+     - the model and enum;
+     - back-relations;
+     - a migration with the all-or-none CHECK, a `BEFORE UPDATE` trigger and a `BEFORE DELETE` trigger, following the care-evidence precedent;
+     - the `@dpf` tag;
+     - asset registration;
+     - the data-impact manifest and migration-safety notes;
+     - the substrate baseline raised through P2;
+     - `isGovernedRequester`.
+   - Tests, run in a throwaway container:
+     - unique digest;
+     - fact update rejected;
+     - partial tuple rejected;
+     - `retired → active` rejected;
+     - row delete rejected;
+     - linked deletes refused, unrelated deletes succeed;
+     - a read error reported as an error;
+     - teardown drops the schema.
+2. **Clone refusal (AC-E3).**
+   - Build: `sanitized-clone.ts` refuses a source containing any `S5RehearsalRequesterEnrollment` row, before any table copy.
+   - Tests: a requester-bearing source is refused with no rows copied; an ordinary source clones unchanged.
+3. **Audit writer (AC-E8).**
+   - Build: a typed insert for both keys, and the M-4 exclusion.
+   - Tests: the approval reader rejects the row; projector and API tests; the M-4 exclusion.
+4. **Boundary and fence (AC-E1).**
+   - Build:
+     - the denying `PreviewEnrollmentFence`;
+     - enroll and retire readiness;
+     - the `[command]` handler, `@exposure authenticated`.
+   - Order of checks:
+     - production, origin, session, command;
+     - strict `setupContext` from the query;
+     - comparison with current owner evidence;
+     - readiness;
+     - the pre-body owner and DB check;
+     - the enroll pre-parse replay, with live-identity verification and `retired` for terminal records;
+     - only then, the bounded body.
+   - Tests:
+     - release, replacement, identity drift, a retired replay, a malformed or stale context, and every pre-body refusal each make zero reader, hasher and mutator calls;
+     - invalid bodies are read but make zero hasher calls and zero writes.
+5. **Owner binding (AC-E2).**
+   - Build:
+     - `findInstallOrganization` → `topAccountablePrincipalId`, which holds on an ambiguous or invalid mapping;
+     - the sole `manage_platform` human, used only when the mapping is unset;
+     - no superuser fallback;
+     - the receipt port, which denies and is gated on **BI-C7100183**;
+     - live actor checks.
+   - Tests:
+     - missing receipt, wrong Principal, wrong install;
+     - ambiguous organization;
+     - invalid mapping;
+     - several candidates;
+     - non-owner, automation, handed-over and requester actors.
+6. **Enrollment (AC-E4).**
+   - Build: a serializable create that takes the per-setup advisory lock before any hash, then re-runs the checks under the lock, re-reads the record, makes the single hash, creates the inactive User and Principal, and writes the record and audit row.
+   - Tests:
+     - two overlapping requests on an empty setup give exactly one hash and one create; the other request gets `replay` with zero hasher calls;
+     - a forced post-hash failure rolls back and returns `create_failed`, with no secret in the logs or the response;
+     - drift, collision, orphan email and mismatch all hold;
+     - replay works after audit purge.
+7. **Never-active invariant (AC-E5).**
+   - These are regression tests only; no issuer is edited.
+   - An enrolled requester is refused by every issuer: workforce, mobile login and refresh, LDAP, automation, OAuth consent, exchange, refresh and bearer, headless, customer and social.
+8. **Guards (AC-E7).**
+   - Build:
+     - `users.ts`: lifecycle, role, admin reset, issue reset, complete reset (including old tokens), and request reset with a neutral response;
+     - `workforce.ts`: profile create and relink;
+     - `syncEmployeePrincipal`.
+   - Tests: every guard, before and after retirement.
+9. **Retirement (AC-E6).**
+   - Build:
+     - the transaction-scoped token and client revocation helper, with the export unchanged;
+     - Read Committed `FOR UPDATE` on the record;
+     - authority, DB, installation and exact-alias checks run **before** the already-retired branch;
+     - separate binding revocation, the helper, deactivation of this account only, and a single terminal write plus audit row;
+     - a fresh readback of refs, alias, live artifacts, identities and the tuple. It returns `retired` only on full verification, otherwise `committed_unverified` or a hold.
+   - Tests:
+     - populated revocation;
+     - concurrent and repeated retirement;
+     - no reservation and no lease;
+     - purged audit rows;
+     - drift;
+     - a `committed_unverified` retry where the actor lost authority (refuses) or the alias drifted (holds, not `retired`).
+10. **Read seam (AC-E8).**
+    - Build: `readS5RehearsalEnrollment`.
+    - Tests: no bearer fields, no mutator, `audit-expired`, and the provisioner holds.
+11. **Docs.**
+    - Reconcile the parent provisioner spec: its "no migration" line (`:17`) and the enrollment and delegation ownership split (`:15`–`:21`).
+    - Record the docs-impact disposition for `docs/architecture/ai-agent-meta-model.md`, triggered by the `principal-linking.ts` change.
 
 ## Gates and evidence (before handoff)
 
 - **Tests and typecheck:**
-  - Focused tests.
-  - PostgreSQL schema and concurrency tests in throwaway containers.
-  - Web typecheck only when no DPF2 window is open and the lock is absent.
-- **Guard scripts:**
+  - focused tests;
+  - PostgreSQL schema, concurrency and clone tests, in throwaway containers;
+  - web typecheck, only when no DPF2 window is open and the lock is absent.
+- **Guards:**
   - prose-lint (test and run);
   - style-drift;
   - endpoint classification, baseline unchanged;
@@ -195,94 +147,92 @@ These are regression tests only, run in this item's own test files against seede
   - stewardship scope;
   - closed-set strings;
   - asset coverage;
-  - the platform-substrate baseline, with the approved model count.
-- **Page budgets:**
-  - `/admin`: at most 226 words, net Δ ≤ 0, ratchet unchanged.
-  - New route: absolute shell budgets.
-  - Governance decisions: ratchet unchanged.
-- **UX-fit:** `docs/ux-fit/2026-11-26-rehearsal-requester.ux-fit.json`, by sweep measurement.
-- **Docs impact:** the Admin guide and the parent spec. Confirm the 2026-09 dependency-inventory doc drops out once `govern/auth.ts` is untouched.
-- **Derived artifacts:** regenerate only where inputs change, including architecture counts for the model, enum, migration and route.
+  - platform substrate, with the approved budget.
+- **Derived artifacts:** regenerate only those whose inputs change:
+  - `route-manifest` and `route-audience`, for the API route;
+  - `doc-index` and `doc-impact`;
+  - architecture counts, for the model, enum, migration and route.
+  - Confirm at Red whether `route-shells` or `page-purpose` change for an API-only route.
 - **Commits:** a `Design-Grounding-Decision:` trailer and DCO sign-off on every commit.
-- **Coordinator go:** required before `pregate:preflight`, `pregate`, a push or `pnpm land`. An independent review on a different model runs before each gate.
+- **Coordinator go:** required before `pregate:preflight`, `pregate`, any push or `pnpm land`. An independent review on a different model runs before each gate.
 
 ## Files
 
-### Already claimed and still used
+### Keep (claimed)
 
+**Enrollment code:**
 - `apps/web/lib/identity/s5-rehearsal-enrollment.server{,.test}.ts`
-- `apps/web/lib/actions/s5-rehearsal-enrollment.ts`
+- `apps/web/app/api/admin/rehearsal-requester/[command]/route{,.test}.ts`
+- `apps/web/lib/identity/password-policy.ts`
+
+**Guards and identity:**
+- `apps/web/lib/actions/users{,.test}.ts`
+- `apps/web/lib/actions/workforce{,.test}.ts`
+- `apps/web/lib/identity/principal-linking{,.test}.ts`
+- `apps/web/lib/auth/account-agent-access{,.test}.ts`
+
+**Audit and metrics:**
+- `apps/web/lib/gpp/efficacy/efficacy-measures-store.ts`
+- `apps/web/lib/gpp/efficacy/efficacy-measures.test.ts`
+
+**Read-only consumers (tests only):**
+- `apps/web/lib/security/internal-projector{,.test}.ts`
+- `apps/web/app/api/v1/governance/decisions/route{,.test}.ts`
+
+**Docs:**
+- the parent provisioner spec
+- this spec and plan
+
+**Generated:**
+- `apps/web/lib/docs/doc-index.generated.json`
+- `apps/web/lib/docs/doc-impact.generated.json`
+- `apps/web/lib/ea/route-manifest.json`
+- `apps/web/lib/navigation/route-audience.generated.json`
+
+### Release at handoff (deferred UI, now unused)
+
 - `apps/web/components/admin/S5RehearsalEnrollmentPanel{,.test}.tsx`
 - `apps/web/app/(shell)/admin/page.tsx`
 - `apps/web/app/(shell)/admin/rehearsal-requester/page.tsx`
-- `apps/web/lib/actions/users.ts`
-- `apps/web/lib/auth/account-agent-access{,.test}.ts`
-- `apps/web/lib/gpp/efficacy/efficacy-measures-store.ts`
-- `apps/web/lib/security/internal-projector.ts` and `apps/web/app/api/v1/governance/decisions/route.ts` (tests only)
-- `docs/user-guide/admin/index.md`
-- the UX-fit JSON
-- this spec and plan
-- the six generated route and doc files
-
-### Claimed but unused (release at handoff)
-
-- `apps/web/app/api/admin/rehearsal-requester/route{,.test}.ts`
-- `apps/web/lib/identity/authentication{,.test}.ts`
-- `apps/web/lib/govern/auth{,.test}.ts`
-
-### Previously cleared, claim after the drain
-
-- `apps/web/app/api/admin/rehearsal-requester/[command]/route{,.test}.ts`
-- `apps/web/lib/ux-budget/ux-budget.test.ts`
-- `apps/web/lib/identity/password-policy.ts`
+- `apps/web/lib/actions/s5-rehearsal-enrollment.ts`
 - `apps/web/lib/ux-budget/purpose-contracts/rehearsal-requester.ts` and `purpose-contracts/index.ts`
-- `apps/web/lib/actions/users.test.ts`
-- `apps/web/lib/gpp/efficacy/efficacy-measures.test.ts`
-- `apps/web/lib/security/internal-projector.test.ts`
-- `apps/web/app/api/v1/governance/decisions/route.test.ts`
+- `apps/web/lib/ux-budget/ux-budget.test.ts`
+- `docs/ux-fit/2026-11-26-rehearsal-requester.ux-fit.json`
+- `docs/user-guide/admin/index.md`
+- `apps/web/lib/ux-budget/route-shells.generated.json` and `route-purpose.generated.json`, unless Red shows the API route changes them
+
+### Claim after the go (P2 and P3)
+
+**Overlap already cleared:**
+- `packages/db/prisma/schema/core-identity.prisma`
+- `packages/db/prisma/migrations/<timestamp>_s5_rehearsal_requester_enrollment/migration.sql` (new)
+- `apps/web/lib/govern/data/s5-rehearsal-requester-assets.ts` (new) and `apps/web/lib/govern/data/assets.ts`
+- `docs/data-impact/2026-11-26-s5-rehearsal-requester-enrollment.data-impact.json` (new)
+- `scripts/platform-substrate-baseline.json`, regenerated via P2
+
+**New in revision 6, needs an overlap check:**
+- `packages/db/src/sanitized-clone.ts` and its test (clone refusal)
+- `docs/architecture/ai-agent-meta-model.md`, only if the disposition is "updated"
 - `docs/architecture/architecture-counts.generated.md`, if its inputs change
-
-### New in revision 5 (need an overlap check, then a claim after the drain)
-
-**Guards:**
-- `apps/web/lib/actions/workforce.ts` and its test: the workforce link guard.
-- `apps/web/lib/identity/principal-linking.ts` and its test: the employee-sync guard.
-
-**Schema and stewardship:**
-- `packages/db/prisma/schema/core-identity.prisma`: the model, enum and back-relations. This is approved in principle; the model shape still needs your confirmation.
-- `packages/db/prisma/migrations/<timestamp>_s5_rehearsal_requester_enrollment/migration.sql`: the table, the CHECK and the trigger.
-- `apps/web/lib/govern/data/s5-rehearsal-requester-assets.ts` (new) and `apps/web/lib/govern/data/assets.ts`.
-- `docs/data-impact/2026-11-26-s5-rehearsal-requester-enrollment.data-impact.json` (new).
-- `scripts/platform-substrate-baseline.json`: the `prismaModelCount` increase, which needs the owner's approval.
-- Any shrink-only stewardship baselines the new model touches. Confirm these at P2.
-
-**Docs:**
-- `docs/superpowers/specs/2026-11-25-s5-rehearsal-draft-provisioner-design.md`: the parent "no migration" reconciliation.
-
-### Dropped to BI-9F5D1052
-
-- `apps/web/proxy.ts` and its test
-- `apps/web/lib/api/auth-middleware.ts` and its test
-- the OAuth authorize route and its test
-- `apps/web/lib/auth/oauth-tokens.ts` and its test
-- `apps/web/app/api/v1/auth/login/route.ts`
-- `apps/web/lib/govern/auth-cookie-isolation.test.ts`
+- any shrink-only stewardship baselines the model touches, confirmed at P2
 
 ### Excluded (owned elsewhere)
 
-- the lease fence and lease provenance files
+- the lease fence and provenance files
 - `lib/workroom-runtime/s5-rehearsal-*`
 - every authentication and issuance file named in the design
 
 ## Coverage
 
-Every deliverable maps to BI-9F7192F9. The delivered code holds until each of these lands:
+Every deliverable maps to BI-9F7192F9. The delivered code holds until these dependencies are met:
 
 | Dependency | Owner |
 | --- | --- |
 | Installation attestation: lease-joined for enroll, lease-independent for retire | BI-8EA98961 |
-| DB identity: lease-independent | BI-5C193A3F |
-| Lease currency for enroll | BI-60FC9291 |
+| Database identity | BI-5C193A3F |
+| Lease currency | BI-60FC9291 |
 | Reservation and fixture-review owners | BI-588688A7 |
-| Owner-confirmed custody receipt | Coordinator and owner |
-| Migration and model-count approvals | Coordinator and portfolio-management |
+| Owner receipt adapter | **BI-C7100183** |
+| Model-count budget | Owner, through P2 |
+
+The deferred UI and activation belong to BI-9F5D1052.
