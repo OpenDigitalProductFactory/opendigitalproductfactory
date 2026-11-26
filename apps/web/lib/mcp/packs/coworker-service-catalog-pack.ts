@@ -4,11 +4,11 @@
 // coworker services/offers. The tools stay in a scoped pack so mcp-tools.ts
 // remains a composition layer instead of growing the frozen inline switch.
 
-import type { ToolDefinition, ToolResult, ToolExecutionContext } from "@/lib/mcp-tool-types";
+import type { RegisteredToolDefinition, ToolResult, ToolExecutionContext } from "@/lib/mcp-tool-types";
 import type { ToolPack } from "../tool-pack";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 
-const definitions: ToolDefinition[] = [
+const definitions: RegisteredToolDefinition[] = [
   {
     name: "list_coworker_services",
     description: "List AI coworker service capabilities with provider, risk, authority, persona, and execution backing.",
@@ -23,6 +23,7 @@ const definitions: ToolDefinition[] = [
       },
       required: [],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_platform",
     sideEffect: false,
   },
@@ -45,6 +46,7 @@ const definitions: ToolDefinition[] = [
       },
       required: [],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_platform",
     sideEffect: false,
   },
@@ -58,6 +60,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["offerId"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_platform",
     sideEffect: false,
   },
@@ -76,6 +79,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["offerId", "accessProfile"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_platform",
     sideEffect: false,
   },
@@ -98,6 +102,7 @@ const definitions: ToolDefinition[] = [
       },
       required: [],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_platform",
     sideEffect: true,
     coworkerArtifact: true,
@@ -114,6 +119,7 @@ const definitions: ToolDefinition[] = [
       },
       required: [],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_platform",
     sideEffect: false,
   },

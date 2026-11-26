@@ -674,6 +674,29 @@ describe("bound terminal effect identity carriage", () => {
     mocks.findReads.mockResolvedValue([]);
   });
 
+  it("carries the dependency disposition's admitted task identity and refuses an unbound external write", async () => {
+    const context = { taskRunId: "TR-DISPOSITION", agentId: "AGT-DISPOSER", authorityDecisionId: "AUTH-1", tokenScope: "write" } as never;
+    const assessment = { ...params, itemId: "BI-BOUND", gate: "dependency-disposition", artifactRef };
+    mocks.findTaskRun.mockResolvedValue({ a2aMetadata: { trigger: "external-mcp" } });
+    expect(await initiativeReadinessPack.handlers.record_initiative_evidence!(assessment, "user", context))
+      .toMatchObject({ success: false, error: "initiative_review_binding_required" });
+    expect(mocks.recordGateReceipt).not.toHaveBeenCalled();
+
+    const workroomRef = { kind: "workroom-head", workroomId: "WC-BOUND", repositoryFullName: artifactRef.repositoryFullName,
+      branchName: "feat/bound", headSha: artifactRef.commitSha };
+    mocks.findTaskRun.mockResolvedValue({ a2aMetadata: { trigger: "external-mcp", requestDigest, initiativeReviewBinding: {
+      writerToolName: "record_initiative_evidence", itemId: "BI-BOUND", gate: "dependency-disposition", artifactRef,
+      expectedCurrentBaselineId: null, workroomRef,
+    } } });
+    mocks.recordGateReceipt.mockResolvedValue({ ok: true, receiptId: "disposition-receipt" });
+    expect(await initiativeReadinessPack.handlers.record_initiative_evidence!({ ...assessment, operation: "objective-mapping" }, "user", context))
+      .toMatchObject({ success: false, error: "gate-not-authorized" });
+    expect(mocks.recordObjectiveMapping).not.toHaveBeenCalled();
+    expect(await initiativeReadinessPack.handlers.record_initiative_evidence!(assessment, "user", context)).toMatchObject({ success: true });
+    expect(mocks.recordGateReceipt).toHaveBeenCalledWith(expect.objectContaining({ requiresIndependentReviewer: true, workroomRef,
+      boundReviewTask: { taskRunId: "TR-DISPOSITION", requestDigest } }));
+  });
+
   it.each(["design-spec", "spec-approval"])("refuses an external TaskRun's %s writer when its accepted binding is absent", async gate => {
     mocks.findTaskRun.mockResolvedValue({ a2aMetadata: { trigger: "external-mcp", initiativeReviewBinding: null } });
     mocks.recordGateReceipt.mockResolvedValue({ ok: true, receiptId: "unbound-receipt" });

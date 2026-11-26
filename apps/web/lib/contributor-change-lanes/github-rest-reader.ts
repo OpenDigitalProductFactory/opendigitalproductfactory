@@ -339,6 +339,74 @@ export async function readGithubPullRequestObservation(input: {
   return parsed ? parseVerifiedPullRequestObservation(parsed) : null;
 }
 
+/** Read a complete file list and reject a PR that changed during pagination. */
+export async function readGithubPullRequestChange(input: {
+  repositoryFullName: string;
+  number: number;
+  prisma: PrismaLike;
+  fetchImpl?: typeof fetch;
+}): Promise<{ paths: string[]; title: string; state: PullRequestObservation["state"]; isDraft: boolean } | null> {
+  if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(input.repositoryFullName)
+    || !Number.isSafeInteger(input.number) || input.number <= 0) return null;
+  const [owner, name] = input.repositoryFullName.split("/") as [string, string];
+  const url = `https://api.github.com/repos/${owner}/${name}/pulls/${input.number}`;
+  const transport = input.fetchImpl ? null : createGithubReadTransport();
+  try {
+    const token = await resolveGithubToken(input.prisma, { preferRepositoryController: true });
+    const signal = AbortSignal.timeout(12_000);
+    const get = async (suffix: string): Promise<unknown> => {
+      const response = await (input.fetchImpl ?? transport!.fetch)(url + suffix, {
+        signal, redirect: "error",
+        headers: {
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          Accept: "application/vnd.github+json",
+          "X-GitHub-Api-Version": "2022-11-28",
+          "User-Agent": "dpf-contributor-inventory-sync",
+        },
+      });
+      if (!response.ok) { await cancelGithubResponseBody(response); return null; }
+      return response.json();
+    };
+    const readIdentity = async () => {
+      const raw = await get("") as (RawPullRequest & { changed_files?: number }) | null;
+      if (!raw || raw.number !== input.number || typeof raw.changed_files !== "number"
+        || !Number.isSafeInteger(raw.changed_files) || raw.changed_files < 1 || raw.changed_files > 3000
+        || typeof raw.draft !== "boolean") return null;
+      const base = readCustodySource(raw, { owner, name });
+      const parsed = parsePullRequest(raw, { owner, name }, new Date().toISOString());
+      const observation = parsed && parseVerifiedPullRequestObservation(parsed);
+      return base && observation ? { base, observation, count: raw.changed_files } : null;
+    };
+    const start = await readIdentity();
+    if (!start || start.observation.isDraft || start.observation.state === "closed") return null;
+    const paths: string[] = [];
+    const filenames = new Set<string>();
+    for (let page = 1; page <= Math.ceil(start.count / DEFAULT_PER_PAGE); page++) {
+      const files = await get(`/files?per_page=${DEFAULT_PER_PAGE}&page=${page}`);
+      if (!Array.isArray(files) || files.length !== Math.min(DEFAULT_PER_PAGE, start.count - filenames.size)) return null;
+      for (const file of files as Array<{ filename?: unknown; status?: unknown; previous_filename?: unknown } | null>) {
+        if (!file || typeof file.filename !== "string" || filenames.has(file.filename)
+          || !["added", "removed", "modified", "renamed", "copied", "changed"].includes(String(file.status))) return null;
+        filenames.add(file.filename);
+        paths.push(file.filename);
+        if (file.status === "renamed") {
+          if (typeof file.previous_filename !== "string") return null;
+          paths.push(file.previous_filename);
+        }
+      }
+    }
+    const end = await readIdentity();
+    if (!end || start.count !== end.count || start.base.baseSha !== end.base.baseSha
+      || start.base.baseBranch !== end.base.baseBranch
+      || start.observation.observationFingerprint !== end.observation.observationFingerprint) return null;
+    return { paths, title: end.observation.title, state: end.observation.state, isDraft: end.observation.isDraft };
+  } catch {
+    return null;
+  } finally {
+    await transport?.close().catch(() => {});
+  }
+}
+
 type FetchOutcome =
   | { kind: "rows"; rows: SnapshotRowPayload[]; etag: string | null; rateLimitRemaining?: number; rateLimitResetAt?: Date | null }
   | { kind: "not-modified"; rateLimitRemaining?: number; rateLimitResetAt?: Date | null }

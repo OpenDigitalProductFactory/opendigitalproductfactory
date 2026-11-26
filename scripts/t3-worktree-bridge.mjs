@@ -22,9 +22,9 @@ import { isEntryModule } from "./lib/entry-module.mjs";
 import { runGit } from "./lib/git.mjs";
 import { scriptArgv } from "./lib/script-argv.mjs";
 import { resolveOwningClone } from "./lib/worktree-base.mjs";
-import { removeHeartbeat, writeHeartbeat } from "./lib/worktree-session-heartbeat.mjs";
+import { removeHeartbeat, T3_BRIDGE_SESSION_ID, writeHeartbeat } from "./lib/worktree-session-heartbeat.mjs";
 
-export const T3_BRIDGE_SESSION_ID = "t3-worktree-bridge";
+export { T3_BRIDGE_SESSION_ID };
 
 /** Derive a stable Compose project name slug for a linked worktree path. */
 export function composeProjectNameForWorktree(worktreePath) {

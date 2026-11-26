@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
+import { createHash } from "node:crypto";
 
 import { discoverCanonicalDesignArtifact, discoverCanonicalReviewArtifact, prepareCurrentDesignObservation, readCurrentDesignArtifact } from "./canonical-artifact-discovery";
+import { receipt } from "./entry-adapter.test-fixtures";
+import * as repository from "./repository-artifact";
 
 const BASE_SHA = "1111111111111111111111111111111111111111";
 const HEAD_SHA = "2222222222222222222222222222222222222222";
@@ -87,7 +90,8 @@ describe("current canonical design observation", () => {
     const { store } = multipleRooms();
     const readCurrentArtifact = vi.fn().mockResolvedValue({ state: "verified", digest: "sha256:new" });
     const prepared = await prepareCurrentDesignObservation({ itemId: "BI-X", db: store as never,
-      claimSource: snapshot().room, ports: { readCurrentArtifact, lockBinding: vi.fn() } });
+      claimSource: snapshot().room,
+      allowArchivedBootstrap: true, ports: { readCurrentArtifact, lockBinding: vi.fn() } });
     expect(prepared.evidence).toEqual({ state: "verified", digest: "sha256:new" });
     expect(readCurrentArtifact).toHaveBeenCalledWith(snapshot());
     expect(await prepared.admissionGuard(store as never)).toEqual(prepared.evidence);
@@ -113,6 +117,63 @@ describe("current canonical design observation", () => {
       ports: { readCurrentArtifact } })).evidence).toEqual({ state: "unavailable" });
     expect(readCurrentArtifact).not.toHaveBeenCalled();
   });
+  function archivedHandoff() {
+    const { store, baselineRow } = stored();
+    const source = { ...snapshot().room, capsuleId: undefined, headBranch: "feat/implementation",
+      baseSha: HEAD_SHA, headSha: HEAD_SHA };
+    const archived = { ...snapshot().room, status: "archived", archivedAt: new Date(1) };
+    const bytes = Buffer.from("Approved design bytes");
+    const digest = `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
+    const approval = receipt("r-approval", "spec-approval");
+    Object.assign(approval.payload, { subject: baselineRow.payload.subject,
+      artifactRef: baselineRow.payload.artifactRef, artifactDigest: digest });
+    const scope = { ...baselineRow, payload: { ...baselineRow.payload, artifactDigest: digest,
+      approvalReceiptId: approval.id } };
+    store.backlogItemActivity.findMany.mockImplementation(async query =>
+      query.where.kind === "initiative_gate_receipt" ? [approval] : [scope]);
+    store.workroom.findMany.mockImplementation(async query => query.where.archivedAt === null ? [] : [archived]);
+    const observe = (allowArchivedBootstrap = true) => prepareCurrentDesignObservation({ itemId: "BI-X", db: store as never,
+      claimSource: source, allowArchivedBootstrap, ports: { lockBinding: vi.fn() } });
+    return { store, approval, scope, source, bytes, digest, observe };
+  }
+  it("verifies an approved archived design at the fresh implementation head without restoring the room", async () => {
+    const f = archivedHandoff();
+    const read = vi.spyOn(repository, "readRepositoryProviderBlob").mockResolvedValue({ ok: true, data: f.bytes,
+      blobId: BLOB_SHA });
+    try {
+      const prepared = await f.observe();
+      expect(prepared.evidence).toMatchObject({ state: "verified", digest: f.digest });
+      expect(await prepared.admissionGuard(f.store as never)).toEqual(prepared.evidence);
+      expect(read).toHaveBeenCalledTimes(1);
+      expect(read).toHaveBeenCalledWith({ repositoryFullName: "org/repo", commitSha: HEAD_SHA,
+        path: f.scope.payload.artifactRef.path, expectedBlobId: BLOB_SHA });
+    } finally { read.mockRestore(); }
+  });
+  it.each(["changed-blob", "changed-bytes", "unavailable-provider", "missing-approval", "foreign-repo",
+    "different-approval-artifact", "superseded-before-lock", "read-only-observation", "different-design-selection"])(
+    "refuses an archived handoff with %s", async scenario => {
+      const f = archivedHandoff();
+      if (scenario === "missing-approval") f.store.backlogItemActivity.findMany.mockResolvedValue([f.scope]);
+      if (scenario === "foreign-repo") f.source.repositoryFullName = "different/repo";
+      if (scenario === "different-approval-artifact") Object.assign(f.approval.payload, { artifactRef: {
+        ...f.scope.payload.artifactRef, path: "docs/superpowers/specs/other.md",
+      } });
+      if (scenario === "different-design-selection") f.store.backlogItem.findFirst.mockResolvedValue({
+        id: "item-row", itemId: "BI-X", body: "docs/superpowers/specs/unapproved.md",
+      });
+      const read = vi.spyOn(repository, "readRepositoryProviderBlob").mockResolvedValue(scenario === "unavailable-provider"
+        ? { ok: false, code: "IMMUTABLE_SOURCE_UNAVAILABLE", error: "Provider unavailable" }
+        : { ok: true, data: scenario === "changed-bytes" ? Buffer.from("Changed design") : f.bytes,
+          blobId: scenario === "changed-blob" ? OTHER_BLOB_SHA : BLOB_SHA });
+      try {
+        const prepared = await f.observe(scenario !== "read-only-observation");
+        if (scenario === "superseded-before-lock") {
+          expect(prepared.evidence.state).toBe("verified");
+          f.scope.payload.approvalReceiptId = "r-new-approval";
+        }
+        expect(await prepared.admissionGuard(f.store as never)).toEqual({ state: "unavailable" });
+      } finally { read.mockRestore(); }
+    });
   it("does not turn inherited-only scope into a claim-owned amendment", async () => {
     const { store } = multipleRooms(); store.backlogItemActivity.findMany.mockResolvedValue([]);
     const readCurrentArtifact = vi.fn();

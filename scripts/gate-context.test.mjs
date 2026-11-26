@@ -128,13 +128,31 @@ test("a change to graph-linked code lists the doc it affects and the Docs Impact
   assert.match(formatGateContextMarkdown(ctx), /Docs this change affects/);
 });
 
-test("a doc updated in the same change is reported updated and no longer demands the trailer", () => {
-  const ctx = build([
-    { path: "packages/dpf-skill-pack/hooks/hooks.json", status: "M" },
-    { path: "docs/architecture/agent-client-capability-parity.md", status: "M" },
+test("updating linked docs drops the trailer only after all linked docs are updated", async (t) => {
+  const { mkdirSync, mkdtempSync, rmSync, writeFileSync } = await import("node:fs");
+  const root = mkdtempSync(join(tmpdir(), "dpf-doc-impact-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const code = "apps/web/lib/example.ts";
+  const primary = "docs/architecture/example-primary.md";
+  const secondary = "docs/architecture/example-secondary.md";
+  const manifestDir = join(root, "apps/web/lib/docs");
+  mkdirSync(manifestDir, { recursive: true });
+  writeFileSync(join(manifestDir, "doc-impact.generated.json"), JSON.stringify({
+    codeToDocs: { [code]: [primary, secondary] },
+  }));
+  const context = (paths) => build(paths.map((path) => ({ path, status: "M" })), { repoRoot: root });
+
+  const partial = context([code, primary]);
+  assert.deepEqual(partial.docsImpact.map(({ doc, status }) => [doc, status]), [
+    [primary, "updated"], [secondary, "pending"],
   ]);
-  assert.equal(ctx.docsImpact.find((d) => d.doc === "docs/architecture/agent-client-capability-parity.md")?.status, "updated");
-  assert.ok(!ctx.trailers.some((t) => t.gate === "Docs Impact"));
+  assert.match(partial.trailers.find((entry) => entry.gate === "Docs Impact")?.because ?? "", /example-secondary\.md/);
+
+  const complete = context([code, primary, secondary]);
+  assert.deepEqual(complete.docsImpact.map(({ doc, status }) => [doc, status]), [
+    [primary, "updated"], [secondary, "updated"],
+  ]);
+  assert.ok(!complete.trailers.some((entry) => entry.gate === "Docs Impact"));
 });
 
 test("a net-new route lists the absolute budgets and four-companion checklist", () => {

@@ -72,6 +72,18 @@ beforeEach(() => {
 });
 
 describe("runApprovedExternalRequest (BI-12E5DD91)", () => {
+  it("does not resume a task even if one is attached to a decision-only envelope", async () => {
+    const { db, execute, findPending } = fixtures({
+      envelope: { manifestActionId: "s5-single-synthetic-rehearsal", taskRunId: "TR-1" },
+    });
+    const resumeTask = vi.fn(async () => ({ status: "executed" as const, message: "Unexpected launch." }));
+    await expect(runApprovedExternalRequest("env-1", { db: db as never, execute: execute as never, now: NOW, resumeTask }))
+      .resolves.toMatchObject({ status: "not-run", reason: "decision-only" });
+    expect(resumeTask).not.toHaveBeenCalled();
+    expect(findPending).not.toHaveBeenCalled();
+    expect(execute).not.toHaveBeenCalled();
+  });
+
   it("runs the exact approved call once, as the person and assistant, under the same consent", async () => {
     const { db, execute } = fixtures();
 

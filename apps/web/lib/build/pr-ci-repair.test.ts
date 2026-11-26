@@ -339,6 +339,87 @@ describe("BI-C3EBDCEC VERIFY-PR-2: PR-only Build Studio custody repair dispatch"
     }));
   });
 
+  it("dispatches coworker-owned custody through the admitted Workroom coordinator", async () => {
+    const coworkerPrincipalId = "prin-custody-coworker";
+    const coordinatorPrincipalId = "prin-admitted-coordinator";
+    const coordinatorUserId = "user-admitted-coordinator";
+    const room = custodyRoom();
+    const { prCustody } = room.workspaceState as { prCustody: Record<string, unknown> };
+    const start = vi.fn(async ({ actor }: { actor: { principalId: string | null; userId: string } }) =>
+      actor.principalId === coordinatorPrincipalId && actor.userId === coordinatorUserId
+        ? { success: true, message: "admitted" }
+        : { success: false, error: "unauthorized", message: "Not admitted to this Workroom" });
+    const recordActivity = vi.fn().mockResolvedValue(undefined);
+    vi.doMock("@dpf/db", () => ({
+      prisma: {
+        workroom: {
+          findUnique: vi.fn().mockResolvedValue({
+            ...room,
+            requestedByPrincipalId: coworkerPrincipalId,
+            createdByPrincipalId: coworkerPrincipalId,
+            leaseHolderPrincipalId: coworkerPrincipalId,
+            workspaceState: { prCustody: { ...prCustody, accountableOwnerPrincipalId: coworkerPrincipalId } },
+          }),
+        },
+        workroomParticipant: {
+          findMany: vi.fn().mockResolvedValue([
+            { id: "participant-coworker", principalId: coworkerPrincipalId, roles: ["contributor"], lifecycle: "active" },
+            { id: "participant-coordinator", principalId: coordinatorPrincipalId, roles: ["coordinator"], lifecycle: "active" },
+          ]),
+        },
+        principalAlias: {
+          findFirst: vi.fn(async ({ where }: { where: { principalId: string; aliasType: string } }) =>
+            where.principalId === coordinatorPrincipalId && where.aliasType === "user"
+              ? { aliasValue: coordinatorUserId }
+              : null),
+        },
+        user: { findUnique: vi.fn().mockResolvedValue({ id: coordinatorUserId, isActive: true, workHandedOverAt: null }) },
+        aiProviderConnection: {
+          findMany: vi.fn().mockResolvedValue([{ status: "active", connectionId: "conn-codex" }]),
+        },
+        workroomActivity: { create: recordActivity },
+      },
+    }));
+    vi.doMock("@/lib/workroom-runtime/runtime-account", () => ({ runtimeAccountDriver: () => "codex" }));
+    vi.doMock("@/lib/workroom-runtime/runtime-tools", () => ({ workroomRuntimeSupervisor: () => ({ start }) }));
+
+    try {
+      const outcome = await dispatchWorkroomPrCiRepair({
+        capsuleId: "WC-PR7184",
+        owner: "o",
+        repo: "r",
+        prNumber: 7184,
+        prUrl: "https://github.com/o/r/pull/7184",
+        baseBranch: "main",
+        headBranch: "dependabot/npm_and_yarn/minor-and-patch-d73a48238d",
+        accountableOwnerPrincipalId: coworkerPrincipalId,
+        packet: policyGuardPacket(),
+      });
+
+      expect.soft(outcome).toBe("dispatched");
+      expect(recordActivity).toHaveBeenCalledWith(expect.objectContaining({
+        data: expect.objectContaining({
+          summary: expect.stringContaining(`[dispatched head=${HEAD}]`),
+          payload: expect.objectContaining({
+            custodyPrincipalId: coworkerPrincipalId,
+            runtimeActorPrincipalId: coordinatorPrincipalId,
+            identityBasis: "active-workroom-coordinator",
+          }),
+        }),
+      }));
+      expect(start).toHaveBeenCalledTimes(1);
+      expect(start).toHaveBeenCalledWith(expect.objectContaining({
+        capsuleId: "WC-PR7184",
+        actor: expect.objectContaining({ userId: coordinatorUserId, principalId: coordinatorPrincipalId }),
+        prompt: expect.stringContaining(HEAD),
+      }));
+    } finally {
+      vi.doUnmock("@dpf/db");
+      vi.doUnmock("@/lib/workroom-runtime/runtime-account");
+      vi.doUnmock("@/lib/workroom-runtime/runtime-tools");
+    }
+  });
+
   it("refuses dispatch when the PR head moved (stale callback cannot publish)", async () => {
     const d = workroomDeps({
       readRoomIdentity: vi.fn().mockResolvedValue(custodyRoom({ headSha: "f".repeat(40) })),
@@ -407,10 +488,34 @@ describe("BI-C3EBDCEC VERIFY-PR-2: PR-only Build Studio custody repair dispatch"
       headBranch: "dependabot/npm_and_yarn/minor-and-patch-d73a48238d",
       accountableOwnerPrincipalId: "prin-owner",
       packet: policyGuardPacket(),
-    }, noActor)).resolves.toBe("unavailable");
-    expect(noActor.recordActivity).toHaveBeenCalledWith(expect.objectContaining({
-      payload: expect.objectContaining({ reason: "accountable-owner-unavailable" }),
-    }));
+    }, noActor)).resolves.toBe("repair-identity-unavailable");
+    expect(noActor.startSession).not.toHaveBeenCalled();
+    expect(noActor.readJobLog).not.toHaveBeenCalled();
+    expect(noActor.recordActivity).not.toHaveBeenCalled();
+  });
+
+  it("keeps a refused coordinator dispatch refused without trying a second identity", async () => {
+    const d = workroomDeps({
+      resolveActor: vi.fn()
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce({ userId: "u-coordinator", agentId: PR_CI_REPAIR_TOOL, principalId: "prin-coordinator" }),
+      findAdmittedCoordinator: vi.fn().mockResolvedValue("prin-coordinator"),
+      startSession: vi.fn().mockResolvedValue({ success: false, error: "workroom_access_denied", message: "Grant refused" }),
+    });
+    await expect(dispatchWorkroomPrCiRepair({
+      capsuleId: "WC-PR7184",
+      owner: "o",
+      repo: "r",
+      prNumber: 7184,
+      prUrl: "https://github.com/o/r/pull/7184",
+      baseBranch: "main",
+      headBranch: "dependabot/npm_and_yarn/minor-and-patch-d73a48238d",
+      accountableOwnerPrincipalId: "prin-owner",
+      packet: policyGuardPacket(),
+    }, d)).resolves.toBe("repair-identity-refused");
+    expect(d.resolveActor).toHaveBeenCalledTimes(2);
+    expect(d.startSession).toHaveBeenCalledTimes(1);
+    expect(d.sendTurn).not.toHaveBeenCalled();
   });
 
   it("omits dependency-bot rules for non-bot PRs while keeping core publication constraints", () => {

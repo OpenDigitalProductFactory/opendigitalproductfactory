@@ -9,6 +9,8 @@ import { buildPrincipalContext } from "@/lib/principal-context";
 import { resolveGovernedAction } from "@/lib/governance-resolver";
 import { summarizeGovernedLifecycleAttempt } from "@/lib/user-governance";
 import { syncUserPrincipal } from "@/lib/identity/principal-linking";
+import { getT } from "@/lib/i18n/t.server";
+import { err, ok, type ActionResult } from "@/lib/shared/action-result";
 import {
   buildPasswordResetExpiry,
   createPasswordResetToken,
@@ -26,6 +28,8 @@ export type PasswordResetIssueResult = UserActionResult & {
   deliveryChannel?: "email" | "manual";
   recoveryLink?: string;
 };
+
+export type AddPlatformRoleResult = ActionResult<{ change: "added" | "unchanged"; message: string }>;
 
 type SessionUserContext = {
   id: string;
@@ -442,4 +446,88 @@ export async function updateUserLifecycle(input: {
       };
     },
   });
+}
+
+/** Human portal action. Not exposed as a coworker operation or lifecycle update. */
+export async function addUserPlatformRole(input: { userId: string; roleId: string }): Promise<AddPlatformRoleResult> {
+  const t = await getT("admin");
+  const actorId = (await auth())?.user?.id;
+  if (!actorId) return err(t("userLifecycle.addSignIn"));
+  if (typeof input?.userId !== "string" || !input.userId || typeof input.roleId !== "string" || !input.roleId) {
+    return err(t("userLifecycle.addSelectRole"));
+  }
+
+  let result: AddPlatformRoleResult;
+  try {
+    result = await prisma.$transaction<AddPlatformRoleResult>(async (tx) => {
+      // Use current membership and account state, not a principal supplied
+      // from the form or role data cached in the session.
+      const [actor, alias] = await Promise.all([
+        tx.user.findUnique({
+          where: { id: actorId },
+          select: {
+            isActive: true, isSuperuser: true, workHandedOverAt: true,
+            automationVerificationId: true, automationProfile: true,
+            groups: { select: { platformRole: { select: { roleId: true } } } },
+          },
+        }),
+        tx.principalAlias.findUnique({
+          where: { aliasType_aliasValue_issuer: { aliasType: "user", aliasValue: actorId, issuer: "" } },
+          select: { principal: { select: { kind: true, status: true } } },
+        }),
+      ]);
+      if (!actor?.isActive || actor.workHandedOverAt || actor.automationVerificationId || actor.automationProfile
+          || alias?.principal.kind !== "human" || alias.principal.status !== "active") {
+        return err(t("userLifecycle.addHumanOnly"));
+      }
+      const humanAllowed = can({
+        platformRole: null,
+        platformRoles: actor.groups.map(({ platformRole }) => platformRole.roleId),
+        isSuperuser: actor.isSuperuser,
+      }, "manage_users");
+      const decision = resolveGovernedAction({
+        humanAllowed,
+        agentPolicyAllowed: true,
+        riskBand: "high",
+        agentMaxRiskBand: "critical",
+        activeGrant: null,
+      });
+      if (!humanAllowed || decision.decision !== "allow") {
+        return err(t("userLifecycle.addDenied"));
+      }
+      const target = actorId === input.userId ? actor : await tx.user.findUnique({
+        where: { id: input.userId }, select: { isSuperuser: true },
+      });
+      if (!target) return err(t("userLifecycle.addUserMissing"));
+      const targetDecision = summarizeGovernedLifecycleAttempt({
+        actorIsSuperuser: actor.isSuperuser, targetIsSuperuser: target.isSuperuser,
+      });
+      if (targetDecision.decision === "deny") return err(t("userLifecycle.superuserNotice"));
+
+      const role = await tx.platformRole.findUnique({
+        where: { roleId: input.roleId }, select: { id: true, name: true },
+      });
+      if (!role) return err(t("userLifecycle.addRoleMissing"));
+      const inserted = await tx.userGroup.createMany({
+        data: { userId: input.userId, platformRoleId: role.id },
+        skipDuplicates: true,
+      });
+      if (inserted.count === 0) return ok({ change: "unchanged", message: t("userLifecycle.addUnchanged", { role: role.name }) });
+
+      await createAuthorizationDecisionLog({
+        actorType: "user", actorRef: actorId, humanContextRef: actorId,
+        objectRef: input.userId, routeContext: "/employee",
+        actionKey: "user.platform_role_add", decision: "allow",
+        rationale: { roleId: input.roleId, effect: "added" },
+      }, tx);
+      return ok({ change: "added", message: t("userLifecycle.addSuccess", { role: role.name }) });
+    }, { isolationLevel: "Serializable" });
+  } catch {
+    return err(t("userLifecycle.addSaveFailed"));
+  }
+  if (result.ok && result.data.change === "added") {
+    revalidatePath("/employee");
+    revalidatePath("/admin");
+  }
+  return result;
 }

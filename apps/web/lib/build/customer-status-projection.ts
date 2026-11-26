@@ -225,6 +225,18 @@ export function projectBuildStudioCustomerStatus(args: {
     switch (delivery.status) {
       case "created":
       case "checking":
+        if (delivery.queueHold || delivery.lastError === "queue-intent-required" || delivery.lastError === "changes-requested") {
+          return {
+            ...base,
+            lifecyclePosition: "Needs your decision",
+            worker: "Watching for an authorized delivery transition",
+            nextAction: delivery.queueHold?.nextAction ?? (delivery.lastError === "changes-requested"
+              ? "address the outstanding review and obtain its disposition."
+              : "the accountable writer must explicitly request queue enrollment for this exact commit."),
+            owner: "owner",
+            needsYou: true,
+          };
+        }
         return {
           ...base,
           lifecyclePosition: "Checking the pull request",
@@ -241,6 +253,24 @@ export function projectBuildStudioCustomerStatus(args: {
           nextAction: "rerun checks against the updated platform.",
           owner: "Build Studio",
           needsYou: false,
+        };
+      case "armed":
+        return {
+          ...base,
+          lifecyclePosition: "Auto-merge armed",
+          worker: "Waiting for GitHub to confirm queue entry",
+          nextAction: "wait while Build Studio checks whether the repository actually enrolls this head.",
+          owner: "Build Studio",
+          needsYou: false,
+        };
+      case "removed":
+        return {
+          ...base,
+          lifecyclePosition: "Needs your decision",
+          worker: "Following up on the removed queue attempt",
+          nextAction: delivery.queueHold?.nextAction ?? "review the queue failure before requesting another attempt.",
+          owner: "owner",
+          needsYou: true,
         };
       case "queued":
         return {

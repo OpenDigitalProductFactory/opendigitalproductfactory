@@ -10,7 +10,7 @@ import { loadInitiativeReviewOutcome } from "./mcp-task-review-outcome";
 import { sanitizeNativeCliDiagnostics } from "./shared/execution-uncertainty";
 import { isRecord } from "./shared/coerce";
 import { expandGrants, getAgentToolGrantsAsync } from "./tak/agent-grants";
-import { INITIATIVE_READINESS_LANES } from "./tak/initiative-readiness-tool-grants";
+import { readinessLaneForGate } from "./tak/initiative-readiness-tool-grants";
 import { readBoundReviewAuthorityTask } from "./backlog/initiative-readiness/bound-review-effect";
 import { validInitiativeGateReceipt } from "./backlog/initiative-readiness/receipt-validation";
 import { resolveAgentWorkroomAccess } from "./work-management/workroom-agent-access.server";
@@ -135,7 +135,7 @@ export async function readOriginalReviewResult(input: ReadInput): Promise<Origin
     if (!isRecord(task.a2aMetadata) || task.a2aMetadata.initiativeReviewBinding === undefined) return null;
     const metadata = task.a2aMetadata;
     const binding = parseInitiativeReviewBinding(metadata.initiativeReviewBinding);
-    const lane = binding ? INITIATIVE_READINESS_LANES[binding.writerToolName] : undefined;
+    const lane = binding ? readinessLaneForGate(binding.writerToolName, binding.gate) : undefined;
     // Ordinary initiative evidence keeps its existing Tasks/result contract.
     if (binding && lane && !lane.independent && (lane.gates as readonly string[]).includes(binding.gate)) return null;
     if (!binding?.workroomRef) return unknown(input.taskRunId, "original-review-binding-invalid");

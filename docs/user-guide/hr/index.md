@@ -207,7 +207,8 @@ In full navigation mode, open **Role governance & access** below the People view
 - Review each platform role’s ID, description, minimum oversight level, service-level target, and assignment count.
 - Treat an unassigned role as a coverage signal, not automatically as a hiring request.
 - In **HR user lifecycle**, select a platform user, choose the role, and set the account active or inactive.
-- Save the change and confirm the result message.
+- To keep existing roles, select the user and the new role, then choose **Add role**. An authorized human administrator can do this from the portal. It does not change active status and records who added the role.
+- Use **Replace roles and save status** only when you intend to keep the selected role alone and save the account status. Review the current roles before replacing them.
 
 Deactivating a user removes sign-in access. It does not delete the employee profile or historical evidence, and it is reversible by reactivating the account. Password setup and reset remain under **Admin**, not People. Superuser accounts require a superuser to change.
 

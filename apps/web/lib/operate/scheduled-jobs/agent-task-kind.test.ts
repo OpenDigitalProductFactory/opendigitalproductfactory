@@ -17,6 +17,7 @@ describe("scheduled agent task kinds", () => {
       "demand-scoring-steward",
       "client-capability-reverify",
       "harness-evolution-loop",
+      "closure-scorecard",
     ]);
     expect(isScheduledAgentTaskKind("product-intelligence-watch")).toBe(true);
     expect(isScheduledAgentTaskKind("product-management-playbook")).toBe(true);
@@ -28,6 +29,7 @@ describe("scheduled agent task kinds", () => {
     expect(isScheduledAgentTaskKind("demand-scoring-steward")).toBe(true);
     expect(isScheduledAgentTaskKind("client-capability-reverify")).toBe(true);
     expect(isScheduledAgentTaskKind("harness-evolution-loop")).toBe(true);
+    expect(isScheduledAgentTaskKind("closure-scorecard")).toBe(true);
     expect(isScheduledAgentTaskKind("prompt-defined-work")).toBe(false);
   });
 });

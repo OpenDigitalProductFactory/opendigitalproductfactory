@@ -9,6 +9,7 @@ import { promisify } from "node:util";
 import { prisma } from "@dpf/db";
 
 import { extractDeliveredBacklogItemIds, isDocPullRequest, PR_SUBMIT_ACTUATOR } from "@/lib/backlog/pr-submit-awaiting-acceptance";
+import { readImplementationChange, requiresImplementationChange } from "@/lib/backlog/implementation-change";
 import { isReachableFromTrunk, refreshTrunkRef, trunkHasMergedPullRequest, trunkRefCommittedAt, trunkRefExists, trustedGitArgs } from "@/lib/work-capsules/git-scanner";
 
 const execFileAsync = promisify(execFile);
@@ -142,13 +143,10 @@ export function pullRequestNumbersFromActivities(
 }
 
 /**
- * Delivery evidence is the trunk (BI-AFE8BB73, design §4): a SHA reachable
- * from origin/main satisfies DELIVERY_EVIDENCE_REQUIRED for every shape.
- * Read the Workroom heads first; when no room recorded a head (a fix worked
- * outside a Workroom, or a room whose head was never synced), fall back to the
- * item's linked pull request — the room's `pullRequestNumber` or an evidence
- * link — and look for its merge commit on the trunk. The manifest path stays
- * as the fallback the caller already has.
+ * Delivery evidence is the trunk (BI-AFE8BB73, design §4). For a feature,
+ * bug, or refactor, reachability must prove an implementation change: the
+ * immutable Workroom range for direct work, or the squash diff for PR work.
+ * The manifest path stays as the fallback the caller already has.
  */
 /**
  * The git half of the merge signal, with no database and no ambient
@@ -163,6 +161,8 @@ export function pullRequestNumbersFromActivities(
  */
 export async function resolveMergeSignalFromRefs(input: {
   heads: readonly string[];
+  /** Immutable Workroom ranges for heads not bound to a PR. */
+  headRanges?: readonly { headSha: string; baseSha: string }[];
   pullRequests: readonly number[];
   /**
    * PRs the server-side PR-submit actuator recorded as delivering the item
@@ -184,6 +184,7 @@ export async function resolveMergeSignalFromRefs(input: {
   readTrunkCommittedAt?: (root: string) => Promise<Date | null>;
 }): Promise<MergeDeliverySignal> {
   const { heads, pullRequests, roots } = input;
+  const needsImplementation = requiresImplementationChange(input.item?.workType);
   const attested = input.item ? [...new Set(input.attestedPullRequests ?? [])] : [];
   const now = input.now ?? new Date();
   const readTrunkCommittedAt = input.readTrunkCommittedAt ?? ((root: string) => trunkRefCommittedAt(root));
@@ -201,10 +202,28 @@ export async function resolveMergeSignalFromRefs(input: {
     let sawDefiniteNegative = false;
     for (const sha of heads) {
       const reachable = await isReachableFromTrunk(root, sha);
-      if (reachable === true) return "merged";
+      if (reachable === true) {
+        if (!needsImplementation) return "merged";
+        const range = input.headRanges?.find((candidate) => candidate.headSha === sha);
+        if (!range) continue;
+        const change = await readImplementationChange(root, sha, range.baseSha);
+        if (change === true) return "merged";
+        if (change === false) sawDefiniteNegative = true;
+      }
       if (reachable === false) sawDefiniteNegative = true;
     }
     for (const prNumber of new Set(pullRequests)) {
+      if (needsImplementation) {
+        const commit = await readTrunkPullRequestCommit(root, prNumber);
+        if (commit === null) continue;
+        if (commit && !isDocPullRequest(commit.subject)) {
+          const change = await readImplementationChange(root, commit.sha);
+          if (change === true) return "merged";
+          if (change === null) continue;
+        }
+        sawDefiniteNegative = true;
+        continue;
+      }
       const merged = await trunkHasMergedPullRequest(root, prNumber);
       if (merged === true) return "merged";
       if (merged === false) sawDefiniteNegative = true;
@@ -212,7 +231,11 @@ export async function resolveMergeSignalFromRefs(input: {
     for (const prNumber of attested) {
       const commit = await readTrunkPullRequestCommit(root, prNumber);
       if (commit === null) continue;
-      if (commit && input.item && trunkCommitDeliversItem(commit, input.item)) return "merged";
+      if (commit && input.item && trunkCommitDeliversItem(commit, input.item)) {
+        const change = needsImplementation ? await readImplementationChange(root, commit.sha) : true;
+        if (change === true) return "merged";
+        if (change === null) continue;
+      }
       // Absent, reverted, or a squash commit that does not deliver this item:
       // git answered, and the answer is that this PR is not the item's merge.
       sawDefiniteNegative = true;
@@ -238,7 +261,7 @@ export async function resolveMergeSignalFromRefs(input: {
 }
 
 type MergeDeliveryDb = {
-  workroom: { findMany(args: unknown): Promise<{ headSha: string | null; pullRequestNumber: number | null }[]> };
+  workroom: { findMany(args: unknown): Promise<{ baseSha?: string | null; headSha: string | null; pullRequestNumber: number | null }[]> };
   backlogItemActivity: { findMany(args: unknown): Promise<{ kind: string; payload: unknown; recordedAt?: Date | null }[]> };
 };
 
@@ -259,7 +282,7 @@ export async function resolveMergeDeliveryFromDb(
     const rooms = await db.workroom.findMany({
       where: { backlogItemId: itemId },
       orderBy: { updatedAt: "desc" },
-      select: { headSha: true, pullRequestNumber: true },
+      select: { baseSha: true, headSha: true, pullRequestNumber: true },
     });
     const heads = rooms.map((room) => room.headSha).filter((sha): sha is string => Boolean(sha));
     const evidence = await db.backlogItemActivity.findMany({
@@ -281,6 +304,10 @@ export async function resolveMergeDeliveryFromDb(
     });
     return await resolveMergeSignalFromRefs({
       heads,
+      // A PR-bound room is measured by its actual squash, not a branch range
+      // that could include code inherited from an earlier base.
+      headRanges: rooms.flatMap(({ baseSha, headSha, pullRequestNumber }) =>
+        baseSha && headSha && pullRequestNumber == null ? [{ baseSha, headSha }] : []),
       pullRequests,
       attestedPullRequests: deliveryAttemptPullRequests(transitions),
       item: { itemId, workType: workType ?? null },
@@ -373,21 +400,14 @@ export async function readTrunkPullRequestCommit(
   root: string,
   prNumber: number,
   trunkRef = "origin/main",
-): Promise<{ subject: string; body: string } | false | null> {
+): Promise<TrunkCommit | false | null> {
   if (!Number.isInteger(prNumber) || prNumber <= 0) return null;
   const marker = `(#${prNumber})`;
   try {
-    const { stdout } = await execFileAsync(
-      "git",
-      trustedGitArgs(root, ["log", trunkRef, "--fixed-strings", `--grep=${marker}`, "-n", "20", "--format=%s%x1f%b%x1e"]),
-      { timeout: 5000, windowsHide: true, maxBuffer: 4 * 1024 * 1024 },
-    );
-    const commits = stdout.split("\x1e").map((entry) => entry.replace(/^\n/, "")).filter(Boolean).map((entry) => {
-      const [subject = "", body = ""] = entry.split("\x1f");
-      return { subject: subject.trim(), body };
-    });
+    const commits = await readTrunkCommits(root, trunkRef, [marker], 20);
     if (commits.some((c) => c.subject.startsWith("Revert ") && c.subject.includes(marker))) return false;
-    return commits.find((c) => !c.subject.startsWith("Revert ") && c.subject.endsWith(marker)) ?? false;
+    const match = commits.find((c) => !c.subject.startsWith("Revert ") && c.subject.endsWith(marker));
+    return match && !(await trunkHasRevertOf(root, trunkRef, match)) ? match : false;
   } catch {
     return null;
   }
@@ -423,10 +443,14 @@ export async function trunkHasDeliveringCommit(
       .filter((c) => !c.subject.startsWith("Revert "))
       .filter((c) => !options.after || c.committedAt.getTime() > options.after.getTime())
       .filter((c) => trunkCommitDeliversItem(c, item));
+    let changeUnavailable = false;
     for (const candidate of candidates) {
-      if (!(await trunkHasRevertOf(root, trunkRef, candidate))) return true;
+      if (await trunkHasRevertOf(root, trunkRef, candidate)) continue;
+      const change = requiresImplementationChange(item.workType) ? await readImplementationChange(root, candidate.sha) : true;
+      if (change === true) return true;
+      if (change === null) changeUnavailable = true;
     }
-    return false;
+    return changeUnavailable ? null : false;
   } catch {
     return null;
   }
@@ -524,6 +548,11 @@ export async function findMergedDeliveryCommits(
     const delivered: MergedDeliveryCommit[] = [];
     for (const c of candidates.values()) {
       if (c.parents.length !== 1 || await trunkHasRevertOf(root, trunkRef, c)) continue;
+      if (requiresImplementationChange(item.workType)) {
+        const change = await readImplementationChange(root, c.sha, c.parents[0]!);
+        if (change === null) return null;
+        if (!change) continue;
+      }
       // BI-46E344FE: oldest first, so a split delivery is reviewed in trunk order.
       let at = delivered.length;
       while (at > 0 && await isAncestor(root, c.sha, delivered[at - 1]!.sha)) at -= 1;

@@ -1,4 +1,4 @@
-import type { ToolDefinition } from "@/lib/mcp-tool-types";
+import type { RegisteredToolDefinition } from "@/lib/mcp-tool-types";
 import { RECOVERY_READ_GATES } from "../backlog-recovery-read";
 import {
   backlogScopeCreateProperties,
@@ -17,7 +17,7 @@ import { DEFERRAL_INPUT_SCHEMA } from "@/lib/backlog/deferral-contract";
 import { BACKLOG_SENSITIVITY_VALUES } from "@/lib/federation/cross-org-sharing";
 import { backlogStatusToolDefinition } from "./backlog-status-tool-definition";
 
-export const backlogPackDefinitions: ToolDefinition[] = [
+export const backlogPackDefinitions: RegisteredToolDefinition[] = [
   {
     name: "create_backlog_item",
     description:
@@ -49,6 +49,7 @@ export const backlogPackDefinitions: ToolDefinition[] = [
       },
       required: ["title", "type", "workType"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_backlog",
     sideEffect: true,
   },
@@ -68,6 +69,7 @@ export const backlogPackDefinitions: ToolDefinition[] = [
       },
       required: ["itemId", "outcome", "rationale"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_backlog",
     sideEffect: true,
   },
@@ -86,6 +88,7 @@ export const backlogPackDefinitions: ToolDefinition[] = [
       },
       required: ["itemId", "outcome", "rationale"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_backlog",
     sideEffect: true,
     consequence: "irreversible",
@@ -104,6 +107,7 @@ export const backlogPackDefinitions: ToolDefinition[] = [
       },
       required: [],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_backlog",
     sideEffect: true,
     consequence: "irreversible",
@@ -122,6 +126,7 @@ export const backlogPackDefinitions: ToolDefinition[] = [
       },
       required: ["itemId", "size"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_backlog",
     sideEffect: true,
   },
@@ -135,6 +140,7 @@ export const backlogPackDefinitions: ToolDefinition[] = [
       },
       required: [],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_backlog",
     sideEffect: true,
   },
@@ -161,6 +167,7 @@ export const backlogPackDefinitions: ToolDefinition[] = [
       },
       required: ["itemId"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_backlog",
     sideEffect: true,
   },
@@ -195,6 +202,7 @@ export const backlogPackDefinitions: ToolDefinition[] = [
       required: ["items", "total", "truncated"],
       additionalProperties: true,
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_operations",
     executionMode: "immediate",
     sideEffect: false,
@@ -220,6 +228,7 @@ export const backlogPackDefinitions: ToolDefinition[] = [
       },
       required: ["title"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_backlog",
     sideEffect: true,
   },
@@ -242,6 +251,7 @@ export const backlogPackDefinitions: ToolDefinition[] = [
       },
       required: ["epicId"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_backlog",
     sideEffect: true,
   },
@@ -260,6 +270,7 @@ export const backlogPackDefinitions: ToolDefinition[] = [
       },
       required: [],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_operations",
     executionMode: "immediate",
     sideEffect: false,
@@ -288,6 +299,7 @@ export const backlogPackDefinitions: ToolDefinition[] = [
       },
       required: [],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_operations",
     executionMode: "immediate",
     sideEffect: false,
@@ -309,6 +321,7 @@ export const backlogPackDefinitions: ToolDefinition[] = [
       },
       required: ["itemId"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_operations",
     executionMode: "immediate",
     sideEffect: false,
@@ -325,6 +338,7 @@ export const backlogPackDefinitions: ToolDefinition[] = [
       },
       required: ["itemId"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_backlog",
     sideEffect: true,
   },
@@ -344,6 +358,7 @@ export const backlogPackDefinitions: ToolDefinition[] = [
       },
       required: [],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_operations",
     executionMode: "immediate",
     sideEffect: false,

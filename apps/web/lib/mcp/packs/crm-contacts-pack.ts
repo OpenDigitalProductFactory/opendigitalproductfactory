@@ -3,10 +3,10 @@
 // model but unreachable — no tool existed, so the coworker parked real people
 // ("Ian Pruden — email to be added") in free-text account notes.
 
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
+import type { RegisteredToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack } from "../tool-pack";
 
-const definitions: ToolDefinition[] = [
+const definitions: RegisteredToolDefinition[] = [
   {
     name: "create_customer_contact",
     description:
@@ -31,6 +31,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["accountId", "firstName", "email"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "operate_customer",
     sideEffect: true,
     coworkerArtifact: true,

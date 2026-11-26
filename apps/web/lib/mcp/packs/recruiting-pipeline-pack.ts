@@ -11,11 +11,11 @@ import {
   getRecruitingPipeline,
   type RecruitingPipelineClient,
 } from "@/lib/recruiting/pipeline-read-model";
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
+import type { RegisteredToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
 
-const definitions: ToolDefinition[] = [
+const definitions: RegisteredToolDefinition[] = [
   {
     name: "get_recruiting_pipeline",
     description:
@@ -29,6 +29,7 @@ const definitions: ToolDefinition[] = [
         },
       },
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_employee",
     executionMode: "immediate",
     sideEffect: false,

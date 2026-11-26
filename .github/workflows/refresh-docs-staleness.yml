@@ -84,6 +84,7 @@ jobs:
             -m "docs(maintenance): refresh documentation staleness report (auto)" \
             -m "Automated weekly refresh by Docs Staleness Refresh (BI-AA5DFEA2). Each row is a live doc referencing a repo file committed more recently than the doc itself — a deterministic stale-candidate signal for a reviewer to confirm, not a proven error." \
             -m "Process-Spine-Decision: generated maintenance report, no contract/behaviour change."
+          published_head=$(git rev-parse HEAD)
           git push -f origin "$BRANCH"
 
           gh pr create \
@@ -92,4 +93,4 @@ jobs:
             --head "$BRANCH" --base main
 
           gh workflow run ci.yml --ref "$BRANCH" || echo "ci.yml dispatch failed; dispatch manually"
-          gh pr merge "$BRANCH" --auto || echo "auto-merge not armed; arm manually after checks pass"
+          gh pr merge "$BRANCH" --auto --match-head-commit "$published_head" || echo "auto-merge not armed; arm manually after checks pass"

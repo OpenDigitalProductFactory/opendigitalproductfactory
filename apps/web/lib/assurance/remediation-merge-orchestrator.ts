@@ -23,6 +23,7 @@ export interface ReadyRemediationPR {
   buildPk: string;
   backlogItemId: string;
   prNumber: number;
+  headSha?: string | null;
   title: string;
   /** Dependency package name (null when not extractable). Used by the live
    *  cooldown/OSV verifiers in P2.2b. */

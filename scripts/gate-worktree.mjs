@@ -68,7 +68,7 @@ import { classifyGateOutcome, EXIT_CANDIDATE_MERGE_CONFLICT, EXIT_CHILD_SIGNAL_D
 import { SLOT_SUBSTRATE_UNAVAILABLE_STATUS, assessSlotSubstrate, ensureSlotPostgres } from "./lib/local-ci-slot-substrate.mjs";
 import { GATE_CLIENT_REVISION } from "./lib/gate-client-revision.mjs";
 import { buildIsDelegated, defaultBuildStrategy, metadataMergeConflictForRun } from "./lib/local-integration-ci.mjs";
-import { fallbackStatusForUnknown } from "./lib/local-integration-status.mjs";
+import { fallbackRecordForUnknownStatus } from "./lib/local-integration-status.mjs";
 import {
   createRetryableRelease,
   admittedLeaseTtlMs,
@@ -110,6 +110,16 @@ import {
   sampleLocalCiHostPressure,
   summarizeLocalCiPressureSamples,
 } from "./lib/local-ci-host-pressure.mjs";
+import {
+  describeDpf2Reservation,
+  dpf2ReservationDeadline,
+  dpf2ReservationPath,
+  DPF2_RESERVATION_POLL_MS,
+  dpf2ReservationBlocks,
+  inspectDpf2CiReservation,
+  waitForDpf2Reservation,
+} from "./lib/local-convergence-lock.mjs";
+import { GATE_EXIT } from "./lib/gate-exit-classification.mjs";
 import { buildAttributionEvidence, resolveAgentIdentity } from "./lib/agent-identity.mjs";
 import {
   createGateOutputRelay,
@@ -226,6 +236,9 @@ export function describeQueuedAdmission({ admission, poolPolicy, delayMs }) {
     : "";
   const closed = poolClosedReason(poolPolicy);
   if (closed) {
+    if (closed === "dpf2-ci-reservation") {
+      return `local-CI claim parked at position ${position} for the DPF2 quiet-window reservation${again}`;
+    }
     const shortfall = describeHeadroomShortfall(poolPolicy?.headroom);
     return `local-CI pool is CLOSED (${closed}): no slot can admit anyone until the host recovers, `
       + `so this claim is parked at position ${position} behind host pressure, not behind other work`
@@ -285,6 +298,7 @@ async function observeLocalCiHostPressure(input) {
     createLocalCiSlotManifest({ ...input, slotKey }));
   return sampleLocalCiHostPressure({
     rootPath: input.rootClone,
+    dpf2LockPath: dpf2ReservationPath(),
     convergenceLockPaths: manifests.map(
       (manifest) => manifest.dependencies.convergenceLock,
     ),
@@ -1750,6 +1764,9 @@ async function main() {
     die("local-CI gate runner is not wired (scripts/local-ci-runner.mjs is missing); refusing to record passing stub evidence. Set DPF_LOCAL_CI_COMMAND to the canonical sandbox command, or use DPF_ALLOW_LOCAL_CI_STUB=1 only in contract tests.");
   }
 
+  const reservation = await waitForDpf2Reservation({ deadline, notice: waiting });
+  if (reservation !== "clear") process.exit(GATE_EXIT.DPF2_RESERVATION_TIMEOUT);
+
   const leaseTtlMs = Math.min(
     options.expiresMinutes * 60_000,
     LOCAL_CI_ACTIVE_LEASE_TTL_MS,
@@ -1868,6 +1885,10 @@ async function main() {
       candidateGitDir,
     });
     hostPressureSamples.push(hostPressure);
+    if (hostPressure.dpf2ReservationActive) {
+      const reservation = inspectDpf2CiReservation();
+      if (dpf2ReservationBlocks(reservation)) waiting(`Waiting for ${describeDpf2Reservation(reservation)}.`);
+    }
     const requestTiming = leaseRequestTiming({ now: new Date(), durationMs: leaseTtlMs, deadline });
     expiresAt = requestTiming.expiresAt;
     let claimResponse;
@@ -2467,6 +2488,7 @@ async function main() {
   // Durable remote admission is authoritative. The host-process fence is a
   // second, local safety belt acquired only after this waiter owns and has
   // bound the server-assigned slot.
+  let reservationWaitDeadline = null;
   for (;;) {
     if (receivedSignal) {
       await releaseLeaseOnce();
@@ -2476,7 +2498,15 @@ async function main() {
       await releaseLeaseOnce();
       die("local-CI lease authority expired while waiting for the host process fence");
     }
-    const localFence = acquireLocalSandboxFence({
+    // Re-observe after admission and on each host-fence retry. Renew this
+    // lease in the same loop without starting any slot mutation or child.
+    const reservation = inspectDpf2CiReservation();
+    const blockedByDpf2 = dpf2ReservationBlocks(reservation);
+    reservationWaitDeadline = blockedByDpf2
+      ? reservationWaitDeadline ?? dpf2ReservationDeadline()
+      : null;
+    const fenceDeadline = reservationWaitDeadline ?? deadline;
+    const localFence = blockedByDpf2 ? { status: "conflict" } : acquireLocalSandboxFence({
       path: localFencePath,
       ownerSessionId,
       branch,
@@ -2508,8 +2538,12 @@ async function main() {
       });
       localFence.liveMutatorPids = liveMutatorPids;
     }
-    if (Date.now() >= deadline) {
+    if (Date.now() >= fenceDeadline) {
       await releaseLeaseOnce();
+      if (blockedByDpf2) {
+        process.stderr.write(`gate-worktree: timed out waiting for ${describeDpf2Reservation(reservation)}; execution unrun.\n`);
+        process.exit(GATE_EXIT.DPF2_RESERVATION_TIMEOUT);
+      }
       die("local-CI sandbox owner process is still live; timed out waiting");
     }
     let renewal;
@@ -2525,7 +2559,7 @@ async function main() {
       process.stderr.write(
         `gate-worktree: lease heartbeat uncertain while waiting for the host fence (${error.message}); retrying within known authority\n`,
       );
-      await sleep(Math.min(options.pollSeconds * 1000, Math.max(10, deadline - Date.now())));
+      await sleep(Math.min(options.pollSeconds * 1000, Math.max(10, fenceDeadline - Date.now())));
       continue;
     }
     if (renewal?.success !== true) {
@@ -2537,14 +2571,19 @@ async function main() {
       at: new Date().toISOString(),
       expiresAt,
     });
-    if (localFence.liveMutatorPids?.length > 0) {
+    if (blockedByDpf2) {
+      waiting(`Waiting for ${describeDpf2Reservation(reservation)} before local-CI execution.`);
+    } else if (localFence.liveMutatorPids?.length > 0) {
       waiting(
         `local-CI sandbox still has live mutator processes (${localFence.liveMutatorPids.join(", ")}); retrying after admission...`,
       );
     } else {
       waiting(`local-CI sandbox process fence held by ${localFence.active?.ownerSessionId || "unknown"}; retrying after admission...`);
     }
-    await sleep(Math.min(options.pollSeconds * 1000, Math.max(10, deadline - Date.now())));
+    await sleep(Math.min(
+      blockedByDpf2 ? DPF2_RESERVATION_POLL_MS : options.pollSeconds * 1000,
+      Math.max(10, fenceDeadline - Date.now()),
+    ));
   }
   try {
     rmSync(freshnessReportFile, { force: true });
@@ -2597,6 +2636,8 @@ async function main() {
       DPF_LOCAL_CI_METADATA_FILE: metadataFile,
       DPF_LOCAL_CI_FRESHNESS_REPORT_FILE: freshnessReportFile,
       DPF_LOCAL_CI_GATE_STATE_FILE: stateFile,
+      // Resolve relative overrides once, before children change cwd to scratch.
+      DPF2_CI_SLOT_LOCK: dpf2ReservationPath() ?? "",
       DPF_NONPROD_LEASE_ID: leaseId,
       DPF_NONPROD_OWNER_SESSION_ID: ownerSessionId,
     },
@@ -2835,15 +2876,10 @@ async function main() {
   // then permanently unable to be gated. Record SOMETHING, always — `failed` is
   // the honest floor and the prefix keeps the real class readable.
   if (evidenceResponse?.error === "invalid_status" && evidenceResponse?.success !== true) {
-    const fallback = fallbackStatusForUnknown(outcome.status);
+    evidenceArgs = fallbackRecordForUnknownStatus(evidenceArgs);
     process.stdout.write(
-      `gate-worktree: portal does not know ${outcome.status} yet; recording as ${fallback.status} with the original class in the summary\n`,
+      `gate-worktree: portal does not know ${outcome.status} yet; recording as ${evidenceArgs.status} with the original class in the summary\n`,
     );
-    evidenceArgs = {
-      ...evidenceArgs,
-      status: fallback.status,
-      summary: `${fallback.summaryPrefix} ${evidenceArgs.summary}`,
-    };
     writePendingEvidence(pendingEvidenceFile, {
       branch, sha, expiresAt, reason: "publication_pending", recordArgs: evidenceArgs,
     });
@@ -3001,6 +3037,10 @@ async function main() {
     process.stderr.write(`gate-worktree: BLOCKED (sandbox drift): ${outcome.summary}\n`);
     process.stderr.write("gate-worktree: this is a sandbox defect, not product build evidence; converge the sandbox and re-run the gate\n");
     process.exit(3);
+  }
+  if (outcome.status === "blocked_dpf2_reservation") {
+    process.stderr.write(`gate-worktree: ${outcome.summary}\n`);
+    process.exit(GATE_EXIT.DPF2_RESERVATION_TIMEOUT);
   }
   if (outcome.status === "blocked_control_plane_starvation") {
     process.stderr.write(`gate-worktree: BLOCKED (control-plane starvation): ${outcome.summary}\n`);

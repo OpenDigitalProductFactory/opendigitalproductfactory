@@ -35,7 +35,9 @@ import path from "node:path";
 import {
   acquireLocalConvergenceLock,
   releaseLocalConvergenceLock,
+  waitForDpf2Reservation,
 } from "./lib/local-convergence-lock.mjs";
+import { GATE_EXIT } from "./lib/gate-exit-classification.mjs";
 import process from "node:process";
 import {
   CRITICAL_PACKAGES,
@@ -330,6 +332,7 @@ const lockDir = resolveSlotMutablePath(
   defaultLockDir,
   "convergence lock",
 );
+if (await waitForDpf2Reservation() !== "clear") process.exit(GATE_EXIT.DPF2_RESERVATION_TIMEOUT);
 const convergenceLock = acquireLocalConvergenceLock({ path: lockDir });
 if (convergenceLock.status !== "acquired") {
   console.error(`[sandbox-freshness] another convergence holds the lock (${convergenceLock.active?.status ?? "unknown"}); not starting a duplicate install`);
@@ -464,7 +467,9 @@ function clearFreshPnpmStore(storeDir) {
   fs.rmSync(resolved, { recursive: true, force: true });
 }
 
-function runConvergenceAttempt(packageState, { force = false, resetNodeModules = false, freshStore = false } = {}) {
+const reservationDeadline = Symbol("DPF2 reservation wait expired");
+async function runConvergenceAttempt(packageState, { force = false, resetNodeModules = false, freshStore = false } = {}) {
+  if (await waitForDpf2Reservation() !== "clear") throw reservationDeadline;
   if (resetNodeModules) resetSandboxNodeModules();
   clearPnpmInstallState();
   clearStalePackageLinks(packageState);
@@ -494,8 +499,9 @@ function runConvergenceAttempt(packageState, { force = false, resetNodeModules =
 }
 
 const attempts = [];
+let timedOutOnReservation = false;
 try {
-  attempts.push(runConvergenceAttempt(state));
+  attempts.push(await runConvergenceAttempt(state));
   convergence = { ...attempts[attempts.length - 1], attempts };
   state = collectState();
   evaluation = evaluateFreshness(state);
@@ -507,7 +513,7 @@ try {
   // whole ladder is bounded.
   if (shouldEscalateConvergence(evaluation, attempts[attempts.length - 1])) {
     log("first convergence did not settle (drift or failed install); retrying once with --force to refresh the sandbox store/link graph");
-    attempts.push(runConvergenceAttempt(state, { force: true }));
+    attempts.push(await runConvergenceAttempt(state, { force: true }));
     convergence = { ...attempts[attempts.length - 1], attempts };
     state = collectState();
     evaluation = evaluateFreshness(state);
@@ -515,7 +521,7 @@ try {
 
   if (shouldEscalateConvergence(evaluation, attempts[attempts.length - 1]) && canResetNodeModules()) {
     log("forced convergence did not settle; resetting scratch node_modules once (root + package trees) and reinstalling from the lockfile");
-    attempts.push(runConvergenceAttempt(state, { resetNodeModules: true }));
+    attempts.push(await runConvergenceAttempt(state, { resetNodeModules: true }));
     convergence = { ...attempts[attempts.length - 1], attempts };
     state = collectState();
     evaluation = evaluateFreshness(state);
@@ -523,14 +529,18 @@ try {
 
   if (shouldEscalateConvergence(evaluation, attempts[attempts.length - 1]) && canResetNodeModules()) {
     log("scratch node_modules reset still did not settle; retrying once with a scratch-local pnpm store");
-    attempts.push(runConvergenceAttempt(state, { freshStore: true }));
+    attempts.push(await runConvergenceAttempt(state, { freshStore: true }));
     convergence = { ...attempts[attempts.length - 1], attempts };
     state = collectState();
     evaluation = evaluateFreshness(state);
   }
+} catch (error) {
+  if (error !== reservationDeadline) throw error;
+  timedOutOnReservation = true;
 } finally {
   releaseLocalConvergenceLock({ path: lockDir, token: convergenceLock.owner.token });
 }
+if (timedOutOnReservation) process.exit(GATE_EXIT.DPF2_RESERVATION_TIMEOUT);
 
 if (convergence.exitCode !== 0 && evaluation.verdict === "green") {
   // Trust the re-check, but surface the installer's own failure.

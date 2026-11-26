@@ -125,7 +125,7 @@ export async function foregroundSeedScheduleDefinitions(ownerUserId: string): Pr
     import("../../../packages/db/src/acceptance-sweep-config"), import("../../../packages/db/src/demand-scoring-steward-config"),
     import("../../../packages/db/src/client-capability-reverify-config"), import("../../../packages/db/src/harness-evolution-loop-config"),
     import("../../../packages/db/src/sysml-projection-config"), import("../../../packages/db/src/self-optimization-sweep-config"),
-    import("../../../packages/db/src/hive-scout-config"),
+    import("../../../packages/db/src/hive-scout-config"), import("../../../packages/db/src/closure-scorecard-config"),
   ]);
   return definitions.map(definition => {
     const idKeys = Object.keys(definition).filter(key => key.endsWith("_TASK_ID"));

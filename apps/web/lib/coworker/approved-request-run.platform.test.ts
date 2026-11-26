@@ -71,6 +71,13 @@ function run(f: ReturnType<typeof fixtures>) {
 }
 
 describe("runApprovedPlatformRequest", () => {
+  it("does not replay a parked call even if it names a decision-only envelope", async () => {
+    const f = fixtures({ envelope: { manifestActionId: "s5-single-synthetic-rehearsal" } });
+    await expect(run(f)).resolves.toMatchObject({ status: "not-run", reason: "decision-only" });
+    expect(f.findFirst).not.toHaveBeenCalled();
+    expect(f.execute).not.toHaveBeenCalled();
+  });
+
   it("retains the original captured fence through delayed platform approval", async () => {
     const taskExecutionFence = { schemaVersion: 1, reservation: "original", dispatchClaim: null, authorityDigest: null, requestDigest: "a".repeat(64) };
     const f = fixtures({ park: { parameters: { ...PARAMS, _approvalResume: MARKER, _taskExecutionFence: taskExecutionFence } } });

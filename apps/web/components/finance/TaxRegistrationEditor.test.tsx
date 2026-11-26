@@ -79,7 +79,7 @@ describe("TaxRegistrationEditor jurisdiction picker", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("combobox", { name: "Jurisdiction" }));
+    fireEvent.click(screen.getByRole("button", { name: "Jurisdiction" }));
 
     // The kernel ledger (DI-89F317F406AA) scored a bare search box negative on
     // "don't task the operator with what an agent can do". Authority 7 is the
@@ -100,8 +100,8 @@ describe("TaxRegistrationEditor jurisdiction picker", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("combobox", { name: "Jurisdiction" }));
-    fireEvent.change(screen.getByRole("textbox", { name: "Search authorities" }), {
+    fireEvent.click(screen.getByRole("button", { name: "Jurisdiction" }));
+    fireEvent.change(screen.getByRole("combobox", { name: "Search authorities" }), {
       target: { value: "DE" },
     });
 

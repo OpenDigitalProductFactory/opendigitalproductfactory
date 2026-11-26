@@ -100,6 +100,7 @@ const BLOCKED_GATE_STATUSES = new Set([
   "blocked_sandbox_drift",
   "blocked_control_plane_starvation",
   "blocked_child_signal_death",
+  "blocked_dpf2_reservation",
   SLOT_SUBSTRATE_UNAVAILABLE_STATUS,
 ]);
 

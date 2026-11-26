@@ -17,6 +17,7 @@
 // so the two can never disagree.
 
 import { canTransition, type EnvelopeStatus } from "./envelope-state-machine";
+import { S5_REHEARSAL_APPROVAL_ACTION } from "@/lib/workroom-runtime/s5-rehearsal-approval-action";
 
 /** The lapsed envelopes this sweep may settle, and the write it performs. */
 export interface EnvelopeExpiryDb {
@@ -28,6 +29,7 @@ export interface EnvelopeExpiryDb {
 
 /** Statuses a lapse can still settle. Anything terminal is already answered. */
 const LAPSABLE: readonly EnvelopeStatus[] = ["proposed", "approved"];
+const decidedRehearsal = { status: "approved", manifestActionId: S5_REHEARSAL_APPROVAL_ACTION };
 
 export interface EnvelopeExpirySummary {
   /** How many envelopes moved to `expired`. */
@@ -52,6 +54,7 @@ export async function expireLapsedEnvelopes(
   const candidates = await db.coworkerActionEnvelope.findMany({
     where: {
       status: { in: [...LAPSABLE] },
+      NOT: decidedRehearsal,
       resolvedAt: null,
       expiresAt: { lte: now, not: null },
     },
@@ -72,6 +75,7 @@ export async function expireLapsedEnvelopes(
       // Re-assert the precondition at write time: between the read above and
       // this update a person may have answered, and their answer wins.
       status: { in: [...LAPSABLE] },
+      NOT: decidedRehearsal,
       resolvedAt: null,
     },
     data: { status: "expired", resolvedAt: now },

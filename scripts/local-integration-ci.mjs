@@ -2,6 +2,8 @@
 import { parseArgs as utilParseArgs } from "node:util";
 import { scriptArgv } from "./lib/script-argv.mjs";
 import { spawnSync } from "node:child_process";
+import { GATE_EXIT } from "./lib/gate-exit-classification.mjs";
+import { waitForDpf2Reservation } from "./lib/local-convergence-lock.mjs";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import {
@@ -104,7 +106,11 @@ if (!diskCheck.ok) {
 }
 
 const startedAt = new Date().toISOString();
-const execution = executeLocalIntegrationPlan(plan);
+const execution = await executeLocalIntegrationPlan(plan, {
+  beforeCommand: async () => (await waitForDpf2Reservation()) === "clear"
+    ? 0
+    : GATE_EXIT.DPF2_RESERVATION_TIMEOUT,
+});
 if (metadataOut) {
   const evidencePlan = readJsonIfPresent(evidencePlanOut);
   const vitestDiagnostics = readJsonIfPresent(
@@ -167,7 +173,8 @@ if (metadataOut) {
     plannedExecutionLane: coverage.plannedExecutionLane,
     productionArtifact,
     execution: {
-      status: execution.status === 0 ? "passed" : "failed",
+      status: execution.status === 0 ? "passed"
+        : execution.status === GATE_EXIT.DPF2_RESERVATION_TIMEOUT ? "blocked" : "failed",
       exitCode: execution.status,
       completedCommandCount: execution.completedCommandCount,
       failedCommand: execution.failedCommand?.join(" ") ?? null,

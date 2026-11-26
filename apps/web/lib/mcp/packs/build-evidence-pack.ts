@@ -16,7 +16,7 @@ import {redactDiagnosticEvidenceText as redactFunctionalFailureText} from "@/lib
 import * as crypto from "crypto";
 import { prisma } from "@dpf/db";
 
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
+import type { RegisteredToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import {
   parseQualificationExperimentState,
   qualificationExecutionEvidenceAllowed,
@@ -39,7 +39,7 @@ import {
   NONPROD_OWNER_PROVIDERS,
 } from "@/lib/nonprod/nonprod-owner-provider";
 
-const definitions: ToolDefinition[] = [
+const definitions: RegisteredToolDefinition[] = [
   {
     name: "record_execution_evidence",
     description: "Attach typed evidence to a backlog item (tests, production build, UX, migration, source provenance, spec review, manual check, or supporting link). Use manual_fail, not manual_check, for a blocked or failed manual check. manual_fail never earns completion credit. A supplied ToolExecution must belong to the same user. Failed executions may be linked only by failure evidence kinds; these never earn completion credit. Other kinds require successful execution, including manual_check.",
@@ -60,6 +60,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["itemId", "kind", "summary"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_backlog",
     sideEffect: true,
   },
@@ -84,6 +85,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["provider", "externalSessionId", "routeContext", "candidateBranch", "mode", "status", "summary", "evidence"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: true,
@@ -124,6 +126,7 @@ const definitions: ToolDefinition[] = [
         "likelyOwnerArea",
       ],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_backlog",
     sideEffect: true,
   },
@@ -298,7 +301,7 @@ async function recordLocalIntegrationResultHandler(
       taskRunId: stringValue("taskRunId") || undefined,
       candidateBranch,
       mode: mode as "single-branch" | "sibling-set" | "post-merge-main",
-      status: status as "passed" | "failed" | "conflict" | "blocked_sandbox_drift" | "blocked_control_plane_starvation",
+      status,
       summary,
       gateKey: stringValue("gateKey") || undefined,
       leaseId: stringValue("leaseId") || undefined,

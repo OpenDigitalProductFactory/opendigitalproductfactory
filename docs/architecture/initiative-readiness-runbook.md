@@ -74,9 +74,9 @@ merge does not; see the break-fix paragraph in §1.
 
 Changed criteria, source identity, organization or eligible evidence reject old
 requests. Refresh recovery for a current successor; unchanged retries reuse the
-TaskRun and proposal. Historical authority stays auditable. Research and
-dependency-disposition remain author lanes; only the acceptance mapping lane
-becomes independent. Missing prerequisites are reported as recovery actions,
+TaskRun and proposal. Historical authority stays auditable. Research remains
+author-owned. Dependency disposition and acceptance mapping use separate
+independent routes. Missing prerequisites are reported as recovery actions,
 without unlinking the product, lowering shape or weakening completion gates.
 
 Implementation: [body baseline retention](../../apps/web/lib/backlog/initiative-readiness/body-baseline-persistence.ts),
@@ -109,6 +109,15 @@ checks. The final writer rechecks expiry after approval; historic envelopes are
 not rewritten or replayed by admission.
 
 ## 1. The lifecycle sequence
+
+When the only Workroom for an approved design has been archived, the first
+implementation claim can start a fresh branch at its immutable base. The claim
+verifies that the current scope baseline and latest passing spec approval name
+the same repository, path, revision, blob and digest. It reads that blob at the
+proposed head and rechecks the persisted binding under lock. This does not reopen
+the archive or replace plan coverage, actor admission or any review. A changed
+design still needs the amendment lane. An ambiguous or missing binding stays
+blocked. Existing Workrooms still use their exact live source binding.
 
 An xlarge initiative does not enter implementation itself. After decomposition,
 close it through the existing completion writer using its current governed plan
@@ -243,7 +252,7 @@ Each row: the gate, the **accountable role**, **who actually acts** (Author = th
 | plan | OBJECTIVE_BASELINE | design-checklist-reviewer | **Independent** | minted *by* the spec-approval receipt |
 | plan | ARTIFACT_AUTHOR | artifact-resolver | Author (git identity) | DCO-signed commit (author principal == workroom principal), **pushed**, then `adopt_worktree` re-sync |
 | implementation | PLAN | implementation-planner | Author | `record_plan_backlog_coverage` |
-| implementation | DEPENDENCY_DISPOSITION | portfolio-management | Author | `record_initiative_evidence(gate:"dependency-disposition")` |
+| implementation | DEPENDENCY_DISPOSITION | portfolio-management | Independent | `record_initiative_evidence(gate:"dependency-disposition")` |
 | implementation | CAPSULE_IDENTITY | delivery-coordinator | Author | `adopt_worktree(headBranch, headSha)` |
 | implementation | PLAN_REVIEW | plan-reviewer | **Independent** | `record_initiative_design_review(gate:"plan-review")` |
 | implementation | PLAN_COVERAGE + TRACEABILITY | portfolio-management | Author | `record_plan_backlog_coverage` (binds to the baseline) |
@@ -353,7 +362,14 @@ Live assignment in [`packages/db/data/agent_registry.json`](../../packages/db/da
 | `initiative_security_review` | AGT-190 (security-auditor) | security-review |
 | `initiative_compliance_review` | AGT-905 (licensing-specialist) | compliance-review |
 | `initiative_archetype_review` | AGT-WS-INVENTORY (inventory-specialist) | archetype-review |
-| `initiative_evidence_write` | **AGT-WS-BUILD** (Build Lead), AGT-WS-PORTFOLIO | research, dependency-disposition, plan-coverage, delivery (author-side) |
+| `initiative_evidence_write` | **AGT-WS-BUILD** (Build Lead), AGT-WS-PORTFOLIO | Research and evidence on the author side, plus independent dependency disposition |
+
+**Dependency disposition uses the pre-delivery readiness decision.** Dispatch
+the exact packet from `get_backlog_item(itemId, recoveryGate="dependency-disposition")`.
+It binds the current Workroom and immutable design while excluding the claimant
+from selection. The receipt writer checks the current claimant again under lock
+and rejects self-disposition even on a direct call. This does not change
+author-side research or `record_plan_backlog_coverage`.
 
 **Independence is by principal.** A reviewer coworker's receipt is attributed to that coworker's principal; on a single-human-principal install the reviewer coworker is the *only* independent reviewer available, which is *why* the author (human or external agent) cannot self-approve and must route (`reviewer-identity.ts`). If no production coworker holds the grant, the packet escalates `no-eligible-reviewer` — activate one; do not proxy the receipt.
 

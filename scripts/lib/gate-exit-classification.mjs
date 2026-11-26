@@ -32,6 +32,7 @@ export const GATE_EXIT = Object.freeze({
   DURABLE_WAIT: 75,
   WAIT_CANCELLED: 81,
   SOURCE_DRIFT: 82,
+  DPF2_RESERVATION_TIMEOUT: 84,
   CHILD_SIGNAL_DEATH: 87,
   HOST_CONNECTION_UNAVAILABLE: 88,
   INTERRUPTED: 130,
@@ -95,6 +96,10 @@ export function classifyGateExit({ code, output = "" }) {
       };
     case GATE_EXIT.INTERRUPTED:
       return { kind: "interrupted", retry: false, verdict: "none", summary: "interrupted" };
+    case GATE_EXIT.DPF2_RESERVATION_TIMEOUT:
+      return { kind: "dpf2-reservation", retry: false, verdict: "none",
+        summary: "DPF2 quiet-window wait reached its deadline; no gate verdict",
+        next: "Resume the gate after DPF2 releases the reservation." };
     case GATE_EXIT.HOST_CONNECTION_UNAVAILABLE:
       return { kind: "host-connection-unavailable", retry: false, verdict: "none",
         summary: "host prerequisites or verified transport unavailable; gate unrun",

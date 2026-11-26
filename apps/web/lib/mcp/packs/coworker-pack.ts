@@ -7,7 +7,7 @@
 // a current server-issued independent review through the token-bound task owner.
 // Central TOOL_TO_GRANTS owns disclosure; the request guard narrows execution.
 
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
+import type { RegisteredToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
 import { dispatchExternalCoworkerTask } from "@/lib/mcp/external-coworker-task-adapter";
 import { authorizeCoworkerRequest } from "@/lib/mcp/independent-review-request";
@@ -73,7 +73,7 @@ const initiativeReviewProperties = {
   },
 } as const;
 
-const definitions: ToolDefinition[] = [
+const definitions: RegisteredToolDefinition[] = [
   {
     name: "get_my_approval_status",
     description: "Read an exact approval outcome by envelopeId and separately report safe stored action evidence for provider-account tests or the original runtime reconciliation. Runtime approval, recorded operation, exact currently authorized transition and historically verified host receipt stay distinct; missing or contradictory proof never establishes no effects or retry authority. Other evidence is explicitly missing, conflicting or unsupported. Generic provider test success does not prove Responses verification or quota reconciliation. Mode pending lists up to 20 unexpired requests FROM THIS ASSISTANT ONLY for the authenticated user, with owner, expiry, Inbox link and immutable review locator; hasMore names a bounded page. This is NOT the owner's whole Inbox: other coworkers' requests are excluded and ownerInboxTotal is unknown. Zero here never establishes that the user's Inbox is empty. Does not execute, approve, retry, transfer ownership or grant access.",
@@ -81,6 +81,7 @@ const definitions: ToolDefinition[] = [
       mode: { type: "string", enum: ["exact", "pending"], description: "Defaults to exact; pending omits envelopeId." },
       envelopeId: { type: "string", minLength: 1, maxLength: 128 },
     }, additionalProperties: false },
+    workroomAccess: "outside-workroom",
     requiredCapability: null,
     sideEffect: false,
     executionMode: "immediate",
@@ -90,6 +91,7 @@ const definitions: ToolDefinition[] = [
     title: "Probe pending approval conversion",
     description: "Dry-run, for every pending proposal, what converting it to an approval request would hit: the authority decision, identity resolution, governance hook verdicts and alignment requirement, with one refusal code per row and the owner's activity. Read-only: runs no tool, approves nothing and writes nothing. Platform administrators only.",
     inputSchema: { type: "object", properties: {}, additionalProperties: false },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_platform",
     // Read-only by construction: evaluation runs on read-only transactions and no handler is called.
     sideEffect: false,
@@ -113,6 +115,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["targetAgent", "objective"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: null,
     sideEffect: true,
     // Delegation is advise-safe coordination — an advisor may route a scoped
@@ -136,6 +139,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["targetAgent", "objective"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: null,
     sideEffect: true,
     // Bringing a named peer into the conversation is advise-safe coordination —
@@ -159,6 +163,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["query"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: false,

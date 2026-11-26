@@ -8,7 +8,7 @@
 // memorized/vectorized snapshot — the coworker reasons over the current database.
 // The entityType → reader map is the convention: adding a model is one entry.
 
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
+import type { RegisteredToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack } from "../tool-pack";
 import { prisma } from "@dpf/db";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
@@ -72,7 +72,7 @@ const SOR_READERS: Record<string, SorEntity> = {
 
 const ENTITY_TYPES = Object.keys(SOR_READERS);
 
-const definitions: ToolDefinition[] = [
+const definitions: RegisteredToolDefinition[] = [
   {
     name: "read_operational_record",
     description:
@@ -93,6 +93,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["entityType"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_customer",
     sideEffect: false,
   },

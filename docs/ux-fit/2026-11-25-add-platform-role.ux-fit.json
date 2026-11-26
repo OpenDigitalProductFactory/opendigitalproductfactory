@@ -1,0 +1,20 @@
+{
+  "version": "1",
+  "decidedOption": "add-action-in-existing-panel",
+  "decisionInteractionId": "DI-4BC0576A8920",
+  "scope": {
+    "files": [
+      "apps/web/components/employee/HrUserLifecyclePanel.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "add-action-in-existing-panel",
+      "separate-role-form",
+      "new-admin-role-route"
+    ]
+  },
+  "rationale": "Use the existing People role panel and repeat no form fields. Add role has a direct effect and preserves other roles and account status. The separate submit control names its replacement effect. Unauthorized humans have no Add role control. Keep Add role visible but disabled for an already held selection, where Current roles explains why no addition is available. The cockpit fixture already measured five fields before this change. Retain the four-field advisory and all numerical baselines. No agent action or new route.",
+  "verification": "The role panel test exercises selection, preservation of the lifecycle form, held-role disabling and visibility. Server tests cover current human authority, additive write, retry and audit failure. Served UX Route Sweep Runtime run 45663432064 measured 219 eligible routes and reported one intended structural addition on /employee: a disabled button in the held-role fixture. The artifact from hosted baseline run 45665303191 re-freezes only that route's measured accessibility snapshot. The sweep does not verify a live human role grant."
+}

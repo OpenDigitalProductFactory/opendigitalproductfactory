@@ -1,17 +1,19 @@
 import assert from "node:assert/strict";
 import { completeFixture } from "./fixtures/gate-completion.mjs";
 import { writeExecutionCheckpoint } from "../../scripts/lib/gate-execution-checkpoint.mjs";
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
-import { test } from "node:test";
+import { after, test } from "node:test";
 import { fileURLToPath } from "node:url";
 
 const repoRoot = fileURLToPath(new URL("../..", import.meta.url));
 const execPrefix = process.platform === "win32" ? "" : "exec ";
 const completionSource = `import { completeFixture } from ${JSON.stringify(new URL("./fixtures/gate-completion.mjs", import.meta.url).href)}; await completeFixture();`;
 const script = fileURLToPath(new URL("../../scripts/gate-worktree.sh", import.meta.url));
+const dpf2FixtureDir = mkdtempSync(join(tmpdir(), "dpf-shell-contract-lock-"));
+after(() => rmSync(dpf2FixtureDir, { recursive: true, force: true }));
 const nativeShellProbe = spawnSync("sh", ["-c", "printf ok"], { encoding: "utf8" });
 const shellContractSkipReason = nativeShellProbe.error
   ? "native POSIX shell 'sh' is unavailable on this host; shell contracts run in CI/Linux or Git Bash-equipped worktrees"
@@ -23,7 +25,7 @@ function runGate(args, options = {}) {
   return spawnSync("sh", [script, ...args], {
     cwd: repoRoot,
     encoding: "utf8",
-    env: options.env ? { ...options.env } : process.env,
+    env: { ...(options.env ?? process.env), DPF2_CI_SLOT_LOCK: join(dpf2FixtureDir, "fixture-dpf2-ci.lock") },
   });
 }
 

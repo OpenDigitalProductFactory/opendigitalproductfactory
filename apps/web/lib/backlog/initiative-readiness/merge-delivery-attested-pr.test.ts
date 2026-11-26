@@ -18,7 +18,7 @@ import { createRealGitFixture, REAL_GIT_SETUP_HOOK_MS, type RealGitFixture } fro
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { resolveMergeSignalFromRefs } from "./backlog-terminal-transition";
+import { resolveMergeSignalFromRefs } from "./merge-delivery-signal";
 import {
   deliveryAttemptPullRequests,
   resolveMergeDeliveryFromDb,
@@ -90,10 +90,11 @@ async function makeRepo(): Promise<Repo> {
     await repo.git("config", "user.email", "test@example.invalid");
     await repo.git("config", "user.name", "Test");
     await repo.git("config", "commit.gpgsign", "false");
-    await commit(repo, "a.txt", "fix(gate): repair the gate (BI-AAAA1111) (#101)");
+    await repo.git("commit", "--allow-empty", "-m", "base");
+    await commit(repo, "a.ts", "fix(gate): repair the gate (BI-AAAA1111) (#101)");
     await commit(repo, "b.txt", "feat(other): unrelated work (#102)", "Context: this follows on from BI-BBBB2222.");
     await commit(repo, "c.txt", "doc(plan): plan the feature (BI-CCCC3333) (#103)");
-    await commit(repo, "d.txt", "feat(x): ship it (BI-DDDD4444) (#104)");
+    await commit(repo, "d.ts", "feat(x): ship it (BI-DDDD4444) (#104)");
     await commit(repo, "e.txt", "Revert \"feat(x): ship it (BI-DDDD4444) (#104)\" (#105)");
     const tip = (await repo.git("rev-parse", "HEAD")).stdout.trim();
     await repo.git("update-ref", "refs/remotes/origin/main", tip);

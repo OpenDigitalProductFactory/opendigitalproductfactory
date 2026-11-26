@@ -1,4 +1,4 @@
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
+import type { RegisteredToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import { orchestrateDeliberation } from "@/lib/deliberation/orchestrator";
 import {
   isDeliberationArtifactType,
@@ -6,7 +6,7 @@ import {
   isDeliberationStrategyProfile,
 } from "@/lib/deliberation/types";
 
-export const DELIBERATION_TOOLS: ToolDefinition[] = [
+export const DELIBERATION_TOOLS: RegisteredToolDefinition[] = [
   {
     name: "deliberate_on",
     description: "Run deliberation on a feature build and return branch consensus.",
@@ -36,6 +36,7 @@ export const DELIBERATION_TOOLS: ToolDefinition[] = [
       },
       required: ["topic", "content", "buildId"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: true,

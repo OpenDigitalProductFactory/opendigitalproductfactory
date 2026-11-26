@@ -4,10 +4,10 @@
 // mcp-tools.ts inline dispatcher while preserving the same proposal approval
 // payload shape used by the supervisor rail.
 
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
+import type { RegisteredToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack } from "../tool-pack";
 
-const definitions: ToolDefinition[] = [
+const definitions: RegisteredToolDefinition[] = [
   {
     name: "activity_harness_confidence_override",
     description:
@@ -25,6 +25,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["kind", "activityClass", "harnessRecipeKey", "providerId", "confidence"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: true,

@@ -13,7 +13,7 @@
 
 import { prisma } from "@dpf/db";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
+import type { RegisteredToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
 import {
   contributeFindingToHiveDefinition,
@@ -30,11 +30,12 @@ import {
   reconcileHiveContributionDelivery,
 } from "@/lib/mcp/contribution-hive-delivery";
 
-const definitions: ToolDefinition[] = [
+const definitions: RegisteredToolDefinition[] = [
   {
     name: "assess_contribution",
     description: "Evaluate whether a shipped feature should be contributed to the Hive Mind community. Assesses vision alignment, community value, augmentation vs innovation, and proprietary sensitivity. Always presents the assessment to the user — contribution is their choice.",
     inputSchema: { type: "object", properties: {} },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: false,
@@ -50,6 +51,7 @@ const definitions: ToolDefinition[] = [
         include_migrations: { type: "boolean", description: "Include database migrations in the pack. Default: true." },
       },
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_platform",
     executionMode: "proposal",
     sideEffect: true,
@@ -88,6 +90,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["title", "description", "category"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: null,
     executionMode: "immediate",
     coworkerArtifact: true,
@@ -123,6 +126,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["skillId", "title", "description", "proposedContent"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: null,
     executionMode: "immediate",
     coworkerArtifact: true,
@@ -141,6 +145,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["toEmployeeId", "content", "feedbackType"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: null,
     executionMode: "immediate",
   },
@@ -512,6 +517,7 @@ async function contributeToHiveHandler(
   // Anonymous identity pushes dpf/<hash>/<slug> branch directly to the upstream repo.
   // No customer fork needed — the hive token provides write access.
   let prUrl: string | null = null;
+  let publishedHeadSha: string | null = null;
   let prError: string | null = null;
   try {
     const upstreamUrl = devConfig?.upstreamRemoteUrl ?? "https://github.com/OpenDigitalProductFactory/opendigitalproductfactory.git";
@@ -576,6 +582,7 @@ async function contributeToHiveHandler(
 
         if (prResult.prUrl) {
           prUrl = prResult.prUrl;
+          publishedHeadSha = prResult.commitSha ?? null;
           await prisma.featurePack.update({
             where: { packId },
             data: { status: "contributed", manifest: { ...manifest, dcoAttestation, prUrl } as unknown as import("@dpf/db").Prisma.InputJsonValue },
@@ -613,6 +620,7 @@ async function contributeToHiveHandler(
   await reconcileHiveContributionDelivery({
     buildId,
     prUrl,
+    publishedHeadSha,
     token: hiveTokenEarly,
     eligible: securityScan.passed && !prError,
   });

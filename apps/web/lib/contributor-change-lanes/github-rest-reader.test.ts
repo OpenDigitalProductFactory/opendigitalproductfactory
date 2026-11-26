@@ -37,6 +37,7 @@ vi.mock("@/lib/credential-crypto", () => ({
 import {
   createGithubReadTransport,
   parseRepoFromUrl,
+  readGithubPullRequestChange,
   readGithubPullRequests,
   resolveGithubToken,
 } from "./github-rest-reader";
@@ -73,6 +74,42 @@ function makeResponse(
   }
   return new Response(JSON.stringify(body ?? null), { status, headers });
 }
+
+describe("readGithubPullRequestChange", () => {
+  const metadata = {
+    number: 42, title: "feat: plan", html_url: "https://github.com/o/r/pull/42",
+    state: "closed", draft: false, merged_at: "2026-11-25T10:30:00Z", merge_commit_sha: "c".repeat(40),
+    updated_at: "2026-11-25T10:30:00Z", changed_files: 1,
+    head: { ref: "plan", sha: "a".repeat(40) },
+    base: { ref: "main", sha: "b".repeat(40), repo: { full_name: "o/r" } },
+  };
+  const prisma = { credentialEntry: { findUnique: mocks.credentialFindUnique } } as never;
+  const read = (fetchImpl: typeof fetch) => readGithubPullRequestChange({
+    repositoryFullName: "o/r", number: 42, prisma, fetchImpl,
+  });
+
+  it("reads all files and preserves both paths of a rename", async () => {
+    const fetchImpl = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(makeResponse(metadata))
+      .mockResolvedValueOnce(makeResponse([{ filename: "docs/test.md", previous_filename: "apps/web/obsolete.ts", status: "renamed" }]))
+      .mockResolvedValueOnce(makeResponse(metadata));
+    await expect(read(fetchImpl)).resolves.toEqual({
+      paths: ["docs/test.md", "apps/web/obsolete.ts"], title: "feat: plan", state: "merged", isDraft: false,
+    });
+  });
+
+  it("withholds classification when the list is incomplete or the head changes", async () => {
+    const incomplete = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(makeResponse({ ...metadata, changed_files: 2 }))
+      .mockResolvedValueOnce(makeResponse([{ filename: "source.ts", status: "modified" }]));
+    await expect(read(incomplete)).resolves.toBeNull();
+    const changed = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(makeResponse(metadata))
+      .mockResolvedValueOnce(makeResponse([{ filename: "source.ts", status: "modified" }]))
+      .mockResolvedValueOnce(makeResponse({ ...metadata, head: { ref: "plan", sha: "d".repeat(40) } }));
+    await expect(read(changed)).resolves.toBeNull();
+  });
+});
 
 describe("readGithubPullRequests", () => {
   it("returns state: not-configured when no credential row exists", async () => {

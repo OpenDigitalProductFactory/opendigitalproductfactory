@@ -33,6 +33,10 @@ export const SCHEDULED_AGENT_TASK_KINDS = [
   // evidence and records budget and spend; model judgement is confined to the
   // bounded editor of a later slice, never the orchestration.
   "harness-evolution-loop",
+  // BI-97C56E20 — the daily closure scorecard. Deterministic SQL and pure
+  // measures: whether platform work finished at least what it started over the
+  // trailing week, against the week before. No model judgement, no routing.
+  "closure-scorecard",
 ] as const;
 
 export type ScheduledAgentTaskKind =
@@ -58,6 +62,8 @@ export const CLIENT_CAPABILITY_REVERIFY_TASK_KIND =
   SCHEDULED_AGENT_TASK_KINDS[8];
 export const HARNESS_EVOLUTION_LOOP_TASK_KIND =
   SCHEDULED_AGENT_TASK_KINDS[9];
+export const CLOSURE_SCORECARD_TASK_KIND =
+  SCHEDULED_AGENT_TASK_KINDS[10];
 
 export function isScheduledAgentTaskKind(
   value: unknown,

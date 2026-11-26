@@ -9,13 +9,11 @@
 //
 //   SessionStart, Stop  → write/refresh the marker (Stop fires every turn, so the
 //                         marker stays fresh throughout a live session).
-//   SessionEnd          → remove the marker (the session is over; the worktree is
-//                         now eligible for its normal Tier-A reap).
+//   SessionEnd          → clear a standalone session's own marker. T3 restarts
+//                         its provider between turns, so keep its heartbeat.
 //
-// This hook is NON-DESTRUCTIVE by construction — it only ever writes or deletes a
-// single marker file. That is exactly why it is safe on `Stop` (a per-turn event),
-// unlike worktree-session-hygiene.mjs, whose destructive reap is confined to
-// SessionEnd (BI-E5D810B8). Keep the two concerns separate: never add reaping here.
+// This hook only updates the liveness marker. Worktree removal belongs to the
+// governed janitor, never to a provider lifecycle hook (BI-F52EF21B).
 //
 // Fail-open always. Skips the root/main clone (never reaped) and anything outside a
 // DPF workspace. Escape hatch: DPF_SKIP_WORKTREE_SESSION_HEARTBEAT=1.
@@ -108,6 +106,7 @@ async function main() {
 
   const event = hookEventName(payload);
   if (event === "SessionEnd") {
+    if (process.env.T3CODE_THREAD_ID) return;
     // Only this session's entry: another session may still be working here (BI-296C9E24).
     lib.removeHeartbeat(top, { sessionId: sessionIdOf(payload) });
   } else {

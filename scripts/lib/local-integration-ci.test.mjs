@@ -463,10 +463,37 @@ describe("createLocalIntegrationPlan", () => {
 });
 
 describe("executeLocalIntegrationPlan", () => {
-  it("keeps spaced Windows path arguments out of shell-string parsing", () => {
+  it("does not start a later phase until its fresh admission check clears", async () => {
+    const commands = [["node", "setup.mjs"], ["node", "test.mjs"], ["node", "build.mjs"]];
+    const launched = [];
+    let release;
+    let checkStarted;
+    const waiting = new Promise(resolve => { checkStarted = resolve; });
+    const pending = executeLocalIntegrationPlan({ commands }, {
+      beforeCommand: async ([, script]) => {
+        if (script === "test.mjs") {
+          await new Promise(resolve => { release = resolve; checkStarted(); });
+        }
+        return script === "build.mjs" ? 84 : 0;
+      },
+      spawnSyncImpl: (_bin, args) => { launched.push(args[0]); return { status: 0 }; },
+      log: () => {},
+    });
+    // Racing the completion makes an executor which ignores the check fail
+    // rather than hanging this test on a promise that can never settle.
+    await Promise.race([pending, waiting]);
+    assert.deepEqual(launched, ["setup.mjs"]);
+    release();
+    const result = await pending;
+    assert.deepEqual(launched, ["setup.mjs", "test.mjs"]);
+    assert.equal(result.status, 84, "reservation deadline is not a product verdict");
+    assert.equal(result.completedCommandCount, 2);
+    assert.equal(result.failedCommand, null, "a blocked phase did not fail");
+  });
+  it("keeps spaced Windows path arguments out of shell-string parsing", async () => {
     const calls = [];
     const output = "C:\\Users\\Mark Bodman\\repo\\dpf-ci-evidence-plan.json";
-    const result = executeLocalIntegrationPlan({
+    const result = await executeLocalIntegrationPlan({
       commands: [["node", "scripts/ci-evidence-plan.mjs", "--output", output]],
     }, {
       baseEnv: { ComSpec: "C:\\Windows\\System32\\cmd.exe" },
@@ -485,7 +512,7 @@ describe("executeLocalIntegrationPlan", () => {
     assert.equal(calls[0].options.shell, false);
   });
 
-  it("does not launch exhaustive tests or a production build after typecheck fails", () => {
+  it("does not launch exhaustive tests or a production build after typecheck fails", async () => {
     const launched = [];
     const errors = [];
     const plan = createLocalIntegrationPlan({
@@ -495,7 +522,7 @@ describe("executeLocalIntegrationPlan", () => {
       hostPlatform: "win32",
     });
 
-    const result = executeLocalIntegrationPlan(plan, {
+    const result = await executeLocalIntegrationPlan(plan, {
       baseEnv: {},
       platform: "win32",
       now: () => 100,
@@ -606,10 +633,10 @@ it("an ordinary non-zero status stays a verdict about the diff", () => {
   assert.equal(isHostProcessLaunchFailure(0), false);
 });
 
-it("a command that could not be started reports infrastructure death, not its raw code", () => {
+it("a command that could not be started reports infrastructure death, not its raw code", async () => {
   const plan = { commands: [["git", "merge", "--no-ff", "--no-edit", "--signoff", "candidate"]] };
   const errors = [];
-  const outcome = executeLocalIntegrationPlan(plan, {
+  const outcome = await executeLocalIntegrationPlan(plan, {
     spawnSyncImpl: () => ({ status: 3221225794, signal: null }),
     baseEnv: {},
     platform: "win32",
@@ -627,9 +654,9 @@ it("a command that could not be started reports infrastructure death, not its ra
   assert.match(errors.join("\n"), /command-failure/);
 });
 
-it("a genuine command failure still reports its own status", () => {
+it("a genuine command failure still reports its own status", async () => {
   const plan = { commands: [["pnpm", "test"]] };
-  const outcome = executeLocalIntegrationPlan(plan, {
+  const outcome = await executeLocalIntegrationPlan(plan, {
     spawnSyncImpl: () => ({ status: 1, signal: null }),
     baseEnv: {},
     platform: "linux",
@@ -658,27 +685,27 @@ describe("a stage reporting itself inconclusive is not a verdict (BI-27D3DCCD)",
     });
   }
 
-  it("maps the stage's inconclusive code onto the gate's infrastructure code", () => {
+  it("maps the stage's inconclusive code onto the gate's infrastructure code", async () => {
     // 87 is EXIT_CHILD_SIGNAL_DEATH, the code classifyGateOutcome already reads
     // as infrastructure evidence rather than a verdict about the diff.
-    assert.equal(runOne(EXIT_STAGE_INCONCLUSIVE).status, 87);
+    assert.equal((await runOne(EXIT_STAGE_INCONCLUSIVE)).status, 87);
   });
 
-  it("leaves an ordinary failure alone, so a real type error still fails the gate", () => {
-    assert.equal(runOne(2).status, 2);
-    assert.equal(runOne(1).status, 1);
+  it("leaves an ordinary failure alone, so a real type error still fails the gate", async () => {
+    assert.equal((await runOne(2)).status, 2);
+    assert.equal((await runOne(1)).status, 1);
   });
 
-  it("does NOT touch 86, which is the vitest runner's own termination code", () => {
+  it("does NOT touch 86, which is the vitest runner's own termination code", async () => {
     // Both runners are commands in this plan. 86 is EXIT_VITEST_RUNNER_TERMINATION,
     // which classifyGateOutcome deliberately classifies as `failed` with its own
     // summary about inspecting the attempt diagnostics. A rule keyed on 86 here
     // would silently move that decision.
-    assert.equal(runOne(86).status, 86);
+    assert.equal((await runOne(86)).status, 86);
   });
 
-  it("still names the command that ended the run, so the log is not weaker", () => {
-    const result = runOne(EXIT_STAGE_INCONCLUSIVE);
+  it("still names the command that ended the run, so the log is not weaker", async () => {
+    const result = await runOne(EXIT_STAGE_INCONCLUSIVE);
     assert.deepEqual(result.failedCommand, ["node", "scripts/local-ci-typecheck-runner.mjs"]);
     assert.equal(result.completedCommandCount, 0);
   });
@@ -769,9 +796,9 @@ describe("a candidate that conflicts with the base is a typed merge-conflict ver
     return { dir, topicSha };
   }
 
-  function runIn(dir, plan) {
+  async function runIn(dir, plan) {
     const errors = [];
-    const outcome = executeLocalIntegrationPlan(plan, {
+    const outcome = await executeLocalIntegrationPlan(plan, {
       baseEnv: process.env,
       platform: process.platform,
       now: () => 0,
@@ -786,10 +813,10 @@ describe("a candidate that conflicts with the base is a typed merge-conflict ver
     return { outcome, errors };
   }
 
-  it("exits the merge-conflict code and names every conflicting path", () => {
+  it("exits the merge-conflict code and names every conflicting path", async () => {
     const { dir, topicSha } = conflictingRepo();
     try {
-      const { outcome, errors } = runIn(dir, {
+      const { outcome, errors } = await runIn(dir, {
         baseRef: "origin/main",
         commands: [
           ["git", "merge", "--no-ff", "--no-edit", "--signoff", topicSha],
@@ -810,10 +837,10 @@ describe("a candidate that conflicts with the base is a typed merge-conflict ver
     }
   });
 
-  it("leaves the scratch workspace out of the half-merged state", () => {
+  it("leaves the scratch workspace out of the half-merged state", async () => {
     const { dir, topicSha } = conflictingRepo();
     try {
-      runIn(dir, { baseRef: "origin/main", commands: [["git", "merge", "--no-ff", "--no-edit", "--signoff", topicSha]] });
+      await runIn(dir, { baseRef: "origin/main", commands: [["git", "merge", "--no-ff", "--no-edit", "--signoff", topicSha]] });
       const mergeHead = spawnSync("git", ["rev-parse", "-q", "--verify", "MERGE_HEAD"], { cwd: dir, encoding: "utf8" });
       assert.notEqual(mergeHead.status, 0, "MERGE_HEAD must not survive the conflict");
       assert.equal(git(dir, "status", "--porcelain"), "");
@@ -822,10 +849,10 @@ describe("a candidate that conflicts with the base is a typed merge-conflict ver
     }
   });
 
-  it("a git merge that fails WITHOUT unmerged paths keeps git's own status", () => {
+  it("a git merge that fails WITHOUT unmerged paths keeps git's own status", async () => {
     const { dir } = conflictingRepo();
     try {
-      const { outcome } = runIn(dir, {
+      const { outcome } = await runIn(dir, {
         baseRef: "origin/main",
         commands: [["git", "merge", "--no-ff", "--no-edit", "--signoff", "no-such-ref"]],
       });

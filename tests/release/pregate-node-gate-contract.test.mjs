@@ -14,7 +14,7 @@ import { join } from "node:path";
 import { createServer } from "node:http";
 import { spawn, spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { test } from "node:test";
+import { after, test } from "node:test";
 import { detectWorkingShell } from "../../scripts/pregate.mjs";
 
 const repoRoot = fileURLToPath(new URL("../..", import.meta.url));
@@ -23,6 +23,10 @@ const completionSource = `import { completeFixture } from ${JSON.stringify(new U
 const pregateScript = join(repoRoot, "scripts", "pregate.mjs");
 const gateScript = join(repoRoot, "scripts", "gate-worktree.mjs");
 const runnerScript = join(repoRoot, "scripts", "local-ci-runner.mjs");
+const dpf2FixtureDir = mkdtempSync(join(tmpdir(), "dpf-node-contract-lock-"));
+const dpf2FixtureLock = join(dpf2FixtureDir, "fixture-dpf2-ci.lock");
+after(() => rmSync(dpf2FixtureDir, { recursive: true, force: true }));
+const gateEnvironment = (env = process.env) => ({ ...env, DPF2_CI_SLOT_LOCK: dpf2FixtureLock });
 const nativeShellProbe = spawnSync("sh", ["-c", "printf ok"], { encoding: "utf8" });
 const shellContractSkipReason = nativeShellProbe.error
   ? "native POSIX shell 'sh' is unavailable on this host; shell routing parity runs in CI/Linux or Git Bash-equipped worktrees"
@@ -108,7 +112,7 @@ async function startMockMcp(handlers) {
 }
 
 function runGate(args, env) {
-  return spawnSync(process.execPath, [gateScript, ...args], { encoding: "utf8", env });
+  return spawnSync(process.execPath, [gateScript, ...args], { encoding: "utf8", env: gateEnvironment(env) });
 }
 
 // Tests that pair a child gate process with an in-process mock MCP server
@@ -119,7 +123,7 @@ function runGate(args, env) {
 // 'error' event deterministically; every production caller uses the default.
 function runGateAsync(args, env, { execPath = process.execPath } = {}) {
   return new Promise((resolve, reject) => {
-    const child = spawn(execPath, [gateScript, ...args], { env });
+    const child = spawn(execPath, [gateScript, ...args], { env: gateEnvironment(env) });
     let stdout = "";
     let stderr = "";
     child.stdout.on("data", (chunk) => { stdout += chunk; });
@@ -263,6 +267,7 @@ test("gate-worktree.mjs refuses to run when neither an explicit command, the stu
   // mcp-credential.mjs re-exports the exchange from the skill pack (BI-84C1F526).
   cpSync(join(repoRoot, "packages", "dpf-skill-pack", "scripts", "lib", "client-credentials-exchange.mjs"), join(temp, "packages", "dpf-skill-pack", "scripts", "lib", "client-credentials-exchange.mjs"));
   cpSync(join(repoRoot, "scripts", "lib", "gate-quiescence.mjs"), join(temp, "scripts", "lib", "gate-quiescence.mjs"));
+  cpSync(join(repoRoot, "scripts", "lib", "gate-exit-classification.mjs"), join(temp, "scripts", "lib", "gate-exit-classification.mjs"));
   cpSync(join(repoRoot, "scripts", "lib", "documentation-evidence-lane.mjs"), join(temp, "scripts", "lib", "documentation-evidence-lane.mjs"));
   cpSync(join(repoRoot, "scripts", "lib", "semantic-review-gate.mjs"), join(temp, "scripts", "lib", "semantic-review-gate.mjs"));
   cpSync(join(repoRoot, "scripts", "lib", "local-integration-ci.mjs"), join(temp, "scripts", "lib", "local-integration-ci.mjs"));
@@ -326,7 +331,7 @@ test("gate-worktree.mjs refuses to run when neither an explicit command, the stu
   delete env.DPF_ALLOW_LOCAL_CI_STUB;
   delete env.DPF_LOCAL_CI_COMMAND;
 
-  const result = spawnSync(process.execPath, [join(temp, "scripts", "gate-worktree.mjs"), "--branch", "feat/x", "--sha", "abc123", "--worktree", dir, "--no-push"], { encoding: "utf8", env });
+  const result = spawnSync(process.execPath, [join(temp, "scripts", "gate-worktree.mjs"), "--branch", "feat/x", "--sha", "abc123", "--worktree", dir, "--no-push"], { encoding: "utf8", env: gateEnvironment(env) });
   assert.notEqual(result.status, 0);
   assert.match(result.stderr, /refusing to record passing stub evidence/);
 });
@@ -353,7 +358,7 @@ test("gate-worktree.mjs still runs main() when invoked through a symlinked path 
     const result = spawnSync(
       process.execPath,
       [join(link, "scripts", "gate-worktree.mjs"), "--dry-run", "--branch", "feat/x", "--sha", "abc123", "--worktree", repoRoot, "--no-push"],
-      { encoding: "utf8", env: { ...process.env } },
+      { encoding: "utf8", env: gateEnvironment() },
     );
     assert.equal(result.status, 0, result.stderr);
     assert.match(result.stdout, /gate-worktree dry-run/, "main() must run under a symlinked argv[1], not silently exit 0");
@@ -993,7 +998,7 @@ function makeLoudFixture(lines) {
 /** Env for a gate run whose child command prints `lines` lines. */
 function loudGateEnv(mcpUrl, lines, extra = {}) {
   return {
-    ...process.env,
+    ...gateEnvironment(),
     DPF_MCP_BEARER_TOKEN: "dpfmcp_test",
     DPF_GATE_OWNER_PROVIDER: "codex",
     DPF_GATE_OWNER_SESSION_ID: "contract-thread",

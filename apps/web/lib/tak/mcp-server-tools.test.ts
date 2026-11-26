@@ -74,6 +74,7 @@ describe("getMcpServerTools", () => {
     expect(tools.map((t) => t.name)).toEqual(["mcp-browser-use__browse_open"]);
     expect(tools[0].requiresExternalAccess).toBe(true);
     expect(tools[0].sideEffect).toBe(false);
+    expect(tools[0].workroomAccess).toBe("outside-workroom");
     expect(prisma.mcpServerTool.findMany).toHaveBeenCalledWith(expect.objectContaining({
       where: expect.objectContaining({ policyStatus: "approved", isEnabled: true }),
     }));

@@ -241,7 +241,7 @@ export function recordedPassAction({ status, headSha, dirty, mergeable }) {
  * @returns {{ step: string, message: string, next?: string } | null} the refusal, or null when done
  */
 const PR_FIELDS = "number,state,headRefName,baseRefName,headRefOid,isCrossRepository";
-const PR_QUERY = `query($owner:String!,$name:String!,$number:Int!){repository(owner:$owner,name:$name){pullRequest(number:$number){number state headRefName baseRefName headRefOid autoMergeRequest{mergeMethod} mergeQueueEntry{id state position}}}}`;
+const PR_QUERY = `query($owner:String!,$name:String!,$number:Int!){repository(owner:$owner,name:$name){pullRequest(number:$number){number state headRefName baseRefName headRefOid reviewDecision latestReviews(first:100){nodes{state} pageInfo{hasNextPage}} autoMergeRequest{mergeMethod} mergeQueueEntry{id state position}}}}`;
 const fullSha = value => typeof value === "string" && /^[a-f0-9]{40}$/.test(value);
 const publicationRefusal = message => ({ step: "pull-request", message,
   next: "inspect the current PR and recorded evidence read-only; do not repeat push or queue requests" });
@@ -274,6 +274,9 @@ function observePublication({ repository, prNumber, branch, base, headSha, runne
     && pr.mergeQueueEntry.id && typeof pr.mergeQueueEntry.state === "string" ? "queued" : "unknown";
   if (pr.autoMergeRequest !== null) return typeof pr.autoMergeRequest?.mergeMethod === "string"
     && pr.autoMergeRequest.mergeMethod ? "requested" : "unknown";
+  if (pr.reviewDecision === "CHANGES_REQUESTED"
+    || pr.latestReviews?.nodes?.some(review => review?.state === "CHANGES_REQUESTED")) return "review-blocked";
+  if (pr.latestReviews?.pageInfo?.hasNextPage === true) return "unknown";
   return "unconfirmed";
 }
 function publishPushed({ branch, base, title, body, headSha, log, runner }) {
@@ -302,6 +305,7 @@ function publishPushed({ branch, base, title, body, headSha, log, runner }) {
   const binding = { repository, prNumber: pr.number, branch, base, headSha, runner };
   let state = observePublication(binding);
   if (state === "unknown") return publicationRefusal("Current PR publication state is unproven.");
+  if (state === "review-blocked") return { step: "auto-merge", message: "An outstanding changes-requested review blocks queue enrollment.", next: "have the PR writer address the review and obtain its disposition before requesting merge" };
   if (state === "unconfirmed") {
     const enabled = runner("gh", ["pr", "merge", String(pr.number), "--repo", `github.com/${repository}`,
       "--squash", "--auto", "--match-head-commit", headSha], { capture: true, allowFail: true });
@@ -313,7 +317,8 @@ function publishPushed({ branch, base, title, body, headSha, log, runner }) {
     state = observePublication(binding);
   }
   if (!["queued", "requested", "merged"].includes(state)) return { step: "auto-merge",
-    message: "Queue request is not confirmed; no second request was made.", next: `read pnpm pr:health ${pr.number}` };
+    message: "Queue request is not confirmed; no second request was made.",
+    next: `PR #${pr.number} owner reviews the checks, fixes or routes any failure, and verifies this exact head before another request` };
   log(state === "queued" ? `PR #${pr.number} is queued` : state === "merged"
     ? `PR #${pr.number} is merged` : `auto-merge requested for PR #${pr.number}; queue membership is not yet observed`);
   return null;
@@ -321,12 +326,40 @@ function publishPushed({ branch, base, title, body, headSha, log, runner }) {
 
 export function publish({ branch, base, title, body, dry, log, runner = run }) {
   if (dry) { log(`would push and publish ${branch}; no publication performed`); return null; }
+  const head = runner("git", ["rev-parse", "HEAD"], { capture: true, allowFail: true });
+  const headSha = head.ok ? head.out.trim() : "";
+  const origin = runner("git", ["remote", "get-url", "origin"], { capture: true, allowFail: true });
+  const repository = origin.ok ? repositorySlugFromRemote(origin.out) : "";
+  if (!repository || !fullSha(headSha)) return publicationRefusal("Repository or exact local source could not be established before push.");
+  const checkReplacement = () => {
+    const selection = currentOpenPr({ branch, base, repository, runner });
+    if (selection.refusal) return selection.refusal;
+    const pr = selection.pr;
+    if (!pr || pr.headRefOid === headSha) return null;
+    const status = observePublication({ repository, prNumber: pr.number, branch, base, headSha: pr.headRefOid, runner });
+    if (status === "queued" || status === "requested") {
+      return {
+        step: "push", message: `PR #${pr.number} is ${status === "queued" ? "in the merge queue" : "still armed for auto-merge"} at ${pr.headRefOid.slice(0, 12)}. Replacing it with ${headSha.slice(0, 12)} was refused.`,
+        next: "the authorized PR owner must clear the old queue entry or auto-merge request and verify it is clear before retrying this push",
+      };
+    }
+    return status === "unknown" ? publicationRefusal("The old PR head or its queue state could not be verified before replacement.") : null;
+  };
+  const replacement = checkReplacement();
+  if (replacement) return replacement;
   log(`pushing ${branch}`);
   const pushed = runner("git", ["push", "-u", "origin", branch], { allowFail: true });
-  if (!pushed.ok) return { step: "push", message: "push refused; it was NOT retried because another push can overwrite a recorded PASS.",
-    next: "read the original output and pnpm pregate:status; do not re-push to re-read a refusal" };
-  const head = runner("git", ["rev-parse", "HEAD"], { capture: true, allowFail: true });
-  return publishPushed({ branch, base, title, body, headSha: head.ok ? head.out.trim() : "", log, runner });
+  if (!pushed.ok) {
+    // Git and its hooks stream through normal stdio; show any extra runner error too.
+    if (pushed.out?.trim()) log(pushed.out.trim());
+    // A queue entry may have appeared between the initial read and push. Diagnose
+    // by read-back even when stderr was streamed and therefore wasn't captured.
+    const raced = checkReplacement();
+    if (raced?.step === "push") return raced;
+    return { step: "push", message: "push refused; it was NOT retried because another push can overwrite a recorded PASS.",
+      next: "inspect the repository refusal and pnpm pregate:status; do not re-push to re-read a refusal" };
+  }
+  return publishPushed({ branch, base, title, body, headSha, log, runner });
 }
 
 /** Resume only the post-push stages against unchanged, already-qualified bytes. */
