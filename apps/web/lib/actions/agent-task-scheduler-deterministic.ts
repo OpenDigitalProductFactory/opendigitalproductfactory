@@ -10,6 +10,7 @@ import {
   ACCEPTANCE_SWEEP_TASK_KIND,
   BOOKKEEPING_CYCLE_TASK_KIND,
   CLIENT_CAPABILITY_REVERIFY_TASK_KIND,
+  CLOSURE_SCORECARD_TASK_KIND,
   DECISION_ENGINE_REVIEW_TASK_KIND,
   DEMAND_SCORING_STEWARD_TASK_KIND,
   HARNESS_EVOLUTION_LOOP_TASK_KIND,
@@ -61,6 +62,12 @@ export async function runDeterministicScheduledTaskKind(task: DeterministicSched
   if (task.taskKind === HARNESS_EVOLUTION_LOOP_TASK_KIND) {
     const { executeHarnessEvolutionLoopTask } = await import("@/lib/harness-evolution/harness-evolution-task");
     await executeHarnessEvolutionLoopTask(task);
+    return true;
+  }
+  // BI-97C56E20: the daily closure scorecard.
+  if (task.taskKind === CLOSURE_SCORECARD_TASK_KIND) {
+    const { executeClosureScorecardTask } = await import("@/lib/continual-improvement/closure-scorecard/closure-scorecard-task");
+    await executeClosureScorecardTask(task);
     return true;
   }
   return false;
