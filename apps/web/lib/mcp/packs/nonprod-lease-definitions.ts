@@ -204,6 +204,46 @@ export const nonprodLeaseDefinitions: RegisteredToolDefinition[] = [
     buildPhases: ["ideate", "plan", "build", "review", "ship"],
   },
   {
+    name: "attest_preview_database",
+    description: "Publish a bounded database identity observation for an owned, active Contributor preview after governed authority approval. Never supplies production identity or changes lease expiry.",
+    inputSchema: {
+      type: "object",
+      additionalProperties: false,
+      required: ["previewDatabaseObservation"],
+      properties: {
+        previewDatabaseObservation: {
+          type: "object",
+          additionalProperties: false,
+          required: ["schemaVersion", "leaseId", "runtimeId", "sourceSha", "containerId", "volumeName", "database"],
+          properties: {
+            schemaVersion: { type: "integer", enum: [1] },
+            leaseId: { type: "string", minLength: 1, maxLength: 128 },
+            runtimeId: { type: "string", minLength: 1, maxLength: 128 },
+            sourceSha: { type: "string", pattern: "^[0-9a-f]{40}$" },
+            containerId: { type: "string", pattern: "^[0-9a-f]{64}$" },
+            volumeName: { type: "string", minLength: 1, maxLength: 128 },
+            database: {
+              type: "object",
+              additionalProperties: false,
+              required: ["systemIdentifier", "databaseOid", "databaseName", "postmasterStartEpoch"],
+              properties: {
+                systemIdentifier: { type: "string", pattern: "^-?[1-9][0-9]{0,18}$" },
+                databaseOid: { type: "string", pattern: "^[1-9][0-9]{0,9}$" },
+                databaseName: { type: "string", minLength: 1, maxLength: 63 },
+                postmasterStartEpoch: { type: "string", pattern: "^[0-9]+([.][0-9]{1,6})?$", maxLength: 32 },
+              },
+            },
+          },
+        },
+      },
+    },
+    workroomAccess: "outside-workroom",
+    requiredCapability: "view_platform",
+    executionMode: "immediate",
+    sideEffect: true,
+    consequence: "authority",
+  },
+  {
     name: "renew_nonprod_environment_lease",
     description:
       "Heartbeat an active shared nonproduction environment lease, optionally binding its assigned slot before host mutation. " +

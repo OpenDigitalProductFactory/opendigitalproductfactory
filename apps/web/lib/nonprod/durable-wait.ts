@@ -240,35 +240,51 @@ export async function checkpointNonprodLeaseWait(input: {
       throw new Error("nonprod_preview_ownership_conflict");
     }
   }
-  const existing = await input.db.taskRun.findUnique({ where: { taskRunId } });
-  const progressPayload = waitPayload(existing?.progressPayload, wait);
-  await input.db.taskRun.upsert({
-    where: { taskRunId },
-    create: {
-      taskRunId,
-      userId: input.userId,
-      title: `Wait for ${input.lease.environmentKey} capacity`,
-      objective: `Resume lease ${input.lease.leaseId} without polling or losing FIFO position.`,
-      source: "proactive",
-      status: "submitted",
-      initiatingAgentId: input.lease.ownerProvider,
-      repeatedPatternKey: `nonprod-wait:${input.lease.leaseId}`,
-      a2aMetadata: {
-        kind: "nonprod-lease-wait",
-        leaseId: input.lease.leaseId,
-        claimKey: input.lease.claimKey,
+  let checkpointed = false;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const existing = await input.db.taskRun.findUnique({ where: { taskRunId } });
+    if (!existing) {
+      await input.db.taskRun.upsert({
+        where: { taskRunId },
+        create: {
+          taskRunId,
+          userId: input.userId,
+          title: `Wait for ${input.lease.environmentKey} capacity`,
+          objective: `Resume lease ${input.lease.leaseId} without polling or losing FIFO position.`,
+          source: "proactive",
+          status: "submitted",
+          initiatingAgentId: input.lease.ownerProvider,
+          repeatedPatternKey: `nonprod-wait:${input.lease.leaseId}`,
+          a2aMetadata: {
+            kind: "nonprod-lease-wait",
+            leaseId: input.lease.leaseId,
+            claimKey: input.lease.claimKey,
+          },
+          progressPayload: waitPayload(null, wait),
+          lastHeartbeatAt: null,
+        },
+        // Concurrent creation is a no-op. Checkpoint only after observing the row.
+        update: {},
+      });
+      continue;
+    }
+    if (!input.db.taskRun.updateMany) throw new Error("nonprod_wait_checkpoint_cas_unavailable");
+    const result = await input.db.taskRun.updateMany({
+      where: { taskRunId, status: existing.status, progressPayload: { equals: existing.progressPayload } },
+      data: {
+        status: "submitted",
+        completedAt: null,
+        lastHeartbeatAt: null,
+        repeatedPatternKey: `nonprod-wait:${input.lease.leaseId}`,
+        progressPayload: waitPayload(existing.progressPayload, wait),
       },
-      progressPayload,
-      lastHeartbeatAt: null,
-    },
-    update: {
-      status: "submitted",
-      completedAt: null,
-      lastHeartbeatAt: null,
-      repeatedPatternKey: `nonprod-wait:${input.lease.leaseId}`,
-      progressPayload,
-    },
-  });
+    });
+    if (result.count === 1) {
+      checkpointed = true;
+      break;
+    }
+  }
+  if (!checkpointed) throw new Error("nonprod_wait_checkpoint_contended");
   await input.db.nonProductionEnvironmentLease.updateMany({
     where: { id: input.lease.id, status: "queued" },
     data: { taskRunId, expiresAt: input.waitDeadlineAt },
@@ -410,7 +426,7 @@ export async function settleNonprodLeaseWait(input: SettleNonprodLeaseWaitInput)
   }
   // Automatic expiry runs inside the lease transaction. Persistent contention
   // must roll it back, leaving the active/queued row visible for a later pass.
-  throw new Error("nonprod_expiry_wait_settlement_contended");
+  throw new Error(input.expiredLease ? "nonprod_expiry_wait_settlement_contended" : "nonprod_release_wait_settlement_contended");
 }
 
 async function settleNonprodLeaseWaitOnce(input: SettleNonprodLeaseWaitInput): Promise<{ settled: boolean; retryable?: boolean }> {
@@ -444,17 +460,17 @@ async function settleNonprodLeaseWaitOnce(input: SettleNonprodLeaseWaitInput): P
       completedAt: now,
       progressPayload: waitPayload(task.progressPayload, next),
   };
-  if (input.expiredLease) {
-    if (task.status !== "submitted" || !input.db.taskRun.updateMany) return { settled: false };
-    const result = await input.db.taskRun.updateMany({
-      where: { taskRunId: input.taskRunId, status: task.status,
-        progressPayload: { equals: task.progressPayload } },
-      data,
-    });
-    return { settled: result.count === 1, retryable: result.count === 0 };
+  if (input.expiredLease && task.status !== "submitted") return { settled: false };
+  if (!input.db.taskRun.updateMany) {
+    if (input.expiredLease) return { settled: false };
+    throw new Error("nonprod_release_wait_settlement_cas_unavailable");
   }
-  await input.db.taskRun.update({ where: { taskRunId: input.taskRunId }, data });
-  return { settled: true };
+  const result = await input.db.taskRun.updateMany({
+    where: { taskRunId: input.taskRunId, status: task.status,
+      progressPayload: { equals: task.progressPayload } },
+    data,
+  });
+  return { settled: result.count === 1, retryable: result.count === 0 };
 }
 
 /** Called only inside the transaction that expires these exact lease rows. */

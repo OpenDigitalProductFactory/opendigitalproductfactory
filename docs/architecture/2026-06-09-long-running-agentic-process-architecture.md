@@ -27,6 +27,10 @@ See the [provider control guide](../user-guide/ai-workforce/provider-ollama.md).
 **Current authority implementation:** durable process reconnects read tool grants
 from the canonical coworker Agent row on each request, with revocation tombstones
 taking precedence. Known alias rows are not an alternate authority source.
+
+**Preview proof publication:** `attest_preview_database` is separate from lease
+renewal. Approval replay runs as the original principal and rechecks the current
+lease under the owner lock. Routine renewal does not request that approval.
 Administrator reconciliation of legacy differences requires explicit approval.
 
 **Review execution recovery:** an incomplete design or plan reviewer panel keeps

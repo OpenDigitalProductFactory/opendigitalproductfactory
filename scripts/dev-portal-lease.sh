@@ -37,6 +37,7 @@ EXPIRES_MINUTES="${DPF_DEV_PORTAL_EXPIRES_MINUTES:-120}"
 RESUME_LEASE_ID="${DPF_DEV_PORTAL_RESUME_LEASE_ID:-}"
 TASK_RUN_ID="${DPF_DEV_PORTAL_TASK_RUN_ID:-}"
 CLAIM_KEY="${DPF_DEV_PORTAL_CLAIM_KEY:-}"
+S5_REHEARSAL_FLAG=""
 URL="${DPF_DEV_PORTAL_URL:-http://localhost:3001}"
 PORTS="${DPF_DEV_PORTAL_PORTS:-3001}"
 WORKTREE_PATH="${DPF_DEV_WORKTREE:-}"
@@ -73,6 +74,7 @@ Options:
   --owner-session-id ID   Client thread (detected by canonical identity helper).
   --expires-minutes N     Admission wait budget, at most 120 minutes (default: 120).
   --lease-id ID           Lease id to release (release only).
+  --s5-rehearsal-preview  Opt in to governed database attestation (refresh only).
   --mcp-url URL           MCP endpoint (default: DPF_MCP_URL or local portal).
   --help                  Show this help.
 
@@ -215,6 +217,7 @@ while [ "$#" -gt 0 ]; do
     --owner-provider) OWNER_PROVIDER="${2:-}"; shift 2 ;;
     --owner-session-id) OWNER_SESSION_ID="${2:-}"; shift 2 ;;
     --expires-minutes) EXPIRES_MINUTES="${2:-}"; shift 2 ;;
+    --s5-rehearsal-preview) S5_REHEARSAL_FLAG=--s5-rehearsal-preview; shift ;;
     --lease-id) LEASE_ID="${2:-}"; shift 2 ;;
     --mcp-url) MCP_URL="${2:-}"; shift 2 ;;
     --help|-h) usage; exit 0 ;;
@@ -223,6 +226,10 @@ while [ "$#" -gt 0 ]; do
 done
 
 [ -n "$COMMAND" ] || { usage; exit 2; }
+if [ -n "${S5_REHEARSAL_FLAG:-}" ]; then
+  [ "$COMMAND" = "refresh" ] || die "s5_preview_refresh_required: --s5-rehearsal-preview requires the refresh command"
+  [ "$ENVIRONMENT_KEY" = "active-candidate" ] || die "s5_preview_active_candidate_required: S5 rehearsal preview mode requires the active-candidate lease lane"
+fi
 
 
 identity_module="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)/lib/agent-identity.mjs"
@@ -240,12 +247,25 @@ esac
 
 release_lease() {
   lease_id_to_release="$1"
-  release_response="$(mcp_call release_nonprod_environment_lease "{\"leaseId\":$(json_escape "$lease_id_to_release"),\"ownerSessionId\":$(json_escape "$OWNER_SESSION_ID")}" | extract_tool_result)"
-  release_success="$(printf '%s' "$release_response" | field success)"
-  if [ "$release_success" != "true" ]; then
-    printf '%s\n' "Release action: lease $lease_id_to_release, owner session $OWNER_SESSION_ID; $release_response" >&2
-    return 1
-  fi
+  release_args="{\"leaseId\":$(json_escape "$lease_id_to_release"),\"ownerSessionId\":$(json_escape "$OWNER_SESSION_ID")}"
+  release_attempt=1
+  while :; do
+    release_response="$(mcp_call release_nonprod_environment_lease "$release_args" | extract_tool_result)" || return 1
+    release_success="$(printf '%s' "$release_response" | field success)" || return 1
+    [ "$release_success" != "true" ] || break
+    release_error="$(printf '%s' "$release_response" | field error)" || return 1
+    release_retryable="$(printf '%s' "$release_response" | node -e '
+const result = JSON.parse(require("node:fs").readFileSync(0, "utf8"));
+process.stdout.write(String(result.success === false && result.data?.retryable === true));
+')" || return 1
+    if [ "$release_error" != "nonprod_release_wait_settlement_contended" ] \
+      || [ "$release_retryable" != "true" ] || [ "$release_attempt" -ge 3 ]; then
+      printf '%s\n' "Release action: lease $lease_id_to_release, owner session $OWNER_SESSION_ID; $release_response" >&2
+      return 1
+    fi
+    sleep "$release_attempt"
+    release_attempt=$((release_attempt + 1))
+  done
   printf 'released %s\n' "$lease_id_to_release"
 }
 
@@ -297,6 +317,26 @@ process.stdout.write(JSON.stringify(previewLeaseRequestTiming({ waitMinutes: pro
   # belongs.
   base_claim_key="dev-portal:${WORKTREE_PATH}:${BRANCH}"
   claim_key="${CLAIM_KEY:-$base_claim_key}"
+  case "$claim_key" in
+    dev-portal:?*) ;;
+    *) die "preview claim key must use the dev-portal: namespace" ;;
+  esac
+  # Mode is part of a preview attempt, not a change to the lease lane.
+  # Keep the ordinary key unchanged and preserve the exact S5 key on resume.
+  case "$claim_key" in
+    dev-portal:s5-rehearsal:?*)
+      [ -n "${S5_REHEARSAL_FLAG:-}" ] || die "s5_preview_claim_mode_mismatch: the pinned lease requires explicit S5 rehearsal mode"
+      ;;
+    dev-portal:s5-rehearsal:)
+      die "s5_preview_claim_mode_mismatch: the pinned S5 attempt key is incomplete"
+      ;;
+    *)
+      if [ -n "${S5_REHEARSAL_FLAG:-}" ]; then
+        [ -z "$RESUME_LEASE_ID" ] || die "s5_preview_claim_mode_mismatch: an ordinary attempt cannot resume as an S5 rehearsal"
+        claim_key="dev-portal:s5-rehearsal:${claim_key#dev-portal:}"
+      fi
+      ;;
+  esac
   while :; do
     host_pressure_json="$(sample_host_pressure)" \
       || die "could not measure host pressure for governed preview admission"
@@ -312,7 +352,6 @@ const args = {
   ...JSON.parse(process.argv[8]),
   worktreePath: process.argv[4],
   branchName: process.argv[5],
-  cleanupCommand: "docker compose -p dpf --profile dev rm -sf dev-portal",
   hostPressure: JSON.parse(process.argv[10]),
   ...(process.argv[11] ? {resumeLeaseId: process.argv[11]} : {}),
   ...(process.argv[12] ? {taskRunId: process.argv[12]} : {}),
@@ -342,7 +381,7 @@ process.stdout.write(JSON.stringify(args));
             --worktree "$WORKTREE_PATH" --branch "$BRANCH" --sha "$SOURCE_SHA" \
             --owner-provider "$OWNER_PROVIDER" --owner-session-id "$OWNER_SESSION_ID" \
             --resume-lease-id "$CLAIMED_LEASE_ID" --task-run-id "$task_run_id" \
-            --claim-key "$claim_key" --mcp-url "$MCP_URL" --wait-deadline "$wait_deadline"
+            --claim-key "$claim_key" --mcp-url "$MCP_URL" --wait-deadline "$wait_deadline" ${S5_REHEARSAL_FLAG:+"$S5_REHEARSAL_FLAG"}
         fi
         printf '%s\n' "Queued lease ${CLAIMED_LEASE_ID}; retain this same claim. No runtime has started." >&2
         return 75
@@ -429,6 +468,11 @@ case "$COMMAND" in
     export DPF_DEV_PORTAL_LEASE_ID="$CLAIMED_LEASE_ID"
     export DPF_DEV_PORTAL_LEASE_EXPIRES_AT="$CLAIMED_EXPIRES_AT"
     export DPF_MCP_URL="$MCP_URL"
+    if [ -n "${S5_REHEARSAL_FLAG:-}" ]; then
+      export DPF_DEV_PORTAL_S5_REHEARSAL=1
+    else
+      unset DPF_DEV_PORTAL_S5_REHEARSAL
+    fi
     node "$(dirname -- "$0")/lib/dev-preview-runtime.mjs"
     exit "$?"
     ;;

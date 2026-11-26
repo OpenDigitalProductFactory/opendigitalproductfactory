@@ -10,10 +10,10 @@ vi.mock("@/lib/govern/current-user-context", () => ({
 }));
 vi.mock("@/lib/mcp-governed-execute", () => ({ governedExecuteTool: vi.fn() }));
 vi.mock("@/lib/mcp-tools", () => ({
-  PLATFORM_TOOLS: [{ name: "create_backlog_item", sideEffect: true }],
+  PLATFORM_TOOLS: [{ name: "create_backlog_item", sideEffect: true }, { name: "attest_preview_database", sideEffect: true }],
 }));
 vi.mock("@/lib/tak/agent-grants", () => ({
-  getToolGrantMapping: () => ({ create_backlog_item: ["backlog_write"] }),
+  getToolGrantMapping: () => ({ create_backlog_item: ["backlog_write"], attest_preview_database: ["work_capsule_write"] }),
   expandGrants: (grants: string[]) => grants,
 }));
 
@@ -177,4 +177,28 @@ describe("an approved request parked inside a task (BI-9FD11E5E)", () => {
       .resolves.toMatchObject({ status: "not-run", reason: "expired" });
     expect(resumeTask).not.toHaveBeenCalled();
   });
+});
+
+
+it.each([false, true])("replays retained preview approval server-side and reports a lapsed lease (%s)", async (lapsed) => {
+  const args = { previewDatabaseObservation: { schemaVersion: 1, leaseId: "NPEL-REPLAY",
+    runtimeId: "runtime", sourceSha: "a".repeat(40), containerId: "b".repeat(64), volumeName: "fixture_dev_pgdata",
+    database: { systemIdentifier: "7391584902012345678", databaseOid: "16384", databaseName: "dpf",
+      postmasterStartEpoch: "1795679812.123456" } } };
+  const { db } = fixtures({
+    envelope: { manifestActionId: "attest_preview_database", argsJson: { approvalBinding: {
+      taskRunId: null, routeContext: null, chainId: null, inputFingerprint: fingerprintCoworkerInput(args),
+    } } },
+    pending: { parameters: args }, token: { scopes: ["work_capsule_write"] },
+  });
+  const execute = vi.fn(async () => lapsed
+    ? { success: false, error: "preview_database_lease_not_current" }
+    : { success: true });
+  const result = await runApprovedExternalRequest("env-1", { db: db as never, execute: execute as never, now: NOW });
+  expect(execute).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({
+    toolName: "attest_preview_database", rawParams: args, userId: "user-1", source: "external-jsonrpc",
+    context: expect.objectContaining({ agentId: "AGT-EXT-CODEX", apiTokenId: "tok-1" }),
+  }));
+  expect(result.status).toBe(lapsed ? "failed" : "executed");
+  if (lapsed) expect(result).toMatchObject({ message: "preview_database_lease_not_current" });
 });
