@@ -143,3 +143,12 @@ describe("obsolete reservation approval settlement", () => {
     expect((await settleObsoleteLeaseReleaseEnvelopes(f.db, now, second.nextCursor)).cancelled).toBe(0);
   });
 });
+
+it("does not close a command-free Contributor preview envelope without a slot manifest", async () => {
+  const row = obsoleteEnvelope();
+  const f = fixture([row], { ...obsoleteTarget(), environmentKey: "active-candidate",
+    cleanupCommand: null, slotManifestVersion: null });
+  expect((await settleObsoleteLeaseReleaseEnvelopes(f.db, now)).cancelled).toBe(0);
+  expect(row.status).toBe("proposed");
+  expect(f.updateMany).not.toHaveBeenCalled();
+});

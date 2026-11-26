@@ -3,9 +3,9 @@
   "selectionCliff": null,
   "entries": {
     "registry.toolDefinitions": {
-      "value": 466,
-      "reason": "BI-5A17505E adds propose_work_pattern_experiment_candidate: the governed origination seam that submits a validated 2x2 shadow Living Playbook experiment candidate as a deduplicated CoworkerCapabilityNeed so an operator can review and launch the hermetic experiment that legally promotes a work-pattern AuthorityBinding. submit_coworker_capability_need cannot carry it because that tool is caller-scoped view_platform self-assessment without manage_platform/registry_write authority, consequence:'authority' classification, promotion-policy ceiling enforcement, or build-replay-v1 fixture validation. Reuses registry_write; adds no new grant, core-tier entry, route, or DB table. Claim to check: work-pattern-experiment-candidate.test.ts and work-pattern-experiment-pack.test.ts prove invalid/inadmissible/fixtureless candidates are rejected and valid proposals write only CoworkerSelfAssessment + CoworkerCapabilityNeed, never AuthorityBinding or TaskRun. The prior 465-tool justification remains in the parent version.",
-      "recordedAt": "2026-11-23"
+      "value": 467,
+      "reason": "BI-5C193A3F adds attest_preview_database as a narrow authority-classified publication tool for explicit S5 rehearsal previews. Separating it from ordinary lease renewal avoids adding approval, receipts or decision routing to every heartbeat. Reuses work_capsule_write and the nonprod lease pack; adds no core or delivery-readiness entry.",
+      "recordedAt": "2026-11-26"
     },
     "registry.packFiles": {
       "value": 111,

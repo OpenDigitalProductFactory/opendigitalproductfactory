@@ -283,3 +283,21 @@ it('changing inventory and disappeared IDs never retarget held containers', asyn
   await fenceEndedPreviewRuntimes({ ...f.deps, now: new Date(now.getTime() + 600_000) });
   expect(f.stop).toHaveBeenCalledExactlyOnceWith(f.id);
 });
+
+it.each(["active", "expired"] as const)("fences only terminal command-free active-candidate launcher claims (%s)", async status => {
+  const f = fixture();
+  f.lease.environmentKey = "active-candidate";
+  f.lease.cleanupCommand = null;
+  f.lease.status = status;
+  f.lease.activeKey = status === "active" ? "active-candidate:slot-0" : null;
+  f.wait.environmentKey = f.lease.environmentKey;
+  const binding = Object.fromEntries(["leaseId", "claimKey", "environmentKey", "ownerProvider", "ownerSessionId",
+    "worktreePath", "branchName", "buildId", "url", "ports"].map(key => [key, f.lease[key as keyof LeaseRow]]));
+  f.readTask.mockResolvedValue({
+    ...f.task, initiatingAgentId: "fixture-agent",
+    progressPayload: { ...f.task.progressPayload,
+      nonprodPreviewOwner: { schemaVersion: 1, userId: f.task.userId, agentId: "fixture-agent", binding } },
+  } as typeof f.task);
+  const result = await fenceEndedPreviewRuntimes(f.deps);
+  expect(result).toMatchObject(status === "active" ? { held: 1, stopped: 0 } : { held: 0, stopped: 1 });
+});

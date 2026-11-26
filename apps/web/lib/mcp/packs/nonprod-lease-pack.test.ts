@@ -19,8 +19,9 @@ vi.mock("@/lib/nonprod/durable-wait", async (importOriginal) => ({
   ...await importOriginal<typeof import("@/lib/nonprod/durable-wait")>(),
   ...durableWait,
 }));
-const cleanup = vi.hoisted(() => ({ readLease: vi.fn(), readWait: vi.fn(), stance: vi.fn() }));
+const cleanup = vi.hoisted(() => ({ readLease: vi.fn(), readWait: vi.fn(), stance: vi.fn(), transaction: vi.fn() }));
 vi.mock("@dpf/db", () => ({ prisma: {
+  $transaction: cleanup.transaction,
   nonProductionEnvironmentLease: { findUnique: cleanup.readLease },
   taskRun: { findUnique: cleanup.readWait },
 } }));
@@ -42,6 +43,7 @@ const EXPECTED_TOOLS = [
   "claim_nonprod_environment_lease",
   "release_nonprod_environment_lease",
   "renew_nonprod_environment_lease",
+  "attest_preview_database",
 ];
 
 beforeEach(() => {
@@ -673,4 +675,114 @@ describe("exact persisted reservation readback", () => {
     expect(JSON.stringify(result)).not.toContain("private reader details");
     expect(result.data ?? {}).not.toHaveProperty("lease");
   });
+});
+
+describe("preview attestation tool and release contention", () => {
+  it("classifies only attestation as authority, leaving renew unchanged", () => {
+    const attest = nonprodLeasePack.definitions.find(tool => tool.name === "attest_preview_database");
+    const renew = nonprodLeasePack.definitions.find(tool => tool.name === "renew_nonprod_environment_lease");
+    expect(attest).toMatchObject({ consequence: "authority", sideEffect: true });
+    expect(renew?.consequence).toBeUndefined();
+    expect(renew?.inputSchema.properties).not.toHaveProperty("previewDatabaseObservation");
+    expect(nonprodLeasePack.grants.attest_preview_database).toEqual(["work_capsule_write"]);
+    expect(isToolAllowedByGrants("attest_preview_database", ["work_capsule_write"])).toBe(true);
+  });
+
+  it.each([undefined, null, [], 7, "value", { productionSystemIdentifier: "123" }])(
+    "refuses an invalid observation before any lease effect (%j)", async (previewDatabaseObservation) => {
+      const handler = nonprodLeasePack.handlers.attest_preview_database;
+      expect(handler).toBeTypeOf("function");
+      expect(await handler!({ previewDatabaseObservation }, "user-1")).toMatchObject({
+        success: false, error: "preview_database_observation_invalid",
+      });
+      expect(cleanup.readLease).not.toHaveBeenCalled();
+    },
+  );
+
+  it("preserves lease release contention for a bounded caller retry", async () => {
+    lease.releaseNonprodEnvironmentLease.mockRejectedValueOnce(
+      Object.assign(new Error("nonprod_release_wait_settlement_contended"), { retryable: true }),
+    );
+    const result = await nonprodLeasePack.handlers.release_nonprod_environment_lease!(
+      { leaseId: "NPEL-FIXTURE", ownerSessionId: "preview-owner" }, "user-1",
+    );
+    expect(result).toMatchObject({
+      success: false, error: "nonprod_release_wait_settlement_contended",
+      data: { leaseId: "NPEL-FIXTURE", retryable: true },
+    });
+    expect(result.message).not.toMatch(/do not|final/i);
+  });
+
+  it("does not change other release failure classification", async () => {
+    lease.releaseNonprodEnvironmentLease.mockRejectedValueOnce(new Error("unrelated"));
+    const result = await nonprodLeasePack.handlers.release_nonprod_environment_lease!(
+      { leaseId: "NPEL-FIXTURE", ownerSessionId: "preview-owner" }, "user-1",
+    );
+    expect(result).toMatchObject({ success: false, error: "release_failed", data: { retryable: false } });
+  });
+});
+
+it("retains the exact fingerprint through observation wire coercion and the approval audit", async () => {
+  const { coerceMcpToolArgs } = await import("@/lib/mcp-arg-coercion");
+  const { fingerprintCoworkerInput } = await import("@/lib/govern/authority/coworker-authority-decision");
+  const { retainedGovernedToolParameters, deriveToolAuditClass } = await import("@/lib/governed-tool-audit-parameters");
+  const tool = nonprodLeasePack.definitions.find(def => def.name === "attest_preview_database")!;
+  const observation = { schemaVersion: 1, leaseId: "NPEL-FIXTURE", runtimeId: "fixture-runtime",
+    sourceSha: "a".repeat(40), containerId: "b".repeat(64), volumeName: "fixture_dev_pgdata",
+    database: { systemIdentifier: "7391584902012345678", databaseOid: "16384",
+      databaseName: "dpf", postmasterStartEpoch: "1795679812.123456" } };
+  const rawParams = coerceMcpToolArgs({
+    previewDatabaseObservation: JSON.stringify({ ...observation, database: JSON.stringify(observation.database) }),
+  }, tool.inputSchema);
+  expect(rawParams).toEqual({ previewDatabaseObservation: observation });
+  const auditClass = deriveToolAuditClass(tool);
+  expect(auditClass).toBe("ledger");
+  const retained = retainedGovernedToolParameters({ tool, rawParams }, auditClass);
+  expect(retained).toEqual(rawParams);
+  expect(fingerprintCoworkerInput(retained!)).toBe(fingerprintCoworkerInput(rawParams));
+});
+
+const validPreviewObservation = {
+  schemaVersion: 1, leaseId: "NPEL-FIXTURE", runtimeId: "fixture-runtime",
+  sourceSha: "a".repeat(40), containerId: "b".repeat(64), volumeName: "fixture_dev_pgdata",
+  database: { systemIdentifier: "7391584902012345678", databaseOid: "16384",
+    databaseName: "dpf", postmasterStartEpoch: "1795679812.123456" },
+};
+
+it.each([
+  { previewDatabaseObservation: { ...validPreviewObservation, productionSystemIdentifier: "123" } },
+  { previewDatabaseObservation: validPreviewObservation, extraTopLevel: true },
+])("rejects extra keys even when every observation field is valid", async params => {
+  const handler = nonprodLeasePack.handlers.attest_preview_database!;
+  expect(await handler(params, "user-1", { agentId: "fixture-agent" })).toMatchObject({
+    success: false, error: "preview_database_observation_invalid",
+  });
+});
+
+it.each([["P2034", true], ["P2024", true], ["P2028", false], ["unknown", false]])(
+  "retains audited attestation failure and classifies retryability for %s", async (code, retryable) => {
+  const handler = nonprodLeasePack.handlers.attest_preview_database!;
+  cleanup.transaction.mockRejectedValueOnce(Object.assign(new Error("internal database detail"), { code }));
+  expect(await handler({ previewDatabaseObservation: validPreviewObservation }, "user-1", { agentId: "fixture-agent" }))
+    .toMatchObject({ success: false, error: "preview_database_attestation_failed",
+      data: { retryable, previewDatabaseObservation: {
+        leaseId: "NPEL-FIXTURE", userId: "user-1", agentId: "fixture-agent",
+        reason: "preview_database_attestation_failed", tupleDigest: expect.stringMatching(/^[a-f0-9]{64}$/),
+      } },
+    });
+});
+
+it("logs only a bounded failure category, never credential-bearing diagnostics", async () => {
+  const handler = nonprodLeasePack.handlers.attest_preview_database!;
+  const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+  try {
+    cleanup.transaction.mockRejectedValueOnce(Object.assign(
+      new Error("database connection was lost: postgresql://fixture:private@127.0.0.1/dpf\npassword=fixture-secret"),
+      { code: "P2024" },
+    ));
+    const result = await handler({ previewDatabaseObservation: validPreviewObservation }, "user-1", { agentId: "fixture-agent" });
+    expect(warn).toHaveBeenCalledWith(expect.any(String), "P2024", "pool_timeout");
+    expect(JSON.stringify(warn.mock.calls)).not.toMatch(/fixture:private|fixture-secret|database connection was lost/);
+    expect(JSON.stringify(result)).not.toContain("database connection was lost");
+  } finally { warn.mockRestore(); }
 });

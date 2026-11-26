@@ -491,6 +491,25 @@ export async function releaseNonprodEnvironmentLease(input: {
 } & LeaseReleaseContext) {
   const db = input.db ?? prisma;
   const now = input.now ?? new Date();
+  // Keep the environment lock through settlement. A contended wait must roll
+  // back the status flip, not leave a terminal lease with an unfinished wait.
+  const settleReleasedWait = async (tx: LeaseTx, lease: LeaseRow, priorStatus: string) => {
+    if (!tx.taskRun || !lease.taskRunId) return;
+    try {
+      await settleNonprodLeaseWait({
+        db: { nonProductionEnvironmentLease: tx.nonProductionEnvironmentLease, taskRun: tx.taskRun },
+        taskRunId: lease.taskRunId,
+        leaseId: lease.leaseId,
+        state: priorStatus === "active" || priorStatus === "released" ? "admitted" : "terminal",
+        now,
+      });
+    } catch (error) {
+      if (error instanceof Error && error.message === "nonprod_release_wait_settlement_contended") {
+        throw Object.assign(error, { retryable: true });
+      }
+      throw error;
+    }
+  };
   const result = await inLeaseTransaction(db, async (tx) => {
     const beforeLock = await tx.nonProductionEnvironmentLease.findUnique({
       where: { leaseId: input.leaseId },
@@ -510,6 +529,7 @@ export async function releaseNonprodEnvironmentLease(input: {
       throw new Error("nonprod_lease_not_owner");
     }
     if (isTerminalLeaseStatus(current.status)) {
+      await settleReleasedWait(tx, current, current.status);
       return {
         lease: current,
         priorStatus: current.status,
@@ -530,6 +550,7 @@ export async function releaseNonprodEnvironmentLease(input: {
         ownerProcessIdentity: null,
       },
     });
+    await settleReleasedWait(tx, lease, current.status);
     const reconciliation = await reconcileEnvironmentInTransaction({
       tx,
       environmentKey: current.environmentKey,
@@ -587,7 +608,9 @@ export async function releaseNonprodEnvironmentLease(input: {
     }
   }
   void emitLeaseTransitions(transitions);
-  await afterNonprodLeaseRelease({ db: db as never, lease: result.lease, priorStatus, now });
+  await publishNonprodCapacityForHead({
+    db: db as never, environmentKey: result.lease.environmentKey, causeLeaseId: result.lease.leaseId, now,
+  });
   return result.lease;
 }
 

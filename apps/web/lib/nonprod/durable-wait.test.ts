@@ -161,7 +161,7 @@ describe("durable nonproduction lease wait", () => {
     });
 
     expect(second.taskRunId).toBe(first.taskRunId);
-    expect(mock.taskRun.upsert).toHaveBeenCalledTimes(2);
+    expect(mock.taskRun.upsert).toHaveBeenCalledTimes(1);
     expect(mock.nonProductionEnvironmentLease.updateMany).toHaveBeenLastCalledWith({
       where: { id: "lease-row-1", status: "queued" },
       data: { taskRunId: first.taskRunId, expiresAt: new Date("2026-08-30T20:00:00.000Z") },
@@ -414,7 +414,9 @@ describe("durable nonproduction lease wait", () => {
     });
 
     expect(mock.taskRun.upsert).toHaveBeenCalledTimes(1);
-    expect(mock.taskRun.update).toHaveBeenCalledOnce();
+    expect(mock.taskRun.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ status: "completed" }),
+    }));
     expect(mock.task()).toMatchObject({ status: "completed", completedAt: NOW });
     expect(parseNonprodLeaseWait(mock.task()?.progressPayload)).toMatchObject({ state: "admitted" });
   });
@@ -446,6 +448,13 @@ it("keeps a caller's legacy Task separate from its ordinary durable preview wait
   const mock = { taskRun: {
     findUnique: vi.fn(async ({ where }: any) => tasks.get(where.taskRunId) ?? null),
     findMany: vi.fn(async () => []), update: vi.fn(),
+    updateMany: vi.fn(async ({ where, data }: any) => {
+      const task = tasks.get(where.taskRunId);
+      if (!task || task.status !== where.status
+        || JSON.stringify(task.progressPayload) !== JSON.stringify(where.progressPayload.equals)) return { count: 0 };
+      tasks.set(where.taskRunId, { ...task, ...data });
+      return { count: 1 };
+    }),
     upsert: vi.fn(async ({ where, create, update }: any) => {
       const next = tasks.has(where.taskRunId) ? { ...tasks.get(where.taskRunId), ...update } : create;
       tasks.set(where.taskRunId, next); return next;
@@ -457,4 +466,67 @@ it("keeps a caller's legacy Task separate from its ordinary durable preview wait
   expect(result.taskRunId).not.toBe(legacy.taskRunId);
   expect(tasks.get(legacy.taskRunId)).toBe(legacy);
   expect(tasks.get(result.taskRunId).progressPayload.nonprodPreviewOwner).toBeUndefined();
+});
+
+describe("preview database proof and durable wait interleavings", () => {
+  const proofKey = "nonprodPreviewDatabaseAttestation";
+  const proof = { schemaVersion: 1, systemIdentifier: "7391584902012345678" };
+  const replacement = { ...proof, systemIdentifier: "7391584902012345679" };
+  const deadline = new Date(NOW.getTime() + 600_000);
+
+  async function raceFixture(operation: "checkpoint" | "settle") {
+    const mock = db();
+    const checkpoint = () => checkpointNonprodLeaseWait({
+      db: mock, userId: "user-1", lease: lease(), queuePosition: 1, now: NOW, waitDeadlineAt: deadline,
+    });
+    const { taskRunId } = await checkpoint();
+    const settle = () => settleNonprodLeaseWait({
+      db: mock, taskRunId, leaseId: "NPEL-WAIT-1", state: "terminal", now: NOW,
+    });
+    return { mock, taskRunId, write: operation === "checkpoint" ? checkpoint : settle };
+  }
+
+  for (const operation of ["checkpoint", "settle"] as const) {
+    it(`${operation} retries a stale wait writer without losing the newly published proof`, async () => {
+      const { mock, write } = await raceFixture(operation);
+      const stale = structuredClone(mock.task());
+      mock.taskRun.findUnique.mockImplementationOnce(async () => {
+        await mock.taskRun.update({ data: { progressPayload: { ...stale.progressPayload, [proofKey]: proof } } });
+        return stale;
+      });
+      await write();
+      expect(mock.taskRun.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+        where: expect.objectContaining({ status: stale.status, progressPayload: { equals: stale.progressPayload } }),
+      }));
+      expect(mock.task().progressPayload[proofKey]).toEqual(proof);
+    });
+
+    it.each([undefined, replacement])(`${operation} cannot restore stale proof after removal or replacement (%j)`, async (current) => {
+      const { mock, write } = await raceFixture(operation);
+      await mock.taskRun.update({ data: { progressPayload: { ...mock.task().progressPayload, [proofKey]: proof } } });
+      const stale = structuredClone(mock.task());
+      mock.taskRun.findUnique.mockImplementationOnce(async () => {
+        const latest = { ...stale.progressPayload };
+        if (current) latest[proofKey] = current;
+        else delete latest[proofKey];
+        await mock.taskRun.update({ data: { progressPayload: latest } });
+        return stale;
+      });
+      await write();
+      expect(mock.task().progressPayload[proofKey]).toEqual(current);
+    });
+  }
+
+  it("rejects release settlement after bounded CAS misses with the release-specific retry error", async () => {
+    const { mock, taskRunId } = await raceFixture("settle");
+    mock.taskRun.updateMany.mockClear();
+    mock.taskRun.updateMany.mockResolvedValue({ count: 0 });
+    const release = () => afterNonprodLeaseRelease({
+      db: mock, lease: { ...lease(), taskRunId, status: "cancelled" }, priorStatus: "queued", now: NOW,
+    });
+    const before = structuredClone(mock.task());
+    await expect(release()).rejects.toThrow("nonprod_release_wait_settlement_contended");
+    expect(mock.taskRun.updateMany).toHaveBeenCalledTimes(3);
+    expect(mock.task()).toEqual(before);
+  });
 });
