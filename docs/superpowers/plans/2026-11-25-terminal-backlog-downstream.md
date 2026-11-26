@@ -33,17 +33,19 @@ Measured 2026-11-25:
   |---|---|---|
   | WorkItem | live → `completed`, `completedAt` set | live → `cancelled`, `completedAt` set |
   | ImprovementSignal | `open` → `resolved` | `open` → `dismissed` |
-  | ImprovementProposal | `prioritized` or `in_progress` → `implemented` | `prioritized` or `in_progress` → `rejected`, with a reason naming the item |
+  | ImprovementProposal | `prioritized` or `in_progress` → `implemented` | Unchanged. Route to the Manager for disposition. |
 
   The proposal lifecycle is the one in `2026-03-16-platform-feedback-loop-design.md`. `verifiedAt` stays reserved for the recurrence check (BI-D33412EA).
 - **Queue telemetry.** After a committed WorkItem closure, attempt a `finished` or `cancelled` transition under `cwq:<queueId>` with its cycle time. Report telemetry successes separately from the ledgered closure count.
 - **Schedule.** `ops/terminal-backlog-downstream-reconcile` runs at minutes 4, 19, 34 and 49 of each hour. It is catalogued as editable and honours the enabled gate and quiescence.
 
-## Revision 4 (coordinator rulings on Revision 3, 510574082650)
+## Revision 5 (independent review of b886d32f106c)
 
 The independent review of 581c8c2e and the design reviews of Revisions 2 and 3 all returned REQUEST_CHANGES. Revisions 2 and 3 are superseded and kept only in git history (84733f08, 510574082650).
 
-Changes from Revision 3:
+Revision 5 keeps Revision 4's batch and opt-in boundaries. It preserves Manager-only proposal rejection, requires stable signal cutoffs, and makes disabled-state recovery explicit. It removes verification claims from the earlier draft. Revision 4 remains in Git history.
+
+Safeguards retained from Revision 4:
 - Automatic signal reopen is dropped; recurred signals are surfaced to people (R5).
 - Quiescence admission fails closed (R2).
 - The retention window is explicit (R3).
@@ -57,7 +59,7 @@ Changes from Revision 3:
 |---|---|
 | **Parent** | The BacklogItem. |
 | **Child** | A WorkItem, ImprovementSignal or ImprovementProposal linked to the parent. |
-| **Finish cutoff** | The parent's `coalesce("completedAt", "updatedAt")`, read under the parent lock and stored on every ledger row. |
+| **Signal finish cutoff** | The parent's `completedAt`, read under the parent lock and retained for each closed signal. No signal closes if that timestamp is absent. Never use the parent's mutable `updatedAt` to admit a signal. |
 | **Run key** | `TBD-<yyyymmddhhmm>`, taken from the scheduled cron slot (UTC) the invocation was fired for. It is stable across step retries and across a duplicate firing of the same slot. |
 | **Batch key** | `<run key>:<batch name>`, one per batch in a run. |
 
@@ -69,14 +71,14 @@ Every batch is one interactive transaction, with `SET LOCAL lock_timeout = '5s'`
 2. **Select candidates.** Run a non-locking select of up to 250 child ids that satisfy every eligibility condition (R5), ordered by `createdAt, id`. Children are selected rather than parents, so the cap counts real targets and a parent with no eligible child takes no slot.
 3. **Lock parents.** Lock those candidates' parents `FOR SHARE`, ordered by `id`, and keep only those still `done` or `retired`. READ COMMITTED re-evaluates the predicate after any lock wait, and a parent reopen that starts after this point waits for the batch to commit.
 4. **Lock children.** Lock the children `FOR UPDATE`, ordered by `id`, re-checking the full typed link and every eligibility condition against the locked parents.
-   - **WorkItem link:** `sourceType = 'backlog-item'` and `sourceId` equal to the parent's `itemId` or `id`.
+   - **WorkItem link:** `sourceType = 'backlog-item'` and `sourceId` matches exactly one parent across both namespaces. An ID that matches different parents by `itemId` and `id` is ambiguous even if only one parent is terminal. Skip it and report the count. Recheck uniqueness of the match at write time.
    - **Signal and proposal link:** `backlogItemId` equal to the parent's `itemId`.
 
    The before-image is captured from these locked rows.
 5. **Admission (R2).** Read the opt-in and quiescence rows `FOR SHARE`.
 6. **Update and record.** Run the UPDATE, whose final WHERE repeats the full link and eligibility predicate. Insert one ledger row per updated child, and the batch receipt, in the same transaction.
 
-**The backfill follows the same rules.** The `completedAt` backfill takes its timestamp from the parent, so it locks the parent `FOR SHARE` and the child `FOR UPDATE` and re-checks the typed link the same way. A child relinked while the batch waited fails the recheck and is skipped. A child with no parent link (sourceType other than `backlog-item`) takes its own `updatedAt`, under the child lock only.
+**The backfill follows the same rules.** For a backlog-linked child, use the locked parent's `completedAt`. Skip the backfill when the close time cannot be established. A child relinked while the batch waited fails the typed-link recheck and is skipped. A child with no parent link (sourceType other than `backlog-item`) takes its own `updatedAt`, under the child lock only. This timestamp is not a signal eligibility cutoff.
 
 **Drift after commit is reported for parent reopens only.**
 - Each run's result lists active ledger entries whose parent is no longer `done` or `retired`, with record ids, so an operator can revert them (R3). They are not reopened automatically, since that would race with whichever writer reopened the parent.
@@ -117,7 +119,7 @@ The boundary is **one admitted batch**: a disable or quiescence change issued wh
 | `recordType`, `recordId` | The child |
 | `backlogItemId` | The parent's row id |
 | `link` | JSON: the typed link as written |
-| `finishCutoff` | The stored cutoff |
+| `finishCutoff` | The stable parent cutoff when present. It is required for a signal closure. |
 | `preImage` | JSON: every column the write changed, before the write |
 | `postImage` | JSON: the full expected after-image, link columns included |
 | `writeGeneration` | The child's `updatedAt` as set by this write (transaction timestamp) |
@@ -130,6 +132,7 @@ The boundary is **one admitted batch**: a disable or quiescence change issued wh
 **Claiming.** Ledger rows are inserted in the same transaction as the child UPDATE, fed from `UPDATE … RETURNING`. The record and the change commit together or not at all.
 
 **`revertTerminalDownstreamRun(runKey)`:**
+- This is a separately authorized `manage_platform` operator action, not a cron execution. The forward job must already be disabled and the transaction must observe readable normal quiescence. Missing or unreadable control state refuses the revert. Hold the relevant control rows through the transaction so re-enabling the job waits.
 - For each entry, it locks the ledger row `FOR UPDATE`, then the child `FOR UPDATE`.
 - If the entry is active (`consumedAt IS NULL`) and the child is still owned, it restores `preImage` and consumes the entry as `reverted`.
 - If the child no longer matches, it consumes the entry as `superseded` and leaves the child alone.
@@ -158,11 +161,11 @@ This guarantee holds **only while the ledger entry exists**. Once an entry is pu
 
 **Rollback procedure** (also in the data-impact manifest). It covers runs whose ledger entries are still within the 365-day window. Older runs cannot be reverted.
 1. Disable the job on the scheduled-jobs surface, which removes the opt-in.
-2. Call `revertTerminalDownstreamRun` for each run key in the window. The entry point is the job's revert action, available only to an operator with `manage_platform`.
-3. Read the skipped list and resolve those entries by hand.
-4. Schema rollback: drop the two tables once the job is disabled. Child rows are unaffected.
+2. Confirm disablement is effective before using the authorized revert action for each run in the window. A quiescence pause or unreadable state holds the revert. Do not re-enable the forward job to work around that hold.
+3. Inspect the ledger and the skipped entries. Resolve superseded entries through normal ownership routes. Disabling the job alone does not revert any closure. Entries past their retention window cannot be recovered by this job.
+4. Keep both tables while any rollback or reconciliation is owed. Removing them is a separate forward migration that requires a reviewed disposition for retained history. This procedure never drops tables during incident recovery.
 
-**Telemetry.** Queue transitions stay best-effort after commit and are not used for rollback. The summary's counts come from ledger inserts, and `transitionsRecorded` counts only successful inserts.
+**Telemetry.** Queue transitions stay best-effort after commit and are not used for rollback. A crash between commit and emit can leave missing telemetry, and a revert does not erase telemetry already recorded. The ledger, not queue throughput, is the audit source. Report committed closures and observed telemetry successes separately. Any difference is a telemetry gap, not a failed closure or evidence of a duplicate. Replay does not emit transitions again.
 
 ### R4. Quiescence and opt-in are part of admission
 
@@ -184,6 +187,7 @@ Both are read inside the batch transaction under a row lock (R2), so a retried s
 **Signal close:**
 - `status = 'open'`;
 - `backlogItemId` names a `done` or `retired` parent;
+- the locked parent has a stable `completedAt`. Missing cutoffs are triage cases, not eligible signals;
 - `lastSeenAt <= finishCutoff`;
 - the no-re-close rule allows it.
 
@@ -191,19 +195,19 @@ A signal seen after its parent finished therefore stays open.
 
 **Proposal close:**
 - `status IN ('prioritized','in_progress')`;
-- the parent is `done` (→ `implemented`) or `retired` (→ `rejected`, with a reason naming the item);
+- the parent is `done` (→ `implemented`). This is the developer/agent lifecycle transition recorded in the feedback-loop spec;
 - the no-re-close rule allows it.
 
 **Recurred signals are surfaced, never reopened (v1).** A signal the job closed whose current `lastSeenAt` is later than its entry's stored `finishCutoff` has recurred. This includes an occurrence between the finish and the closure, and an upsert that waited on the batch's child lock. The job never changes such a signal; it sets the entry's `surfacedAt` and adds the signal to the human ask below. Automatic reopen needs a closure-generation column on the child tables to prove ownership against a manual reopen and re-close, so it is filed as a follow-up, BI-949B6B74.
 
 **Proposals before prioritization:** a `proposed` or `reviewed` proposal with a backlink to a finished parent is never changed, and each run counts these.
 
+**Proposals linked to retired items:** never reject or otherwise change the proposal in this job. Route prioritized or in-progress proposals linked to a retired item to the authorized Manager with the linked item and reason for triage. The Manager remains responsible for rejection through the existing workflow.
+
 **The human ask.** Persistent cases go to people through the existing `routeToHuman`:
-- **What counts as persistent:**
-  - a pre-prioritization proposal whose parent finished more than 7 days ago;
-  - a recurred signal.
+- **What is routed:** a pre-prioritization proposal with a parent known to have been terminal for more than seven days, a recurred signal, an open signal with no stable finish cutoff, or a prioritized or in-progress proposal linked to a retired item. When the age cannot be established, count the pre-prioritization case without calling it persistent. Route the existing rolling ask to the improvement triage owner, with Manager action explicitly identified for proposal rejection.
 - **One open ask at a time,** under the stable dedupe key `terminal-downstream:needs-triage`. While it is open, each run refreshes its rolling list: the first 50 record ids, the total count, and a query reference that reproduces the full set.
-- **After it closes:** if persistent cases older than 7 days remain, the next run raises a new ask.
+- **After it closes:** if an unresolved eligible case remains, the next run raises a new ask under the same dedupe key.
 - **No work item** is created on any pass.
 
 **A new parent lifecycle.** A parent that reopens and finishes again gets a later `completedAt`, and that later cutoff lets its children close again.
@@ -254,12 +258,16 @@ All tests run on real Postgres through the repo's `*.postgres.test.ts` harness, 
 - partial failure (a later batch throws after an earlier one committed) and its retry;
 - a commit-before-acknowledgement replay, proving repeated replays never exceed 1,000 committed rows per run;
 - the rolling ask: one open ask, refreshed list, and a new ask only after closure.
+- an ambiguous WorkItem ID where the other match is not terminal;
+- a retired parent without a stable finish cutoff, even after later edits;
+- a retired parent's prioritized proposal remains unchanged and reaches Manager triage;
+- revert works with the job disabled and refuses unreadable or non-normal quiescence.
 
 ## Acceptance
 
-- AC-1: For each eligible WorkItem selected in a bounded batch, match the terminal backlog item by semantic or row ID, close it as completed or cancelled, and set completedAt. Backfill missing completion timestamps only after rechecking the typed link and eligibility.
+- AC-1: For each eligible WorkItem selected in a bounded batch, match exactly one terminal backlog item by semantic or row ID, close it as completed or cancelled, and set completedAt. Skip ambiguous matches. Backfill missing completion timestamps only after rechecking the typed link and eligibility.
 - AC-2: Record each committed child change in the closure ledger. Attempt the matching finished or cancelled WorkItem telemetry after commit and report successful transitions separately from ledgered closures. Receipt replay must not repeat the mutation or emit duplicate telemetry.
-- AC-3: Resolve or dismiss eligible open signals only if lastSeenAt is no later than the locked parent finish cutoff. Implement or reject only prioritized or in-progress proposals. Surface recurrent signals and persistent pre-prioritization proposals for human triage without changing them.
+- AC-3: Resolve or dismiss eligible open signals only when a stable parent completedAt exists and lastSeenAt is no later than that cutoff. For done parents, mark only prioritized or in-progress proposals implemented. Surface retired-parent proposals to the Manager without rejecting them. Route recurrences, missing signal cutoffs, and persistent pre-prioritization proposals for triage without changing them.
 - AC-4: Each scheduled slot commits at most four replay-safe batches of 250 changes, at most 500 of them WorkItems. Lock and recheck eligibility before writing. Revert within the 365-day ledger window only while the job still owns the row.
 - AC-5: The cron is disabled by default and never writes without explicit operator opt-in and readable normal quiescence. In shared nonproduction, verify locking, opt-in, replay and revert against Postgres. After a separately authorized production enablement, verify the first bounded run and confirm the closure scorecard reflects eligible signal and proposal closures as the backlog drains.
 
@@ -269,20 +277,14 @@ All tests run on real Postgres through the repo's `*.postgres.test.ts` harness, 
 - Parent: `BI-F4A9BBF4`
 - Rationale: The ledger, the opt-in gate, the batch store, the cron and the revert are one safety envelope for a bulk mutator. None of them can ship alone without either running unguarded or shipping dead code, so the slice is delivered and reviewed as one change.
 - Dependencies: none (the follow-up BI-949B6B74 depends on this slice, not the reverse)
-- Receipt: `cmwxhwu9f0wz80ese134jzhj2`
-
-The receipt is bound to the plan at `eee1b75ad4f4`.
+- Receipt: blocked-by: the immutable plan must be pushed and synced to WC-C2A48953 before DPF can issue the receipt. Read the current head-bound receipt in that Workroom and PR #7237. A receipt in the bytes it binds would change the artifact identity.
 
 ## Verification
 
-- **Unit tests:** transition mapping, one transition per closed row, idempotent empty pass, `more` flag, clock-skew guard.
-- **Real SQL:** all four statements ran against the dev database copy in one transaction that was rolled back. Result: `UPDATE 813` WorkItems, `UPDATE 231` completedAt backfills, `UPDATE 95` signals, `UPDATE 65` proposals.
+- **Planned implementation checks:** test transition mapping, replay without duplicate telemetry, the empty pass and the Postgres cases in R7. No test of the revised worker or revised SQL is claimed by this documentation PR.
 - **After separately authorized production enablement:** verify the first bounded run. Use the closure scorecard (BI-97C56E20) to see whether eligible signal and proposal closures are reflected as the backlog drains. Compare ledgered WorkItem closures against successfully recorded queue transitions.
 
 ## Not in this slice
 
 - **Automatic reopen of recurred signals.** It needs a closure-generation column on the child tables; filed as BI-949B6B74 (R5).
-- **Anchor WorkItems of ad-hoc capsules** (below).
-
-
-Anchor WorkItems for ad-hoc capsules (sourceType `work-capsule`) whose room is terminal, about 45 rows. Their terminal source is the room, not a backlog item. That belongs with the merged-room closure in BI-D5830561.
+- **Anchor WorkItems of ad-hoc capsules.** Their terminal source is the room, not a backlog item. They belong with merged-room closure in BI-D5830561.

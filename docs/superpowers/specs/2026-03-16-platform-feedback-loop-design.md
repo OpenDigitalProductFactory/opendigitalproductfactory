@@ -128,13 +128,13 @@ proposed → reviewed → prioritized → in_progress → implemented → verifi
 | **verified** | Original submitter | Submitter confirms the improvement addresses their friction |
 | **rejected** | Manager | Proposal declined with reason |
 
-**Closure from the linked backlog item (BI-F4A9BBF4).** A finished backlog item closes the records that point at it. The reconcile is opt-in per install, and its rules are in `docs/superpowers/plans/2026-11-25-terminal-backlog-downstream.md` (Revision 4, R5).
+**Closure from the linked backlog item (BI-F4A9BBF4).** The per-install opt-in reconcile applies the eligibility and authority rules in [the terminal-backlog plan](../plans/2026-11-25-terminal-backlog-downstream.md#r5-eligibility-and-what-goes-to-people).
 
 - **Proposals.** A proposal follows its item only once it reached `prioritized`, the stage that creates the item.
   - Item done: `prioritized` or `in_progress` → `implemented`.
-  - Item retired: `prioritized` or `in_progress` → `rejected`.
+  - Item retired: the reconcile leaves the proposal unchanged and routes eligible cases to the Manager. Only the Manager can reject a proposal.
   - A `proposed` or `reviewed` proposal with a backlink is never changed; persistent cases are raised once to people for triage.
-- **Signals.** A signal closes with its item only if it was last seen no later than the item finished. A signal the job closed that recurs is raised to people for triage, never reopened automatically (automatic reopen is BI-949B6B74). `verified` stays the submitter's confirmation and is never set by the reconcile.
+- **Signals.** A signal closes with its item only when the item has a stable completion timestamp and the signal was last seen no later than that timestamp. A recurred signal is routed for triage, never reopened automatically (automatic reopen is BI-949B6B74). `verified` stays the submitter's confirmation and is never set by the reconcile.
 
 After verification, if the change involved code:
 - **proposed_for_sharing** — platform suggests contributing to open source
