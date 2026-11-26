@@ -4,7 +4,7 @@ status: active
 
 # A finished backlog item closes what points at it
 
-**Backlog item:** `BI-F4A9BBF4`. **Workroom:** WC-B5FD7949. **Program:** [closure program slice 2](2026-11-25-closure-program.md) (EP-C00F61F4, BI-97C56E20).
+**Backlog item:** `BI-F4A9BBF4`. **Program:** [closure program slice 2](2026-11-25-closure-program.md) (EP-C00F61F4, BI-97C56E20).
 
 ## Problem
 
@@ -167,6 +167,15 @@ This guarantee holds **only while the ledger entry exists**. Once an entry is pu
 
 **Telemetry.** Queue transitions stay best-effort after commit and are not used for rollback. A crash between commit and emit can leave missing telemetry, and a revert does not erase telemetry already recorded. The ledger, not queue throughput, is the audit source. Report committed closures and observed telemetry successes separately. Any difference is a telemetry gap, not a failed closure or evidence of a duplicate. Replay does not emit transitions again.
 
+**R3 amendment — preserve the committed ledger migration**
+
+This is a plan-only correction to Revision 5. The five acceptance statements below, scheduler admission, child writes, typed eligibility, receipt keys, ledger retention (365 days), batch receipt retention (90 days), and disabled-state revert ownership do not change. The correction is not independently shippable.
+
+- Keep the committed `packages/db/prisma/migrations/20261126030000_terminal_downstream_ledger/migration.sql` byte-for-byte unchanged. Its migration checksum must not change.
+- Add `packages/db/prisma/migrations/20261126030100_terminal_downstream_retained_references/migration.sql` after it. In one transaction rename `recordId` to `recordRef` and `backlogItemId` to `parentBacklogRef` on `TerminalDownstreamClosure`, then rename `TerminalDownstreamClosure_recordType_recordId_consumedAt_idx` to `TerminalDownstreamClosure_recordType_recordRef_consumedAt_idx` and `TerminalDownstreamClosure_backlogItemId_consumedAt_idx` to `TerminalDownstreamClosure_parentBacklogRef_consumedAt_idx`. Preserve the existing index keys and nullability. Child references are polymorphic with `recordType`; parent references are historical and may be null on an unlinked backfill. Do not add FKs or change delete behavior.
+- Add the named `TerminalDownstreamClosure_recordType_closed_set` CHECK with exactly `work-item`, `signal`, and `proposal`. Apply a validated CHECK in the correction. Before signing the ordinary migration-safety `data-safe` attestation, verify that the original migration and its writers have not shipped and that managed installs apply both files before the new writer can run. Cite that proof in the attestation. Do not use `NOT VALID` to avoid the check, or rewrite, delete or silently tolerate invalid values. If the source or release history cannot establish that proof, stop for the data steward's decision on safe forward recovery.
+- Keep the staged schema and its call sites tied to the renamed columns. Update `changes/terminal-downstream-ledger.data-impact.json` to describe the ordered create-and-correct sequence, historical references, zero row rewrites, and forward-only recovery. Preserve the manifest's retention and rollback dispositions. Regenerate `docs/architecture/architecture-counts.generated.md` with the canonical generator.
+
 ### R4. Quiescence and opt-in are part of admission
 
 Both are read inside the batch transaction under a row lock (R2), so a retried step re-reads them.
@@ -263,6 +272,12 @@ All tests run on real Postgres through the repo's `*.postgres.test.ts` harness, 
 - a retired parent's prioritized proposal remains unchanged and reaches Manager triage;
 - revert works with the job disabled and refuses unreadable or non-normal quiescence.
 
+**R7 amendment — exact ordered migration pair**
+
+The original R7 harness in `apps/web/lib/queue/bridges/terminal-backlog-downstream.postgres.test.ts` and the supplemental harness in `apps/web/lib/queue/bridges/terminal-backlog-downstream-triage.postgres.test.ts` both apply the two exact repository migration files in order, only to their own disposable fixture schemas. Bind the committed original blob and scope the second migration to the two column renames, the two corresponding index renames, and the named CHECK plus validation. Reject swapped, missing, or unexpected SQL using source-local fixtures. Preserve the 21 original named runtime cases and 2 supplemental cases and both schema-absence assertions. The database-specific constraint probe stays in the existing fixture test.
+
+Source-only exit criteria: exact affected synthetic suites with the DB environment variables empty, web production/test typecheck, migration immutability, migration safety, schema regression, closed-set, FK index coverage, connector lifecycle, module size, data-impact, and generated-artifact freshness checks. Confirm the original migration blob and the substrate baseline are unchanged. The canonical Postgres gate, migration execution, and 23 real cases remain due and must not be reported as passed.
+
 ## Acceptance
 
 - AC-1: For each eligible WorkItem selected in a bounded batch, match exactly one terminal backlog item by semantic or row ID, close it as completed or cancelled, and set completedAt. Skip ambiguous matches. Backfill missing completion timestamps only after rechecking the typed link and eligibility.
@@ -277,7 +292,7 @@ All tests run on real Postgres through the repo's `*.postgres.test.ts` harness, 
 - Parent: `BI-F4A9BBF4`
 - Rationale: The ledger, the opt-in gate, the batch store, the cron and the revert are one safety envelope for a bulk mutator. None of them can ship alone without either running unguarded or shipping dead code, so the slice is delivered and reviewed as one change.
 - Dependencies: none (the follow-up BI-949B6B74 depends on this slice, not the reverse)
-- Receipt: blocked-by: the immutable plan must be pushed and synced to WC-C2A48953 before DPF can issue the receipt. Read the current head-bound receipt in that Workroom and PR #7237. A receipt in the bytes it binds would change the artifact identity.
+- Coverage: the forward correction stays within the same atomic deliverable and adds no dependency. Record current coverage for the immutable amended plan before implementing it. The model-budget disposition is separate.
 
 ## Verification
 
