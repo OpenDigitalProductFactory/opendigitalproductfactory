@@ -53,6 +53,29 @@ DPF2's pin and direct calls were checked on local `7f8bfe778ed0054d6ac2859e273c5
 
 The two archives' emitted `dist` trees, including declarations, are byte-identical. Candidate.3 adds a `require` export condition targeting the same synchronous ESM, not a new scoring algorithm. Candidate.2 archive SHA-256 is `cf79f4ee40c72706439af9e51155b2a12c9b14c5029a6253d14f8a6848a87af9`. Candidate.3 is `24fdf47bc9d43bc3a47b79843a1e35eb0e7e640b88d55f83443678267c241837`. Keep DPF on candidate.3 and target its exact artifact for DPF2, subject to clean receiving loader/declaration, lock and GPP closure checks. Do not downgrade DPF to make the pins match, override an already qualified GPP dependency or describe the dual pin as converged. Coordinate the exact edge with component qualification BI-ABB5587B and DPF receiving BI-2D3F986C. This design claims neither lane and changes no manifest or lock.
 
+## 5. Wave 2 — prove the caller and relational ledger together
+
+[Convergence §5.3 and §2.2.1](2026-11-22-dpf-to-dpf2-convergence-export-and-cutover-readiness.md) govern this synthetic proof. BI-6C35FB77 owns it. BI-428A53FB and BI-E91D988C are closed prior art. BI-ABB5587B and BI-2D3F986C remain dependencies only. See the [bounded proof plan](../plans/2026-11-26-wwmd-wave-2-synthetic-proof.md).
+
+### Source baseline
+
+At DPF `4e7b9d86`, `governedExecuteTool → enforceTakPreexecution → resolveMonitorPermit/gateDecisionRef → DecisionInteraction` carries shadow TAK WWWD × WSID alignment. It is not WWMD authority. Authoritative WWMD uses `recordKernelConsultInteraction`, suppresses verdict and autonomy on incomplete evidence, and relies on the policy authority projector to require a current sealed affirmative judgment.
+
+At DPF2 `8b3afa0f`, the receiving coordinator verified that `permit-projection.ts:112` emits a synthetic `core-permit-projection/1` with its own admission ID and no DPF decision locator. Core `harness-session.ts:550–579` accepts a generic nested projection after envelope checks. The independent executor verifier in `protocol.mjs:194+` checks signature, inner format and identity, session and execution constraints without checking WWMD authority. Both `installed-guest-receiver.mjs:54` and `guest-bridge.mjs:948` use that verifier. Scorer output identity across scoped-judgment candidates .2 and .3 proves neither receiver admission nor ledger parity.
+
+### Proof contract
+
+**OBJ-WAVE2:** Demonstrate that the exact receiver admission relies on the original DPF WWMD decision and that the same relational ledger remains continuous through an isolated writer transfer and rollback.
+
+| Acceptance ID | Objective IDs | Statement |
+| --- | --- | --- |
+| AC-W2-1 | OBJ-WAVE2 | An eligible, sealed and scoped DPF WWMD yes yields a by-value reference signed into the exact receiver admission. It resolves to the original DecisionInteraction ID, exact profile version and seal. The relational verdict and ledger remain authoritative. |
+| AC-W2-2 | OBJ-WAVE2 | Core and executor run the same versioned positive and negative vectors. Trusted admission, profile or receiver policy selects WWMD-required mode, never the received envelope or field presence. Unavailable or late retrieval, stale or missing evidence, missing audit or seal, and unprovable lineage prevent issuance and effects. Even with a valid envelope signature, missing, legacy, stale, mismatched or unauthorized bindings hold before effects, without fallback to /1 or substitution from WWWD company or WSID professional or jurisdiction judgments. Preserve independent WWWD and WSID and separately scoped legacy fixtures. |
+| AC-W2-3 | OBJ-WAVE2 | Isolated synthetic relational restore preserves exact IDs, FKs, chainId, prevHash, chainEntryHash and sealedAt. Intentional nulls stay null without resealing or synthesizing links. Fence the predecessor, then accept exactly one successor append extending the restored head. |
+| AC-W2-4 | OBJ-WAVE2 | Rollback fences the successor and reconciles its accepted append before the predecessor resumes writing. If reconciliation fails, keep predecessor writes fenced. |
+
+This design defines semantics and evidence, not byte-level wire encoding or versioning. The DPF decision owner and DPF2 receiving design owner must jointly choose the signed representation, version and compatibility rules and agree the shared vector contract before implementation admission. No production data or live authority handoff is part of this proof.
+
 ## Research & benchmarking
 
 - [OPA decision logs](https://www.openpolicyagent.org/docs/management-decision-logs) separate evaluation from recording and carry stable decision IDs and policy bundle metadata. Adopt the separation and provenance, not the external log sink as ledger of record. DPF decisions need exact relational profile versions, outcomes and seals.
