@@ -73,8 +73,9 @@ export function registerQueueTransitionTests({
     });
     const green = [{ name: "Failure Readiness", status: "COMPLETED", conclusion: "SUCCESS" }];
     mocks.observe.mockResolvedValue({ ...observation(green, "BEHIND"), headSha: from, baseSha: base });
-    mocks.fetch.mockImplementation(async (_url, init) => init?.method === "PUT" ? { status: 202 }
-      : { ok: true, json: async () => ({ data: { enablePullRequestAutoMerge: { pullRequest: { number: 9 } } } }) });
+    mocks.fetch.mockImplementation(async (_url, init) => init?.method === "PUT"
+      ? new Response(null, { status: 202 })
+      : Response.json({ data: { enablePullRequestAutoMerge: { pullRequest: { number: 9 } } } }));
     await runBuildPrDeliveryReconcile();
     expect(workspaceState).toMatchObject({ prDelivery: { status: "updating",
       pendingQueueUpdate: { fromHeadSha: from, baseSha: base } } });
