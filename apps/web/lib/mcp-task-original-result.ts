@@ -5,7 +5,8 @@ import { canonicalJson } from "@dpf/integration-shared/canonical-json";
 import { deterministicExternalTaskRunId, parseResourceWaitProjection } from "./mcp-task-capacity-contract";
 import { reconstructPersistedRemoteTask, type PersistedRemoteTask } from "./mcp-task-persisted-request";
 import { parseInitiativeReviewBinding, validateInitiativeReviewAuthorityScope, type InitiativeReviewBinding } from "./mcp-task-review-contract";
-import { parseTerminalWriterWait } from "./mcp-task-replay-projection";
+import { TERMINAL_WRITER_REJECTED_WAIT_REASON, terminalWriterRejectionStructuredContent } from "./mcp-task-terminal-writer-escalation";
+import { parseTerminalWriterWait, projectRemoteTaskReplay } from "./mcp-task-replay-projection";
 import { loadInitiativeReviewOutcome } from "./mcp-task-review-outcome";
 import { sanitizeNativeCliDiagnostics } from "./shared/execution-uncertainty";
 import { isRecord } from "./shared/coerce";
@@ -33,6 +34,7 @@ export type OriginalReviewResult = {
     reviewerAgentId: string; itemId: string; gate: string; artifactRef: InitiativeReviewBinding["artifactRef"]; workroomId: string };
   observations: Observation[];
   receipt?: { receiptId: string; gate: string; decision: string };
+  terminalWriterRejection?: ReturnType<typeof terminalWriterRejectionStructuredContent>;
   missingProof: string[];
   proofInventory?: OriginalProofInventory;
   proofInventoryUnavailable?: "budget";
@@ -260,6 +262,13 @@ export async function readOriginalReviewResult(input: ReadInput): Promise<Origin
       return unknown(input.taskRunId, "original-snapshot-changed");
     }
     if (!await mayRead(input, latest, binding)) return unknown(input.taskRunId, "current-original-owner-content-access-required");
+    // Reuse the public hold classification, not the replay response payload.
+    // This is a pure projection and never submits or resumes the original task.
+    const rejection = wait?.writerRejection;
+    if (task.status === "input-required" && wait && rejection
+      && projectRemoteTaskReplay({ existing: task, requestMatches: true }).result.waitReason === TERMINAL_WRITER_REJECTED_WAIT_REASON) {
+      result.terminalWriterRejection = terminalWriterRejectionStructuredContent(wait.writerToolName, wait.attempt, rejection);
+    }
     const uniqueReceipts = new Map(receipts.map(value => [value.receiptId, value]));
     if (resolution && (uniqueReceipts.size !== 1 || !uniqueReceipts.has(String(resolution.reviewReceiptId)))) {
       result.missingProof.push("historical-receipt-binding-mismatch");
