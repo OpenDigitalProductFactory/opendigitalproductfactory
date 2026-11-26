@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from "node:util";
 import { bindFreshLeaseProvenance, checkpointQueuedLeaseProvenance } from "./environment-lease-provenance";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 const recordQueueTransition = vi.hoisted(() => vi.fn());
@@ -158,7 +159,15 @@ it("refreshes the owned preview wait under the admission transaction without tra
   let task: any = null;
   const taskRun = {
     upsert: vi.fn(async ({ create, update }: any) => (task = task ? { ...task, ...update } : create)),
-    findUnique: vi.fn(async () => task), findMany: vi.fn(async () => []), update: vi.fn(),
+    findUnique: vi.fn(async ({ where }: any) => task?.taskRunId === where.taskRunId ? structuredClone(task) : null),
+    findMany: vi.fn(async () => []),
+    update: vi.fn(),
+    updateMany: vi.fn(async ({ where, data }: any) => {
+      if (!task || task.taskRunId !== where.taskRunId || task.status !== where.status
+        || !isDeepStrictEqual(task.progressPayload, where.progressPayload.equals)) return { count: 0 };
+      task = { ...task, ...structuredClone(data) };
+      return { count: 1 };
+    }),
   };
   Object.assign(mockDb, { taskRun });
   mockDb.nonProductionEnvironmentLease.updateMany.mockResolvedValue({ count: 1 });
@@ -167,17 +176,24 @@ it("refreshes the owned preview wait under the admission transaction without tra
     waitDeadlineAt: new Date(NOW.getTime() + 60_000), now: NOW };
   const fresh = await checkpointQueuedLeaseProvenance(input);
   expect(fresh).toMatchObject({ durableWaitTaskRunId: fresh.lease.taskRunId });
-  const originalOwner = task.progressPayload.nonprodPreviewOwner;
+  const observed = structuredClone(task.progressPayload);
+  const originalOwner = observed.nonprodPreviewOwner;
   const deadline = new Date(NOW.getTime() + 120_000);
   const renewed = await checkpointQueuedLeaseProvenance({ ...input, lease: fresh.lease,
     created: false, queuePosition: 1, waitDeadlineAt: deadline });
   expect(renewed.durableWaitTaskRunId).toBe(fresh.durableWaitTaskRunId);
   expect(task.progressPayload.nonprodPreviewOwner).toEqual(originalOwner);
   expect(task.progressPayload.nonprodLeaseWait.waitDeadlineAt).toBe(deadline.toISOString());
-  expect(taskRun.upsert).toHaveBeenCalledTimes(2);
+  expect(taskRun.upsert).toHaveBeenCalledTimes(1);
+  expect(taskRun.updateMany).toHaveBeenCalledExactlyOnceWith({
+    where: { taskRunId: fresh.lease.taskRunId, status: "submitted", progressPayload: { equals: observed } },
+    data: expect.objectContaining({ status: "submitted" }),
+  });
   await expect(checkpointQueuedLeaseProvenance({ ...input, lease: fresh.lease,
     created: false, authenticatedAgentId: "AGT-EXT-CLAUDE" })).rejects.toThrow("nonprod_preview_ownership_conflict");
-  expect(taskRun.upsert).toHaveBeenCalledTimes(2);
+  expect(taskRun.upsert).toHaveBeenCalledTimes(1);
+  expect(taskRun.updateMany).toHaveBeenCalledTimes(1);
+  expect(taskRun.update).not.toHaveBeenCalled();
 });
 
 
