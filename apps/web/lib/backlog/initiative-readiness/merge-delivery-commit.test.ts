@@ -22,7 +22,7 @@ async function git(root: string, args: string[], date?: string) {
 
 let fileCounter = 0;
 async function commit(root: string, subject: string, body?: string, date?: string): Promise<string> {
-  await writeFile(path.join(root, `f${fileCounter++}.txt`), `${subject}\n`);
+  await writeFile(path.join(root, `f${fileCounter++}.ts`), `${subject}\n`);
   await git(root, ["add", "."]);
   await git(root, ["commit", "-q", "-m", subject, ...(body ? ["-m", body] : [])], date);
   return (await git(root, ["rev-parse", "HEAD"])).stdout.trim();

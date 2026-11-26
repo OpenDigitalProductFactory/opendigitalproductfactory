@@ -2,6 +2,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { parseVerifiedPullRequestObservation, type PullRequestObservation } from "@/lib/contributor-change-lanes/pull-request-observation";
 import { isDocPullRequest } from "@/lib/backlog/pr-submit-awaiting-acceptance";
+import { readImplementationChange, requiresImplementationChange } from "@/lib/backlog/implementation-change";
 import type { InitiativeReadinessDecision } from "./types";
 
 const sha = /^[a-f0-9]{40}$/i;
@@ -29,6 +30,7 @@ export async function resolveDeploymentClosureProof(args: {
   servedSha: string | null;
   observation: unknown;
   contains: (repository: string, ancestor: string, target: string) => Promise<boolean | null>;
+  implementationChange?: (repository: string, mergeCommit: string) => Promise<boolean | null>;
 }): Promise<DeploymentClosureResult> {
   const { room, run, servedSha } = args;
   const pr = parseVerifiedPullRequestObservation(args.observation);
@@ -49,6 +51,10 @@ export async function resolveDeploymentClosureProof(args: {
   if (included !== true) return { kind: "unavailable", reason: included === false
     ? "The merged pull request is not included in the deployed lineage."
     : "Deployed lineage membership could not be verified." };
+  if (requiresImplementationChange(args.workType)
+    && await args.implementationChange?.(pr.repositoryFullName, pr.mergeCommitSha) !== true) {
+    return { kind: "unavailable", reason: "No implementation change could be verified in the deployed pull request." };
+  }
   return { kind: "deployed", runId: run.runId, repositoryFullName: pr.repositoryFullName,
     pullRequestNumber: pr.number, headSha: pr.headSha, mergeCommitSha: pr.mergeCommitSha,
     targetSha: run.targetSha, servedSha, completedAt: run.completedAt.toISOString() };
@@ -125,17 +131,28 @@ async function resolveRoomDeploymentClosure(args: {
       orderBy: { fetchedAt: "desc" }, take: 20, select: { payload: true },
     });
     const observation = selectDeliveryObservation(snapshots.map(row => row.payload), room);
+    async function* repositoryRoots(repository: string) {
+      for (const root of args.roots) {
+        try {
+          // The workspace clone can be owned by another uid (BI-DC2758DE).
+          const { stdout } = await exec("git", trustedGitArgs(root, ["remote", "get-url", "origin"]), { timeout: 5000 });
+          const remote = stdout.trim().replace(/\.git$/, "");
+          if (remote === `https://github.com/${repository}` || remote === `git@github.com:${repository}`) yield root;
+        } catch { /* An unavailable checkout is not negative evidence. */ }
+      }
+    }
     return await resolveDeploymentClosureProof({ workType: args.workType, room, run, servedSha, observation,
       contains: async (repository, ancestor, target) => {
-        for (const root of args.roots) {
-          try {
-            // BI-DC2758DE: the workspace clone is owned by another uid.
-            const { stdout } = await exec("git", trustedGitArgs(root, ["remote", "get-url", "origin"]), { timeout: 5000 });
-            const remote = stdout.trim().replace(/\.git$/, "");
-            if (remote !== `https://github.com/${repository}` && remote !== `git@github.com:${repository}`) continue;
-            const answer = await isReachableFromTrunk(root, ancestor, target);
-            if (answer !== null) return answer;
-          } catch { /* An unavailable checkout is not negative evidence. */ }
+        for await (const root of repositoryRoots(repository)) {
+          const answer = await isReachableFromTrunk(root, ancestor, target);
+          if (answer !== null) return answer;
+        }
+        return null;
+      },
+      implementationChange: async (repository, mergeCommit) => {
+        for await (const root of repositoryRoots(repository)) {
+          const answer = await readImplementationChange(root, mergeCommit);
+          if (answer !== null) return answer;
         }
         return null;
       },
