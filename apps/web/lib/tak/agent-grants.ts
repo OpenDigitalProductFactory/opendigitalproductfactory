@@ -289,6 +289,7 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   claim_nonprod_environment_lease: ["work_capsule_write"],
   release_nonprod_environment_lease: ["work_capsule_write"],
   renew_nonprod_environment_lease: ["work_capsule_write"],
+  attest_preview_database: ["work_capsule_write"],
 
   // Scheduled agent tasks — recurring coordination-plane work. Reuse the
   // coordination read/write grants (scheduling is coordination work) so MCP and

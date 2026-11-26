@@ -61,6 +61,11 @@ Hyphens, not underscores. Adding a new value requires updating both `backlog.ts`
 
 `BacklogItem.workType` is the closed *work-type* axis (the WHAT) and `BacklogItem.source` is the closed *intake-origin* axis (the HOW). Together they replace the legacy mixed-axis `source` enum (which had `feature-gap`, `bug`, `tool-gap`, `skill-gap`, `doc-gap`, `user-request`, `automated-detection` in one list). `FeatureBuild.kind` is derived from `workType` at promote time (`workType==="bug" ? "fix" : "feature"`). Spec: [`docs/superpowers/specs/2026-05-30-unified-backlog-worktype-design.md`](../superpowers/specs/2026-05-30-unified-backlog-worktype-design.md).
 
+**S5 rehearsal preview attestation.** Only the explicit S5 rehearsal preview mode requests database attestation,
+and it requires the active-candidate lane to be selected beforehand. Ordinary
+Contributor previews do not request attestation. If approval arrives after the
+lease lapses or is replaced, replay refuses without publishing a proof.
+
 ## Routine maintenance and recovery authority
 
 Report the evidence and continue routine repair within current scoped operator

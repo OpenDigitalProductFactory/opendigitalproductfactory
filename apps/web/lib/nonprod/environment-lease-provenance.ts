@@ -202,3 +202,90 @@ export async function freshLeaseBirthFields(
   }
   return { leaseId, createdAt };
 }
+
+/** Publish only through the authenticated owner tool. All effects are local to
+ * the owner transaction; the host-supplied values are observations, not authority. */
+export async function attestOwnedPreviewDatabase(input: {
+  db: typeof prisma;
+  observation: import("./preview-db-attestation").PreviewDatabaseObservation;
+  authenticatedUserId: string;
+  authenticatedAgentId?: string;
+}): Promise<string> {
+  const { observation, authenticatedUserId, authenticatedAgentId } = input;
+  if (!authenticatedUserId || !authenticatedAgentId) return "preview_database_owner_unverified";
+  const { lockNonprodEnvironment } = await import("./environment-lease-lock");
+  const {
+    PREVIEW_DATABASE_PROOF_KEY, previewLogicalRuntimeId, previewProofChange,
+    readLeaseOwningSystemIdentifier, publishPreviewDatabaseAttestation,
+  } = await import("./preview-db-attestation");
+  const { QUIESCENCE_CONFIG_KEY } = await import("../self-upgrade/quiescence-contract");
+  return input.db.$transaction(async tx => {
+    await lockNonprodEnvironment(tx, "active-candidate");
+    const now = new Date();
+    const lease = await tx.nonProductionEnvironmentLease.findUnique({ where: { leaseId: observation.leaseId } });
+    if (!lease || lease.environmentKey !== "active-candidate" || lease.status !== "active"
+      || lease.expiresAt <= now || !lease.taskRunId) return "preview_database_lease_not_current";
+    const purpose = `Contributor preview (:3001) bound to ${lease.worktreePath} @ ${lease.branchName} (${observation.sourceSha})`;
+    if (!lease.worktreePath || !lease.branchName || lease.purpose !== purpose
+      || previewLogicalRuntimeId(previewBinding(lease)) !== observation.runtimeId) {
+      return "preview_database_runtime_mismatch";
+    }
+    const taskRunId = lease.taskRunId;
+    let readRefusal: string | null = null;
+    const read = async () => {
+      const task = await tx.taskRun.findUnique({ where: { taskRunId } });
+      if (!task || !isRecord(task.progressPayload)) {
+        readRefusal = "preview_database_owner_unverified";
+        return null;
+      }
+      if (task.status !== "completed" || parseNonprodLeaseWait(task.progressPayload)?.state !== "admitted") {
+        readRefusal = "preview_database_wait_not_admitted";
+        return null;
+      }
+      if (!await previewWaitMatchesOwner({ db: { taskRun: { findUnique: async () => task } }, lease,
+        userId: authenticatedUserId, agentId: authenticatedAgentId, ownerSessionId: lease.ownerSessionId })) {
+        readRefusal = "preview_database_owner_unverified";
+        return null;
+      }
+      readRefusal = null;
+      return { status: task.status, progressPayload: task.progressPayload };
+    };
+    if (!await read()) return readRefusal ?? "preview_database_owner_unverified";
+    const quiescence = await tx.platformConfig.findUnique({ where: { key: QUIESCENCE_CONFIG_KEY }, select: { value: true } });
+    if (quiescence && (!isRecord(quiescence.value) || quiescence.value.level !== "normal")) {
+      return "preview_database_portal_quiescing";
+    }
+
+    await tx.$executeRaw`SAVEPOINT preview_database_proof`;
+    let disposition = "preview_database_publication_contended";
+    try {
+      const productionSystemIdentifier = await readLeaseOwningSystemIdentifier(tx.$queryRaw.bind(tx));
+      if (!productionSystemIdentifier) return "preview_database_owner_cluster_unavailable";
+      if (productionSystemIdentifier === observation.database.systemIdentifier) return "preview_database_production_cluster";
+      const proof = { ...observation, productionSystemIdentifier };
+      await publishPreviewDatabaseAttestation({ proof, binding: observation, read,
+        compareAndSet: async (snapshot, payload) => {
+          const change = previewProofChange(snapshot.progressPayload[PREVIEW_DATABASE_PROOF_KEY], proof);
+          if (change !== "replace") {
+            disposition = change === "unchanged" ? "preview_database_unchanged" : "preview_database_observation_stale";
+            return true;
+          }
+          const result = await tx.taskRun.updateMany({
+            where: { taskRunId, status: "completed",
+              progressPayload: { equals: snapshot.progressPayload as never } },
+            data: { progressPayload: payload as never },
+          });
+          if (result.count !== 1) return false;
+          await tx.$executeRaw`RELEASE SAVEPOINT preview_database_proof`;
+          disposition = "preview_database_published";
+          return true;
+        },
+      });
+      return readRefusal ?? disposition;
+    } finally {
+      if (disposition !== "preview_database_published") {
+        await tx.$executeRaw`ROLLBACK TO SAVEPOINT preview_database_proof`;
+      }
+    }
+  });
+}

@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from "node:util";
 import { describe, expect, it, vi } from "vitest";
 import { applyNonprodCapacityEvent, checkpointNonprodLeaseWait, parseNonprodLeaseWait } from "./durable-wait";
 import { claimNonprodEnvironmentLease, reapExpiredNonprodEnvironmentLeases } from "./environment-lease";
@@ -54,7 +55,7 @@ async function fixture() {
     },
     taskRun: {
       upsert: vi.fn(async ({ create }: any) => { task = create; return task; }),
-      findUnique: vi.fn(async () => task),
+      findUnique: vi.fn(async ({ where }: any) => task?.taskRunId === where.taskRunId ? structuredClone(task) : null),
       findMany: vi.fn(async () => []),
       update: vi.fn(async ({ data }: any) => {
         if (data.status === "completed") expect(insideTransaction).toBe(true);
@@ -63,8 +64,8 @@ async function fixture() {
       }),
       updateMany: vi.fn(async ({ where, data }: any) => {
         if (data.status === "completed") expect(insideTransaction).toBe(true);
-        if (task.status !== where.status
-          || JSON.stringify(task.progressPayload) !== JSON.stringify(where.progressPayload.equals)) return { count: 0 };
+        if (!task || task.taskRunId !== where.taskRunId || task.status !== where.status
+          || !isDeepStrictEqual(task.progressPayload, where.progressPayload.equals)) return { count: 0 };
         task = { ...task, ...data };
         return { count: 1 };
       }),
@@ -76,6 +77,13 @@ async function fixture() {
   };
   const wait = await checkpointNonprodLeaseWait({ db, userId: "user-1", lease: row,
     queuePosition: 1, waitDeadlineAt: row.expiresAt, now: new Date(NOW.getTime() - 60_000) });
+  // Verify the setup CAS, then count only operations issued by the expiry scenario.
+  expect(db.taskRun.updateMany).toHaveBeenCalledExactlyOnceWith({
+    where: { taskRunId: wait.taskRunId, status: "submitted", progressPayload: { equals: task.progressPayload } },
+    data: expect.objectContaining({ status: "submitted" }),
+  });
+  await expect(db.taskRun.updateMany.mock.results[0].value).resolves.toEqual({ count: 1 });
+  db.taskRun.updateMany.mockClear();
   row.taskRunId = wait.taskRunId;
   task.progressPayload.preserved = "original evidence";
   return { db, row, task: () => task };

@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from "node:util";
 import { bindFreshLeaseProvenance } from "./environment-lease-provenance";
 import { leaseCleanupConsequenceForCall } from "./lease-cleanup-consequence";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -73,6 +74,30 @@ function db() {
   return database;
 }
 
+function taskStore() {
+  let task: Record<string, any> | null = null;
+  return {
+    task: () => task,
+    changeTask: (delta: Record<string, unknown>) => { task = { ...task, ...structuredClone(delta) }; },
+    taskRun: {
+      upsert: vi.fn(async ({ where, create, update }: any) => {
+        if ((task?.taskRunId ?? create.taskRunId) !== where.taskRunId) throw new Error("unexpected TaskRun id");
+        task = structuredClone(task ? { ...task, ...update } : create);
+        return structuredClone(task);
+      }),
+      findUnique: vi.fn(async ({ where }: any) => task?.taskRunId === where.taskRunId ? structuredClone(task) : null),
+      findMany: vi.fn(async () => []),
+      update: vi.fn(),
+      updateMany: vi.fn(async ({ where, data }: any) => {
+        if (!task || task.taskRunId !== where.taskRunId || task.status !== where.status
+          || !isDeepStrictEqual(task.progressPayload, where.progressPayload.equals)) return { count: 0 };
+        task = { ...task, ...structuredClone(data) };
+        return { count: 1 };
+      }),
+    },
+  };
+}
+
 describe("release settles the existing durable wait", () => {
   it.each([
     ["expired", "expired", "terminal"],
@@ -82,14 +107,8 @@ describe("release settles the existing durable wait", () => {
     ["active", "released", "admitted"],
   ])("projects %s as %s with wait state %s", async (status, releasedStatus, waitState) => {
     const mockDb = db();
-    let task: Record<string, any> | null = null;
-    const taskRun = {
-      upsert: vi.fn(async ({ create }: any) => { task = create; return task; }),
-      findUnique: vi.fn(async () => task),
-      findMany: vi.fn(async () => []),
-      update: vi.fn(async ({ data }: any) => { task = { ...task, ...data }; return task; }),
-    };
-    const database = { ...mockDb, taskRun };
+    const { task, changeTask, taskRun } = taskStore();
+    const database = Object.assign(mockDb, { taskRun });
     const wait = await checkpointNonprodLeaseWait({
       db: database as never,
       userId: "user-1",
@@ -99,10 +118,13 @@ describe("release settles the existing durable wait", () => {
       now: NOW,
     });
     // Reproduce a wake delivered before the lease expired: capacity is not admission.
-    await taskRun.update({ data: { progressPayload: {
+    const observed = { ...task()!.progressPayload,
       nonprodLeaseWait: { ...wait.wait, state: "capacity-available", eventConsumed: false },
-    } } });
-    taskRun.update.mockClear();
+      nonprodPreviewDatabaseAttestation: { evidence: "retained" },
+    };
+    changeTask({ progressPayload: observed });
+    expect(taskRun.updateMany).toHaveBeenCalledTimes(1); // Checkpoint CAS.
+    taskRun.updateMany.mockClear();
     const current = lease({ status, taskRunId: wait.taskRunId });
     mockDb.nonProductionEnvironmentLease.findUnique.mockResolvedValue(current);
     mockDb.nonProductionEnvironmentLease.update.mockResolvedValue({ ...current, status: releasedStatus });
@@ -114,8 +136,9 @@ describe("release settles the existing durable wait", () => {
 
     expect(result).toMatchObject({ leaseId: current.leaseId, taskRunId: wait.taskRunId, status: releasedStatus });
     expect(taskRun.upsert).toHaveBeenCalledTimes(1); // Only the original checkpoint.
-    expect(taskRun.update).toHaveBeenCalledExactlyOnceWith({
-      where: { taskRunId: wait.taskRunId },
+    expect(taskRun.update).not.toHaveBeenCalled();
+    expect(taskRun.updateMany).toHaveBeenCalledExactlyOnceWith({
+      where: { taskRunId: wait.taskRunId, status: "submitted", progressPayload: { equals: observed } },
       data: {
         status: "completed", completedAt: NOW,
         progressPayload: expect.objectContaining({
@@ -123,7 +146,9 @@ describe("release settles the existing durable wait", () => {
         }),
       },
     });
-    expect(parseNonprodLeaseWait(taskRun.update.mock.calls[0][0].data.progressPayload)).toMatchObject({
+    expect(task()).toMatchObject({ status: "completed", completedAt: NOW,
+      progressPayload: { nonprodPreviewDatabaseAttestation: { evidence: "retained" } } });
+    expect(parseNonprodLeaseWait(task()!.progressPayload)).toMatchObject({
       leaseId: current.leaseId, claimKey: current.claimKey, ownerSessionId: "session-1", state: waitState,
     });
     expect(mockDb.nonProductionEnvironmentLease.create).not.toHaveBeenCalled();
@@ -208,12 +233,7 @@ async function ownedPreview(status: "active" | "queued" = "active", environmentK
     branchName: environmentKey === "local-integration-ci" ? "fix/existing-ci" : null,
     slotKey: status === "active" ? "slot-0" : null,
     activeKey: status === "active" ? `${environmentKey}:slot-0` : null });
-  let task: any = null;
-  const taskRun = {
-    upsert: vi.fn(async ({ create, update }: any) => (task = task ? { ...task, ...update } : create)),
-    findUnique: vi.fn(async () => task), findMany: vi.fn(async () => []),
-    update: vi.fn(async ({ data }: any) => (task = { ...task, ...data })),
-  };
+  const { task, changeTask, taskRun } = taskStore();
   Object.assign(mockDb, { taskRun });
   mockDb.nonProductionEnvironmentLease.updateMany.mockResolvedValue({ count: 1 });
   current = await bindFreshLeaseProvenance({ db: mockDb as never, lease: current, created: true,
@@ -225,9 +245,9 @@ async function ownedPreview(status: "active" | "queued" = "active", environmentK
     context: { agentId: "AGT-EXT-CODEX" }, params: { leaseId: current.leaseId, ownerSessionId: "session-1" } };
   const input = { db: mockDb as never, leaseId: current.leaseId, ownerSessionId: "session-1",
     authenticatedUserId: "user-1", authenticatedAgentId: "AGT-EXT-CODEX", now: NOW };
-  return { mockDb, taskRun, call, input, task: () => task,
+  return { mockDb, taskRun, call, input, task,
     changeLease: (delta: Record<string, unknown>) => { current = { ...current, ...delta }; },
-    changeTask: (delta: Record<string, unknown>) => { task = { ...task, ...delta }; } };
+    changeTask };
 }
 
 describe("shared preview consent and locked release proof", () => {
@@ -237,12 +257,17 @@ describe("shared preview consent and locked release proof", () => {
       .toMatchObject({ consequence: null });
     const result = await releaseNonprodEnvironmentLease(f.input);
     expect(result.status).toBe(status === "active" ? "released" : "cancelled");
-    const owner = f.task().progressPayload.nonprodPreviewOwner;
+    const owner = f.task()!.progressPayload.nonprodPreviewOwner;
     const repeated = await releaseNonprodEnvironmentLease(f.input);
     expect(repeated).toBe(result);
     expect(f.mockDb.nonProductionEnvironmentLease.update).toHaveBeenCalledTimes(1);
-    expect(f.task().progressPayload.nonprodPreviewOwner).toEqual(owner);
+    expect(f.task()!.progressPayload.nonprodPreviewOwner).toEqual(owner);
     expect(f.taskRun.upsert).toHaveBeenCalledTimes(1);
+    expect(f.taskRun.update).not.toHaveBeenCalled();
+    expect(f.taskRun.updateMany).toHaveBeenCalledTimes(status === "queued" ? 1 : 0);
+    expect(f.task()).toMatchObject({ status: "completed", progressPayload: {
+      nonprodLeaseWait: { state: status === "queued" ? "terminal" : "admitted", eventConsumed: true },
+    } });
   });
 
   const races: [string, (f: Awaited<ReturnType<typeof ownedPreview>>) => void][] = [

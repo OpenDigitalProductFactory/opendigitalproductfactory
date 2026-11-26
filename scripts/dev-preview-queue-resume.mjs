@@ -62,7 +62,7 @@ export async function resumePreviewQueue(pin, deps = {}) {
       cwd: pin.worktree,
       args: [fileURLToPath(new URL('./dev-portal-lease.sh', import.meta.url)), 'refresh',
         '--worktree', pin.worktree, '--owner-provider', pin.ownerProvider, '--owner-session-id', pin.ownerSessionId,
-        '--mcp-url', pin.mcpUrl],
+        '--mcp-url', pin.mcpUrl, ...(pin.s5Rehearsal === true ? ['--s5-rehearsal-preview'] : [])],
       env: { ...env, DPF_DEV_PORTAL_CLAIM_KEY: pin.claimKey, DPF_DEV_PORTAL_EXPECTED_SOURCE_SHA: pin.sha,
         DPF_DEV_PORTAL_EXPECTED_BRANCH: pin.branch,
         DPF_DEV_PORTAL_WAIT_DEADLINE: pin.waitDeadline,
@@ -75,7 +75,8 @@ export async function resumePreviewQueue(pin, deps = {}) {
     gitText(['rev-parse', '--git-common-dir'], { cwd: pin.worktree, timeout: 5000 }), 'dpf-local-ci-queue-observers');
   const resume = (deps.spawnResumer ?? spawnDurableWaitResumer)({
     runnerPath: fileURLToPath(new URL('./local-ci-durable-wait-resumer.mjs', import.meta.url)),
-    gateArgv: [process.execPath, ownPath, ...Object.entries(flags).flatMap(([key, flag]) => [`--${flag}`, pin[key]])],
+    gateArgv: [process.execPath, ownPath, ...Object.entries(flags).flatMap(([key, flag]) => [`--${flag}`, pin[key]]),
+      ...(pin.s5Rehearsal === true ? ['--s5-rehearsal-preview'] : [])],
     observerDirectory, cwd: pin.worktree, env,
     pin: { branch: pin.branch, sha: pin.sha, worktree: pin.worktree, ownerProvider: pin.ownerProvider,
       ownerSessionId: pin.ownerSessionId, resumeLeaseId: pin.resumeLeaseId },
@@ -87,8 +88,10 @@ export async function resumePreviewQueue(pin, deps = {}) {
 
 if (isEntryModule(import.meta.url)) {
   try {
-    const { values } = parseArgs({ options: Object.fromEntries(Object.values(flags).map(flag => [flag, { type: 'string' }])) });
+    const { values } = parseArgs({ options: { ...Object.fromEntries(Object.values(flags).map(flag => [flag, { type: 'string' }])),
+      's5-rehearsal-preview': { type: 'boolean' } } });
     const pin = Object.fromEntries(Object.entries(flags).map(([key, flag]) => [key, values[flag]]));
+    pin.s5Rehearsal = values['s5-rehearsal-preview'] === true;
     const result = await resumePreviewQueue(pin);
     console.error(JSON.stringify({ status: result.code === 75 ? 'queued' : 'completed', ...result }));
     process.exitCode = result.code;
