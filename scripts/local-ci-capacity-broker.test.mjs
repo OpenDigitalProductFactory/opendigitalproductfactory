@@ -7,9 +7,11 @@ import {
   mergeLocalCiHostPressure,
   observeLocalCiServerPressure,
 } from "../apps/web/lib/nonprod/local-ci-capacity-broker.ts";
+import { resolveLocalCiPoolPolicy } from "../apps/web/lib/nonprod/local-ci-pool-policy.ts";
 
 const CLIENT = {
   observedAt: "2026-07-30T08:00:30.000Z",
+  totalMemoryBytes: 32 * 1024 ** 3,
   availableMemoryBytes: 16 * 1024 ** 3,
   sustainedCpuPercent: 20,
   diskFreeBytes: 500 * 1024 ** 3,
@@ -18,6 +20,19 @@ const CLIENT = {
   fencesHealthy: true,
   evidenceIsolationHealthy: true,
 };
+
+test("a Mac reservation contracts admission even on the compatibility singleton", () => {
+  const host = mergeLocalCiHostPressure({
+    client: { ...CLIENT, dpf2ReservationActive: true },
+    server: CLIENT,
+  });
+  assert.equal(host.dpf2ReservationActive, true);
+  const policy = resolveLocalCiPoolPolicy({ configValue: null, host, manifestSlotCount: 1 });
+  assert.equal(policy.effectiveCapacity, 0);
+  assert.equal(policy.rollbackReason, "dpf2-ci-reservation");
+  const clear = resolveLocalCiPoolPolicy({ configValue: null, host: CLIENT, manifestSlotCount: 1 });
+  assert.equal(clear.effectiveCapacity, 1);
+});
 
 test("keeps Windows and Docker memory in separate reservation domains", () => {
   const merged = mergeLocalCiHostPressure({
@@ -38,6 +53,7 @@ test("keeps Windows and Docker memory in separate reservation domains", () => {
 
   assert.deepEqual(merged, {
     observedAt: "2026-07-30T08:00:00.000Z",
+    totalMemoryBytes: 32 * 1024 ** 3,
     availableMemoryBytes: 16 * 1024 ** 3,
     dockerAvailableMemoryBytes: 7 * 1024 ** 3,
     builderMemoryUsageBytes: [2 * 1024 ** 3, 0],

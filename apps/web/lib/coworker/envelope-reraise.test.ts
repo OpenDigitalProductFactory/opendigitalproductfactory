@@ -77,6 +77,17 @@ function fakeDb(row: ReturnType<typeof source> | null, active: unknown = null) {
 }
 
 describe("reraiseEnvelope (AC-REASK)", () => {
+  it("never re-raises an expired one-shot rehearsal even if an audit row could be replayed", async () => {
+    const action = "s5-single-synthetic-rehearsal";
+    const binding = { ...BINDING, toolName: action };
+    const f = fakeDb(source({ manifestActionId: action, argsJson: { approvalBinding: binding },
+      approvalBindingFingerprint: fingerprintCoworkerApprovalBinding(binding) }));
+    const result = await reraiseEnvelope("ENV-OLD", "user-1", { db: f.db, now: NOW, classify: async () => "authority" });
+    expect(result).toMatchObject({ ok: false, httpStatus: 409 });
+    expect(f.raw.toolExecution.findFirst).not.toHaveBeenCalled();
+    expect(f.tx.coworkerActionEnvelope.create).not.toHaveBeenCalled();
+  });
+
   it("mints a fresh proposed request copied from the expired one, linked back, with a fresh durable lifetime", async () => {
     const { db, tx } = fakeDb(source());
     const classify = vi.fn(async () => "irreversible" as const);

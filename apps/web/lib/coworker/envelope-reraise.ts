@@ -29,6 +29,7 @@ import {
   type CoworkerApprovalBinding,
 } from "@/lib/govern/authority/coworker-authority-decision";
 import { isRecord } from "@/lib/shared/coerce";
+import { approvalActionPolicy } from "./approval-action-policy";
 
 import { approvalLifetimeMs } from "./approval-lifetime";
 import { classifyApprovalCallAgainst, type ClassifyApprovalCall } from "./approval-classification";
@@ -157,6 +158,9 @@ export async function reraiseEnvelope(
     );
   }
   if (!lapsedUnanswered(source, now)) return refuse(REFUSED_NOT_LAPSED, 409);
+  if (approvalActionPolicy(source.manifestActionId)?.decision === "owner-one-time") {
+    return refuse("This rehearsal attempt expired and cannot be reopened.", 409);
+  }
 
   const binding = storedBinding(source.argsJson);
   if (

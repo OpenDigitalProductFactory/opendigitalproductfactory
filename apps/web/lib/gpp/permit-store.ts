@@ -137,9 +137,11 @@ export async function readGppPermitForEvidence(tx: Prisma.TransactionClient, per
   return row ? toPermitRow(row) : null;
 }
 
-const prismaStore: GppPermitStore = {
-  async createPermit(claims, signature) {
-    const created = await prisma.gppPermit.create({
+/** Same persisted claims and MAC, optionally owned by a caller's transaction. */
+export async function persistGppPermit(
+  db: Pick<Prisma.TransactionClient, "gppPermit">, claims: PermitClaims, signature: PermitSignature | null,
+): Promise<PermitRow> {
+  const created = await db.gppPermit.create({
       data: {
         gppPermitId: claims.permitId,
         bindingKey: claims.bindingId,
@@ -169,8 +171,11 @@ const prismaStore: GppPermitStore = {
       },
       select: PERMIT_SELECT,
     });
-    return toPermitRow(created);
-  },
+  return toPermitRow(created);
+}
+
+const prismaStore: GppPermitStore = {
+  async createPermit(claims, signature) { return persistGppPermit(prisma, claims, signature); },
   async findPermitByPermitId(permitId) {
     const row = await prisma.gppPermit.findUnique({ where: { gppPermitId: permitId }, select: PERMIT_SELECT });
     return row ? toPermitRow(row) : null;

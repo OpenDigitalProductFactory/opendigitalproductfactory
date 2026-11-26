@@ -4,7 +4,7 @@
 
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -14,6 +14,8 @@ import { EXIT_SOURCE_DRIFT, EXIT_WAIT_CANCELLED } from "./lib/sandbox-freshness.
 
 // No real resumer may outlive a test that talks to a stub server.
 process.env.DPF_DURABLE_RESUMER = "off";
+const dpf2FixtureDir = mkdtempSync(join(tmpdir(), "dpf-gate-resume-lock-"));
+test.after(() => rmSync(dpf2FixtureDir, { recursive: true, force: true }));
 
 const HOST_PRESSURE = {
   observedAt: "2026-09-24T00:00:00.000Z",
@@ -30,7 +32,8 @@ function run(args, env) {
   return new Promise((resolve, reject) => {
     const child = spawn(process.execPath, args, {
       cwd: process.cwd(),
-      env: { ...process.env, ...env, NODE_ENV: "test", DPF_LOCAL_CI_HOST_PRESSURE_JSON: JSON.stringify(HOST_PRESSURE) },
+      env: { ...process.env, ...env, DPF2_CI_SLOT_LOCK: join(dpf2FixtureDir, "fixture-dpf2-ci.lock"),
+        NODE_ENV: "test", DPF_LOCAL_CI_HOST_PRESSURE_JSON: JSON.stringify(HOST_PRESSURE) },
     });
     let output = "";
     const timeout = setTimeout(() => { child.kill(); resolve({ code: -1, output: `${output}\n[harness] timed out` }); }, 20_000);

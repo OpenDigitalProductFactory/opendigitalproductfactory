@@ -40,6 +40,7 @@ function resolveMcpCredentialOrNull({ mcpUrl, env = process.env }) {
 }
 import { checkHostDiskSpace } from "./lib/disk-space-preflight.mjs";
 import { GATE_EXIT } from "./lib/gate-exit-classification.mjs";
+import { waitForDpf2Reservation } from "./lib/local-convergence-lock.mjs";
 import {
   createLocalCiSlotManifest,
   LOCAL_CI_SLOT_KEYS,
@@ -940,6 +941,14 @@ async function main() {
   }
   // process.exit runs "exit" listeners synchronously, so every path below clears it.
   if (liveMarker) process.once("exit", () => liveMarker.release());
+
+  if (!isRecordExemptInvocation(args)) {
+    const reservation = await waitForDpf2Reservation({
+      deadline: createQueuedGateRevivalWindow({ args }).deadlineMs,
+      notice: text => process.stdout.write(`pregate: ${text}\n`),
+    });
+    if (reservation !== "clear") process.exit(GATE_EXIT.DPF2_RESERVATION_TIMEOUT);
+  }
 
   if (!args.includes(FORCE_RERUN_FLAG) && !isRecordExemptInvocation(args)) {
     // The probe only ever narrows work: a checkout without the correction

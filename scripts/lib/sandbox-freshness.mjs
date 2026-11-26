@@ -13,6 +13,7 @@
 // Filesystem/process collection lives in scripts/sandbox-freshness-preflight.mjs.
 
 import { baseVersion, findImporterDependency, parseImporters } from "./pnpm-lock.mjs";
+import { GATE_EXIT } from "./gate-exit-classification.mjs";
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
@@ -563,6 +564,14 @@ export function isSlotDatabaseUnreachable(output) {
 }
 
 export function classifyGateOutcome({ freshnessVerdict, gateExitCode, mergeConflict = null, gateOutput = "", receivedSignal = "" }) {
+  if (gateExitCode === GATE_EXIT.DPF2_RESERVATION_TIMEOUT) {
+    return {
+      status: "blocked_dpf2_reservation",
+      gatePassed: false,
+      productEvidence: false,
+      summary: "Local CI timed out waiting for DPF2's quiet-window reservation before a phase. No product verdict. Resume after the reservation clears.",
+    };
+  }
   // BI-FCC1DCB2: decided before freshness. The merge is the first thing the
   // runner does and freshness runs after it, so any freshness report beside a
   // merge conflict belongs to an earlier run.

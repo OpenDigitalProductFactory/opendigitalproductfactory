@@ -717,6 +717,7 @@ test("every status classifyGateOutcome can emit is one the recorder accepts", ()
     EXIT_VITEST_RUNNER_TERMINATION,
     EXIT_CHILD_SIGNAL_DEATH,
     EXIT_CANDIDATE_MERGE_CONFLICT,
+    84,
     75,
     130,
     143,
@@ -738,6 +739,16 @@ test("every status classifyGateOutcome can emit is one the recorder accepts", ()
       + "Add it to LOCAL_INTEGRATION_STATUSES in scripts/lib/local-integration-status.mjs.",
     );
   }
+});
+
+test("a DPF2 wait timeout never grades an incomplete gate, including before freshness", () => {
+  for (const freshnessVerdict of ["", "green", "sandbox_not_ready"]) {
+    const outcome = classifyGateOutcome({ freshnessVerdict, gateExitCode: 84 });
+    assert.equal(outcome.status, "blocked_dpf2_reservation");
+    assert.equal(outcome.productEvidence, false);
+    assert.match(outcome.summary, /resume after the reservation clears/i);
+  }
+  assert.equal(fallbackStatusForUnknown("blocked_dpf2_reservation").status, "blocked_sandbox_drift");
 });
 
 // BI-FCC1DCB2. A candidate that does not merge onto origin/main was recorded as
