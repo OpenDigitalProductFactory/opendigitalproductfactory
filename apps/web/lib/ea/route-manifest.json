@@ -1,6 +1,6 @@
 {
   "generator": "apps/web/scripts/build-route-manifest.ts",
-  "routeCount": 693,
+  "routeCount": 694,
   "routes": [
     {
       "routePath": "/",
@@ -555,6 +555,21 @@
       ],
       "dynamicParams": [],
       "file": "apps/web/app/api/admin/ops/execute-proposal/route.ts"
+    },
+    {
+      "routePath": "/api/admin/rehearsal-requester/[command]",
+      "kind": "route",
+      "segments": [
+        "api",
+        "admin",
+        "rehearsal-requester",
+        "[command]"
+      ],
+      "dynamicParams": [
+        "command"
+      ],
+      "file": "apps/web/app/api/admin/rehearsal-requester/[command]/route.ts",
+      "exposure": "authenticated"
     },
     {
       "routePath": "/api/agent-toolchain/manifest",
