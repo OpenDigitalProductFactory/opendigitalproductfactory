@@ -43,6 +43,7 @@ Detection, filing, sweeps and gates all exist. What is missing is closure: the s
 | 1 | Closure scorecard: a daily deterministic measure, trailing week vs the week before | BI-97C56E20 | medium |
 | 2 | A terminal backlog transition closes its WorkItems, signals and proposals, plus a one-time reconcile | BI-F4A9BBF4 (extended) | medium |
 | 3 | A merged PR completes its build, and a dead sibling releases its dependents | BI-8129F585 / BI-EFA17EC3 | medium |
+| 3a | An armed PR names unresolved review conversations before queue entry | BI-1B868C6D | small |
 | 4 | "Behind main" is its own finalize result and triggers a branch refresh | new | small |
 | 5 | Delivery evidence goes to the home install so it can close peer-owned acceptance | BI-BBBE8CB1 | medium |
 | 6 | Turn on the observe-only actuators whose evidence is in, one at a time | BI-D5830561, BI-BD13E7BA | small each |
@@ -53,6 +54,7 @@ Each slice is judged by the scorecard line it should move:
 
 - Slice 2 moves `signals.closed`, `proposals.closed` and the anchor queue.
 - Slices 3 and 4 move `builds.completed` and `builds.stranded`.
+- Slice 3a verifies one named hold per exact head and blocker, and verifies that the same armed request moves to provider-confirmed queue entry or merge after authorized resolution. The scorecard does not separately count this hold.
 - Slice 5 moves `acceptance.peerOwned`.
 - Slice 7 moves `decisions.recommendedShare`.
 
@@ -61,6 +63,17 @@ Each slice is judged by the scorecard line it should move:
 T3 absorption S4–S8 (launch contract, workroom-bound toolset, execution-host routing, device cutover) and the DPF2 OS-layer cutover stay in the DPF2 coordination lane. This program does not touch them.
 
 The meeting point is S9. Its measure (AC-5) is delivered early by slice 1, and its loop by slice 8 on today's dispatch. When S6 lands, only the dispatch step changes route.
+
+## Slice 3a design (BI-1B868C6D)
+
+[PR #7229](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/7229)
+was green and armed at `97b681883c88`, but GitHub had not enrolled it and still
+reported five unresolved outdated review conversations. The existing custody
+worker returned armed without naming that blocker. Extend the
+[Workroom PR follow-through contract](../specs/2026-10-01-pr-follow-through-workroom-duty-design.md#32-follow-through-state-on-the-room)
+to record, route and recheck the exact-head hold. Do not add another worker or
+another queue request. This is separate from CI repair dispatch (BI-C9741512)
+and from closing an already merged Workroom (BI-D5830561).
 
 ## Slice 1 design (BI-97C56E20)
 
@@ -95,6 +108,7 @@ Each deliverable, its backlog item, its contract and how it is verified:
 | S1-closure-scorecard | Closure scorecard | BI-97C56E20 | `apps/web/lib/operate/scheduled-jobs/agent-task-kind.ts` | `apps/web/lib/continual-improvement/closure-scorecard/measures.test.ts` |
 | S2-terminal-downstream | Finished item closes downstream records | BI-F4A9BBF4 | `apps/web/lib/queue/bridges/backlog-bridge.ts` | `apps/web/lib/queue/bridges/terminal-backlog-downstream.test.ts` |
 | S3-merged-build-completes | Merged PR completes its build | BI-8129F585 | `apps/web/lib/build/feature-build-dependencies.ts` | closure-scorecard:builds.completed |
+| S3a-pr-conversation-hold | Exact-head conversation hold on an armed PR | BI-1B868C6D | Workroom PR follow-through design §3.2 | Green armed fixture with an outdated unresolved thread, then resolution and confirmed enrollment without a second request |
 | S4-behind-main | Behind-main refresh | BI-9E32CC27 | `apps/web/lib/build/guard-gauntlet.ts` | closure-scorecard:builds.stranded |
 | S5-peer-delivery-evidence | Peer delivery evidence | BI-BBBE8CB1 | `apps/web/lib/federation` | closure-scorecard:acceptance.peerOwned |
 | S6-actuators | Observe-only actuators enabled | BI-D5830561 | `apps/web/lib/operate/taskrun-watchdog.ts` | closure-scorecard:builds.stranded |
