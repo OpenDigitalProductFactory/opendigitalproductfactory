@@ -29,6 +29,14 @@ describe("expireLapsedEnvelopes (BI-410ACCB8)", () => {
     await expect(expireLapsedEnvelopes(db, NOW)).resolves.toEqual({ expired: 1, skipped: 0 });
   });
 
+  it("excludes a decided S5 rehearsal from the proposal clock on both read and write", async () => {
+    const { db, findMany, updateMany } = dbWith([{ id: "pending-s5", status: "proposed" }]);
+    await expireLapsedEnvelopes(db, NOW);
+    const where = { NOT: { status: "approved", manifestActionId: "s5-single-synthetic-rehearsal" } };
+    expect(findMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining(where) }));
+    expect(updateMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining(where) }));
+  });
+
   it("only reads envelopes already past their window, never one still open", async () => {
     const { db, findMany } = dbWith([]);
     await expireLapsedEnvelopes(db, NOW);

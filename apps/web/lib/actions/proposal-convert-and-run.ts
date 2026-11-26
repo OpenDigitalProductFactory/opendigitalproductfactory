@@ -243,6 +243,8 @@ async function runClaimed(
   if (governed.governance?.rejected === "approval_required") {
     const envelopeId = typeof governed.data?.envelopeId === "string" ? governed.data.envelopeId : null;
     if (!envelopeId) return revert("refused", governed);
+    // Only the monitor's exact executable tool envelope can get here. The
+    // preview's S5 rehearsal is not a tool and never enters proposal replay.
     const approved = await (deps.approveEnvelope ?? approveEnvelopeLive)(envelopeId, approver.userId);
     if (!approved.ok) return revert("refused", { success: false, error: "approval_unavailable", message: approved.reason ?? "The approval could not be recorded." });
     const run: PlatformRequestRun = await (deps.runApproved ?? runApprovedLive)(envelopeId)
