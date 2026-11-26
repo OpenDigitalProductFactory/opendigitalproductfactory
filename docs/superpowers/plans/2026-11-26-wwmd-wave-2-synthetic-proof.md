@@ -8,6 +8,10 @@ BI-6C35FB77 · WC-578907C5. This plan does not authorize implementation.
 
 The [canonical design §5](../specs/2026-11-24-wwmd-os-binding-design.md#5-wave-2--prove-the-caller-and-relational-ledger-together) owns the acceptance contract. Use the DPF `4e7b9d86` and coordinator-verified DPF2 `8b3afa0f` baselines. The research receipt is `initiative-74557b8b-2fd5-4282-b1b6-e2033b4bcc1c`.
 
+## Traceability
+
+Scope baseline `baseline-0893a21d-7452-4d2e-bab9-ca2f660fd05d` binds objective `OBJ-WAVE2` to acceptance criteria `AC-W2-1`, `AC-W2-2`, `AC-W2-3` and `AC-W2-4` in the canonical design.
+
 ## Before implementation admission
 
 The DPF decision owner and DPF2 receiving design owner must concur on the strict paired /2 contract in the canonical design. Review the exact field schema and limits, signed-byte fixture, and protected freshness, policy and claim sources at all three ingress points. Preserve /1 fixture bytes and selection. Complete governed design and plan review before seeking implementation admission.
