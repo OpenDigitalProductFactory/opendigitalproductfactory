@@ -195,6 +195,7 @@ describe("admin pack — handler behavior (delegation preserved)", () => {
   );
 
   it.each(["", "garbled\n", "21 1 0:2 / / rw - overlay overlay rw\nnot a mount record\n",
+    "23 21 0:4 net:[4026531992] relative-mount rw - nsfs nsfs rw\n",
     "21 1 0:2 / /run/dpf-actuator rw - tmpfs tmpfs rw\n"])(
     "admin_view_logs refuses direct Docker for an invalid or mounted snapshot %j",
     async table => {
@@ -205,6 +206,17 @@ describe("admin pack — handler behavior (delegation preserved)", () => {
       expect(execution.exec).not.toHaveBeenCalled();
     },
   );
+
+  it("admin_view_logs accepts a Linux nsfs root when no private actuator mount exists", async () => {
+    mounts.platform.mockReturnValue("linux");
+    mounts.readFile.mockResolvedValue(
+      "21 1 0:2 / / rw - overlay overlay rw\n23 21 0:4 net:[4026531992] /run/docker/netns/fixture rw - nsfs nsfs rw\n",
+    );
+    execution.exec.mockResolvedValue({ stdout: "fixture logs" });
+    expect(await adminPack.handlers.admin_view_logs({ service: "portal" }, "u1"))
+      .toMatchObject({ success: true, data: { output: "fixture logs" } });
+    expect(execution.exec).toHaveBeenCalledOnce();
+  });
 
   it.each(["linux", "darwin", "win32"] as const)(
     "admin_view_logs still uses the legacy path for confirmed actuator absence on %s",

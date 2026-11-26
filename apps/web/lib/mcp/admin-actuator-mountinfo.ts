@@ -10,9 +10,10 @@ function parseMountPoints(text: string): string[] | null {
   for (const row of rows) {
     const fields = row.split(" ");
     const split = fields.indexOf("-", 6);
+    // A namespace root can be net:[…]. Only the mount point must be a path.
     if (split < 6 || fields.length !== split + 4 || fields.some(field => !field || /[\s\u0000]/u.test(field))
       || !/^\d+$/u.test(fields[0]!) || !/^\d+$/u.test(fields[1]!) || !/^\d+:\d+$/u.test(fields[2]!)
-      || !mountPath.test(fields[3]!) || !mountPath.test(fields[4]!) || !/^(?:ro|rw)(?:,|$)/u.test(fields[5]!)) return null;
+      || !mountPath.test(fields[4]!) || !/^(?:ro|rw)(?:,|$)/u.test(fields[5]!)) return null;
     points.push(fields[4]!);
   }
   return points;
