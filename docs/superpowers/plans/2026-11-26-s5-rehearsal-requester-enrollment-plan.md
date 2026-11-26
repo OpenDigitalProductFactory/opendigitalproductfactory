@@ -4,7 +4,7 @@ status: draft
 
 # Plan: owner-operated inactive enrollment and retirement of the S5 rehearsal requester
 
-Backlog item BI-9F7192F9, Workroom WC-4EBA473D. Design: `docs/superpowers/specs/2026-11-26-s5-rehearsal-requester-enrollment-design.md`, revision 8. Shape: delivery-small.
+Backlog item BI-9F7192F9, Workroom WC-4EBA473D. Design: `docs/superpowers/specs/2026-11-26-s5-rehearsal-requester-enrollment-design.md`, revision 9 (converged). Shape: delivery-small.
 
 This plan covers server-side work only. It ships inert, and the requester is never active.
 
@@ -18,7 +18,7 @@ Activation, sessions, delegation and issuance belong to BI-9F5D1052.
 
 ## Preconditions (hold Red until all are met)
 
-- **P1. Design approved.** The independent re-review approves revision 8.
+- **P1. Design approved.** The independent re-review approves revision 9. The coordinator checks the convergence diff; no further design review round is held.
 - **P2. Schema and model count.**
   - The coordinator confirms the model shape (approved in principle).
   - The owner approves a `prismaModelCount` raise from 649 to 650.
@@ -65,7 +65,8 @@ Activation, sessions, delegation and issuance belong to BI-9F5D1052.
      - A destination session advisory lock on the fixed key `hashtextextended('dpf:s5-rehearsal-requester:destination-fence', 0)`.
        - Hold it on a pinned destination connection from before the preflight through reset, copy and failure cleanup.
        - Take it on every entry point: the direct `dev-init` path and `runSourceCheckedClone`/`runWithDestinationCleanup`.
-       - If the fence is lost, stop with `fence_lost` and run no cleanup.
+       - If the fence is lost, stop with `fence_lost` and run no cleanup. Then terminate only this clone's own recorded writer backend PIDs (the COPY subprocess and the batch writers) with `pg_terminate_backend`, confirm through `pg_stat_activity` that they are gone, and exit non-zero.
+       - Precondition: a failed dev-init never reaches portal start (`dev-preview-runtime.mjs:325`), and enrollment is served only by that portal.
      - The destination preflight under the fence:
        - an active requester refuses;
        - retired-only requires `--discard-retired-rehearsal-evidence`.
@@ -81,7 +82,7 @@ Activation, sessions, delegation and issuance belong to BI-9F5D1052.
      - a requester-bearing source aborts with no requester in the destination;
      - a pre-migration source clones;
      - an ordinary production-sourced preview is unaffected;
-     - fence loss runs no cleanup.
+     - **`R-FENCE-LOSS`:** fence loss during a real destination write leaves no surviving recorded writer, terminates no other session, exits non-zero, and a fresh run recovers.
    - Out of scope: the clone's existing copy-consistency window, which predates this item.
 3. **Audit writer (AC-E8).**
    - Build: a typed insert for both keys, and the M-4 exclusion.
@@ -116,10 +117,11 @@ Activation, sessions, delegation and issuance belong to BI-9F5D1052.
      - several candidates;
      - non-owner, automation, handed-over and requester actors;
      - a superuser with no role;
-     - an owner-mapping change interleaved between what used to be separate candidate and grant reads, which never yields an accepted combination.
+     - an owner-mapping change interleaved between what used to be separate candidate and grant reads, which never yields an accepted combination;
+     - **`R-OWNER-COHERENT`:** role keys are projected `UserGroup.platformRoleId → PlatformRole.roleId → PERMISSIONS` with no superuser bypass. Fallback cardinality and IDs (0, 1 and 2) come from the same statement, and the actor is bound through its exact local `user` alias.
 6. **Enrollment (AC-E4).**
    - Build: a **Read Committed** create.
-     1. Take the destination fence as a shared try-lock (`clone_in_progress` if it is unavailable). Use a Prisma transaction with `timeout: 15_000` and `maxWait: 5_000`, which exceeds the lock wait. Then `SET LOCAL lock_timeout = '5s'` and take the per-setup advisory lock before any hash; a timeout returns `enroll_busy`.
+     1. Take the destination fence **once**, as the first statement of the single request-scoped transaction, as a shared try-lock (`clone_in_progress` if it is unavailable). Hold it through the pre-body checks, the bounded body read in the pre-write phase, and the write. Use a Prisma transaction with `timeout: 15_000` and `maxWait: 5_000`, which exceeds the lock wait. Then `SET LOCAL lock_timeout = '5s'` and take the per-setup advisory lock before any hash; a timeout returns `enroll_busy`.
      2. Fresh reads after the lock: owner checks, reservation comparison, the record.
      3. The commit-time fences for the one-shot reservation revision (BI-588688A7), lease currency, installation and DB identity.
      4. The single hash.
@@ -131,6 +133,7 @@ Activation, sessions, delegation and issuance belong to BI-9F5D1052.
      - Waits on the per-setup lock so it cannot overtake an in-flight commit.
      - Reports `committed` (with `verifyRequesterState`) or `not_committed`.
      - Never creates.
+     - Takes a session-level per-setup lock on a pinned connection **before** `BEGIN REPEATABLE READ READ ONLY`, holds it through the read, and releases it after.
    - Tests:
      - Request B waits before A commits (asserted through `pg_locks` or a barrier). Exactly one hash. B gets `replay` with zero hasher calls.
      - A lock timeout gives `enroll_busy` with no hash.
@@ -138,6 +141,8 @@ Activation, sessions, delegation and issuance belong to BI-9F5D1052.
      - A forced post-hash failure gives `create_failed`, with no secret logged or returned.
      - A simulated lost commit acknowledgement gives `create_unverified`. The reservation is released **between** the lost acknowledgement and recovery. Status still reports `committed` with its verification, and a new POST holds without creating.
      - A waiter that gets the lock near 5 s still completes as `replay` within the transaction timeout.
+     - **`R-ONE-FENCE`:** a clone arriving between the pre-body checks and the body read is held off and the request completes. A request arriving during a clone returns `clone_in_progress` with zero body reads.
+     - **`R-STATUS-WAIT`:** GET is proven waiting before the enroll commit, then reports `committed`.
      - Drift, collision, orphan email and mismatch each hold.
      - Replay still works after the audit rows are purged.
 7. **Never-active invariant (AC-E5).**

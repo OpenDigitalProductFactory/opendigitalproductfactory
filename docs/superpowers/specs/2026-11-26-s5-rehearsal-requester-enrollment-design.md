@@ -4,7 +4,7 @@ status: draft
 
 # Owner-operated inactive enrollment and retirement of the S5 rehearsal requester
 
-**Status:** design for independent review, revision 8. It addresses the seventh review of `b175b4dd` (REQUEST_CHANGES) under the coordinator's fixed clone-scope rulings.
+**Status:** design for independent review, revision 9 (converged). It applies the coordinator's final rulings on the eighth review of `b6b1818a`. Each ruling has a named Red test (`R-…`).
 
 - **Backlog item:** BI-9F7192F9.
 - **Workroom:** WC-4EBA473D.
@@ -169,8 +169,20 @@ The record is the single durable marker of a governed requester. `isGovernedRequ
      - Every supported clone entry point takes it:
        - the direct `dev-init` path (`docker-compose.yml:800`, which runs `sanitized-clone.ts`);
        - the cleanup wrapper path (`runSourceCheckedClone` → `runWithDestinationCleanup`, `sanitized-clone-cleanup.ts:9`).
-     - If the fence connection is lost, the clone stops with `fence_lost`. It does **not** run failure cleanup, because cleanup would truncate without the fence. The destination is left for the operator to inspect.
-     - **Enrollment and retirement** take the same key as a transaction-scoped shared try-lock (`pg_try_advisory_xact_lock_shared`) before any other work. If they can't get it, they hold with `clone_in_progress`, before any body read or hash.
+     - **Fence loss.** If the fence connection is lost, the clone supervisor stops with `fence_lost`. It does **not** run failure cleanup, because cleanup would truncate without the fence. It then shuts down its own writers:
+       1. At start, the supervisor records the backend PIDs of **its own** destination writers: the binary `COPY` subprocess connection and each batch-writer connection.
+       2. On `fence_lost`, it calls `pg_terminate_backend` **only** on those recorded PIDs. It never touches any other session.
+       3. It confirms through `pg_stat_activity` that none of those PIDs remains.
+       4. It exits non-zero.
+
+       **Precondition:** a failed dev-init can never reach the portal start operation (`scripts/lib/dev-preview-runtime.mjs:325`). Enrollment is served only by that portal, so the half-written destination stays unavailable to enrollment.
+
+       **Recovery** is a fresh fenced run, which begins with the normal reset.
+
+       **Test `R-FENCE-LOSS`:** drop the fence during a real destination write. Afterwards, no recorded writer backend survives, no other session is terminated, the exit is non-zero, and a fresh run recovers.
+     - **Enrollment and retirement take the fence exactly once.** They take the same key as a transaction-scoped shared try-lock (`pg_try_advisory_xact_lock_shared`) as the **first statement of one request-scoped transaction**. They hold it through the pre-body checks, the bounded body read (inside that transaction's pre-write phase) and the write. If they can't get it, they return `clone_in_progress` before any body read or hash.
+
+       **Test `R-ONE-FENCE`:** a clone that arrives between the pre-body checks and the body read is held off until the request completes. A request that arrives while a clone holds the fence returns `clone_in_progress` with zero body reads.
   2. **Destination preflight, under the fence and before reset.** Read the destination's enrollment rows:
      - An **active** requester refuses. The operator retires it first.
      - **Only retired** rows refuse unless the operator passes `--discard-retired-rehearsal-evidence`, which records that the per-DB evidence is being discarded. There is no implicit discard.
@@ -232,7 +244,9 @@ Each successful command writes one typed, transaction-bound `AuthorizationDecisi
    - the singleton organization count and its `topAccountablePrincipalId`;
    - the candidate Principal's kind and status, and its local `user` alias;
    - the acting User's activity, automation and handover fields;
-   - the acting User's platform-role IDs;
+   - the acting User's role keys, projected as `UserGroup.platformRoleId → PlatformRole.roleId`. They are mapped through the static `PERMISSIONS` table, with **no superuser bypass**;
+   - for the unset-owner fallback, the **cardinality and IDs** of active human Principals whose role keys grant `manage_platform`;
+   - the actor, bound through its **exact** local `user` alias (`aliasType: "user"`, `aliasValue: userId`, `issuer: ""`);
    - the governed-requester marker.
 
    The decision is a pure evaluation of that single row set, so it can never combine owner and grant facts from different moments. It requires all of the following:
@@ -241,6 +255,8 @@ Each successful command writes one typed, transaction-bound `AuthorizationDecisi
    - no automation fields;
    - no `workHandedOverAt`;
    - not a governed requester.
+
+**Test `R-OWNER-COHERENT`:** the unset-owner fallback with zero, one and two candidates is decided from the same single statement. A superuser holding no qualifying role key never qualifies.
 
 **Tests** (each case holds or refuses):
 - the owner mapping changes between what used to be separate candidate and grant reads (an `organization-accountable-owner.ts:47` write interleaved with the evaluation). The decision uses only one coherent row set, and never accepts a combination that was never true at one moment
@@ -365,7 +381,14 @@ Under `Serializable`, a transaction's snapshot is taken by its first statement, 
   - owner binding;
   - the lease-independent installation and DB proofs.
 - **Keyed only by the digest:** it does not depend on the current reservation, so it still works after the reservation is released or replaced.
-- **Waits for the original transaction:** it takes the per-setup advisory lock in a read-only transaction. That lock is held until the original transaction ends, so the read cannot overtake a commit that is still completing.
+- **Waits for the original transaction.** On a pinned connection it:
+  1. takes the per-setup lock as a **session-level** advisory lock (`pg_advisory_lock`), **before** `BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY`;
+  2. holds that lock through the read;
+  3. releases it (`pg_advisory_unlock`) after `COMMIT`.
+
+  The original enrollment holds its transaction-scoped lock until it ends, so the snapshot is taken only after that transaction has finished.
+
+  **Test `R-STATUS-WAIT`:** GET is shown waiting (via `pg_locks`) before the enroll commit, then reports `committed`.
 - **Reports one of:**
   - `committed`, with the `verifyRequesterState` result;
   - `not_committed`, if no record exists once the lock has been acquired.
