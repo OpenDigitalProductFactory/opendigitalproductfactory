@@ -170,7 +170,7 @@ describe.skipIf(!url)("forward-only reservation admission history — isolated P
     const rawWitness = await f.db.$transaction(async tx => {
       const raw = await tx.$queryRawUnsafe<Array<{ systemIdentifier: string }>>(
         'SELECT system_identifier::text AS "systemIdentifier" FROM pg_catalog.pg_control_system()');
-      return { raw, observed: await readLeaseOwningSystemIdentifier({ $queryRawUnsafe: sql => tx.$queryRawUnsafe(sql) }) };
+      return { raw, observed: await readLeaseOwningSystemIdentifier(tx.$queryRaw.bind(tx)) };
     });
     expect(rawWitness).toEqual({ raw: [{ systemIdentifier: ownerCluster }], observed: ownerCluster });
     const observation = { schemaVersion: 1, leaseId: live.leaseId, runtimeId: previewLogicalRuntimeId(live),

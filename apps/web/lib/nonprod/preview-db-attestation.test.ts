@@ -1,3 +1,4 @@
+import { PREVIEW_DATABASE_IDENTITY_SQL } from "../../../../packages/integration-shared/src/preview-db-identity.cjs";
 import { describe, expect, it, vi } from "vitest";
 
 const tuple = {
@@ -13,7 +14,7 @@ const proof = {
 };
 const binding = { leaseId: proof.leaseId, runtimeId: proof.runtimeId, sourceSha: proof.sourceSha };
 
-type FixtureTransaction = { $queryRawUnsafe: (sql: string) => Promise<unknown> };
+type FixtureTransaction = { $queryRaw: (sql: TemplateStringsArray) => Promise<unknown> };
 type PublicationSnapshot = { status: string; progressPayload: Record<string, unknown> };
 type ProofModule = {
   publishPreviewDatabaseAttestation: (input: {
@@ -46,7 +47,7 @@ describe("preview database proof", () => {
     ["the production cluster via the live DB override", liveOverride],
   ] as const)("refuses a write on %s", async (_name, actual) => {
     const { matchesPreviewDatabase } = await reader();
-    const tx = { $queryRawUnsafe: vi.fn(async () => [actual]) };
+    const tx = { $queryRaw: vi.fn(async () => [actual]) };
     const write = vi.fn();
     if (await matchesPreviewDatabase({ tx, proof, binding })) write();
     expect(write).not.toHaveBeenCalled();
@@ -54,7 +55,7 @@ describe("preview database proof", () => {
 
   it("refuses an owner proof that names the production cluster even if the transaction matches it", async () => {
     const { matchesPreviewDatabase } = await reader();
-    const tx = { $queryRawUnsafe: vi.fn(async () => [tuple]) };
+    const tx = { $queryRaw: vi.fn(async () => [tuple]) };
     expect(await matchesPreviewDatabase({
       tx, binding, proof: { ...proof, productionSystemIdentifier: tuple.systemIdentifier },
     })).toBe(false);
@@ -62,30 +63,31 @@ describe("preview database proof", () => {
 
   it("holds on an unreadable catalog proof", async () => {
     const { matchesPreviewDatabase } = await reader();
-    const tx = { $queryRawUnsafe: vi.fn(async () => { throw new Error("permission denied"); }) };
+    const tx = { $queryRaw: vi.fn(async () => { throw new Error("permission denied"); }) };
     expect(await matchesPreviewDatabase({ tx, binding, proof })).toBe(false);
   });
 
   it("refuses missing proof and a replaced runtime before probing the transaction", async () => {
     const { matchesPreviewDatabase } = await reader();
-    const tx = { $queryRawUnsafe: vi.fn(async () => [tuple]) };
+    const tx = { $queryRaw: vi.fn(async () => [tuple]) };
     expect(await matchesPreviewDatabase({ tx, binding, proof: null })).toBe(false);
     expect(await matchesPreviewDatabase({ tx, binding: { ...binding, runtimeId: "replacement" }, proof })).toBe(false);
-    expect(tx.$queryRawUnsafe).not.toHaveBeenCalled();
+    expect(tx.$queryRaw).not.toHaveBeenCalled();
   });
 
   it("refuses the root pooled client without issuing a query", async () => {
     const { matchesPreviewDatabase } = await reader();
-    const pooled = { $queryRawUnsafe: vi.fn(async () => [tuple]), $transaction: vi.fn() };
+    const pooled = { $queryRaw: vi.fn(async () => [tuple]), $transaction: vi.fn() };
     expect(await matchesPreviewDatabase({ tx: pooled, binding, proof })).toBe(false);
-    expect(pooled.$queryRawUnsafe).not.toHaveBeenCalled();
+    expect(pooled.$queryRaw).not.toHaveBeenCalled();
   });
 
   it("qualifies catalog functions and preserves the pinned epoch representation", async () => {
     const { matchesPreviewDatabase } = await reader();
-    const tx = { $queryRawUnsafe: vi.fn(async (_sql: string) => [tuple]) };
+    const tx = { $queryRaw: vi.fn(async (_sql: TemplateStringsArray) => [tuple]) };
     expect(await matchesPreviewDatabase({ tx, binding, proof })).toBe(true);
-    const sql = tx.$queryRawUnsafe.mock.calls[0]?.[0];
+    const sql = tx.$queryRaw.mock.calls[0]?.[0].join("");
+    expect(sql).toBe(PREVIEW_DATABASE_IDENTITY_SQL);
     expect(sql).toContain("pg_catalog.pg_control_system()");
     expect(sql).toContain("pg_catalog.current_database()");
     expect(sql).toContain("extract(epoch from pg_catalog.pg_postmaster_start_time())::numeric::text");
@@ -137,9 +139,9 @@ it.skipIf(!disposableUrl)("compares identity and writes on the same disposable b
     `)).rows[0]!;
     const witnessSql = 'pg_catalog.pg_backend_pid() AS pid, pg_catalog.txid_current()::text AS txid';
     let guardWitness: { pid: number; txid: string } | undefined;
-    const tx = { $queryRawUnsafe: async (sql: string) => {
+    const tx = { $queryRaw: async (sql: TemplateStringsArray) => {
       const result = await client.query<typeof tuple & { pid: number; txid: string }>(
-        `SELECT attested.*, ${witnessSql} FROM (${sql.trim().replace(/;$/, "")}) AS attested`,
+        `SELECT attested.*, ${witnessSql} FROM (${sql.join("").trim().replace(/;$/, "")}) AS attested`,
       );
       const row = result.rows[0];
       if (row) guardWitness = { pid: row.pid, txid: row.txid };

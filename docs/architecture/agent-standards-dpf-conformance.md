@@ -48,6 +48,10 @@ canonical Agent row. Revocation tombstones take precedence; missing authority
 fails closed. Conflicting legacy rows are reconciled only through a fresh,
 administrator-approved preview, without merging their grants automatically.
 
+The `attest_preview_database` tool uses the existing `work_capsule_write` grant
+and authority classification. The grant alone does not confer lease ownership.
+The handler checks authenticated ownership and the current lease at execution.
+
 | Control Area | Status | Evidence Path | Notes | Recommended Next Step |
 |--------------|--------|---------------|-------|-----------------------|
 | Runtime authority mediation | Implemented | `apps/web/lib/mcp-tools.ts`, `apps/web/lib/tak/agent-grants.ts`, `apps/web/lib/coworker/authorized-surface-runtime.ts` | Tools declare `requiredCapability`; `getAvailableTools()` filters by user authority, mode, and external access posture; agent grant mapping adds a second control layer. Authorized Surface sessions also bind the principal and intersect role, coworker grants, work context, token scope, approval policy, revision, and TTL before projecting state or actions. | Extend the same explicit permission-intersection receipt beyond Authorized Surfaces to every remaining tool exposure decision. |

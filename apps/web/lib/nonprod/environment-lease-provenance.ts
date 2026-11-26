@@ -256,10 +256,10 @@ export async function attestOwnedPreviewDatabase(input: {
       return "preview_database_portal_quiescing";
     }
 
-    await tx.$executeRawUnsafe("SAVEPOINT preview_database_proof");
+    await tx.$executeRaw`SAVEPOINT preview_database_proof`;
     let disposition = "preview_database_publication_contended";
     try {
-      const productionSystemIdentifier = await readLeaseOwningSystemIdentifier({ $queryRawUnsafe: sql => tx.$queryRawUnsafe(sql) });
+      const productionSystemIdentifier = await readLeaseOwningSystemIdentifier(tx.$queryRaw.bind(tx));
       if (!productionSystemIdentifier) return "preview_database_owner_cluster_unavailable";
       if (productionSystemIdentifier === observation.database.systemIdentifier) return "preview_database_production_cluster";
       const proof = { ...observation, productionSystemIdentifier };
@@ -276,7 +276,7 @@ export async function attestOwnedPreviewDatabase(input: {
             data: { progressPayload: payload as never },
           });
           if (result.count !== 1) return false;
-          await tx.$executeRawUnsafe("RELEASE SAVEPOINT preview_database_proof");
+          await tx.$executeRaw`RELEASE SAVEPOINT preview_database_proof`;
           disposition = "preview_database_published";
           return true;
         },
@@ -284,7 +284,7 @@ export async function attestOwnedPreviewDatabase(input: {
       return readRefusal ?? disposition;
     } finally {
       if (disposition !== "preview_database_published") {
-        await tx.$executeRawUnsafe("ROLLBACK TO SAVEPOINT preview_database_proof");
+        await tx.$executeRaw`ROLLBACK TO SAVEPOINT preview_database_proof`;
       }
     }
   });

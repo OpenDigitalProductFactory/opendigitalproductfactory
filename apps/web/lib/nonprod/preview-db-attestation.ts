@@ -1,8 +1,8 @@
 import { isRecord } from "../shared/coerce";
 
-import { PREVIEW_DATABASE_IDENTITY_SQL, previewLogicalRuntimeId } from "../../../../packages/integration-shared/src/preview-db-identity.cjs";
+import { previewLogicalRuntimeId } from "../../../../packages/integration-shared/src/preview-db-identity.cjs";
 
-export { PREVIEW_DATABASE_IDENTITY_SQL, previewLogicalRuntimeId };
+export { previewLogicalRuntimeId };
 
 export const PREVIEW_DATABASE_PROOF_KEY = "nonprodPreviewDatabaseAttestation";
 
@@ -23,7 +23,7 @@ export type PreviewDatabaseProof = PreviewDatabaseBinding & {
   database: PreviewDatabaseIdentity;
 };
 
-type QueryPort = { $queryRawUnsafe(sql: string): Promise<unknown> };
+type QueryPort = { $queryRaw(sql: TemplateStringsArray): Promise<unknown> };
 type Snapshot = { status: string; progressPayload: Record<string, unknown> };
 
 const systemId = (value: unknown): value is string =>
@@ -84,12 +84,10 @@ function proofMatches(proof: PreviewDatabaseProof | null, binding: PreviewDataba
     && proof.productionSystemIdentifier !== proof.database.systemIdentifier;
 }
 
-export async function readLeaseOwningSystemIdentifier(tx: QueryPort): Promise<string | null> {
-  if (typeof (tx as { $transaction?: unknown }).$transaction === "function") return null;
+/** The owner passes a tag bound to its locked transaction, inside its savepoint. */
+export async function readLeaseOwningSystemIdentifier(query: QueryPort["$queryRaw"]): Promise<string | null> {
   try {
-    const rows = await tx.$queryRawUnsafe(
-      'SELECT system_identifier::text AS "systemIdentifier" FROM pg_catalog.pg_control_system()',
-    );
+    const rows = await query`SELECT system_identifier::text AS "systemIdentifier" FROM pg_catalog.pg_control_system()`;
     const value = Array.isArray(rows) && rows.length === 1 ? rows[0]?.systemIdentifier : null;
     return systemId(value) ? value : null;
   } catch {
@@ -107,7 +105,14 @@ export async function matchesPreviewDatabase(input: {
   const { tx, proof, binding } = input;
   if (typeof (tx as { $transaction?: unknown }).$transaction === "function" || !proofMatches(proof, binding)) return false;
   try {
-    const rows = await tx.$queryRawUnsafe(PREVIEW_DATABASE_IDENTITY_SQL);
+    // Pinned to the launcher psql statement by the identity parity test.
+    const rows = await tx.$queryRaw`
+  SELECT system_identifier::text AS "systemIdentifier", d.oid::text AS "databaseOid",
+         d.datname::text AS "databaseName",
+         extract(epoch from pg_catalog.pg_postmaster_start_time())::numeric::text AS "postmasterStartEpoch"
+  FROM pg_catalog.pg_control_system() CROSS JOIN pg_catalog.pg_database AS d
+  WHERE d.datname = pg_catalog.current_database()
+`;
     const actual = Array.isArray(rows) && rows.length === 1 ? rows[0] : null;
     return validIdentity(actual) && actual.systemIdentifier === proof.database.systemIdentifier
       && actual.databaseOid === proof.database.databaseOid && actual.databaseName === proof.database.databaseName

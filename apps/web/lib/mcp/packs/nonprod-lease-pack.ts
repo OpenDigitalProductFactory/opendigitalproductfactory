@@ -18,8 +18,6 @@ import type { LocalCiHostPressure } from "@/lib/nonprod/local-ci-pool-policy";
 import type { HostResourceLeaseEvidence } from "@/lib/nonprod/environment-lease-pool-policy";
 import { isHeavyResourceClass } from "@/lib/nonprod/host-resource-policy";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
-import { sanitizeForLog } from "@/lib/security/safe-log";
-import { redactConnectorText } from "@/lib/integrations/kernel/redaction";
 import { isRecord } from "@/lib/shared/coerce";
 import { resolveLeaseRequestTiming } from "@/lib/nonprod/environment-lease-timing";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
@@ -648,13 +646,11 @@ const attestPreviewDatabaseHandler: ToolPackHandler = async (params, userId, con
   } catch (error) {
     const reason = "preview_database_attestation_failed";
     const code = isRecord(error) ? error.code : undefined;
-    const logCode = typeof code === "string" && /^[A-Za-z0-9_-]{1,64}$/.test(code) ? code : "unknown";
-    const message = redactConnectorText(getErrorMessage(error)
-      .replace(/\bpostgres(?:ql)?:\/\/[^\s]+/gi, "[REDACTED_DATABASE_URL]"));
-    console.warn("[preview-database-attestation] %s: %s", logCode, sanitizeForLog(message.slice(0, 600)));
-    // Retry only rolled-back/transient database outcomes. An uncertain commit
-    // or unknown error does not tell the caller it is safe to replay.
-    const retryable = code === "P2034" || code === "P2024";
+    // Do not log arbitrary error messages or codes. They can contain secrets.
+    const category = code === "P2034" ? "transaction_conflict"
+      : code === "P2024" ? "pool_timeout" : "unclassified_failure";
+    const retryable = category !== "unclassified_failure";
+    console.warn("[preview-database-attestation] %s: %s", retryable ? code : "unknown", category);
     return { success: false, error: reason, message: "Preview database attestation did not complete.",
       data: { ...audit(reason), retryable } };
   }
