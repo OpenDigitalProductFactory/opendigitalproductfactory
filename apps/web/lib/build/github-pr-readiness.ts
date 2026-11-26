@@ -57,6 +57,8 @@ export type GithubPrObservation = {
   unresolvedReviewThreads: number;
   unresolvedReviewThreadUrls?: string[];
   reviewThreadsComplete: boolean;
+  /** Positive page proof for the new conversation hold, independent of legacy readiness. */
+  reviewConversationPageComplete?: boolean;
   checksComplete: boolean;
   checks: GithubCheckObservation[];
   autoMergeEnabled: boolean;
@@ -84,12 +86,19 @@ function checkPassed(check: GithubCheckObservation): boolean {
   return check.conclusion !== null && PASSING_CHECK_CONCLUSIONS.has(check.conclusion.toUpperCase());
 }
 
+export type ConversationPageObservation = Pick<GithubPrObservation, "reviewThreadsComplete" | "reviewConversationPageComplete">;
+
+export function hasCompleteConversationPage(observation: ConversationPageObservation): boolean {
+  // Explicit false from a provider observation must win over the old aggregate.
+  return observation.reviewConversationPageComplete ?? observation.reviewThreadsComplete;
+}
+
 /** Observation only: do not turn an armed request into a new queue action. */
 function armedConversationHold(observation: GithubPrObservation): GithubPrConversationHold | undefined {
   const count = observation.unresolvedReviewThreads;
   const blocking = observation.checks.filter(checkBlocksMerge);
   const mergeState = (observation.mergeStateStatus ?? "").toUpperCase();
-  if (observation.queueEvent || !observation.reviewThreadsComplete || !Number.isSafeInteger(count) || count < 1
+  if (observation.queueEvent || !hasCompleteConversationPage(observation) || !Number.isSafeInteger(count) || count < 1
     || !observation.checksComplete || blocking.length === 0
     || !blocking.every(check => check.status.toUpperCase() === "COMPLETED" && checkPassed(check))
     || !["BLOCKED", "CLEAN", "HAS_HOOKS", "UNSTABLE"].includes(mergeState)) return undefined;
@@ -365,7 +374,9 @@ export async function observeGithubPullRequest(input: {
       const url = thread?.comments?.nodes?.[0]?.url;
       return thread?.isResolved === false && typeof url === "string" ? [url] : [];
     }),
-    reviewThreadsComplete: pr.reviewThreads?.pageInfo?.hasNextPage === false
+    reviewThreadsComplete: pr.reviewThreads?.pageInfo?.hasNextPage !== true
+      && pr.latestReviews?.pageInfo?.hasNextPage !== true,
+    reviewConversationPageComplete: pr.reviewThreads?.pageInfo?.hasNextPage === false
       && Array.isArray(pr.reviewThreads.nodes)
       && pr.reviewThreads.nodes.every(thread => typeof thread?.isResolved === "boolean")
       && pr.latestReviews?.pageInfo?.hasNextPage !== true,

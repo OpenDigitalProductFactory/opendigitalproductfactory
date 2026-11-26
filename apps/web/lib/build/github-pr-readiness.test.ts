@@ -193,6 +193,12 @@ describe("observeGithubPullRequest check detail (BI-88341B5D)", () => {
     });
     pr.reviewThreads.pageInfo.hasNextPage = true;
     expect(projectGithubPrReadiness(await read())).not.toHaveProperty("conversationHold");
+    // A missing page is not proof for the new hold, but preserves the old readiness adapter.
+    delete (pr.reviewThreads as { pageInfo?: { hasNextPage: boolean } }).pageInfo;
+    const missing = await read();
+    expect(missing.reviewThreadsComplete).toBe(true);
+    expect(missing.reviewConversationPageComplete).toBe(false);
+    expect(projectGithubPrReadiness(missing)).not.toHaveProperty("conversationHold");
   });
 
   it("keeps a removed group's failed check separate from green author-head checks", async () => {

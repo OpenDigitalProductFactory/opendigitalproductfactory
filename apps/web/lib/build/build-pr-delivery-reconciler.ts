@@ -1,9 +1,11 @@
 import {
   enablePullRequestAutoMerge,
+  hasCompleteConversationPage,
   observeGithubPullRequest,
   projectGithubPrReadiness,
   rerunFailedWorkflowJobs,
   updatePullRequestBranch,
+  type ConversationPageObservation,
   type GithubPrObservation,
   type GithubPrReadiness,
 } from "@/lib/build/github-pr-readiness";
@@ -302,7 +304,7 @@ export function projectBuildPrDeliveryReadiness(
 export function holdsPrQueueAttempt(
   state: BuildPrDeliveryStateV1,
   readiness: GithubPrReadiness,
-  observation: Pick<GithubPrObservation, "reviewThreadsComplete">,
+  observation: ConversationPageObservation,
 ): boolean {
   return observeQueueHold(state, readiness, "") !== null || observeConversationHold(state, readiness, observation) !== null;
 }
@@ -310,13 +312,13 @@ export function holdsPrQueueAttempt(
 function observeConversationHold(
   state: BuildPrDeliveryStateV1,
   readiness: GithubPrReadiness,
-  observation: Pick<GithubPrObservation, "reviewThreadsComplete">,
+  observation: ConversationPageObservation,
 ): BuildPrConversationHold | null {
   if (readiness.kind !== "armed" || state.queueHold?.reason === "disarmed"
     || state.queueHold?.headSha === readiness.headSha) return null;
   const prior = state.conversationHold?.headSha === readiness.headSha ? state.conversationHold : null;
   // An incomplete page isn't proof that an already-observed blocker cleared.
-  if (!observation.reviewThreadsComplete) return prior ?? null;
+  if (!hasCompleteConversationPage(observation)) return prior ?? null;
   if (!readiness.conversationHold) return null;
   return {
     ...readiness.conversationHold, headSha: readiness.headSha, owner: "workroom-owner",
@@ -440,7 +442,7 @@ export async function executeBuildPrDeliveryAction(input: {
   }
   const conversationHold = observeConversationHold(input.state, readiness, input.observation);
   if (conversationHold) {
-    if (!conversationHold.routeReportId && input.observation.reviewThreadsComplete && mayActuate
+    if (!conversationHold.routeReportId && hasCompleteConversationPage(input.observation) && mayActuate
       && input.repairAuthority !== "record" && input.routeConversationHold) {
       conversationHold.routeReportId = await input.routeConversationHold(conversationHold).catch(() => null);
     }
