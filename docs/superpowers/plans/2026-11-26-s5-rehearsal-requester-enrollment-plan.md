@@ -217,6 +217,8 @@ Activation, sessions, delegation and issuance belong to BI-9F5D1052.
 
 **Enrollment code:**
 - `apps/web/lib/identity/s5-rehearsal-enrollment.server{,.test}.ts`
+- `apps/web/lib/identity/s5-rehearsal-requester-custody.server{,.test}.ts` (status, retirement and the read seam; split out to stay under the 800-line module cap)
+- `apps/web/lib/identity/s5-rehearsal-requester-never-active.test.ts` (phase 7 issuer regressions)
 - `apps/web/app/api/admin/rehearsal-requester/[command]/route{,.test}.ts`
 - `apps/web/lib/identity/password-policy.ts`
 
@@ -278,6 +280,46 @@ Already released through `release_workroom_scope`:
 - the lease fence and provenance files
 - `lib/workroom-runtime/s5-rehearsal-*`
 - every authentication and issuance file named in the design
+
+## Implementation record (phases 1 to 10)
+
+Phases 1 to 10 are implemented on `t3/preview-owner-enrollment` and are not yet merged. Phase 11 is this record and the docs-impact dispositions below.
+
+| Phase | Commit | What landed |
+| --- | --- | --- |
+| 1 | `add7f091` | Retained record, migration and asset registry |
+| 2 | `65029cea`, `23eaa0a1` | Clone destination fence and its loss gaps |
+| 3 | `c69c8c5d` | Typed audit rows; M-4 excludes them |
+| 4 | `5b96f577` | Request boundary, inert by default |
+| 5 | `92c9ea9e` | Owner binding from one SQL snapshot |
+| 6 | `f3d8f25c` | Enrollment and the read-only status GET |
+| 7 | `82684eec` | Never-active regressions for every issuer; no issuer edited |
+| 8 | `c7a3ac40` | Guards in `users.ts`, `workforce.ts` and `principal-linking.ts` |
+| 9, 10 | `316744c5` | Retirement and `readS5RehearsalEnrollment` |
+
+**What is proven, and how.**
+- Focused Vitest only: 290 tests across the 22 touched suites, plus web typecheck. No full gate has run.
+- The PostgreSQL proofs (R-FENCE-LOSS, R-ONE-FENCE, R-STATUS-WAIT, R-OWNER-COHERENT, the enrollment and retirement suites) ran against throwaway containers with stub tables. They drive the real boundary, runner, enrollment, retirement and status code. The create, audit and revocation writes in those tests are SQL stand-ins for the served Prisma adapters, which only typecheck and helper unit tests cover.
+- Nothing ran against a live, shared or preview database.
+
+**What is served: nothing that writes.**
+- Readiness denies (`preview_enrollment_fence_unavailable`), so every served request holds before any transaction opens.
+- The owner receipt (BI-C7100183), DB identity (BI-5C193A3F) and installation attestation (BI-8EA98961) ports deny. The commit-time reservation fence (BI-588688A7) and lease currency (BI-60FC9291) are ports with no served adapter.
+- The served `execute` still answers `command_not_served`. The Prisma create, retirement and readback adapters exist but are not wired into it.
+- The status GET holds on `owner_binding_unavailable` before any connection opens.
+
+**Deviations a reviewer should judge.**
+- The owner snapshot reads `Organization` directly in the one coherent statement (the first two rows by `createdAt`, as `findInstallOrganization` does) instead of calling `findInstallOrganization`. Calling it would be a second read and break the one-snapshot rule. AC-E2 names the canonical reader, so this needs a ruling.
+- `verifyRequesterState` is implemented as `readRequesterState` (one statement) plus the pure `evaluateRequesterState`.
+- Phases 9 and 10 share one commit because they share a module.
+- The plan's per-commit `Design-Grounding-Decision:` trailer (Gates and evidence) is missing from `add7f091..316744c5`. History was not rewritten. `check-design-grounding-decision.mjs` reports no design-sensitive files in this change. The trailer is carried from the phase 11 commit on.
+
+**Docs-impact dispositions.**
+- `docs/architecture/ai-agent-meta-model.md`: not affected. The `syncEmployeePrincipal` guard refuses one governed class; the Principal and alias convergence model it documents is unchanged.
+- `docs/architecture/data-model-stewardship-runbook.md`: not affected. It documents the ratchet procedure. This change followed it, raising `prismaModelCount` 649 to 650 through the generator with owner, expiry and contraction (BI-A21DB89E).
+- `docs/architecture/platform-substrate-boundaries.md`: not affected. It points to the committed baseline for values; the policy is unchanged.
+- `docs/maintenance/staleness-report.md`: not affected. It is a generated maintenance report.
+- The parent provisioner spec and plan are not edited here (ruling (b)). Their reconciliation belongs to WC-14E7E2F3's F1 amendment.
 
 ## Coverage
 
