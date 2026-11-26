@@ -35,6 +35,8 @@ import { parseRepositoryPnpmVersion, resolvePinnedPnpmInvocation } from "./lib/p
 import { isEntryModule } from "./lib/entry-module.mjs";
 import { resolveHostCommandInvocation } from "./lib/host-command-invocation.mjs";
 import { guardShellEnv } from "./lib/guard-bash.mjs";
+import { GATE_EXIT } from "./lib/gate-exit-classification.mjs";
+import { waitForDpf2Reservation } from "./lib/local-convergence-lock.mjs";
 import { GuardRuntimeEnvironmentError } from "./lib/load-pinned-guard-typescript.mjs";
 
 function die(message, code = 1) {
@@ -665,6 +667,7 @@ async function main() {
     process.stdout.write(`local-ci-runner: origin/main refreshed at admission (${baseFreshness.fetchMode})\n`);
   }
 
+  if (await waitForDpf2Reservation() !== "clear") process.exit(GATE_EXIT.DPF2_RESERVATION_TIMEOUT);
   ensureScratchWorkspace(root, workspace);
   cleanScratchWorkspace(workspace, manifest);
 

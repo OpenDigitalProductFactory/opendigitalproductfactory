@@ -105,6 +105,7 @@ export function isolatedGateFixtureEnvironment(directory, values, ambient = proc
   for (const [key, value] of Object.entries(ambient)) if (allowed.has(key.toLowerCase())) env[key] = value;
   Object.assign(env, {
     TEMP: directory, TMP: directory, NODE_ENV: "test",
+    DPF2_CI_SLOT_LOCK: join(directory, "fixture-dpf2-ci.lock"),
     DPF_MCP_BEARER_TOKEN: "test-token",
     DPF_MCP_CLIENT_CREDENTIALS_FILE: join(directory, "absent-credentials.json"),
     DPF_DURABLE_RESUMER: "off",
