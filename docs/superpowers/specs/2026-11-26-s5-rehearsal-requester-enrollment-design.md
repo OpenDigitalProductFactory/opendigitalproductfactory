@@ -4,225 +4,293 @@ status: draft
 
 # Owner-operated enrollment of the S5 rehearsal requester
 
-Status: design for independent review. Backlog item BI-9F7192F9, Workroom WC-4EBA473D. It is a dependency of the S5 rehearsal provisioner (BI-1F994B73), and it applies the policy on BI-588688A7. It revises draft `5f67e417` after an independent review requested changes. It authorizes no enrollment, rehearsal, provider send or production change.
+Status: design for independent review, revision 3. Backlog item BI-9F7192F9, Workroom WC-4EBA473D. It is a dependency of the S5 rehearsal provisioner (BI-1F994B73) and applies the policy on BI-588688A7. This revision follows two review rounds that requested changes: draft `5f67e417` and commit `3ecb90d4`. It authorizes no enrollment, activation, rehearsal, provider send or production change.
 
 ## Decision
 
-Add one preview-only, owner-operated surface at `/admin/rehearsal-requester`. There the install owner does three things:
+Add one preview-only, owner-operated surface at `/admin/rehearsal-requester`. There the install owner:
 
-1. Enrolls exactly one synthetic requester for one setup key.
-2. Confirms that requester's coworker delegation, after using the existing OAuth consent flow.
-3. Retires the requester.
+1. Enrolls exactly one synthetic requester for one setup key. The requester is created **inactive**.
+2. Activates the requester into a **restricted requester session class**, once a least-privilege profile is decided.
+3. Confirms the requester's coworker delegation, after using the existing OAuth consent flow.
+4. Retires the requester.
 
-The provisioner gets a read-only seam over the resulting records. Every mutation fails closed and ships **inert**: it holds until every owning proof below is served. No schema migration is added, and no agent operates the surface or handles the credential.
+The provisioner gets a read-only seam over the resulting records. Every mutation fails closed and ships **inert**: it holds until every owning proof below is served. No agent operates the surface or handles the credential.
 
 The owner ruled on 2026-11-25: **"I create and hold it."** The owner creates the account once, authorizes the coworker's delegation through the governed preview UI, and keeps the credential. No agent holds, mints or sees it. Separation of duties is role separation between distinct Principals and accounts, not proof that two people acted.
 
 ## Grounding
 
-- Parent design: `2026-11-25-s5-rehearsal-draft-provisioner-design.md`, specifically:
-  - the Enrollment prerequisite;
-  - Invoker and fence (item 3: enrollment uses the same fence);
-  - the Requester pin row;
-  - Idempotency, rollback and non-goals.
-- Plan: `2026-11-25-s5-rehearsal-draft-provisioner-plan.md`, F1, F2 and V2.
-- Reused substrate, verified at `c8270766fc9e`:
-  - `syncUserPrincipal(userId, tx)` (`lib/identity/principal-linking.ts:264`). It uses only the transaction's delegates and has no mail, event or audit side effect.
-  - Canonical bcrypt `hashPassword` (`lib/govern/password.ts:5`).
-  - The `passwordPolicyErrors` rules (`lib/actions/users.ts:48`).
-  - `canonicalJson` (`packages/integration-shared/src/canonical-json.ts`).
-  - `personRevocation` (`lib/auth/oauth-client-people.ts:52`).
-  - `AuthorizationDecisionLog` with its unique `decisionId` (`core-identity.prisma:429`).
-  - The OAuth consent path, unchanged:
-    - `/api/oauth/authorize` creates the binding through `createOAuthConsentBinding`.
-    - Code exchange and token use re-check `currentOAuthHuman` (`lib/auth/oauth-tokens.ts:119`, `:190`).
-- Standards: RFC 2606 §2 reserves `.invalid`, which is used as a label only. NIST SP 800-63B §5.1.1.2 calls for salted, adaptive hashing of memorized secrets, which is why the bcrypt helper is used. OAuth 2.0 (RFC 6749 §10.4) keeps refresh tokens separate from the resource owner's credentials.
-- Rejected:
-  - Generic `createUserAccount`. It runs on the default client, uses an unsalted SHA-256 hash, and syncs the Principal best-effort outside the write.
-  - `withGovernedUserAction`. It writes a separate audit row after its callback.
-  - `endAccountAgentAccess` as-is. It opens its own `$transaction` and leaves bindings and sessions alone.
-  - A seeded role chosen by "size". See the least-privilege section.
-  - Injectable allow fixtures on the served path.
+- **Parent design:** `2026-11-25-s5-rehearsal-draft-provisioner-design.md`. The relevant sections are the Enrollment prerequisite, Invoker and fence (item 3), the Requester pin row, and Idempotency, rollback and non-goals.
+- **Parent plan:** `2026-11-25-s5-rehearsal-draft-provisioner-plan.md`, sections F1, F2 and V2.
+- **Reused substrate**, verified at `c8270766fc9e` with Next.js 16.4.6 installed in this worktree, matching `pnpm-lock.yaml`:
+
+| Substrate | Location | Use here |
+| --- | --- | --- |
+| `syncUserPrincipal(userId, tx)` | `lib/identity/principal-linking.ts:264` | Transaction-only. No mail, event or audit side effect. |
+| `PrincipalAlias` | `core-identity.prisma:327` | Unique `(aliasType, aliasValue, issuer)`, indexed, not enrolled in any purge policy. It already carries several identity types, for example `service-account`, `edge_node` and `mail`. |
+| Canonical bcrypt `hashPassword` | `lib/govern/password.ts:5` | Credential hashing. |
+| `canonicalJson` | shared | Setup digest. |
+| `personRevocation` | `lib/auth/oauth-client-people.ts:52` | Revocation stamp. |
+| `AuthorizationDecisionLog` | — | Audit evidence only, because it carries `retention=365d` at `core-identity.prisma:428`. |
+| OAuth consent and issuance | `/api/oauth/authorize` POST, with a same-origin check at `:178`; `exchangeOAuthCode` (`lib/auth/oauth-tokens.ts:476`); refresh (`:535`) | Delegation path. |
+| Central session gates | `apps/web/proxy.ts`, `authenticateRequest` (`lib/api/auth-middleware.ts:35`) | Restricted session class. |
+| Next.js 16.4.6 request handling | `decodeReply` at `app-render/action-handler.js:568`; handler dispatch at `app-route/module.js:521` | A Route Handler receives the undecoded `Request`, while Server Actions decode arguments before invocation. Re-verify against the pinned version at Red. |
+
+- **Standards:**
+  - RFC 2606 §2: `.invalid` is used as a label only.
+  - NIST SP 800-63B §5.1.1.2: adaptive, salted hashing of memorized secrets.
+  - RFC 6749 §10.4: refresh tokens are separate from the owner's credential.
+  - OWASP CSRF guidance: same-origin verification on cookie-authenticated POSTs.
+- **Rejected approaches:**
+  - Generic `createUserAccount`. It runs on the default client, uses an unsalted SHA-256 hash and does a best-effort Principal sync.
+  - `withGovernedUserAction`. It writes an extra audit row.
+  - `endAccountAgentAccess` and `deactivatePrincipalAndCredentials` as they stand, because each opens its own `$transaction`.
+  - The audit log as a lifecycle marker, because it is purged after 365 days.
+  - A seeded role chosen by size.
+  - Allow fixtures on the served path.
+  - A Server Action as the mutation boundary.
+  - Absence of a JWT claim as proof that an account is ordinary.
+
+## Durable identity marker (no migration)
+
+The governed-requester marker is a `PrincipalAlias` on the requester's own human Principal, written in the enrollment transaction:
+
+- `aliasType: "s5-rehearsal-requester"`
+- `aliasValue: setupDigest`, the full 64-hex SHA-256 of `canonicalJson({ schema: "s5-rehearsal-setup.v1", rulingRef, reservationId })`
+- `issuer: ""`
+
+The unique index guarantees one requester per setup key. The marker is retained, because `PrincipalAlias` has no purge declaration, and indexed. It is created only by enrollment and never deleted. Terminal state is the Principal's `status: "inactive"` together with `User.isActive: false`, plus a second alias `aliasType: "s5-rehearsal-retired"` written by retirement with the same `aliasValue`. Both aliases survive audit purges. `isGovernedRequester(userId, tx)` resolves the user's local `user` alias to its Principal and checks for the marker. **A missing, malformed or unreadable result is an error, not "ordinary"**, so every caller fails closed.
+
+`AuthorizationDecisionLog` rows remain as **audit evidence only**. There is one typed, transaction-bound insert per successful command:
+
+| Command | `actionKey` | `decisionId` |
+| --- | --- | --- |
+| Enroll | `s5.rehearsal-requester.enroll` | `s5rr:enroll:<setupDigest>` |
+| Activate | `s5.rehearsal-requester.activate` | `s5rr:activate:<setupDigest>` |
+| Confirm delegation | `s5.rehearsal-requester.delegation-confirm` | `s5rr:delegation:<setupDigest>` |
+| Retire | `s5.rehearsal-requester.retire` | `s5rr:retire:<setupDigest>` |
+
+Common fields on every row:
+- `actorType: "user"`, with `actorRef` and `humanContextRef` set to the owner;
+- `decision: "allow"`;
+- `purposeOfUse: "synthetic-rehearsal-requester"`;
+- a strict versioned payload containing bounded typed refs and a closed-enum reason code only.
+
+These keys differ from `S5_REHEARSAL_APPROVAL_ACTION`, so the approval reader cannot mistake them for approval rows. Lifecycle decisions read the alias marker and live identity state, never these rows. An expired audit row therefore changes nothing.
+
+How the existing consumers treat the rows:
+- The **security projector** and `GET /api/v1/governance/decisions` already handle them correctly: an informational allow, returned to the matching actor. They get **tests only**.
+- The efficacy measure **M-4** ("refusals before effect") **excludes** `s5.rehearsal-requester.*`. These are owner administration receipts, not gate decisions, and because holds write no row, including them would bias the denominator with allows only. Tests cover the exclusion.
+
+The email is `rehearsal-<first 16 hex of setupDigest>@s5-rehearsal.invalid`. It is a label only and is never used for lookup. A collision, or an email without a marker, holds and is never adopted.
 
 ## Fence: fail closed, inert until served
 
-Both enrollment and retirement refuse unless every proof holds. The process override outranks installer state in `resolveEnvironmentClassPrecedence` (`lib/install/environment-class-contract.ts:112`). So `DPF_ENVIRONMENT_CLASS`, the host, the Origin, a lease row or the class resolution can never pass the fence alone.
-
-| Proof | Owner | Enrollment and delegation confirmation | Retirement |
+| Proof | Owner | Enroll / activate / confirm | Retire |
 | --- | --- | --- | --- |
-| Positive non-production installation attestation joined to the exact lease | BI-8EA98961 | required | required, joined to the enrollment receipt's attested installation |
-| Actual DB server or cluster and database identity on the write transaction's connection | BI-5C193A3F | required, same transaction | required, same transaction, equal to the receipt's DB identity |
-| Lease currency at commit, fenced against remote teardown or replacement | BI-60FC9291 | required at commit | **waived**: retirement must work after the lease ends |
+| Positive non-production installation attestation joined to the exact lease | BI-8EA98961 | required | required, joined to the enrollment's attested installation |
+| Actual DB server/cluster and database identity on the write transaction's connection | BI-5C193A3F | required, same transaction | required, same transaction, equal to the enrollment's DB identity |
+| Lease currency at commit | BI-60FC9291 | required | **not used**: retirement has its own readiness path with no lease input |
 | Production class | resolver | refuse | refuse |
 
-- **The served adapter denies.** `PreviewEnrollmentFence` is wired privately on the server. The served implementation returns `hold: preview_enrollment_fence_unavailable` until all three owners serve their proofs. Allow-capable fakes live only in test files, and nothing imports them from production modules.
-- **Refusal happens at the request boundary.** Mutations go through a Route Handler, `POST /api/admin/rehearsal-requester`, not a Server Action, because a Server Action receives already-decoded arguments. The handler runs these checks in order:
-  1. production refusal;
-  2. session presence;
-  3. the fence's readiness check.
-  All three run before `request.formData()` or `request.json()`. Tests assert that on refusal the body reader, the password hasher and every mutator are never called. The fence is re-verified inside the write transaction.
-- **The page shows the hold.** `/admin/rehearsal-requester` renders the form only when owner binding and fence readiness both verify. Otherwise it shows a read-only hold state with reason codes and no password field. Production returns `notFound()`.
+`DPF_ENVIRONMENT_CLASS`, host, Origin, a lease row or the class resolution never pass the fence alone. The process override outranks installer state (`lib/install/environment-class-contract.ts:112`).
+
+The served adapter denies until all three owners serve their proofs. Allow fakes exist only in test files.
+
+**Request boundary.** `POST /api/admin/rehearsal-requester/[command]` is declared `@exposure authenticated`. The `[command]` segment is one of `enroll`, `activate`, `confirm-delegation` or `retire`; the endpoint-classification baseline is unchanged. Before any body read, the handler performs these steps in order:
+
+1. **Production refusal.**
+2. **Same-origin verification.** The `Origin`/`Host` match follows the OAuth authorize POST.
+3. **Session presence** and a non-requester session class.
+4. **Server-owned binding.** The command comes from the path segment. The setup key, `{ rulingRef, reservationId }`, comes from the one-shot owner's read-only seam for the current reservation, never from the body.
+5. **The command's readiness path.** Retirement's path has no lease input.
+6. **A pre-body serializable transaction** that verifies, without writing:
+   - the owner Principal against the ruling record;
+   - live capabilities, automation fields and handover state;
+   - the exact-DB identity;
+   - for retirement, the enrollment marker and the DB identity bound at enrollment.
+
+Only then is a **bounded** body read:
+- at most 4 KiB;
+- `application/x-www-form-urlencoded` only;
+- a strict schema;
+- for enrollment, the password, at most 72 UTF-8 bytes;
+- for retirement, a closed-enum reason code.
+
+The write transaction re-verifies everything. Tests assert that when the handler refuses, the body reader, the hasher and every mutator are called zero times.
 
 ## Owner and record binding
 
-In the fenced serializable transaction, the actor must satisfy every check below:
+Inside the fenced transaction, the actor must meet every one of these conditions:
 
-- **Session and alias.** The session resolves to an active human `Principal` through its unique local `user` alias.
-- **Capabilities.** The actor currently holds `manage_users` and `manage_platform`. Both are re-read from the database, not taken from session claims.
-- **Account state.** The actor has no automation fields set and no `workHandedOverAt`.
-- **Ruling owner.** The actor's Principal equals the Principal named by the **owning record of the custody ruling**.
-- **Setup refs.** The reservation (`rulingRef`, `reservationId`), attempt ref and fixture ref are verified read-only against their owning records: the one-shot owner (BI-588688A7) and the fixture-review receipt. Nothing is acquired.
+- **Session resolution.** The session resolves to an active human Principal through its local `user` alias.
+- **Live capabilities.** It holds `manage_users` and `manage_platform`, read from the database rather than the session claims.
+- **Account state.** It has no automation fields and no `workHandedOverAt`.
+- **Not a requester.** It is not itself a governed requester.
+- **Ruling owner.** Its Principal equals the Principal that a governed owner-ruling record of the custody ruling attributes to the owner.
 
-If any evidence is missing, the operation holds. Owner-typed refs are never proof.
+The reservation, attempt and fixture refs are verified read-only against their owning records: the one-shot owner (BI-588688A7) and the fixture-review receipt. Nothing is acquired. If any evidence is missing, the request holds.
 
-**Missing authority (flagged).** On the live item, the custody ruling is recorded as prose on BI-9F7192F9 and BI-588688A7. No governed ruling record attributes it to a Principal that a read seam can resolve. No served reservation or fixture-review adapter exists either. Until both owners serve them, the owner-binding check holds. The ruling itself is not re-asked. Recording it through the governed owner-ruling path is a coordinator action.
-
-## Records (no migration)
-
-**Setup digest.** `setupDigest = sha256(canonicalJson({ schema: "s5-rehearsal-setup.v1", rulingRef, reservationId }))`, the full 64-hex value.
-
-**Email.**
-- Format: `rehearsal-<first 16 hex>@s5-rehearsal.invalid`. This is a label only.
-- The unique `User.email` constraint prevents a second account. It is never used for lookup.
-- A prefix collision with a different setup holds. An email with no matching receipt holds and is never adopted.
-
-**Receipt writer.** One typed, transaction-bound writer, `writeRehearsalReceipt(tx, …)`, inserts one `AuthorizationDecisionLog` row per successful command. It sets these fields:
-
-- `decisionId`: the deterministic value from the table below. The writer never generates random IDs.
-- `actorType: "user"`, `actorRef` and `humanContextRef` set to the owner's userId.
-- `decision: "allow"`.
-- `purposeOfUse: "synthetic-rehearsal-requester"`.
-- `objectRef`: the synthetic userId.
-- `rationale`: a strict, versioned payload of bounded typed refs and reason codes only. It never holds free text, a password, a hash, a token or personal data.
-
-| Command | `actionKey` | `decisionId` | Payload adds |
-| --- | --- | --- | --- |
-| Enroll | `s5.rehearsal-requester.enroll` | `s5rr:enroll:<setupDigest>` | rulingRef, reservationId, attemptRef, fixtureRef, userId, principalId, aliasValue, email, installation, lease and DB identity refs, owner Principal |
-| Confirm delegation | `s5.rehearsal-requester.delegation-confirm` | `s5rr:delegation:<setupDigest>` | authorityBindingId, bindingId, coworker agentId, oauth client id, resource, sorted allow scopes |
-| Retire | `s5.rehearsal-requester.retire` | `s5rr:retire:<setupDigest>` | reason code from a closed enum, revoked binding/token/refresh counts, user and Principal terminal state, DB identity ref |
-
-The three action keys differ from `S5_REHEARSAL_APPROVAL_ACTION`. The approval reader therefore cannot mistake these rows for approval evidence, because it matches its own key and `purposeOfUse`. The security projector, `GET /api/v1/governance/decisions` and the efficacy decision metrics read these rows as ordinary audit data. Their payloads are safe to disclose. Tests check that the metrics either exclude the `s5.rehearsal-requester.*` keys or count them correctly.
+**Missing authority, flagged.** No governed owner-ruling record of "I create and hold it" exists yet. The coordinator will capture it through owner-ruling capture without re-asking the owner. No reservation or fixture-review adapter is served yet.
 
 ## Enrollment
 
-Enrollment runs in one serializable transaction, after the boundary refusal:
+Enrollment runs in one serializable transaction:
 
-1. Run the fence and the owner/record binding checks.
-2. Read the existing enrollment receipt by `decisionId`.
-3. If a receipt exists:
-   - Validate it strictly. The setup tuple, attempt, fixture, namespace, user, alias, active Principal and non-retired state must all agree.
-   - On an exact match, return the prior outcome and write nothing. A replay never reads, compares, rehashes or changes the password.
-   - A retired receipt returns the terminal status `retired`.
-   - A changed attempt or fixture, or a malformed receipt, holds.
-4. If the email exists without a receipt, hold.
-5. Otherwise, apply the password policy only, then hash with the canonical bcrypt helper.
-6. Create the User. It is nonsuperuser, has no automation fields, and gets the least-privilege profile described below.
-7. Run `syncUserPrincipal(userId, tx)`.
-8. Write the receipt.
-9. Commit.
-10. Handle conflicts. A unique-constraint conflict or serialization abort ends the transaction. A fresh fenced transaction then re-observes the committed receipt: an exact match is a replay, anything else holds. Any failure rolls back the User, Principal and alias together.
+1. Run the fence and owner checks.
+2. Look up the marker by `setupDigest`.
+3. If the marker exists:
+   - Validate strictly. The setup, attempt, fixture, user, Principal and alias must agree with the enroll audit row while that row is retained, and with the marker and live state always.
+   - An exact match returns the prior outcome and writes nothing. It never reads, compares, rehashes or changes the password.
+   - If the requester is retired, return the terminal status `retired`.
+   - A changed attempt or fixture, or a malformed record, holds.
+4. If the email exists without a marker, hold.
+5. Otherwise, run the shared password policy and the 72-byte check, then hash with bcrypt.
+6. Create the User as nonsuperuser with no automation fields, **no role** and `isActive: false`.
+7. Run `syncUserPrincipal(userId, tx)` and set the Principal's status to `inactive`.
+8. Write the marker alias and the enroll audit row, then commit.
 
-The password travels in only one place: the owner's browser POST body to the boundary handler. It is never logged, echoed, returned or stored except as the bcrypt hash.
+A unique conflict or serialization abort is re-observed in a fresh fenced transaction: an exact match counts as a replay, anything else holds. Any failure rolls back User, Principal, aliases and audit row together.
 
-## Delegation (second immutable receipt)
+The password exists only in the owner's bounded POST body. It is never logged, echoed or returned.
 
-The coworker binding does not exist when enrollment commits. The owner signs in to the preview as the synthetic user and consents to the coworker's client through the unchanged `/api/oauth/authorize` flow. Back in `/admin/rehearsal-requester`, the owner then confirms the exact binding. This step runs under the same fence and owner binding, and it is idempotent. It verifies:
+## Least privilege, the restricted session and activation (held)
+
+The requester stays **inactive**. Both the User and the Principal are inactive until a least-privilege profile is decided.
+
+- **No seeded role is narrow enough:**
+  - `HR-200` adds finance and CRM powers.
+  - `HR-300` adds architecture writes.
+  - `HR-000` can manage the platform.
+- **No governed writer exists for the narrow alternative.** `eligibleOAuthCoworkers` (`lib/auth/oauth-identity-binding.ts:21`) only reads `oauthPurpose: "delegation"` bindings, and nothing writes them.
+- **A roleless active user is still a workforce user, so it is not safe:**
+  - Workforce sign-in returns `type: "admin"` without requiring a group (`lib/govern/auth.ts:155`).
+  - `/api/v1/workspace/activity` exposes backlog titles after authentication alone.
+  - `/api/v1/work-queue/[itemId]/complete` updates WorkItems after authentication alone.
+
+Activation is a separate fenced command. It holds with `least_privilege_profile_undecided` until the owner decides. **Open question for the owner, carried by the coordinator:** add a narrow governed delegation-binding writer, or add a dedicated minimal role. The answer must never fall back to a broader role or superuser.
+
+Activation also requires every one of these to be in place and tested first:
+
+- **Restricted session class.** Every issuer classifies the account against the durable marker, and a missing or unreadable marker fails closed.
+  - Workforce sign-in stamps `identityClass: "rehearsal-requester"` or `"ordinary"` from that lookup and refuses sign-in if the lookup fails.
+  - The mobile `/api/v1/auth/login` already requires a group, and it also refuses requester accounts.
+  - The `jwt` callback treats a token **without** `identityClass`, for example from an older issuer, as unclassified. It runs the marker lookup once, ends the session if the lookup is missing or fails, and otherwise stamps the result.
+  - For `rehearsal-requester` tokens, every callback re-reads `User.isActive` and the Principal's `status`, and ends the session when either is inactive.
+- **Route denial.** `proxy.ts` and `authenticateRequest` deny requester sessions on every route except the OAuth authorize consent GET and POST and sign-out. Ordinary portal pages and `/api/v1/*` return 403.
+- **No S5 work from an unconfirmed binding.** OAuth issuance and bearer resolution for a requester require a `delegation-confirm` audit row and its pinned binding to be live and unchanged. The read seam reports this, and the provisioner holds without it.
+
+**Rollback rule.** A build older than this enforcement ignores `identityClass`. So before rolling back below the enforcing version, the owner must retire every governed requester, and activation records the enforcing build revision. Tests cover a valid claimless cookie through upgrade (classified, or ended on lookup failure) and a stamped cookie read after rollback. The rollback case is documented as requiring retirement first.
+
+## Delegation confirmation (second pin)
+
+After activation, the owner signs in as the requester and consents to the coworker's client through the unchanged authorize flow. In `/admin/rehearsal-requester`, the owner confirms the exact binding, fenced and idempotent. It must satisfy all of the following:
 
 - `oauthPurpose: "consent"` and `status: "active"`;
-- `oauthUserId` equals the synthetic user;
-- `oauthClientId` and `resourceRef` match;
-- `appliedAgent` is active, not archived, and carries `work_room_write`;
-- the allow scopes are within the bounded set needed for the Workroom.
+- `oauthUserId` is the requester;
+- the client and resource match;
+- the `appliedAgent` is active, not archived, and holds `work_room_write`;
+- the scopes are within the bounded set.
 
-It then writes the `delegation-confirm` receipt. The confirmation creates no binding, delegation or token. A different binding for the same setup holds. The first receipt stays immutable.
+Confirmation writes the `delegation-confirm` audit row and creates no binding or token. A different, revoked or over-scoped binding holds.
 
-## Least privilege: activation is held, with an open question for the owner
+## Retirement and the issuance race
 
-The two candidate paths are:
+Retirement and every requester-reachable issuance path take the **same per-requester transaction lock**: `pg_advisory_xact_lock(hashtextextended('s5rr:' || userId, 0))`. They take it after confirming the immutable marker and before reading state. The issuance paths are:
 
-- **Seeded role.** No seeded role is minimal for this purpose:
-  - `HR-200` adds finance and CRM powers.
-  - `HR-300` adds architecture and tool-evaluation writes.
-  - `HR-000` can manage the platform.
-  - `eligibleOAuthCoworkers` (`lib/auth/oauth-identity-binding.ts:21`) admits approved external coworkers only through `view_platform`.
-- **Exact delegation.** The alternative is an exact `oauthPurpose: "delegation"` binding for this user, client and resource. No governed writer for such bindings exists today; the eligibility query only reads them.
+- consent at `/api/oauth/authorize` POST (`:304`);
+- `exchangeOAuthCode` (`lib/auth/oauth-tokens.ts:476`);
+- refresh (`:535`).
 
-So enrollment creates the User with **no platform role**. Delegation confirmation and activation **hold**, with `least_privilege_profile_undecided`, until an explicit least-privilege decision is made.
+Under the lock, each issuance path re-reads `User.isActive`, the Principal's `status` and the binding status, and refuses if any is inactive. Ordinary users are unaffected: the marker check is one indexed alias read, and no lock is taken for them. Tests cover both commit orders, issuance-first and retirement-first, using real PostgreSQL in a throwaway container.
 
-- **The decision must allow:** consenting to the exact coworker, client, resource and scopes, and end-to-end Workroom request authority for that coworker.
-- **The decision must prove inability to:** administer users, approve the rehearsal, or hold `manage_platform`.
-- **Never** fall back to a broader seeded role or superuser.
-- **Open question for the owner:** should a narrow governed delegation-binding writer be added, or a dedicated minimal role? The coordinator takes this to the owner.
+Retirement holds the lock and runs in one serializable transaction:
 
-## Retirement
+1. Bind to the marker and to any `delegation-confirm` pin.
+2. Verify that the Principal owns **only** this synthetic `user` alias, with no other `user`, `customer_contact` or `partner_contact` aliases. Otherwise hold, because the spine helper disables every linked credential.
+3. Revoke every `AuthorityBinding` with `oauthUserId` equal to the requester.
+4. Revoke access and refresh tokens. This uses a transaction-scoped helper extracted from `endAccountAgentAccess`, reusing `personRevocation`.
+5. Deactivate the spine with a transaction-scoped body extracted from `deactivatePrincipalAndCredentials`. Both existing functions keep their behaviour by delegating to the new helpers.
+6. Write the `s5-rehearsal-retired` alias and the retire audit row.
+7. Read back the terminal state: zero live bindings, zero live tokens, the User and Principal inactive, and both aliases present.
 
-Retirement is owner-only and fenced as above, with the lease waived. It runs in one serializable transaction:
+A repeat returns the terminal status and writes nothing. A lease that has ended never blocks retirement. A receipt alone never counts as proof of cleanup; only the terminal readback does.
 
-1. Bind to the enrollment receipt, and to the delegation receipt if one exists.
-2. Revoke every `AuthorityBinding` with `oauthUserId` equal to the synthetic user.
-3. Revoke access and refresh tokens with the `personRevocation` stamp. This uses a new transaction-scoped helper extracted from `endAccountAgentAccess`; that function keeps its behavior by calling the helper.
-4. Deactivate the identity spine: the Principal's status becomes `inactive` and `User.isActive` becomes `false`. This uses a transaction-scoped body extracted from `deactivatePrincipalAndCredentials` (`lib/identity/authentication.ts:268`). That function opens its own `$transaction` today, and it keeps its behavior by delegating to the new body.
-5. Write the `retire` receipt.
-6. Read the terminal state back before returning.
+**Generic paths are guarded** by `isGovernedRequester`, which fails closed. They return `governed_rehearsal_requester`:
+- `updateUserLifecycle`
+- `addUserPlatformRole`
+- `adminResetUserPassword`
+- `adminIssuePasswordReset`
+- `completePasswordReset`, which also refuses a previously issued token
+- `requestPasswordReset`
 
-A repeat call verifies the terminal state and writes nothing.
-
-**Sessions.** Browser JWT sessions do not re-read account activity (`lib/govern/auth.ts:314`).
-- At sign-in, a receipt-bound requester gets a `rehearsalRequester` JWT claim.
-- For tokens that carry the claim, the `jwt` callback re-reads `isActive` on every call and ends the session when the account is inactive. No other account pays for a database read.
-
-**In-flight OAuth.** Code exchange and token use already re-check `currentOAuthHuman`. A consent transaction racing retirement is serialized against it, and the binding revocation happens in the retirement transaction itself.
-
-**Reactivation.** The generic lifecycle, reset and recovery actions (`lib/actions/users.ts` `updateUserLifecycle`, `requestPasswordReset`, `adminIssuePasswordReset` and `adminResetUserPassword`) refuse any user that has an enrollment receipt. They return `governed_rehearsal_requester`. Only this surface manages the account, so custody can never be bypassed by a reset link or by reactivation.
-
-Rollback never deletes the User, the Principal or any receipt.
+`requestPasswordReset` keeps its neutral public response and silently issues nothing for a requester. Tests cover an expired audit row and an old reset token.
 
 ## Read-only verification seam
 
-`readS5RehearsalEnrollment({ rulingRef, reservationId }, tx)` is server-only and uses explicit field projections. It returns:
+`readS5RehearsalEnrollment({ rulingRef, reservationId }, tx)` is server-only and uses explicit projections. It returns:
 
-- the strictly parsed enrollment, delegation and retirement receipts;
-- current User facts: isActive, isSuperuser, automation fields, workHandedOverAt and group roleIds;
-- the Principal and local `user` alias status;
-- the pinned binding ref and that binding's live status, scopes and agent;
-- counts of unrevoked access and refresh tokens.
+- the marker and the retired alias;
+- the audit rows while they are retained, reported as `audit-expired` once purged;
+- User facts: `isActive`, `isSuperuser`, automation fields, `workHandedOverAt` and group roleIds;
+- the Principal's status and aliases;
+- the pinned binding ref with its live status, scopes and agent;
+- unrevoked token counts.
 
-It never selects `passwordHash`, token values or hashes, or session material, and it calls no mutator. The provisioner independently matches these facts against the live reservation. Under BI-1F994B73, a missing, replaced or revoked binding holds.
+It never returns `passwordHash`, tokens or their hashes, or session material, and it calls no mutator.
 
 ## UI
 
 The UI follows the theme-aware styling runbook.
 
-- **The `/admin` arrival page stays within budget.** One owner-only link to `/admin/rehearsal-requester` replaces existing words, keeping the 226-word arrival budget, a net word delta of at most 0, and no prose-lint ratchet increase on `page.tsx`. The link renders only when the class is non-production and the viewer is the verified owner.
-- **The new route is fenced independently** of `/admin`.
-- **Theme and shared components.** Only shared form and status primitives and `var(--dpf-*)` tokens are used, with no hex literals.
-- **Ref fields.** They are prefilled from governed evidence when the owner adapters serve it. Otherwise they stay held.
+- **`/admin` keeps its frozen budget.** One owner-only link to `/admin/rehearsal-requester` replaces existing words, so `/admin` keeps 226 arrival words, a net delta of at most 0, and no `page.tsx` prose-ratchet growth. The link renders only on non-production for the verified owner.
+- **The new route** is fenced independently. It uses the shared form and status primitives and `var(--dpf-*)` tokens only.
+- **Hold states** show reason codes with no password field. Production returns `notFound()`.
+- **Route registration.** The route needs a ratified purpose contract (`lib/ux-budget/purpose-contracts`) and its index entry, plus the four regenerated route companions and the updated eligible-route count. It must meet the absolute shell word, control and field budgets, the `data-dpf-lead` band and the owner-first next-action marker.
+- **Ratchets.** The API route is not a page: it is declared `@exposure authenticated` and is outside the UX sweep. Verify that at Red. The prose-lint ratchet on `governance/decisions/route.ts` (textMass 4) must not grow, and that file gets tests only.
 
 ## Ownership boundaries
 
-These are explicitly excluded: `lib/nonprod/preview-runtime-fence.ts`, which can stop containers, and `lib/nonprod/environment-lease-provenance.ts`. Both belong to the lease writer. `lib/workroom-runtime/s5-rehearsal-*` belongs to the S5 producer and owner-read writer. The fence is a port that their served proofs will implement, and the provisioner consumes the read seam.
+These files are excluded and owned elsewhere:
+- `lib/nonprod/preview-runtime-fence.ts` and `lib/nonprod/environment-lease-provenance.ts` belong to the lease writer.
+- `lib/workroom-runtime/s5-rehearsal-*` belongs to the S5 producer and owner-read writer.
 
 ## Acceptance
 
-- **AC-E1. Fence.**
-  - Production, unattested or wrong-DB requests refuse before the body is read, with zero hasher or mutator calls.
-  - Retirement refuses without preview and exact-DB proof, but needs no live lease.
+- **AC-E1 Fence and boundary.**
+  - Production, cross-origin, non-owner, wrong-DB and unbound-setup requests refuse before the body is read, with zero calls to the body reader, the hasher or any mutator.
+  - The body is bounded and limited to 72 password bytes.
+  - Retirement uses its own readiness path, with no lease input.
   - The served adapter holds.
-- **AC-E2. Owner binding.**
-  - A non-owner administrator, an automation actor or a handed-over actor refuses.
+- **AC-E2 Owner binding.**
+  - A non-owner administrator, an automation actor, a handed-over actor or a requester refuses.
   - Missing ruling, reservation or fixture evidence holds.
-  - Owner-typed refs alone never pass.
-- **AC-E3. Replay and receipt.**
-  - Exact replay writes nothing and never touches the password.
-  - A changed attempt or fixture, a prefix collision, an orphan email or a malformed receipt holds.
-  - A concurrent conflict is re-observed.
-  - Receipts are typed and safe to disclose.
-- **AC-E4. Delegation.** The exact binding is pinned. A missing, replaced, revoked or over-scoped binding holds. No delegation is created.
-- **AC-E5. Least privilege.** No role is assigned. Activation holds until the decision. There is no superuser or broad-role fallback.
-- **AC-E6. Retirement.**
-  - It is atomic and terminal, and a repeat is idempotent.
-  - Sessions end and tokens fail.
-  - Generic reset and reactivation refuse.
-  - Evidence is kept.
-- **AC-E7. Seam.** No bearer material is returned and no mutator is called.
-- **AC-E8. UI.** The `/admin` budget holds, the hold state is truthful, theme tokens are used, and UX-fit is measured.
+- **AC-E3 Marker and replay.**
+  - The alias marker is durable and unique per setup.
+  - An exact replay writes nothing and leaves the password untouched.
+  - A collision, an orphan email or a malformed record holds.
+  - A conflict is re-observed.
+  - An expired audit row changes nothing.
+- **AC-E4 Inactive until decided.**
+  - The User and Principal stay inactive.
+  - Activation holds.
+  - No role, broad role or superuser is assigned.
+- **AC-E5 Restricted session.**
+  - Every issuer fails closed against the marker.
+  - A claimless legacy cookie is classified or ended.
+  - The Principal is checked as well as the User.
+  - Requester sessions are denied ordinary routes.
+- **AC-E6 Delegation.**
+  - The exact binding is pinned.
+  - Missing, replaced, revoked or over-scoped bindings hold.
+  - An unconfirmed binding cannot be used for S5 work.
+- **AC-E7 Retirement.**
+  - It is atomic, locked against issuance in both commit orders, terminal, idempotent and works with no lease.
+  - It holds if the Principal has more than one account.
+  - All generic paths refuse, and the reset response stays neutral.
+- **AC-E8 Seam and audit.**
+  - The seam carries no bearer material and calls no mutator.
+  - The projector and governance API are tested.
+  - M-4 exclusion is tested.
+- **AC-E9 UI.** The `/admin` budget holds, the new route's budgets and purpose contract pass, the hold state is truthful, tokens only are used, and UX-fit is measured.
