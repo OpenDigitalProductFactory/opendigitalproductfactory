@@ -9,8 +9,10 @@ import {
   type CoworkerApprovalBinding,
 } from "@/lib/govern/authority/coworker-authority-decision";
 import { markTaskRunWorking } from "@/lib/observability/heartbeat";
+import { S5_REHEARSAL_APPROVAL_ACTION } from "@/lib/workroom-runtime/s5-rehearsal-approval-action";
 
 import {
+  APPROVAL_DECISION_WINDOW_MS,
   APPROVAL_REPLAY_WINDOW_MS,
   approvalLifetimeMs,
   type ApprovalClassification,
@@ -180,7 +182,9 @@ async function ensureApprovalThread(
   binding: CoworkerApprovalBinding,
   db: AuthorityApprovalDb,
 ): Promise<string> {
-  const key = binding.taskRunId
+  const key = binding.toolName === S5_REHEARSAL_APPROVAL_ACTION
+    ? `rehearsal:${binding.actingHumanUserId}:${binding.inputFingerprint}`
+    : binding.taskRunId
     ? `task:${binding.taskRunId}`
     : `authority:${binding.actingAgentId}`;
   const id = `thr-authority-${createHash("sha256").update(key).digest("hex").slice(0, 24)}`;
@@ -214,10 +218,16 @@ export async function ensureAuthorityApprovalEnvelope(
     /** BI-C8EC05C9: the chat message this request belongs to, for the inline card. */
     chatMessageId?: string | null;
     now?: Date;
+    /** Fixed proposal-to-decision cutoff, not an execution deadline. */
+    rehearsalApprovalDeadline?: Date;
   },
   db: AuthorityApprovalDb = prisma as unknown as AuthorityApprovalDb,
 ): Promise<EnvelopeSummary> {
   const now = input.now ?? new Date();
+  const rehearsal = input.binding.toolName === S5_REHEARSAL_APPROVAL_ACTION;
+  const deadline = input.rehearsalApprovalDeadline?.getTime();
+  if (rehearsal ? !Number.isFinite(deadline) || deadline !== now.getTime() + APPROVAL_DECISION_WINDOW_MS
+    : input.rehearsalApprovalDeadline !== undefined) throw new Error("Invalid rehearsal approval deadline.");
   const approvalBindingFingerprint =
     fingerprintCoworkerApprovalBinding(input.binding);
 
@@ -227,7 +237,7 @@ export async function ensureAuthorityApprovalEnvelope(
   await db.coworkerActionEnvelope.updateMany({
     where: {
       approvalBindingFingerprint,
-      status: { in: ["proposed", "approved"] },
+      status: { in: rehearsal ? ["proposed"] : ["proposed", "approved"] },
       expiresAt: { lte: now },
     },
     data: { status: "expired", resolvedAt: now },
@@ -242,16 +252,19 @@ export async function ensureAuthorityApprovalEnvelope(
     // The forced fallback re-calls the same tool on the same TaskRun, so its
     // binding collides with a boundary request here; that must not pause it.
     if (!raisedUnderProposeBoundary(existing)) await pauseBoundTask(input.binding.taskRunId, db);
+    if (rehearsal && (existing.status !== "proposed" || existing.expiresAt?.getTime() !== deadline)) {
+      throw new Error("Exact pending rehearsal approval is unavailable.");
+    }
     return existing;
   }
 
-  if (input.proposeBoundary === true) {
+  if (input.proposeBoundary === true && !rehearsal) {
     const twin = await findPendingTwinFromEarlierRun(input.binding, approvalBindingFingerprint, now, db);
     if (twin) return twin;
   }
 
   const expiresAt = new Date(
-    now.getTime() + approvalLifetimeMs(input.consequence === undefined ? "unclassified" : input.consequence),
+    Math.min(deadline ?? Infinity, now.getTime() + approvalLifetimeMs(input.consequence === undefined ? "unclassified" : input.consequence)),
   );
   let created: EnvelopeSummary;
   try {

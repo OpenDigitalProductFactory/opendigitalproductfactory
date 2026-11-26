@@ -23,6 +23,7 @@ import type { RegisteredToolDefinition, ToolResult } from "@/lib/mcp-tool-types"
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
 import { parseAdminDiagnostic } from "../admin-command-diagnostic";
 import { stripSqlComments } from "../sql-comments";
+import { hasPortalActuator } from "../admin-actuator-mountinfo";
 
 // These tools are available on the /admin route for platform administration.
 // Tier 1 = read-only, Tier 2 = reversible, Tier 3 = destructive (sideEffect: true).
@@ -150,6 +151,12 @@ function logAdminActivity(
   }).then(() => {}).catch(() => {});
 }
 
+async function holdDirectDockerLogs(userId: string, tool: string, params: Record<string, unknown>): Promise<ToolResult> {
+  const message = "Direct Docker logs are unavailable unless the private actuator mount is confirmed absent.";
+  await logAdminActivity(userId, tool, params, "blocked", 1, message);
+  return { success: false, error: "admin_logs_require_actuator", message };
+}
+
 async function adminViewLogs(params: Record<string, unknown>, userId: string): Promise<ToolResult> {
   const service = String(params.service ?? "");
   const lines = Math.min(Number(params.lines) || 100, 500);
@@ -158,6 +165,7 @@ async function adminViewLogs(params: Record<string, unknown>, userId: string): P
     return { success: false, error: `Invalid service. Allowed: ${ALLOWED_SERVICES.join(", ")}`, message: `Unknown service "${service}".` };
   }
   try {
+    if (await hasPortalActuator()) return holdDirectDockerLogs(userId, "admin_view_logs", { service, lines });
     const { exec: execCb } = lazyChildProcess();
     const { promisify } = lazyUtil();
     const execAsync = promisify(execCb);
@@ -367,6 +375,9 @@ async function adminRunCommand(params: Record<string, unknown>, userId: string):
 
   try {
     const diagnostic = parseAdminDiagnostic(command);
+    if (/^docker compose\s+logs\b/u.test(command) && await hasPortalActuator()) {
+      return holdDirectDockerLogs(userId, "admin_run_command", { command });
+    }
     const { exec: execCb, execFile: execFileCb } = lazyChildProcess();
     const { promisify } = lazyUtil();
     const execAsync = promisify(execCb);
