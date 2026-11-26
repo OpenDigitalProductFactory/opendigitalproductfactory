@@ -269,7 +269,9 @@ All tests run on real Postgres through the repo's `*.postgres.test.ts` harness, 
 - Parent: `BI-F4A9BBF4`
 - Rationale: The ledger, the opt-in gate, the batch store, the cron and the revert are one safety envelope for a bulk mutator. None of them can ship alone without either running unguarded or shipping dead code, so the slice is delivered and reviewed as one change.
 - Dependencies: none (the follow-up BI-949B6B74 depends on this slice, not the reverse)
-- Receipt: blocked-by: the receipt is minted by record_plan_backlog_coverage against this committed plan blob, and is written here in the next commit
+- Receipt: `cmwxhwu9f0wz80ese134jzhj2`
+
+The receipt is bound to the plan at `eee1b75ad4f4`.
 
 ## Verification
 
