@@ -4,7 +4,7 @@ status: draft
 
 # Plan: owner-operated inactive enrollment and retirement of the S5 rehearsal requester
 
-Backlog item BI-9F7192F9, Workroom WC-4EBA473D. Design: `docs/superpowers/specs/2026-11-26-s5-rehearsal-requester-enrollment-design.md`, revision 6. Shape: delivery-small.
+Backlog item BI-9F7192F9, Workroom WC-4EBA473D. Design: `docs/superpowers/specs/2026-11-26-s5-rehearsal-requester-enrollment-design.md`, revision 7. Shape: delivery-small.
 
 This plan covers server-side work only. It ships inert, and the requester is never active.
 
@@ -18,7 +18,7 @@ Activation, sessions, delegation and issuance belong to BI-9F5D1052.
 
 ## Preconditions (hold Red until all are met)
 
-- **P1. Design approved.** The independent re-review approves revision 6.
+- **P1. Design approved.** The independent re-review approves revision 7.
 - **P2. Schema and model count.**
   - The coordinator confirms the model shape (approved in principle).
   - The owner approves a `prismaModelCount` raise from 649 to 650.
@@ -60,9 +60,20 @@ Activation, sessions, delegation and issuance belong to BI-9F5D1052.
      - linked deletes refused, unrelated deletes succeed;
      - a read error reported as an error;
      - teardown drops the schema.
-2. **Clone refusal (AC-E3).**
-   - Build: `sanitized-clone.ts` refuses a source containing any `S5RehearsalRequesterEnrollment` row, before any table copy.
-   - Tests: a requester-bearing source is refused with no rows copied; an ordinary source clones unchanged.
+2. **Clone preflight (AC-E3).**
+   - Build, in `sanitized-clone.ts`, **before** `runWithDestinationCleanup`:
+     - open the source's `REPEATABLE READ READ ONLY` copy snapshot first;
+     - inside it, count requester rows (`to_regclass`-guarded; a missing table counts as zero) and refuse when any exist;
+     - read the destination disposition: an active requester refuses; only retired rows need `--discard-retired-rehearsal-evidence`;
+     - the copy then reuses the same snapshot.
+   - Concurrent enrollment is excluded by BI-60FC9291's lease-teardown fence.
+   - Tests:
+     - a refusal leaves destination rows intact;
+     - a destination with an active requester is protected;
+     - a retired-only destination needs the explicit disposition;
+     - a pre-migration source clones;
+     - a production-sourced ordinary preview is unaffected;
+     - an enrollment made after the snapshot does not appear in the copy.
 3. **Audit writer (AC-E8).**
    - Build: a typed insert for both keys, and the M-4 exclusion.
    - Tests: the approval reader rejects the row; projector and API tests; the M-4 exclusion.
@@ -72,15 +83,15 @@ Activation, sessions, delegation and issuance belong to BI-9F5D1052.
      - enroll and retire readiness;
      - the `[command]` handler, `@exposure authenticated`.
    - Order of checks:
-     - production, origin, session, command;
-     - strict `setupContext` from the query;
+     - production; positive exact same-origin evidence (missing, `null` or foreign origin refuses); session; command;
+     - strict `setupContext` from the query, with `setupDigest` derived on the server from the verified refs;
      - comparison with current owner evidence;
      - readiness;
      - the pre-body owner and DB check;
-     - the enroll pre-parse replay, with live-identity verification and `retired` for terminal records;
+     - the enroll pre-parse replay through the shared `verifyRequesterState`; `retired` only when it passes, otherwise `requester_state_unverified`;
      - only then, the bounded body.
    - Tests:
-     - release, replacement, identity drift, a retired replay, a malformed or stale context, and every pre-body refusal each make zero reader, hasher and mutator calls;
+     - release, replacement, identity drift, a retired replay (verified and alias-drifted), a malformed or stale context, a missing, `null` or foreign origin, and every pre-body refusal each make zero reader, hasher and mutator calls;
      - invalid bodies are read but make zero hasher calls and zero writes.
 5. **Owner binding (AC-E2).**
    - Build:
@@ -88,20 +99,30 @@ Activation, sessions, delegation and issuance belong to BI-9F5D1052.
      - the sole `manage_platform` human, used only when the mapping is unset;
      - no superuser fallback;
      - the receipt port, which denies and is gated on **BI-C7100183**;
-     - live actor checks.
+     - live actor checks, with capabilities taken from role grants (not `can()` alone).
    - Tests:
      - missing receipt, wrong Principal, wrong install;
      - ambiguous organization;
      - invalid mapping;
      - several candidates;
-     - non-owner, automation, handed-over and requester actors.
+     - non-owner, automation, handed-over and requester actors;
+     - a superuser with no role.
 6. **Enrollment (AC-E4).**
-   - Build: a serializable create that takes the per-setup advisory lock before any hash, then re-runs the checks under the lock, re-reads the record, makes the single hash, creates the inactive User and Principal, and writes the record and audit row.
+   - Build: a **Read Committed** create.
+     1. `SET LOCAL lock_timeout`, then take the per-setup advisory lock before any hash. A timeout returns `enroll_busy`.
+     2. Fresh reads after the lock: owner checks, reservation comparison, the record.
+     3. The commit-time fences for the one-shot reservation revision (BI-588688A7), lease currency, installation and DB identity.
+     4. The single hash.
+     5. Create the inactive User and Principal, then write the record and audit row.
+   - Outcomes: `create_failed` (rollback confirmed) and `create_unverified` (commit acknowledgement lost, re-observed on retry).
    - Tests:
-     - two overlapping requests on an empty setup give exactly one hash and one create; the other request gets `replay` with zero hasher calls;
-     - a forced post-hash failure rolls back and returns `create_failed`, with no secret in the logs or the response;
-     - drift, collision, orphan email and mismatch all hold;
-     - replay works after audit purge.
+     - Request B waits before A commits (asserted through `pg_locks` or a barrier). Exactly one hash. B gets `replay` with zero hasher calls.
+     - A lock timeout gives `enroll_busy` with no hash.
+     - A reservation released after the last comparison does not commit.
+     - A forced post-hash failure gives `create_failed`, with no secret logged or returned.
+     - A simulated lost commit acknowledgement gives `create_unverified`, and the retry re-observes.
+     - Drift, collision, orphan email and mismatch each hold.
+     - Replay still works after the audit rows are purged.
 7. **Never-active invariant (AC-E5).**
    - These are regression tests only; no issuer is edited.
    - An enrolled requester is refused by every issuer: workforce, mobile login and refresh, LDAP, automation, OAuth consent, exchange, refresh and bearer, headless, customer and social.
@@ -117,7 +138,7 @@ Activation, sessions, delegation and issuance belong to BI-9F5D1052.
      - Read Committed `FOR UPDATE` on the record;
      - authority, DB, installation and exact-alias checks run **before** the already-retired branch;
      - separate binding revocation, the helper, deactivation of this account only, and a single terminal write plus audit row;
-     - a fresh readback of refs, alias, live artifacts, identities and the tuple. It returns `retired` only on full verification, otherwise `committed_unverified` or a hold.
+     - a fresh readback through the shared `verifyRequesterState`. It returns `retired` only on full verification, otherwise `committed_unverified` or a hold.
    - Tests:
      - populated revocation;
      - concurrent and repeated retirement;
@@ -129,7 +150,10 @@ Activation, sessions, delegation and issuance belong to BI-9F5D1052.
     - Build: `readS5RehearsalEnrollment`.
     - Tests: no bearer fields, no mutator, `audit-expired`, and the provisioner holds.
 11. **Docs.**
-    - Reconcile the parent provisioner spec: its "no migration" line (`:17`) and the enrollment and delegation ownership split (`:15`–`:21`).
+    - Reconcile **both** parent documents:
+      - the provisioner spec: the "no migration" line (`:17`) and the enrollment and delegation ownership (`:15`–`:21`);
+      - the provisioner plan: the F1 and F2 references (`:13`).
+    - The parent's F1 stays held until this edit lands.
     - Record the docs-impact disposition for `docs/architecture/ai-agent-meta-model.md`, triggered by the `principal-linking.ts` change.
 
 ## Gates and evidence (before handoff)
@@ -149,10 +173,9 @@ Activation, sessions, delegation and issuance belong to BI-9F5D1052.
   - asset coverage;
   - platform substrate, with the approved budget.
 - **Derived artifacts:** regenerate only those whose inputs change:
-  - `route-manifest` and `route-audience`, for the API route;
+  - `route-manifest`, for the API route. The API route does **not** change route-audience, route-shells or page-purpose, because those cover pages only.
   - `doc-index` and `doc-impact`;
   - architecture counts, for the model, enum, migration and route.
-  - Confirm at Red whether `route-shells` or `page-purpose` change for an API-only route.
 - **Commits:** a `Design-Grounding-Decision:` trailer and DCO sign-off on every commit.
 - **Coordinator go:** required before `pregate:preflight`, `pregate`, any push or `pnpm land`. An independent review on a different model runs before each gate.
 
@@ -187,9 +210,10 @@ Activation, sessions, delegation and issuance belong to BI-9F5D1052.
 - `apps/web/lib/docs/doc-index.generated.json`
 - `apps/web/lib/docs/doc-impact.generated.json`
 - `apps/web/lib/ea/route-manifest.json`
-- `apps/web/lib/navigation/route-audience.generated.json`
 
-### Release at handoff (deferred UI, now unused)
+### Released (deferred UI and page-only generated files)
+
+Already released through `release_workroom_scope`:
 
 - `apps/web/components/admin/S5RehearsalEnrollmentPanel{,.test}.tsx`
 - `apps/web/app/(shell)/admin/page.tsx`
@@ -199,7 +223,7 @@ Activation, sessions, delegation and issuance belong to BI-9F5D1052.
 - `apps/web/lib/ux-budget/ux-budget.test.ts`
 - `docs/ux-fit/2026-11-26-rehearsal-requester.ux-fit.json`
 - `docs/user-guide/admin/index.md`
-- `apps/web/lib/ux-budget/route-shells.generated.json` and `route-purpose.generated.json`, unless Red shows the API route changes them
+- `apps/web/lib/ux-budget/route-shells.generated.json`, `apps/web/lib/ux-budget/route-purpose.generated.json` and `apps/web/lib/navigation/route-audience.generated.json`: page-only, so the API route does not change them
 
 ### Claim after the go (P2 and P3)
 
@@ -211,7 +235,8 @@ Activation, sessions, delegation and issuance belong to BI-9F5D1052.
 - `scripts/platform-substrate-baseline.json`, regenerated via P2
 
 **New in revision 6, needs an overlap check:**
-- `packages/db/src/sanitized-clone.ts` and its test (clone refusal)
+- `packages/db/src/sanitized-clone.ts`, `packages/db/src/sanitized-clone-cleanup.ts` and their tests (clone preflight before reset)
+- `docs/superpowers/plans/2026-11-25-s5-rehearsal-draft-provisioner-plan.md` (parent plan reconciliation)
 - `docs/architecture/ai-agent-meta-model.md`, only if the disposition is "updated"
 - `docs/architecture/architecture-counts.generated.md`, if its inputs change
 - any shrink-only stewardship baselines the model touches, confirmed at P2
@@ -230,7 +255,8 @@ Every deliverable maps to BI-9F7192F9. The delivered code holds until these depe
 | --- | --- |
 | Installation attestation: lease-joined for enroll, lease-independent for retire | BI-8EA98961 |
 | Database identity | BI-5C193A3F |
-| Lease currency | BI-60FC9291 |
+| Lease currency, fenced against teardown and clone reset | BI-60FC9291 |
+| One-shot reservation revision fenced through commit | BI-588688A7 |
 | Reservation and fixture-review owners | BI-588688A7 |
 | Owner receipt adapter | **BI-C7100183** |
 | Model-count budget | Owner, through P2 |
