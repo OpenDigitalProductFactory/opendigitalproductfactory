@@ -504,45 +504,23 @@ These are excluded from this item:
 - **Owned by the S5 producer and owner-read writer:** `lib/workroom-runtime/s5-rehearsal-*`.
 - **Owned by BI-9F5D1052:** every authentication and issuance file, namely `proxy.ts`, `lib/api/auth-middleware.ts`, `lib/govern/auth.ts`, `app/api/oauth/*`, `lib/auth/oauth-tokens.ts`, `lib/auth/employee-scoped-token.ts`, `app/api/v1/auth/*`, `lib/directory/ldap/*` and `app/api/automation/*`.
 
-## Acceptance
+## Objectives and acceptance
 
-- **AC-E1. Boundary.**
-  - The server-issued context is compared with current owner evidence before the body is read, and the digest is derived on the server.
-  - Positive exact same-origin evidence is required. A missing, `null` or foreign origin refuses.
-  - Release, replacement, identity drift, a retired replay (verified or drifted) and every origin refusal all leave zero reader, hasher and mutator calls.
-  - Invalid bodies are read, with zero hasher calls and zero writes.
-  - Retirement uses lease-independent proofs.
-  - The served adapter holds.
-- **AC-E2. Owner binding.**
-  - Owner resolution uses the canonical singleton reader, and its predicates are evaluated from one coherent statement after the lock.
-  - Ambiguous or invalid mappings hold.
-  - There is no superuser fallback, and a superuser with no role does not qualify through `can()`.
-  - The missing, wrong-Principal and wrong-install receipt cases hold.
-  - The adapter is gated on BI-C7100183.
-- **AC-E3. Record.**
-  - The digest is unique.
-  - The update and delete triggers and the all-or-none CHECK hold.
-  - There is no lifecycle index.
-  - Restrict behaves as specified.
-  - Every clone entry point, including direct `dev-init`, holds the destination fence from the preflight through cleanup. Enrollment and retirement use the shared try-lock.
-  - The destination preflight runs before reset, so a refusal leaves the destination intact.
-  - The source count runs inside the existing copy snapshot at its first use, and a non-zero count aborts through the existing cleanup.
-  - A requester-bearing source refuses. A pre-migration source still clones, and ordinary production-sourced previews are unaffected.
-  - A destination with an active requester is protected. One with only retired requesters needs the explicit discard disposition.
-- **AC-E4. Enrollment.**
-  - The create runs in Read Committed, with the lock taken before any hash and the lock wait bounded (`enroll_busy`). Reads after the lock are fresh.
-  - When request B is already waiting before A commits, exactly one hash happens.
-  - The one-shot reservation revision is fenced through commit. A release after the last comparison cannot commit.
-  - A post-hash failure is rolled back, returns `create_failed`, and leaks nothing.
-  - A lost commit acknowledgement returns `create_unverified`. The read-only status path recovers it by digest even after the reservation is released, and never creates.
-  - The Prisma transaction timeout exceeds the lock wait. A clone in progress gives `clone_in_progress`.
-  - Replay, retired and hold never hash. Enroll returns `retired` only after the shared verification.
-  - Drift, collision, an orphan email and a mismatch all hold.
-- **AC-E5. Never active.** Every issuer in the table refuses, including the headless, customer and social cases. The workforce and employee-sync paths refuse, both before and after retirement.
-- **AC-E6. Retirement.**
-  - The under-lock checks run before any branch.
-  - The fresh readback verifies the refs and the exact alias.
-  - It returns `retired` only when the shared verification passes, and `committed_unverified` re-observes.
-  - It works without a reservation or lease, after audit purge and after drift.
-- **AC-E7. Guards.** Lifecycle, role, reset (including old tokens), workforce, employee sync and clone all refuse. The reset request response stays neutral.
-- **AC-E8. Seam and audit.** The seam carries no bearer material and calls no mutator. The projector and governance API are tested. M-4 excludes the rows.
+This section restates the Decision and Never-active invariant text above, and the acceptance criteria AC-E1 to AC-E8 unchanged, in the marked form that spec-approval parses. It adds no requirement.
+
+- **OBJ-RR-ENROLL:** The owner alone, preview-only, can enroll exactly one synthetic requester for one setup key through one owner-only endpoint; every piece fails closed and ships inert until every owning proof is served.
+- **OBJ-RR-NEVER-ACTIVE:** The User has `isActive: false` and the Principal has `status: "inactive"` from the enrollment commit onward; no command in this item activates either one, and every issuer, generic action, workforce link and employee sync refuses the requester.
+- **OBJ-RR-RECORD:** The retained enrollment record is the single durable marker: it cannot be deleted, and a clone cannot copy the identity without its marker.
+- **OBJ-RR-RETIRE:** Retirement makes that requester terminally unusable and keeps every fact.
+- **OBJ-RR-SEAM:** The provisioner gets only a read-only verification seam; no agent operates the endpoint or handles the credential.
+
+| Acceptance | Objective | Evidence |
+| --- | --- | --- |
+| AC-E1 | OBJ-RR-ENROLL | Boundary. The server-issued context is compared with current owner evidence before the body is read, and the digest is derived on the server. Positive exact same-origin evidence is required. A missing, `null` or foreign origin refuses. Release, replacement, identity drift, a retired replay (verified or drifted) and every origin refusal all leave zero reader, hasher and mutator calls. Invalid bodies are read, with zero hasher calls and zero writes. Retirement uses lease-independent proofs. The served adapter holds. |
+| AC-E2 | OBJ-RR-ENROLL | Owner binding. Owner resolution uses the canonical singleton reader, and its predicates are evaluated from one coherent statement after the lock. Ambiguous or invalid mappings hold. There is no superuser fallback, and a superuser with no role does not qualify through `can()`. The missing, wrong-Principal and wrong-install receipt cases hold. The adapter is gated on BI-C7100183. |
+| AC-E3 | OBJ-RR-RECORD, OBJ-RR-NEVER-ACTIVE | Record. The digest is unique. The update and delete triggers and the all-or-none CHECK hold. There is no lifecycle index. Restrict behaves as specified. Every clone entry point, including direct `dev-init`, holds the destination fence from the preflight through cleanup. Enrollment and retirement use the shared try-lock. The destination preflight runs before reset, so a refusal leaves the destination intact. The source count runs inside the existing copy snapshot at its first use, and a non-zero count aborts through the existing cleanup. A requester-bearing source refuses. A pre-migration source still clones, and ordinary production-sourced previews are unaffected. A destination with an active requester is protected. One with only retired requesters needs the explicit discard disposition. |
+| AC-E4 | OBJ-RR-ENROLL | Enrollment. The create runs in Read Committed, with the lock taken before any hash and the lock wait bounded (`enroll_busy`). Reads after the lock are fresh. When request B is already waiting before A commits, exactly one hash happens. The one-shot reservation revision is fenced through commit. A release after the last comparison cannot commit. A post-hash failure is rolled back, returns `create_failed`, and leaks nothing. A lost commit acknowledgement returns `create_unverified`. The read-only status path recovers it by digest even after the reservation is released, and never creates. The Prisma transaction timeout exceeds the lock wait. A clone in progress gives `clone_in_progress`. Replay, retired and hold never hash. Enroll returns `retired` only after the shared verification. Drift, collision, an orphan email and a mismatch all hold. |
+| AC-E5 | OBJ-RR-NEVER-ACTIVE | Never active. Every issuer in the table refuses, including the headless, customer and social cases. The workforce and employee-sync paths refuse, both before and after retirement. |
+| AC-E6 | OBJ-RR-RETIRE | Retirement. The under-lock checks run before any branch. The fresh readback verifies the refs and the exact alias. It returns `retired` only when the shared verification passes, and `committed_unverified` re-observes. It works without a reservation or lease, after audit purge and after drift. |
+| AC-E7 | OBJ-RR-NEVER-ACTIVE | Guards. Lifecycle, role, reset (including old tokens), workforce, employee sync and clone all refuse. The reset request response stays neutral. |
+| AC-E8 | OBJ-RR-SEAM | Seam and audit. The seam carries no bearer material and calls no mutator. The projector and governance API are tested. M-4 excludes the rows. |
