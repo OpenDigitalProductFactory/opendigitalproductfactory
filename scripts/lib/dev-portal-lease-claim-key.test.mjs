@@ -1233,3 +1233,28 @@ test("the S5 observation trigger fires once only after ready and a successful re
   await ordinary(true, { success: true });
   assert.equal(calls, 1);
 });
+
+test("mixed-mode resumers do not deduplicate observer registration by source or lease owner", async () => {
+  const { registerLocalQueueObserver, createGateObserverIdentity } = await import("./local-queue-observer.mjs");
+  const { buildResumerInvocation } = await import("./durable-wait-resumer.mjs");
+  const { resumePreviewQueue } = await import("../dev-preview-queue-resume.mjs");
+  const directory = mkdtempSync(join(tmpdir(), "dpf-preview-mode-observers-"));
+  try {
+    const contexts = [];
+    for (const s5Rehearsal of [false, true]) {
+      const request = { ...pin, s5Rehearsal };
+      await resumePreviewQueue(request, { now, readSource: source, observerDirectory: directory,
+        spawnResumer: args => { contexts.push(args); return { spawned: true, survivesSession: true }; },
+      });
+    }
+    assert.equal(contexts.length, 2);
+    const observerPaths = contexts.map((context, i) => {
+      const invocation = buildResumerInvocation(context);
+      assert.equal(invocation.args.includes("--s5-rehearsal-preview"), i === 1);
+      return registerLocalQueueObserver({ directory, identity: createGateObserverIdentity(),
+        branch: pin.branch, sha: pin.sha, ownerSessionId: pin.ownerSessionId }).path;
+    });
+    assert.notEqual(observerPaths[0], observerPaths[1]);
+    assert.ok(observerPaths.every(path => fs.existsSync(path)));
+  } finally { rmSync(directory, { recursive: true, force: true }); }
+});

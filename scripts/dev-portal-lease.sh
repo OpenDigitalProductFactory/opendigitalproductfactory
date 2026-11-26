@@ -226,7 +226,8 @@ while [ "$#" -gt 0 ]; do
 done
 
 [ -n "$COMMAND" ] || { usage; exit 2; }
-if [ "$COMMAND" = "refresh" ] && [ -n "${S5_REHEARSAL_FLAG:-}" ]; then
+if [ -n "${S5_REHEARSAL_FLAG:-}" ]; then
+  [ "$COMMAND" = "refresh" ] || die "s5_preview_refresh_required: --s5-rehearsal-preview requires the refresh command"
   [ "$ENVIRONMENT_KEY" = "active-candidate" ] || die "s5_preview_active_candidate_required: S5 rehearsal preview mode requires the active-candidate lease lane"
 fi
 
@@ -319,6 +320,22 @@ process.stdout.write(JSON.stringify(previewLeaseRequestTiming({ waitMinutes: pro
   case "$claim_key" in
     dev-portal:?*) ;;
     *) die "preview claim key must use the dev-portal: namespace" ;;
+  esac
+  # Mode is part of a preview attempt, not a change to the lease lane.
+  # Keep the ordinary key unchanged and preserve the exact S5 key on resume.
+  case "$claim_key" in
+    dev-portal:s5-rehearsal:?*)
+      [ -n "${S5_REHEARSAL_FLAG:-}" ] || die "s5_preview_claim_mode_mismatch: the pinned lease requires explicit S5 rehearsal mode"
+      ;;
+    dev-portal:s5-rehearsal:)
+      die "s5_preview_claim_mode_mismatch: the pinned S5 attempt key is incomplete"
+      ;;
+    *)
+      if [ -n "${S5_REHEARSAL_FLAG:-}" ]; then
+        [ -z "$RESUME_LEASE_ID" ] || die "s5_preview_claim_mode_mismatch: an ordinary attempt cannot resume as an S5 rehearsal"
+        claim_key="dev-portal:s5-rehearsal:${claim_key#dev-portal:}"
+      fi
+      ;;
   esac
   while :; do
     host_pressure_json="$(sample_host_pressure)" \

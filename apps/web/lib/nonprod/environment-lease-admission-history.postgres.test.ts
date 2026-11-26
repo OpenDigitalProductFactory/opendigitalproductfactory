@@ -269,6 +269,31 @@ describe.skipIf(!url)("forward-only reservation admission history — isolated P
     expect(await attestOwnedPreviewDatabase(request)).toBe("preview_database_lease_not_current");
   });
 
+  it("same-mode keys re-enter a live preview but S5 and ordinary keys reserve distinct rows", async () => {
+    const now = new Date(), sha = "a".repeat(40), baseKey = "dev-portal:fixture:mixed-mode";
+    const input = { db: f.db, environmentKey: "active-candidate" as const, ownerProvider: "codex" as const,
+      ownerSessionId: "mixed-mode-owner", authenticatedUserId: "mixed-user", authenticatedAgentId: "mixed-agent",
+      claimKey: baseKey, worktreePath: "/fixtures/mixed", branchName: "codex/mixed", now,
+      purpose: `Contributor preview (:3001) bound to /fixtures/mixed @ codex/mixed (${sha})`,
+      url: "http://localhost:3001", ports: [3001], expiresAt: new Date(now.getTime() + 120_000) };
+    const ordinary = await claimNonprodEnvironmentLease(input);
+    expect(ordinary.status).toBe("admitted");
+    // Before the launcher discriminates mode, identical lane/key/session is
+    // the same live attempt at the broker; a different lane does not alias it.
+    const same = await claimNonprodEnvironmentLease(input);
+    expect(same).toMatchObject({ status: "admitted", lease: { leaseId: ordinary.lease.leaseId } });
+    await expect(claimNonprodEnvironmentLease({ ...input, environmentKey: "local-integration-ci" }))
+      .rejects.toThrow("nonprod_claim_key_environment_mismatch");
+
+    const s5Input = { ...input, claimKey: "dev-portal:s5-rehearsal:fixture:mixed-mode" };
+    const s5 = await claimNonprodEnvironmentLease(s5Input);
+    expect(s5.status).toBe("queued");
+    expect(s5.lease.leaseId).not.toBe(ordinary.lease.leaseId);
+    expect(s5.lease.taskRunId).not.toBe(ordinary.lease.taskRunId);
+    const resumed = await claimNonprodEnvironmentLease({ ...s5Input, resumeLeaseId: s5.lease.leaseId });
+    expect(resumed).toMatchObject({ status: "queued", lease: { leaseId: s5.lease.leaseId } });
+  });
+
   it("rolls back release when PostgreSQL refuses every non-expiry wait settlement", async () => {
     const claim = await realClaim(f, true);
     expect(claim.status).toBe("queued");

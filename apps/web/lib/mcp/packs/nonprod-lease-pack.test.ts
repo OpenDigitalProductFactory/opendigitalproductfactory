@@ -771,3 +771,18 @@ it.each([["P2034", true], ["P2024", true], ["P2028", false], ["unknown", false]]
       } },
     });
 });
+
+it("logs bounded server diagnostics without exposing them in attestation results", async () => {
+  const handler = nonprodLeasePack.handlers.attest_preview_database!;
+  const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+  try {
+    cleanup.transaction.mockRejectedValueOnce(Object.assign(
+      new Error("database connection was lost: postgresql://fixture:private@127.0.0.1/dpf\nnext line"),
+      { code: "P2024" },
+    ));
+    const result = await handler({ previewDatabaseObservation: validPreviewObservation }, "user-1", { agentId: "fixture-agent" });
+    expect(warn).toHaveBeenCalledWith(expect.any(String), "P2024", expect.stringContaining("database connection was lost"));
+    expect(JSON.stringify(warn.mock.calls)).not.toContain("fixture:private");
+    expect(JSON.stringify(result)).not.toContain("database connection was lost");
+  } finally { warn.mockRestore(); }
+});

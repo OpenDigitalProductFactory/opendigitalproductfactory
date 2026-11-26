@@ -394,3 +394,40 @@ test("inherited S5 mode does not block release or status", () => {
     assert.ok(existsSync(stubs.callsFile));
   }
 });
+
+test("an explicit S5 flag on non-refresh commands refuses before contacting MCP", () => {
+  for (const args of [["claim"], ["release", "--lease-id", "NPEL-MINE"], ["status"]]) {
+    const stubs = makeStubs(mkdtempSync(join(tmpdir(), "dpf-s5-wrong-command-")), "queued");
+    const result = runLease([...args, "--s5-rehearsal-preview"], { env: baseEnv(stubs) });
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /s5_preview_refresh_required/);
+    assert.equal(existsSync(stubs.callsFile), false);
+  }
+});
+
+test("ordinary and explicit S5 refreshes use different stable broker keys on the same lane", () => {
+  const claim = (extra, overrides = {}) => {
+    const stubs = makeStubs(mkdtempSync(join(tmpdir(), "dpf-s5-mode-key-")), "queued");
+    const env = baseEnv(stubs, { DPF_DURABLE_RESUME: "1", DPF_DEV_PORTAL_ENVIRONMENT_KEY: "active-candidate", ...overrides });
+    const result = runLease(["refresh", ...extra], { env });
+    return { result, calls: existsSync(stubs.callsFile) ? readFileSync(stubs.callsFile, "utf8").trim().split("\n").map(JSON.parse) : [] };
+  };
+  const baseKey = "dev-portal:fixture:fixed";
+  const ordinary = claim([], { DPF_DEV_PORTAL_CLAIM_KEY: baseKey });
+  const s5 = claim(["--s5-rehearsal-preview"], { DPF_DEV_PORTAL_CLAIM_KEY: baseKey });
+  assert.equal(ordinary.result.status, 75, ordinary.result.stderr);
+  assert.equal(s5.result.status, 75, s5.result.stderr);
+  assert.equal(ordinary.calls[0].params.arguments.claimKey, baseKey);
+  const s5Key = s5.calls[0].params.arguments.claimKey;
+  assert.equal(s5Key, "dev-portal:s5-rehearsal:fixture:fixed");
+  const resumeFields = { DPF_DEV_PORTAL_RESUME_LEASE_ID: "NPEL-WAIT", DPF_DEV_PORTAL_CLAIM_KEY: s5Key };
+  const resumed = claim(["--s5-rehearsal-preview"], resumeFields);
+  assert.equal(resumed.result.status, 75, resumed.result.stderr);
+  assert.equal(resumed.calls[0].params.arguments.claimKey, s5Key);
+  const droppedMode = claim([], resumeFields);
+  assert.match(droppedMode.result.stderr, /s5_preview_claim_mode_mismatch/);
+  assert.equal(droppedMode.calls.length, 0);
+  const upgrade = claim(["--s5-rehearsal-preview"], { ...resumeFields, DPF_DEV_PORTAL_CLAIM_KEY: baseKey });
+  assert.match(upgrade.result.stderr, /s5_preview_claim_mode_mismatch/);
+  assert.equal(upgrade.calls.length, 0);
+});
