@@ -23,7 +23,7 @@ import type { RegisteredToolDefinition, ToolResult } from "@/lib/mcp-tool-types"
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
 import { parseAdminDiagnostic } from "../admin-command-diagnostic";
 import { stripSqlComments } from "../sql-comments";
-import { hasPortalActuator } from "./admin-actuator-mountinfo";
+import { hasPortalActuator } from "../admin-actuator-mountinfo";
 
 // These tools are available on the /admin route for platform administration.
 // Tier 1 = read-only, Tier 2 = reversible, Tier 3 = destructive (sideEffect: true).
