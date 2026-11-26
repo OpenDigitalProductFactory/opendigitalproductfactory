@@ -195,10 +195,12 @@ owner's two-second write grace. A dead PID or unparseable contents past that
 grace are stale. A missing file means no reservation. A parsed but unknown
 owner, unreadable file, or indeterminate PID probe waits conservatively.
 DPF2 defines the fixed default path so both projects can coordinate. DPF
-opens it read-only without following symlinks and checks the open descriptor
-before reading. A non-regular file or one writable by the group or others
-is treated as unreadable. DPF never rewrites, unlinks, or reclaims the file
-or publishes its token.
+opens it read-only, without following symlinks or blocking on special files.
+The open has no creation flag and supplies a zero-permission creation mode as
+a backstop. That mode does not change the existing file's permissions. DPF
+checks the open descriptor before reading and treats non-regular files and
+files writable by the group or others as unreadable. DPF never rewrites,
+unlinks, or reclaims the file or publishes its token.
 
 Local phase waits report the reason, PID and acquisition time if readable,
 recheck every 30 seconds or at the deadline and resume on release within the wait

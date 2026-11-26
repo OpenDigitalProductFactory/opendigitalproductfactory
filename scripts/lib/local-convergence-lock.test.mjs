@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
+import fs from "node:fs";
 import {
   chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync,
-  symlinkSync, utimesSync, writeFileSync,
+  statSync, symlinkSync, utimesSync, writeFileSync,
 } from "node:fs";
+import { syncBuiltinESMExports } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -29,6 +31,35 @@ function writeReservationFixture(path, raw, { modifiedAt, mode } = {}) {
 }
 
 const posixTest = (name, fn) => test(name, { skip: process.platform === "win32" }, fn);
+
+posixTest("DPF2 observer opens only read-only descriptors with no creation permissions", (t) => {
+  const directory = mkdtempSync(join(tmpdir(), "dpf2-read-only-"));
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
+  const path = join(directory, "dpf2-local-ci.lock");
+  const absentPath = join(directory, "not-reserved.lock");
+  const raw = JSON.stringify({ pid: process.pid, token: "fixture" });
+  writeReservationFixture(path, raw);
+
+  const open = t.mock.method(fs, "openSync");
+  syncBuiltinESMExports();
+  try {
+    assert.equal(inspectDpf2CiReservation({ path }).status, "held");
+    assert.equal(inspectDpf2CiReservation({ path: absentPath }).status, "free");
+  } finally {
+    open.mock.restore();
+    syncBuiltinESMExports();
+  }
+
+  const { O_RDONLY, O_NOFOLLOW, O_NONBLOCK } = fs.constants;
+  const flags = O_RDONLY | O_NOFOLLOW | O_NONBLOCK;
+  assert.deepEqual(open.mock.calls.map(call => call.arguments), [
+    [path, flags, 0o000],
+    [absentPath, flags, 0o000],
+  ]);
+  assert.equal(existsSync(absentPath), false);
+  assert.equal(readFileSync(path, "utf8"), raw);
+  assert.equal(statSync(path).mode & 0o777, 0o600);
+});
 
 posixTest("DPF2 symlink reservations fail closed without inspecting the target owner", (t) => {
   const directory = mkdtempSync(join(tmpdir(), "dpf2-symlink-"));

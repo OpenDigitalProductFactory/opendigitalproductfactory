@@ -41,10 +41,11 @@ export function dpf2ReservationPath(env = process.env, platform = process.platfo
 }
 
 function readDpf2Reservation(path) {
-  // DPF opens the foreign reservation read-only. Never follow a symlink or
-  // substitute path-based checks for verification of the opened descriptor.
+  // This open has no creation or write flags. The explicit zero creation mode
+  // is ignored for an existing file and grants no permissions if those flags
+  // ever regress. Check the opened descriptor, not the path, before reading.
   if (!Number.isInteger(constants.O_NOFOLLOW)) return {};
-  const fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+  const fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK, 0o000);
   try {
     const stat = fstatSync(fd);
     if (!stat.isFile() || (stat.mode & 0o022) !== 0) return { mtimeMs: stat.mtimeMs };
