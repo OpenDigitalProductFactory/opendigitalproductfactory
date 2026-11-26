@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # EP-FEEDBACK-001: Platform Improvement Feedback Loop — Design Spec
 
 **Date:** 2026-03-16
