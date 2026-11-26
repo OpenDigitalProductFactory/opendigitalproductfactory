@@ -94,13 +94,18 @@ removal stays bound to the old source when the same PR is rebound to a new
 author head. New bytes go through normal readiness without inheriting previous
 intent. A disarm stays held until there is a fresh explicit request.
 
-The repository has four enqueue paths: the Workroom delivery worker, the
+The repository has five enqueue paths: the Workroom delivery worker, the
 authorized `queue_workroom_pull_request` call, `pnpm land`, and the separately
-opted-in Assurance remediation gate. Their mutation is fenced at the expected
-head. Landing refuses to replace an old queued or armed head and names the
+opted-in Assurance remediation gate, plus the weekly docs staleness workflow.
+Their mutations are fenced at the expected head. The worker carries an intent
+forward only after it observes the exact two-parent merge of the head and base
+recorded at its accepted update-branch request. It binds the replacement head
+before any review check for arming. Landing refuses to replace an old queued or armed head and names the
 authorized owner action. It never dequeues, pushes twice, or bypasses branch
 protection. GitHub records the shared account on historical #7232; that record
-does not identify which client or service used it.
+does not identify which client or service used it. BI-6401919E tracks provider
+evidence to bind a delayed first removal observation back to the exact source
+that its merge group tested.
 
 ### 3.3 Inputs: events first, poll as the safety net
 

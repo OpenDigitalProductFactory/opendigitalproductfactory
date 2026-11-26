@@ -67,6 +67,17 @@ describe("BuildPrDeliveryStateV1", () => {
     expect(restoreBuildPrQueueHistory(different, detached)).toEqual(different);
   });
 
+  it("keeps a previously observed arm on rebind without lending it to the replacement", () => {
+    const active = createBuildPrDeliveryState({ repository: "o/r", prNumber: 42, prUrl: "https://github.com/o/r/pull/42" });
+    const armed = { ...active, status: "armed" as const, lastObservedHeadSha: "old", queueIntentHeadSha: "old",
+      lastObservedAt: "2026-11-25T23:00:00Z", lastActuatedAt: "2026-11-25T23:00:01Z" };
+    const detached = clearBuildPrDeliveryState(writeBuildPrDeliveryState({}, armed));
+    expect(restoreBuildPrQueueHistory(active, detached)).toMatchObject({
+      status: "armed", lastObservedHeadSha: "old", lastActuatedAt: armed.lastActuatedAt,
+    });
+    expect(restoreBuildPrQueueHistory(active, detached).queueIntentHeadSha).toBeUndefined();
+  });
+
   it("retires current and legacy delivery identity without erasing unrelated room state", () => {
     expect(clearBuildPrDeliveryState({
       claim: "kept",

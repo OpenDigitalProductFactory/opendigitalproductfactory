@@ -51,6 +51,8 @@ export type GithubPrObservation = {
   state: "OPEN" | "CLOSED" | "MERGED";
   merged: boolean;
   headSha: string;
+  baseSha?: string;
+  headParentShas?: string[];
   mergeStateStatus: string | null;
   unresolvedReviewThreads: number;
   reviewThreadsComplete: boolean;
@@ -148,7 +150,7 @@ const PR_OBSERVATION_QUERY = `
 query DpfPullRequestReadiness($owner:String!,$name:String!,$number:Int!){
   repository(owner:$owner,name:$name){
     pullRequest(number:$number){
-      id number url state merged headRefOid mergeStateStatus reviewDecision
+      id number url state merged headRefOid baseRefOid mergeStateStatus reviewDecision
       latestReviews(first:100){ nodes { state } pageInfo { hasNextPage } }
       autoMergeRequest { enabledAt }
       mergeQueueEntry { id }
@@ -173,6 +175,8 @@ query DpfPullRequestReadiness($owner:String!,$name:String!,$number:Int!){
       commits(last:1){
         nodes {
           commit {
+            oid
+            parents(first:3){ nodes { oid } pageInfo { hasNextPage } }
             statusCheckRollup {
               contexts(first:100) {
                 nodes {
@@ -234,6 +238,7 @@ type ObservationQueryData = {
       state?: "OPEN" | "CLOSED" | "MERGED";
       merged?: boolean;
       headRefOid?: string;
+      baseRefOid?: string;
       mergeStateStatus?: string | null;
       reviewDecision?: string | null;
       latestReviews?: { nodes?: Array<{ state?: string } | null>; pageInfo?: { hasNextPage?: boolean } } | null;
@@ -247,6 +252,8 @@ type ObservationQueryData = {
       commits?: {
         nodes?: Array<{
           commit?: {
+            oid?: string;
+            parents?: { nodes?: Array<{ oid?: string } | null>; pageInfo?: { hasNextPage?: boolean } };
             statusCheckRollup?: {
               contexts?: {
                 nodes?: Array<{
@@ -288,7 +295,10 @@ export async function observeGithubPullRequest(input: {
     throw new Error(`GitHub PR #${input.prNumber} observation is incomplete`);
   }
 
-  const contexts = pr.commits?.nodes?.[0]?.commit?.statusCheckRollup?.contexts;
+  const headCommit = pr.commits?.nodes?.[0]?.commit;
+  const parents = headCommit?.oid === pr.headRefOid && headCommit.parents?.pageInfo?.hasNextPage === false
+    ? headCommit.parents.nodes?.map((parent) => parent?.oid) : undefined;
+  const contexts = headCommit?.statusCheckRollup?.contexts;
   const checks: GithubCheckObservation[] = (contexts?.nodes ?? []).flatMap((node) => {
     if (!node) return [];
     const required = typeof node.isRequired === "boolean" ? { required: node.isRequired } : {};
@@ -320,6 +330,8 @@ export async function observeGithubPullRequest(input: {
     state: pr.state,
     merged: pr.merged === true,
     headSha: pr.headRefOid,
+    ...(pr.baseRefOid ? { baseSha: pr.baseRefOid } : {}),
+    ...(parents?.every((parent): parent is string => typeof parent === "string") ? { headParentShas: parents } : {}),
     mergeStateStatus: pr.mergeStateStatus ?? null,
     unresolvedReviewThreads: (pr.reviewThreads?.nodes ?? []).filter((thread) => thread?.isResolved === false).length,
     reviewThreadsComplete: pr.reviewThreads?.pageInfo?.hasNextPage !== true

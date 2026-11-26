@@ -84,6 +84,9 @@ export function decideBuildPrDeliveryAction(input: {
             reason: "stale-update-budget-exhausted",
           };
     case "ready":
+      if (state.pendingQueueUpdate?.fromHeadSha === readiness.headSha) {
+        return { kind: "wait", status: "updating", headSha: readiness.headSha, reason: "awaiting-accepted-branch-update" };
+      }
       return state.lastActuatedHeadSha === readiness.headSha
         ? {
             kind: "wait",
@@ -224,6 +227,24 @@ async function applyFollowThroughEffects(input: {
   return { decision, actuated: false, note: null };
 }
 
+/** Verify the result of our accepted provider update; an author's replacement inherits no intent. */
+export function carryQueueIntentAcrossAcceptedUpdate(
+  state: BuildPrDeliveryStateV1,
+  observation: GithubPrObservation,
+): BuildPrDeliveryStateV1 | null {
+  const pending = state.pendingQueueUpdate;
+  if (!pending || state.queueIntentHeadSha !== pending.fromHeadSha
+    || state.lastObservedHeadSha !== pending.fromHeadSha || observation.headSha === pending.fromHeadSha
+    || observation.headParentShas?.length !== 2
+    || observation.headParentShas[0] !== pending.fromHeadSha
+    || observation.headParentShas[1] !== pending.baseSha) return null;
+  return {
+    ...state, status: "checking", queueIntentHeadSha: observation.headSha,
+    pendingQueueUpdate: null, lastObservedHeadSha: observation.headSha,
+    lastObservedAt: new Date().toISOString(), lastReadiness: null, lastError: null,
+  };
+}
+
 /** Only a removal tied to the previous exact head may be ignored after a verified head change. */
 export function projectBuildPrDeliveryReadiness(
   state: BuildPrDeliveryStateV1,
@@ -242,10 +263,10 @@ export function projectBuildPrDeliveryReadiness(
   }
   if (readiness.kind === "armed" && state.status === "armed" && state.lastObservedHeadSha
     && state.lastObservedHeadSha !== observation.headSha
-    && !(Date.parse(observation.autoMergeEnabledAt ?? "") > Date.parse(state.lastObservedAt ?? ""))) {
+    && !(Date.parse(observation.autoMergeEnabledAt ?? "") > Date.parse(state.lastActuatedAt ?? state.lastObservedAt ?? ""))) {
     return { kind: "queue-hold", headSha: observation.headSha, event: {
       kind: "entry-unconfirmed", id: `armed-for-previous-head:${state.lastObservedHeadSha}`,
-      at: observation.autoMergeEnabledAt ?? state.lastObservedAt ?? "",
+      at: observation.autoMergeEnabledAt ?? state.lastActuatedAt ?? state.lastObservedAt ?? "",
       reason: "armed-for-previous-head", groupHeadSha: null, failingChecks: [],
     } };
   }
@@ -396,6 +417,8 @@ export async function executeBuildPrDeliveryAction(input: {
     ...input.state,
     ...undecided,
     ...(readiness.kind === "queued" ? { confirmedQueueHeadSha: readiness.headSha } : {}),
+    ...(input.state.pendingQueueUpdate && readiness.headSha && readiness.headSha !== input.state.pendingQueueUpdate.fromHeadSha
+      ? { pendingQueueUpdate: null } : {}),
     ...(input.state.queueHold ? { queueHold: null } : {}),
     reconciliationAttempts: input.state.reconciliationAttempts + 1,
     lastObservedHeadSha: readiness.headSha,
@@ -450,6 +473,9 @@ export async function executeBuildPrDeliveryAction(input: {
     next = {
       ...next,
       status: result === "accepted" ? "updating" : "checking",
+      pendingQueueUpdate: result === "accepted" && input.state.queueIntentHeadSha === action.headSha
+        && input.observation.baseSha
+        ? { fromHeadSha: action.headSha, baseSha: input.observation.baseSha } : null,
       staleUpdateAttempts: next.staleUpdateAttempts + (result === "accepted" ? 1 : 0),
       lastError: result === "head-changed" ? "head-changed-during-update" : null,
     };
@@ -470,6 +496,7 @@ export async function executeBuildPrDeliveryAction(input: {
     status: "armed",
     queueIntentHeadSha: null,
     lastActuatedHeadSha: action.headSha,
+    lastActuatedAt: (input.now ?? new Date()).toISOString(),
   };
   return done(next, true);
 }

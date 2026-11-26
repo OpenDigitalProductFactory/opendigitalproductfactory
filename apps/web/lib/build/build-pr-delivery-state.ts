@@ -61,6 +61,8 @@ export type BuildPrDeliveryStateV1 = {
   queueHold?: BuildPrQueueHold | null;
   /** Only a governed publication may write an intent for the commit it published. */
   queueIntentHeadSha?: string | null;
+  pendingQueueUpdate?: { fromHeadSha: string; baseSha: string } | null;
+  lastActuatedAt?: string;
   confirmedQueueHeadSha?: string;
   /** Bind the last removal event to the exact room head first observed with it. */
   lastQueueRemoval?: { eventId: string; headSha: string } | null;
@@ -135,6 +137,7 @@ export function readBuildPrDeliveryState(workspaceState: unknown): BuildPrDelive
     return null;
   }
   const removal = asObject(value.lastQueueRemoval);
+  const pendingUpdate = asObject(value.pendingQueueUpdate);
   const integer = (candidate: unknown) =>
     typeof candidate === "number" && Number.isInteger(candidate) && candidate >= 0 ? candidate : 0;
   return {
@@ -156,6 +159,9 @@ export function readBuildPrDeliveryState(workspaceState: unknown): BuildPrDelive
     unknownObservations: integer(value.unknownObservations),
     nextObservationAt: typeof value.nextObservationAt === "string" ? value.nextObservationAt : null,
     followThrough: readPrFollowThrough(value.followThrough),
+    ...(typeof value.lastActuatedAt === "string" ? { lastActuatedAt: value.lastActuatedAt } : {}),
+    ...(typeof pendingUpdate.fromHeadSha === "string" && typeof pendingUpdate.baseSha === "string"
+      ? { pendingQueueUpdate: { fromHeadSha: pendingUpdate.fromHeadSha, baseSha: pendingUpdate.baseSha } } : {}),
     ...(typeof value.confirmedQueueHeadSha === "string" ? { confirmedQueueHeadSha: value.confirmedQueueHeadSha } : {}),
     ...(typeof value.queueIntentHeadSha === "string" ? { queueIntentHeadSha: value.queueIntentHeadSha } : {}),
     ...(typeof removal.eventId === "string" && typeof removal.headSha === "string"
@@ -183,6 +189,11 @@ export function restoreBuildPrQueueHistory(state: BuildPrDeliveryStateV1, worksp
     || previous.prNumber !== state.prNumber) return state;
   return {
     ...state,
+    ...(previous.status === "armed" && previous.lastObservedHeadSha ? {
+      status: "armed", lastObservedHeadSha: previous.lastObservedHeadSha,
+      lastObservedAt: previous.lastObservedAt,
+      ...(previous.lastActuatedAt ? { lastActuatedAt: previous.lastActuatedAt } : {}),
+    } : {}),
     ...(previous.lastQueueRemoval ? { lastQueueRemoval: previous.lastQueueRemoval } : {}),
     ...(previous.queueHold?.reason === "disarmed" ? { queueHold: previous.queueHold } : {}),
   };
@@ -192,9 +203,11 @@ export function restoreBuildPrQueueHistory(state: BuildPrDeliveryStateV1, worksp
 export function clearBuildPrDeliveryState(workspaceState: unknown): JsonObject {
   const prior = readBuildPrDeliveryState(workspaceState);
   const { prDelivery: _current, ...root } = asObject(workspaceState);
-  if (prior?.lastQueueRemoval || prior?.queueHold?.reason === "disarmed") {
+  if (prior?.lastQueueRemoval || prior?.queueHold?.reason === "disarmed" || prior?.status === "armed") {
     const { repository, prNumber, prUrl, lastQueueRemoval, queueHold } = prior;
-    root.prDeliveryPriorQueue = { schemaVersion: 1, status: "checking", repository, prNumber, prUrl,
+    root.prDeliveryPriorQueue = { schemaVersion: 1, status: prior.status === "armed" ? "armed" : "checking", repository, prNumber, prUrl,
+      lastObservedHeadSha: prior.lastObservedHeadSha, lastObservedAt: prior.lastObservedAt,
+      lastActuatedAt: prior.lastActuatedAt ?? null,
       lastQueueRemoval: lastQueueRemoval ?? null, queueHold: queueHold?.reason === "disarmed" ? queueHold : null };
   }
   if (root.buildStudio !== undefined) {

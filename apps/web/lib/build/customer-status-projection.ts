@@ -225,14 +225,14 @@ export function projectBuildStudioCustomerStatus(args: {
     switch (delivery.status) {
       case "created":
       case "checking":
-        if (delivery.lastError === "queue-intent-required" || delivery.lastError === "changes-requested") {
+        if (delivery.queueHold || delivery.lastError === "queue-intent-required" || delivery.lastError === "changes-requested") {
           return {
             ...base,
             lifecyclePosition: "Needs your decision",
             worker: "Watching for an authorized delivery transition",
-            nextAction: delivery.lastError === "changes-requested"
+            nextAction: delivery.queueHold?.nextAction ?? (delivery.lastError === "changes-requested"
               ? "address the outstanding review and obtain its disposition."
-              : "the accountable writer must explicitly request queue enrollment for this exact commit.",
+              : "the accountable writer must explicitly request queue enrollment for this exact commit."),
             owner: "owner",
             needsYou: true,
           };

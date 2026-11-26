@@ -175,6 +175,13 @@ describe("createLiveMergeGateAdapters.armAutoMerge (P2.2b)", () => {
     expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 
+  it("does not turn a provider observation into authority when the Workroom head is missing", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(okJson({ data: { repository: { pullRequest: observed(headSha) } } }));
+    const adapters = await createLiveMergeGateAdapters({ prisma: tokenPrisma() as never, actuationEnabled: true, fetchImpl: fetchImpl as never });
+    await expect(adapters.armAutoMerge(pr)).rejects.toThrow(/exact reviewed PR head/);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
   it("throws when no GitHub token is configured", async () => {
     const noToken = {
       ...tokenPrisma(),

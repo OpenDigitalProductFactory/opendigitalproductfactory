@@ -317,7 +317,8 @@ function publishPushed({ branch, base, title, body, headSha, log, runner }) {
     state = observePublication(binding);
   }
   if (!["queued", "requested", "merged"].includes(state)) return { step: "auto-merge",
-    message: "Queue request is not confirmed; no second request was made.", next: `read pnpm pr:health ${pr.number}` };
+    message: "Queue request is not confirmed; no second request was made.",
+    next: `PR #${pr.number} owner reviews the checks, fixes or routes any failure, and verifies this exact head before another request` };
   log(state === "queued" ? `PR #${pr.number} is queued` : state === "merged"
     ? `PR #${pr.number} is merged` : `auto-merge requested for PR #${pr.number}; queue membership is not yet observed`);
   return null;
@@ -347,13 +348,14 @@ export function publish({ branch, base, title, body, dry, log, runner = run }) {
   const replacement = checkReplacement();
   if (replacement) return replacement;
   log(`pushing ${branch}`);
-  const pushed = runner("git", ["push", "-u", "origin", branch], { capture: true, allowFail: true });
+  const pushed = runner("git", ["push", "-u", "origin", branch], { allowFail: true });
   if (!pushed.ok) {
-    // A queue entry may have appeared between the provider read and push. Diagnose it read-only.
-    if (/GH006|protected branch hook declined/i.test(pushed.out ?? "")) {
-      const raced = checkReplacement();
-      if (raced) return raced;
-    }
+    // Git and its hooks stream through normal stdio; show any extra runner error too.
+    if (pushed.out?.trim()) log(pushed.out.trim());
+    // A queue entry may have appeared between the initial read and push. Diagnose
+    // by read-back even when stderr was streamed and therefore wasn't captured.
+    const raced = checkReplacement();
+    if (raced?.step === "push") return raced;
     return { step: "push", message: "push refused; it was NOT retried because another push can overwrite a recorded PASS.",
       next: "inspect the repository refusal and pnpm pregate:status; do not re-push to re-read a refusal" };
   }

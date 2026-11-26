@@ -313,6 +313,55 @@ describe("runBuildPrDeliveryReconcile — every room with a PR, whichever client
     expect(mocks.updateMany.mock.calls[0]?.[0]?.data).toMatchObject({ headSha: mergedHead });
   });
 
+  it.each([true, false])("carries enqueue intent only across the accepted base merge (%s)", async (matches) => {
+    const from = "a".repeat(40), base = "b".repeat(40), updated = "c".repeat(40);
+    let currentHead = from;
+    let workspaceState: unknown = writeBuildPrDeliveryState({}, {
+      ...createBuildPrDeliveryState({ repository: "o/r", prNumber: 9, prUrl: "https://github.com/o/r/pull/9" }),
+      queueIntentHeadSha: from,
+    });
+    mocks.findMany.mockImplementation(async () => [room({ headSha: currentHead, workspaceState })]);
+    mocks.updateMany.mockImplementation(async ({ data }) => {
+      workspaceState = data.workspaceState;
+      currentHead = data.headSha ?? currentHead;
+      return { count: 1 };
+    });
+    const green = [{ name: "Failure Readiness", status: "COMPLETED", conclusion: "SUCCESS" }];
+    mocks.observe.mockResolvedValue({ ...observation(green, "BEHIND"), headSha: from, baseSha: base });
+    mocks.fetch.mockImplementation(async (_url, init) => init?.method === "PUT" ? { status: 202 }
+      : { ok: true, json: async () => ({ data: { enablePullRequestAutoMerge: { pullRequest: { number: 9 } } } }) });
+    await runBuildPrDeliveryReconcile();
+    expect(workspaceState).toMatchObject({ prDelivery: { status: "updating",
+      pendingQueueUpdate: { fromHeadSha: from, baseSha: base } } });
+
+    // The API is asynchronous. A green read of the old head cannot arm it while the update is pending.
+    mocks.observe.mockResolvedValue({ ...observation(green, "CLEAN"), headSha: from, baseSha: base });
+    await runBuildPrDeliveryReconcile();
+    expect(mocks.fetch).toHaveBeenCalledTimes(1);
+    expect(mocks.publish).not.toHaveBeenCalled();
+
+    mocks.observe.mockResolvedValue({ ...observation(green, "CLEAN"), headSha: updated, baseSha: base,
+      headParentShas: [from, matches ? base : "d".repeat(40)] });
+    await runBuildPrDeliveryReconcile();
+    expect(mocks.fetch).toHaveBeenCalledTimes(1);
+    expect(mocks.publish).not.toHaveBeenCalled();
+    expect(workspaceState).toMatchObject({ prDelivery: { queueIntentHeadSha: matches ? updated : from } });
+
+    mocks.verdict.mockImplementation(async () => {
+      expect(currentHead).toBe(updated);
+      return { mayPublish: true, reason: "reviewed" };
+    });
+    await runBuildPrDeliveryReconcile();
+    if (matches) {
+      expect(mocks.fetch).toHaveBeenCalledTimes(2);
+      expect(String(mocks.fetch.mock.calls[1]?.[1]?.body)).toContain(`"expectedHeadOid":"${updated}"`);
+      expect(workspaceState).toMatchObject({ prDelivery: { status: "armed" } });
+    } else {
+      expect(mocks.fetch).toHaveBeenCalledTimes(1);
+      expect(workspaceState).toMatchObject({ prDelivery: { lastError: "queue-intent-required" } });
+    }
+  });
+
   it("requires current-head intent and withholds even that intent in a quiet room", async () => {
     mocks.fetch.mockResolvedValue({ ok: true, status: 200, json: async () => ({ data: { enablePullRequestAutoMerge: { pullRequest: { number: 9 } } } }) });
     mocks.findMany.mockResolvedValue([

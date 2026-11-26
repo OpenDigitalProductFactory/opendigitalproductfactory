@@ -99,6 +99,7 @@ export function observesRoomHead(
   observedHeadSha: string,
   state: (Pick<BuildPrDeliveryStateV1, "status" | "lastObservedHeadSha"> & {
     followThrough?: Pick<BuildPrDeliveryStateV1["followThrough"], "hold" | "judgedHeadSha"> | null;
+    pendingQueueUpdate?: BuildPrDeliveryStateV1["pendingQueueUpdate"];
   }) | null | undefined,
   options?: { followPrHead?: boolean },
 ): boolean {
@@ -106,7 +107,8 @@ export function observesRoomHead(
   const room = roomHeadSha.toLowerCase();
   if (observedHeadSha.toLowerCase() === room) return true;
   if (options?.followPrHead) return true;
-  if (state?.status === "updating" && state.lastObservedHeadSha?.toLowerCase() === room) return true;
+  if ((state?.status === "updating" || state?.pendingQueueUpdate?.fromHeadSha.toLowerCase() === room)
+    && state?.lastObservedHeadSha?.toLowerCase() === room) return true;
   return state?.followThrough?.hold === "repairing" && state.followThrough.judgedHeadSha?.toLowerCase() === room;
 }
 
@@ -128,6 +130,7 @@ export async function runBuildPrDeliveryReconcile(): Promise<{
   const { checkWorkroomFailureReadiness } = await import("@/lib/change-review/failure-readiness-publication");
   const { publishFailureReadinessStatus } = await import("@/lib/change-review/failure-readiness-status");
   const {
+    carryQueueIntentAcrossAcceptedUpdate,
     executeBuildPrDeliveryAction,
     holdsPrQueueAttempt,
     projectBuildPrDeliveryReadiness,
@@ -276,6 +279,17 @@ export async function runBuildPrDeliveryReconcile(): Promise<{
       let observation = await observeGithubPullRequest({ owner, repo, prNumber, token });
       observed += 1;
       if (!observesRoomHead(capsule.headSha, observation.headSha, existing, { followPrHead })) continue;
+      const intentCarried = carryQueueIntentAcrossAcceptedUpdate(state, observation);
+      if (intentCarried) {
+        // Commit the new room head before any recheck of exact-head review evidence.
+        const saved = await prisma.workroom.updateMany({
+          where: { id: capsule.id, updatedAt: capsule.updatedAt },
+          data: { headSha: observation.headSha,
+            workspaceState: writeBuildPrDeliveryState(capsule.workspaceState, intentCarried) as unknown as import("@dpf/db").Prisma.InputJsonValue },
+        });
+        if (saved.count === 0) compareAndSwapLost += 1;
+        continue;
+      }
       let readiness = projectBuildPrDeliveryReadiness(state, observation);
       // BI-0EDCF2EC: a stopped room the selector handed back is looked at again.
       // A stop whose cause still holds only records that it looked.
@@ -304,7 +318,8 @@ export async function runBuildPrDeliveryReconcile(): Promise<{
       // Build Studio rooms were gated by autonomy eligibility above.
       const actuationAllowed = capsule.featureBuildId ? true : posture.actuationAllowed;
       if (mode === "enforce" && actuationAllowed && !holdsPrQueueAttempt(state, readiness)
-        && (readiness.kind !== "ready" || state.queueIntentHeadSha === readiness.headSha)) {
+        && (readiness.kind !== "ready" || (state.queueIntentHeadSha === readiness.headSha
+          && state.pendingQueueUpdate?.fromHeadSha !== readiness.headSha))) {
         // A passed review's status expires after an hour (BI-4D0B2AAB); refresh
         // it from the server verdict before queueing or when it is the only red check.
         const refresh = await refreshFailureReadinessForDelivery({
