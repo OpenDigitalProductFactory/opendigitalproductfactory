@@ -19,7 +19,8 @@ import {
 import { routeToHuman } from "@/lib/govern/authority/route-to-human";
 import {
   enablePullRequestAutoMerge,
-  resolvePullRequestNodeId,
+  observeGithubPullRequest,
+  projectGithubPrReadiness,
 } from "@/lib/build/github-pr-readiness";
 import { ASSURANCE_ORIGIN_MARKER } from "./remediation-teeup";
 import type { MergeGateAdapters, PrReadiness, ReadyRemediationPR } from "./remediation-merge-orchestrator";
@@ -186,10 +187,10 @@ export async function createLiveMergeGateAdapters(deps: LiveMergeGateDeps): Prom
       const buildPks = bis.map((b) => b.activeBuildId).filter((v): v is string => typeof v === "string");
       const capsules = await prisma.workroom.findMany({
         where: { featureBuildId: { in: buildPks }, pullRequestNumber: { not: null } },
-        select: { featureBuildId: true, pullRequestNumber: true, pullRequestUrl: true },
+        select: { featureBuildId: true, pullRequestNumber: true, pullRequestUrl: true, headSha: true },
       });
-      const capByBuild = new Map<string, { pullRequestNumber: number | null }>(
-        capsules.map((c) => [c.featureBuildId as string, { pullRequestNumber: c.pullRequestNumber }]),
+      const capByBuild = new Map<string, { pullRequestNumber: number | null; headSha: string | null }>(
+        capsules.map((c) => [c.featureBuildId as string, { pullRequestNumber: c.pullRequestNumber, headSha: c.headSha }]),
       );
       const builds = await prisma.featureBuild.findMany({
         where: { id: { in: buildPks } },
@@ -209,6 +210,7 @@ export async function createLiveMergeGateAdapters(deps: LiveMergeGateDeps): Prom
           buildPk,
           backlogItemId: bi.itemId,
           prNumber: cap.pullRequestNumber,
+          ...(cap.headSha ? { headSha: cap.headSha } : {}),
           title: bi.title,
           packageName: parseObservedPackage(bi.body),
           fromVersion: from,
@@ -237,14 +239,17 @@ export async function createLiveMergeGateAdapters(deps: LiveMergeGateDeps): Prom
         throw new Error("assurance auto-merge: no GitHub token (github-pr-sync credential not active)");
       }
       const repo = await resolveRepoIdentity(tokenPrisma);
-      const nodeId = await resolvePullRequestNodeId({
+      const observed = await observeGithubPullRequest({
         fetchImpl,
         token,
         owner: repo.owner,
         repo: repo.name,
         prNumber: pr.prNumber,
       });
-      await enablePullRequestAutoMerge({ fetchImpl, token, nodeId });
+      if (!pr.headSha || observed.headSha !== pr.headSha || projectGithubPrReadiness(observed).kind !== "ready") {
+        throw new Error("assurance auto-merge: exact reviewed PR head or current readiness could not be verified");
+      }
+      await enablePullRequestAutoMerge({ fetchImpl, token, nodeId: observed.nodeId, expectedHeadOid: pr.headSha });
     },
 
     escalate: async (pr, reason): Promise<void> => {

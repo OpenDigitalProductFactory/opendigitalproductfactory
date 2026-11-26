@@ -7,6 +7,7 @@ import { getErrorMessage } from "@/lib/shared/get-error-message";
 export async function reconcileHiveContributionDelivery(input: {
   buildId: string;
   prUrl: string | null;
+  publishedHeadSha: string | null;
   token: string;
   eligible: boolean;
 }): Promise<void> {
@@ -35,6 +36,7 @@ export async function reconcileHiveContributionDelivery(input: {
       prUrl: input.prUrl,
       token: input.token,
       eligible: input.eligible,
+      publishedHeadSha: input.publishedHeadSha,
     });
     logBuildActivity(
       input.buildId,

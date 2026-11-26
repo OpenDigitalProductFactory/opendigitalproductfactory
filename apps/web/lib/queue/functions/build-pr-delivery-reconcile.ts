@@ -99,6 +99,7 @@ export function observesRoomHead(
   observedHeadSha: string,
   state: (Pick<BuildPrDeliveryStateV1, "status" | "lastObservedHeadSha"> & {
     followThrough?: Pick<BuildPrDeliveryStateV1["followThrough"], "hold" | "judgedHeadSha"> | null;
+    pendingQueueUpdate?: BuildPrDeliveryStateV1["pendingQueueUpdate"];
   }) | null | undefined,
   options?: { followPrHead?: boolean },
 ): boolean {
@@ -106,7 +107,8 @@ export function observesRoomHead(
   const room = roomHeadSha.toLowerCase();
   if (observedHeadSha.toLowerCase() === room) return true;
   if (options?.followPrHead) return true;
-  if (state?.status === "updating" && state.lastObservedHeadSha?.toLowerCase() === room) return true;
+  if ((state?.status === "updating" || state?.pendingQueueUpdate?.fromHeadSha.toLowerCase() === room)
+    && state?.lastObservedHeadSha?.toLowerCase() === room) return true;
   return state?.followThrough?.hold === "repairing" && state.followThrough.judgedHeadSha?.toLowerCase() === room;
 }
 
@@ -122,19 +124,22 @@ export async function runBuildPrDeliveryReconcile(): Promise<{
   } = await import("@/lib/contributor-change-lanes/github-rest-reader");
   const {
     observeGithubPullRequest,
-    projectGithubPrReadiness,
     rerunFailedWorkflowJobs,
   } = await import("@/lib/build/github-pr-readiness");
   const { refreshFailureReadinessForDelivery } = await import("@/lib/build/failure-readiness-delivery-refresh");
   const { checkWorkroomFailureReadiness } = await import("@/lib/change-review/failure-readiness-publication");
   const { publishFailureReadinessStatus } = await import("@/lib/change-review/failure-readiness-status");
   const {
+    carryQueueIntentAcrossAcceptedUpdate,
     executeBuildPrDeliveryAction,
+    holdsPrQueueAttempt,
+    projectBuildPrDeliveryReadiness,
     resolveBuildPrReconcilerMode,
   } = await import("@/lib/build/build-pr-delivery-reconciler");
   const {
     createBuildPrDeliveryState,
     readBuildPrDeliveryState,
+    restoreBuildPrQueueHistory,
     writeBuildPrDeliveryState,
   } = await import("@/lib/build/build-pr-delivery-state");
   const {
@@ -177,7 +182,7 @@ export async function runBuildPrDeliveryReconcile(): Promise<{
     })();
     const [owner, repo] = repository.split("/");
     if (!owner || !repo) continue;
-    let state = existing ?? createBuildPrDeliveryState({ repository, prNumber, prUrl });
+    let state = existing ?? restoreBuildPrQueueHistory(createBuildPrDeliveryState({ repository, prNumber, prUrl }), capsule.workspaceState);
     const withheldKey = `build-pr-delivery:${prNumber}:autonomous-eligibility-withheld`;
 
     try {
@@ -274,7 +279,18 @@ export async function runBuildPrDeliveryReconcile(): Promise<{
       let observation = await observeGithubPullRequest({ owner, repo, prNumber, token });
       observed += 1;
       if (!observesRoomHead(capsule.headSha, observation.headSha, existing, { followPrHead })) continue;
-      let readiness = projectGithubPrReadiness(observation);
+      const intentCarried = carryQueueIntentAcrossAcceptedUpdate(state, observation);
+      if (intentCarried) {
+        // Commit the new room head before any recheck of exact-head review evidence.
+        const saved = await prisma.workroom.updateMany({
+          where: { id: capsule.id, updatedAt: capsule.updatedAt },
+          data: { headSha: observation.headSha,
+            workspaceState: writeBuildPrDeliveryState(capsule.workspaceState, intentCarried) as unknown as import("@dpf/db").Prisma.InputJsonValue },
+        });
+        if (saved.count === 0) compareAndSwapLost += 1;
+        continue;
+      }
+      let readiness = projectBuildPrDeliveryReadiness(state, observation);
       // BI-0EDCF2EC: a stopped room the selector handed back is looked at again.
       // A stop whose cause still holds only records that it looked.
       const recheck = resumeClearedEscalation(state, readiness);
@@ -301,7 +317,9 @@ export async function runBuildPrDeliveryReconcile(): Promise<{
       });
       // Build Studio rooms were gated by autonomy eligibility above.
       const actuationAllowed = capsule.featureBuildId ? true : posture.actuationAllowed;
-      if (mode === "enforce" && actuationAllowed) {
+      if (mode === "enforce" && actuationAllowed && !holdsPrQueueAttempt(state, readiness)
+        && (readiness.kind !== "ready" || (state.queueIntentHeadSha === readiness.headSha
+          && state.pendingQueueUpdate?.fromHeadSha !== readiness.headSha))) {
         // A passed review's status expires after an hour (BI-4D0B2AAB); refresh
         // it from the server verdict before queueing or when it is the only red check.
         const refresh = await refreshFailureReadinessForDelivery({
@@ -315,7 +333,7 @@ export async function runBuildPrDeliveryReconcile(): Promise<{
         if (refresh.observeAgain) {
           observation = await observeGithubPullRequest({ owner, repo, prNumber, token });
           if (!observesRoomHead(capsule.headSha, observation.headSha, existing, { followPrHead })) continue;
-          readiness = projectGithubPrReadiness(observation);
+          readiness = projectBuildPrDeliveryReadiness(state, observation);
         }
       }
       const closeoutPlan = planPrTerminalCloseout({ capsule, observation });
@@ -335,6 +353,33 @@ export async function runBuildPrDeliveryReconcile(): Promise<{
         owner,
         repo,
         actuationAllowed,
+        routeQueueHold: async (hold) => {
+          const facts = hold.failingChecks.map((check) =>
+            `${check.name} (${check.conclusion})${check.url ? ` — ${check.url}` : ""}`);
+          const filed = await routeToHuman({
+            producer: "build-pr-delivery",
+            subject: { kind: "workroom", id: capsule.capsuleId },
+            blockingFacts: [hold.reason, ...facts],
+            report: {
+              source: capsule.featureBuildId ? "build-studio" : "workroom-pr-follow-through",
+              severity: "medium",
+              title: `PR #${prNumber} queue follow-through: ${hold.owner}`,
+              description: [
+                `Workroom ${capsule.capsuleId} observed ${hold.reason} at ${hold.eventAt}.`,
+                `Current PR head: ${hold.headSha}. Removed group: ${hold.groupHeadSha ?? "unread"}.`,
+                "Queue-group checks are not a verdict on the current author head.",
+                facts.length ? facts.join("\n") : "Queue-group failing check details are unread.",
+                `Next action for ${hold.owner}: ${hold.nextAction}`,
+                "Build Studio checks again on the existing delivery tick. It does not re-arm this request.",
+                prUrl,
+              ].join("\n"),
+              featureBuildId: capsule.featureBuildId,
+              triggerKind: "build-pr-delivery-reconcile",
+              dedupeKey: `build-pr-delivery:${capsule.capsuleId}:queue-hold:${hold.reason === "disarmed" ? "disarmed" : hold.headSha}:${hold.eventId}`,
+            },
+          });
+          return filed.error ? null : filed.reportId;
+        },
         prOnlyCustody: prOnlyCloseout,
         // BI-085A37EC / BI-C3EBDCEC: Build Studio builds and eligible PR-only
         // Build Studio custody rooms dispatch bounded CI repair unless the room

@@ -63,6 +63,7 @@ export interface CaptureBuildPrArgs {
   repository?: string;
   /** The commit the PR was published at (create_portal_pr's API commit). */
   headSha?: string | null;
+  initialDelivery?: BuildPrDeliveryStateV1;
 }
 
 /**
@@ -133,7 +134,7 @@ export async function captureBuildPrOntoCapsule(
   })();
   if (!repository) return { captured: 0 };
 
-  const delivery = createBuildPrDeliveryState({ repository, prNumber, prUrl });
+  const delivery = args.initialDelivery ?? createBuildPrDeliveryState({ repository, prNumber, prUrl });
   const captured = await persistBuildPrDeliveryStateForBuild({ db, featureBuildId, delivery, publishedHeadSha: args.headSha });
   return { captured };
 }

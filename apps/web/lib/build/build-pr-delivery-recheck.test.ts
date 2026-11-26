@@ -54,8 +54,8 @@ describe("consecutive unknown observations (BI-0EDCF2EC AC-1)", () => {
 });
 
 describe("re-evaluating an escalated room (BI-0EDCF2EC AC-2)", () => {
-  it("resumes PR #6983's observation-budget stop and queues once GitHub reports a decisive state", () => {
-    const resumed = resumeClearedEscalation(stopped6983, { kind: "ready", headSha: HEAD });
+  it("resumes PR #6983 and queues only with exact-head intent once GitHub reports a decisive state", () => {
+    const resumed = resumeClearedEscalation({ ...stopped6983, queueIntentHeadSha: HEAD }, { kind: "ready", headSha: HEAD });
     expect(resumed.kind).toBe("cleared");
     if (resumed.kind !== "cleared") return;
     expect(resumed.state).toMatchObject({ status: "checking", escalationKey: null, lastError: null, unknownObservations: 0, nextObservationAt: null });
