@@ -4,7 +4,7 @@ status: active
 
 # A finished backlog item closes what points at it
 
-**Backlog item:** `BI-F4A9BBF4`. **Workroom:** WC-B5FD7949. **Program:** closure program slice 2 (EP-C00F61F4; plan `2026-11-25-closure-program.md` on branch feat/closure-scorecard, BI-97C56E20).
+**Backlog item:** `BI-F4A9BBF4`. **Workroom:** WC-B5FD7949. **Program:** [closure program slice 2](2026-11-25-closure-program.md) (EP-C00F61F4, BI-97C56E20).
 
 ## Problem
 
@@ -20,12 +20,12 @@ Measured 2026-11-25:
 
 1. **Call the bridge from `completeBacklogItemTransition` and the retire path.** Rejected as the only fix. It covers two writers, and the next writer added (or federation sync, which writes status directly) reopens the gap.
 2. **A database trigger on BacklogItem.status.** Rejected. It hides behaviour from the application layer and its tests, and it cannot record queue telemetry through `recordQueueTransition`.
-3. **Chosen: a level-triggered reconcile on a cron.** Each pass reads the item's terminal state and converges every downstream record onto it. It is idempotent and bounded per pass. The precedent is `budget-reservation-settle` (BI-EF265C9A), which settles reservations against item status for writers that do not settle themselves. The first pass is also the one-time reconcile.
+3. **Chosen: a level-triggered reconcile on a cron.** Each pass reads the item's terminal state and converges eligible downstream records. Repeated bounded passes drain the existing backlog after opt-in. The precedent is `budget-reservation-settle` (BI-EF265C9A), which settles reservations against item status for writers that do not settle themselves.
 
-## Design
+## Implementation surfaces
 
 - **Pure orchestration.** `apps/web/lib/queue/bridges/terminal-backlog-downstream.ts` decides the queue transition per closed row and the summary; it has unit tests.
-- **Postgres ports.** `terminal-backlog-downstream.server.ts` runs set-based `UPDATE … RETURNING` over a bounded target. Every statement re-checks the live or open status in its WHERE, so a concurrent writer is never overwritten.
+- **Postgres ports.** `terminal-backlog-downstream.server.ts` runs set-based `UPDATE … RETURNING` with the locks and eligibility checks in R1.
 - **Matching.** The WorkItem `sourceId` is matched on either the item's semantic id or its row id; both forms exist in production.
 - **Status mapping:**
 
@@ -33,15 +33,15 @@ Measured 2026-11-25:
   |---|---|---|
   | WorkItem | live → `completed`, `completedAt` set | live → `cancelled`, `completedAt` set |
   | ImprovementSignal | `open` → `resolved` | `open` → `dismissed` |
-  | ImprovementProposal | open lifecycle → `implemented` | open lifecycle → `rejected`, with a reason naming the item |
+  | ImprovementProposal | `prioritized` or `in_progress` → `implemented` | `prioritized` or `in_progress` → `rejected`, with a reason naming the item |
 
   The proposal lifecycle is the one in `2026-03-16-platform-feedback-loop-design.md`. `verifiedAt` stays reserved for the recurrence check (BI-D33412EA).
-- **Queue telemetry.** Each closed WorkItem records one `finished` or `cancelled` transition under `cwq:<queueId>`, with its cycle time, so queue throughput reflects closures.
+- **Queue telemetry.** After a committed WorkItem closure, attempt a `finished` or `cancelled` transition under `cwq:<queueId>` with its cycle time. Report telemetry successes separately from the ledgered closure count.
 - **Schedule.** `ops/terminal-backlog-downstream-reconcile` runs at minutes 4, 19, 34 and 49 of each hour. It is catalogued as editable and honours the enabled gate and quiescence.
 
 ## Revision 4 (coordinator rulings on Revision 3, 510574082650)
 
-The independent review of 581c8c2e and the design reviews of Revisions 2 and 3 all returned REQUEST_CHANGES. This revision replaces the Design section above wherever the two conflict. Revisions 2 and 3 are superseded and kept only in git history (84733f08, 510574082650).
+The independent review of 581c8c2e and the design reviews of Revisions 2 and 3 all returned REQUEST_CHANGES. Revisions 2 and 3 are superseded and kept only in git history (84733f08, 510574082650).
 
 Changes from Revision 3:
 - Automatic signal reopen is dropped; recurred signals are surfaced to people (R5).
@@ -255,6 +255,14 @@ All tests run on real Postgres through the repo's `*.postgres.test.ts` harness, 
 - a commit-before-acknowledgement replay, proving repeated replays never exceed 1,000 committed rows per run;
 - the rolling ask: one open ask, refreshed list, and a new ask only after closure.
 
+## Acceptance
+
+- AC-1: For each eligible WorkItem selected in a bounded batch, match the terminal backlog item by semantic or row ID, close it as completed or cancelled, and set completedAt. Backfill missing completion timestamps only after rechecking the typed link and eligibility.
+- AC-2: Record each committed child change in the closure ledger. Attempt the matching finished or cancelled WorkItem telemetry after commit and report successful transitions separately from ledgered closures. Receipt replay must not repeat the mutation or emit duplicate telemetry.
+- AC-3: Resolve or dismiss eligible open signals only if lastSeenAt is no later than the locked parent finish cutoff. Implement or reject only prioritized or in-progress proposals. Surface recurrent signals and persistent pre-prioritization proposals for human triage without changing them.
+- AC-4: Each scheduled slot commits at most four replay-safe batches of 250 changes, at most 500 of them WorkItems. Lock and recheck eligibility before writing. Revert within the 365-day ledger window only while the job still owns the row.
+- AC-5: The cron is disabled by default and never writes without explicit operator opt-in and readable normal quiescence. In shared nonproduction, verify locking, opt-in, replay and revert against Postgres. After a separately authorized production enablement, verify the first bounded run and confirm the closure scorecard reflects eligible signal and proposal closures as the backlog drains.
+
 ## Backlog coverage
 
 - Decision: atomic
@@ -267,7 +275,7 @@ All tests run on real Postgres through the repo's `*.postgres.test.ts` harness, 
 
 - **Unit tests:** transition mapping, one transition per closed row, idempotent empty pass, `more` flag, clock-skew guard.
 - **Real SQL:** all four statements ran against the dev database copy in one transaction that was rolled back. Result: `UPDATE 813` WorkItems, `UPDATE 231` completedAt backfills, `UPDATE 95` signals, `UPDATE 65` proposals.
-- **After deploy:** the closure scorecard (BI-97C56E20) is the measure. `signals.closed` and `proposals.closed` should leave zero, and the anchor queue should show throughput.
+- **After separately authorized production enablement:** verify the first bounded run. Use the closure scorecard (BI-97C56E20) to see whether eligible signal and proposal closures are reflected as the backlog drains. Compare ledgered WorkItem closures against successfully recorded queue transitions.
 
 ## Not in this slice
 
