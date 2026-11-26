@@ -1,0 +1,131 @@
+---
+status: active
+---
+
+# BI-5A866218 integrated S6 implementation plan
+
+**Backlog item:** BI-5A866218 · **Workroom:** WC-3B0AB38E
+
+Plan for the governed implementation claim. No code or runtime authorization. The [S6 design](../specs/2026-11-25-workroom-execution-host-routing-design.md) merged in PR #7220 at `11a11382c56353326837c00a904707ca68d2f6cc`. The coordinator restored BI-5A866218 to open after the design-only merge moved it to awaiting-acceptance. That merge is not implementation or functional acceptance.
+
+## Delivery and ownership
+
+One accountable DPF implementation PR, one scoped Workroom, one exact integrated candidate. The commits below are internal sequencing, not independent releases. The registry alone does not dispatch, transport without binding has no authority, reattachment without a fixed host and the epoch fence risks applying the wrong state. No dispatch is enabled by a partial commit. Keep BI-AFF3F2BD separate as written. Its acceptance grants an installation release owner a governed qualification issuance and revocation action with audit and a distinct evidence preparer. This PR consumes that proof and delivers the scoped revocation transport; no issuer authority, operator grant, or production qualification changes. Bind the exact producer interface and run on a synthetic fixture until approved nonproduction proof exists. S5 owns the projection and room broker, T2 owns identity and authority revisions, and DPF2 owns the receiver, original-attempt restart, stop and outcome. Keep BI-224F56F1's local boot supervisor unchanged.
+
+Before implementation edits, verify the live BI status and effective shape, obtain all owed independent reviews, set the exact Workroom source identity, and claim exact edit paths. Consume `changeImpactContract` and map each test-impact and guard entry to its owning commit. If the scope changes, refresh coverage and review as required. If impact remains unresolved, use the exhaustive path per the gate.
+
+## Backlog acceptance (verbatim)
+
+- AC-1: An execution-host registry under the installation, extending the agent toolchain's host agent, not a new daemon.
+- AC-2: A session runs on the host that owns its worktree. The room records which host.
+- AC-3: Routes are loopback, tailnet and authenticated HTTPS, in order. No plain-HTTP all-interface bind. No third-party relay or telemetry.
+- AC-4: Host links only narrow authority. Linked work carries an immutable origin.
+- AC-5: The paired Dev install stays a federated peer with work sync and never becomes a production execution host.
+
+## Test-first implementation commits
+
+| Commit and status | Scope objectives | Acceptance | Contract | Flow | Fixture |
+| --- | --- | --- | --- | --- | --- |
+| 1. Registry and pinned binding. Internal only. | OBJ-S6-QUALIFICATION, OBJ-S6-BINDING | AC-1, AC-2, AC-4, AC-5 | C-S6-QUALIFIED-BINDING | F-S6-IDENTIFY-AND-COMMIT | V-S6-BINDING-REFUSALS |
+| 2. Ordered same-host transport. Internal only. | OBJ-S6-QUALIFICATION, OBJ-S6-BINDING | AC-2, AC-3, AC-4 | C-S6-PINNED-TRANSPORT | F-S6-REVALIDATE-AND-ROUTE | V-S6-ORDER-NO-DOWNGRADE |
+| 3. Live epoch read, revocation transport and acknowledgement. Internal only. | OBJ-S6-QUALIFICATION, OBJ-S6-BINDING | AC-1, AC-2, AC-4 | C-S6-EPOCH-CONTROL | F-S6-TWO-FENCE-RECONCILIATION | V-S6-RACE-AND-ACK |
+| 4. Exact-attempt liveness, reattachment and integrated docs. Internal only. | OBJ-S6-BINDING, OBJ-S6-REATTACH | AC-2, AC-3, AC-4, AC-5 | C-S6-READBACK | F-S6-OBSERVE-OR-HOLD | V-S6-RESTART-NO-REPLAY |
+
+### 1. C-S6-QUALIFIED-BINDING · F-S6-IDENTIFY-AND-COMMIT · V-S6-BINDING-REFUSALS
+
+Use the toolchain host agent at `packages/dpf-skill-pack/scripts/toolchain_agent.py` and the observation boundary in `apps/web/lib/agent-toolchain/connection-observation.ts`. `AgentSurfaceReadiness` and `AgentToolchainObservation` are observation only, never grants. Bind a reviewed authoritative qualification reference from BI-AFF3F2BD to installation, host, receiver and approved endpoints. Do not introduce a second grant, ledger or qualification issuer. Resolve current Workroom admission and canonical worktree ownership before writing a distinct remote binding and existing outbox effect in one transaction. Ground that binding from `workroom-runtime/runtime-decider.ts`, `workroom-effect-store.ts` and the existing Workroom state in `packages/db/prisma/schema/work-coordination.prisma`. The data review chooses any additive carrier and rollback plan before schema edits.
+
+The approved carriers are the typed `ExecutionHost` registration, a versioned exact-attempt binding in Workroom `workspaceState` independent of `runtimeSession`, and one additive `WorkroomEffect` kind for the pending launch. See DI-B595D17C7999 and BI-5A866218 data review `cmwwepvej2d8i0ep1md0clifn`. The binding and pending effect commit together under the existing receipted room lock. Keep their legacy reader path disabled and demonstrate that it can drain or hold safely before rollout.
+
+BI-AFF3F2BD `spec_review` evidence `cmwweqkfh2d9h0ep1vg2vizrk` binds the foreign key from the issuer-owned Qualification to the stable, exact `ExecutionHost` registration. Only Qualification owns approval status, epoch and the issuer's audit trail. The registration holds its immutable receiver identity, not a copy of qualification. Rotation requires a new registration or governed re-registration that invalidates prior proof, never an in-place identity update. Test that a rotated receiver cannot inherit prior qualification or epoch. Until the issuer and verifier are available and approved, registered candidates remain unqualified.
+
+Start with failing tests for wrong installation, paired Dev, wrong receiver/profile, ambiguous worktree ownership, revoked/stale/missing approval, concurrent binding, and wrong origin or stage. Show the existing local session remains outside this path. Verify exact compare-and-fence identity with the real Workroom outbox transaction.
+
+### 2. C-S6-PINNED-TRANSPORT · F-S6-REVALIDATE-AND-ROUTE · V-S6-ORDER-NO-DOWNGRADE
+
+Extend the existing effect path around `workroom-runtime/effect-executors.ts` and `effect-worker.server.ts`. Recheck S5/BI-B62B218E admission and the qualified receiver before contact. A non-secret projection and opaque route correlation grant nothing by themselves. Enforce one pinned host, explicit loopback then authenticated tailnet then authenticated HTTPS, and verified destination identity for each approved transport. Do not fail over after a possible start or an authorization or identity refusal. Only read back after possible delivery. Separate room token custody and transport credentials. No redirects, plain HTTP bound to all interfaces, third-party relay or telemetry.
+
+Write a dedicated AC-3 fixture row covering complete precedence, unavailable route before send, refusal without downgrade, ambiguous send without second start, another eligible host not selected, wrong audience, and relay/telemetry exclusion. Inspect actual served connections and effects, not just construction of a route array.
+
+### 3. C-S6-EPOCH-CONTROL · F-S6-TWO-FENCE-RECONCILIATION · V-S6-RACE-AND-ACK
+
+Use the Workroom addendum and DI-A6B15ABECFD7. Identify the existing durable DPF delivery carrier for the qualification-scoped revocation before implementation. Commit the DPF authority fence and pending control action together. Carry version, revocation ID, typed scope key and minimum admissible revision over the existing authenticated receiver route. DPF2 reads live DPF authority outside its workspace lock for each transition and validates the same current reply plus all applicable floors inside the workspace transaction. No offline or cached authorization. DPF consumes the exact immutable acknowledgement under the correct Store epoch, preserving the distinction between DPF dispatch fenced, receiver admission fenced, and attempt outcome. An acknowledgement does not report termination.
+
+Use the existing owned Postgres durable-job engine (`JobEvent`, `JobRun` and its worker) for qualification-scoped delivery, per DI-651C0F0900E7. The public `jobs.send` call today opens a separate transaction or routes to Inngest, so it does not meet this contract. Add a narrow jobs-facade enqueue that joins the issuer's mutation transaction, checks exact deterministic event identity and content, and holds unless this function runs on owned Postgres. Do not add a second outbox, scan rooms or send through federation. Issuer-owned state retains pending and verified acknowledgement dispositions. Queue fan-out, exhaustion and pruning do not prove a receiver fence. Validate atomic rollback, duplicate payload conflict and redrive by exact qualification and revocation ID, including when no Workroom is open. Before the issuer is approved, use only the nonproduction fixture producer.
+
+Write tests for both fence orders, partition, lost command or acknowledgement, duplicate and conflicting replay, later floor before old-ack lookup, incomplete or stale pages, restore/regression, expiry while waiting on the Store lock, delayed or unavailable live check, and a revocation racing a pre-spawn reply. A blocked live read cannot hold the receiver workspace lock. Demonstrate that pre-floor unresolved attempts reconcile by exact handle and no post-floor operation admits a stale revision. Prove equality clears only its own floor, not authority, and one membership scope cannot affect unrelated attempts.
+
+### 4. C-S6-READBACK · F-S6-OBSERVE-OR-HOLD · V-S6-RESTART-NO-REPLAY
+
+Use the existing `SupervisedSessionPort` in `workroom-runtime/supervised-turn-delivery.ts` and durable Workroom effects. Record remote attempt identity under the existing Workroom without letting it enter `supervisor.ts`'s local boot start/reattach path. Read exact authenticated status or outcome by pinned host and S5 session/stage attempt. Treat receiver generation as correlation. Distinguish reachability, nonterminal state and a matching final receipt. Unknown, timeout and missing or stale cursor never authorize a launch or settlement. DPF2 owns original process restart, stop and outcome.
+
+Write tests for a lost launch reply, expired outbox lease, portal restart, same-attempt cursor reset, exact receipt deduplication, wrong host/origin/attempt receipt, terminal/refused readback, no remote invocation of local boot, and siblings untouched. Update the plan and epoch addendum together in the implementation delivery. Keep runbook changes scoped to actual behavior and avoid adding activation instructions.
+
+## One integrated closing gate
+
+After each commit run only touched red/green tests and cheap focused checks. Resolve module/guard/data impacts when paths are known. On the assembled candidate run the applicable package typecheck and canonical full build/check gate once, including nonproduction migration application if the reviewed carrier changes schema. Use the governed nonproduction environment and shared lease for the served FB-2c fixture. Capture source/tree/fixture IDs, actual positive and negative outcomes, loss/restart/race claims and skipped coverage. Reuse these receipts across review and the DCO PR where identity remains valid. Native semantic and coordinator review precede merge. A later source change may require exact-tree reverification. No production route, guest, token or dataset is used.
+
+On rollback hold remote dispatch first. Preserve bound identities, qualifications, acknowledgements and receipts, never treat a protected remote record as a local session. Reconcile an in-flight attempt only on its original pinned receiver. A rollback that cannot parse the version holds rather than guessing. Additive data rollout and compatibility proof must be reviewed before migration. Owners retain existing audit and activation authority.
+
+## Addendum · Qualification epochs and revocation acknowledgements
+
+Joint DPF/DPF2 design addendum to BI-5A866218, based on the design in PR #7220. DPF2 N1 recorded its field-level proposal at b7a0389102b7312ce32fd8a541b1bd5019f27cca. DPF accepted the host-route semantics with the replay and acknowledgement completeness tests below. This is design evidence, not implemented wire conformance. WWMD DI-FDFE2BF60256 prefers a current DPF authority check plus DPF2's transactionally enforced floor and acknowledgement. This extends the host-route qualification lifecycle in BI-AFF3F2BD. It does not add fields to S5, authorize production, or put DPF in charge of stopping the protected process.
+
+### Transport and records
+
+Use the same authenticated, audience-bound control route to the pinned protected receiver. Authorize and version this control exchange separately from the S5 projection and room credential. Do not send an administrative credential, token plaintext in evidence, or client/T3 process identifiers. Partition a floor by (sourceInstallationRef, receiverHostRef, authorityKind, authorityScopeRef). For S6 use authorityKind = qualification-epoch. The authorityScopeRef is the qualificationRef and the per-key revision is the qualification epoch, encoded as a non-negative safe integer. Missing authority does not default to zero. Overflow and restore regression hold. Distinct scopes never compare revisions. In the first slice all transports to that host share this qualification and epoch, so falling back to another transport cannot recover stale authority. The pilot receiver uses one configured Control workspace. Resolve it from trusted configuration, never a caller selector. Acknowledgements are scoped to that workspace. There is no general S5 single-workspace limit or claimed cross-workspace atomicity. A future extension needs the complete affected workspace set and all matching acknowledgements.
+
+| Operation | Exact correlation and authority |
+| --- | --- |
+| Protected admission | Resolve an opaque DPF authorization correlation against current installation, host, qualification ref/epoch, origin, S5 sessionRef and stageAttemptRef. Atomically issue or consume authority against the qualification on DPF's side. DPF2 makes the exact live read outside its workspace lock, immediately before the transition. Inside the Store transaction it validates that same current, matching answer and every applicable persisted floor. Re-read live authority and check all floors before protected spawn, start and resume. No cached positive, offline fallback or new start on reattachment. |
+| Revoke | Carry {version, revocationId, key, minimumAcceptedRevision}. The key binds installation, pinned host, authority kind and exact qualification ref. Revoking epoch E requires a floor of at least E+1. Use epoch < floor both to refuse stale admission and enumerate affected unresolved attempts. Equality only clears that floor. A newer or equal value cannot authorize anything without a fresh, exact DPF approval at the current revision and all other checks. The floor alone never qualifies E+1. DPF makes its local fence and pending revocation durable together, then sends through an existing durable delivery path keyed to the qualification rather than a room scan. The plan identifies that carrier before implementation. |
+| Acknowledge | Return {version, revocationId, key, appliedFloor, commitRef, affected}. DPF2 computes affected = [{sessionRef, stageAttemptRef, attemptRef}] inside the workspace-locked floor transaction. Reuse existing harness open-work predicates: an attempt with no closed outcome, an uncertain outcome, or a begun send without success or the existing clean refusal. Include only attempts recorded below the floor for the same typed key. The opaque commitRef binds the receiver Store epoch and event sequence and is never an authority revision. The sequence can have gaps and is not compared across Store epochs. A different Store epoch or mismatched commitRef cannot recover that acknowledgement. An attempt handle resolves to the exact session and stage attempt. If results require pagination, every cursor stays on the commitRef snapshot and DPF verifies complete ordered traversal before treating the set as complete. Include an immutable count and terminal cursor or equivalent exact completeness proof. |
+| Reconcile | Recover a lost acknowledgement or resend the same authenticated revocation command on the same pinned host. Identical ID and payload return the original acknowledgement, even after a later revocation advances the current floor. Use existing command/result receipts to preserve that snapshot. A reused ID with different binding or payload is conflict. A higher floor never goes backward. Stop intent and the final outcome remain DPF2's, and DPF learns them through exact-attempt readback. |
+
+DPF2 keeps the floor in existing Control workspace state under the existing workspace Store lock. Harness-session admission and resolution enforce it. Reuse its existing durable command receipts and stop fence. DPF provides current attempt-scoped authority and retains its own qualification record, pending revocation and acknowledgement correlation. The plan must identify DPF’s existing durable producer and layout, not copy DPF2’s execution ledger.
+
+### Live read and Store lock
+
+WWMD DI-A6B15ABECFD7 selected a live DPF read outside the DPF2 workspace lock. DPF2 foundation `f0360460` locks the workspace and then reads a fresh local snapshot. Holding that receiver lock across a call to DPF cannot serialize DPF's independent revocation commit. It would delay the receiver floor and unrelated workspace commands when the network is slow or unavailable.
+
+For each admission, pre-spawn, start, and resume decision, obtain a fresh positive reply for the exact attempt and all applicable revisions before acquiring the lock. Under the lock, check exact correlation, freshness including any lock wait, and every applicable local floor before the transition. An unavailable, timed-out, malformed, unverifiable, nonpositive, expired, or mismatched reply holds as `authority-unverifiable`; stale local revisions hold on the floor check. On hold, write no new admission or attempt, acquire no new custody, do not launch or resume, and do not automatically retry. Existing attempts remain observable through the protected readback and reconciliation path.
+
+DPF proposes a fixture-only freshness bound of strictly less than 5,000 ms, measured on the receiver's injected monotonic clock from initiating that transition's exact live exchange through consuming the correlated reply under the Store lock (DI-E7A211C20BFB). An earlier authority expiry or any mismatch still holds. At 4,999 ms the reply clears only freshness. At 5,000 ms or later it holds as `authority-unverifiable`, including when the reply arrived on time and aged out waiting for the lock. This is a synthetic test boundary, not a production timeout or activation decision. Record N1's confirmation or exact delta before exercising joint conformance.
+
+### The two fence points
+
+1. On DPF's commit, new DPF authority, delivery and dispatch for the revoked epoch stop. Authority cannot be issued after this fence, even if DPF2 is unreachable.
+2. On DPF2's Store commit, protected admission at an older epoch stops. The receiver serializes admission and floor update so the acknowledgement identifies admissions that committed first. Send those exact attempts through DPF2's existing stop fence.
+3. Each receiver transaction is ordered against the receiver floor. If the floor commits first, the stale revision holds. If admission commits first, the floor transaction includes every unresolved attempt under that affected admission in its acknowledgement. A positive DPF reply can race DPF's independent revocation before the receiver floor arrives, including after the final live read but before a protected effect. This is a pre-floor in-flight case. Reconcile or stop the exact attempt through DPF2's existing stop fence. Do not claim either that DPF's commit immediately stopped the remote process or that DPF2 can admit stale authority once its own floor has committed. DPF must not present the receiver as fenced without complete matching proof. Acknowledgement proves the receiver fence and reconciliation set, never stop, cleanup, rollback or terminal outcome.
+
+### Shared floor and acknowledgement extension boundary
+
+DPF2 agreed in principle to one versioned, authenticated floor/ack operation and one floor-record type in the existing DPF2 Store, with one current record per `(sourceInstallationRef, receiverHostRef, authorityKind, authorityScopeRef)` key. Keep the original acknowledgement in the existing command/result receipts so a higher floor cannot rewrite it. No second transport, floor store, or ledger is introduced.
+
+S6 uses the `qualificationRef` with its qualification epoch. T2 uses DPF-issued opaque authority-binding refs with the monotonic revisions owned by their own domains. Never compare, merge, or broaden revisions across keys. A floor affects only exact unresolved attempts bound to that key. A membership-only event cannot stop unrelated subject or host attempts.
+
+At each admission, start, or resume transition, check every applicable scope together in that transition's Store transaction. Missing, stale, or unverifiable authority for any applicable key holds. Neither a missing floor nor clearing a floor grants authority. T2 owns identity correctness, its revision lineage and joined proof. Production stays held on the host epoch transport and joint race fixture. Inert N1 work can proceed, and N1 confirms the remaining field-level conformance details with S6 and T2.
+
+### Companion subject binding
+
+T2 (BI-67B2B608) can share this transport and transaction without sharing the host-route scope. Subject-binding partitions use opaque refs to distinguish the Principal authority lineage from the exact member-admission lineage. A member removal advances only its member scope. A principal disable or rebind can advance a single Principal scope if every governed admission persists and checks that scope and its acknowledgement enumerates the exact pre-fence attempts on this receiver. DI-EEABE17BC3C2 proposes monotonic revisions on the existing owning records. DI-D793299D7741 proposes the independently established DPF principal binding on the existing DPF2 Actor. Both are T2 work. No scope substitutes for another, including across installations and hosts. N1 confirmed that its existing workspace-locked Store transaction can enforce both typed lineages and enumerate exact admitted attempts within one workspace. Joined proof stays held until the owning paths demonstrate atomic and restore-safe revision updates and an independently established expected principal. The existing timestamps and WorkroomActivity sequence do not establish that proof. The inert S5 fixture is unchanged.
+
+### Evidence and dates
+
+Use a synthetic same-install qualified host. Exercise revoke first, admit first, lost command, lost acknowledgement, authenticated host unreachable, duplicate and reordered control packets, conflicting IDs, wrong host/origin/epoch and pre-fence attempt readback. Test below, equal and above the minimum, including a disabled binding that must still refuse at equality and a restored earlier revision. Use a partition with an in-flight admission, a live reply that expires while waiting for the lock, and a revocation between the last successful DPF read and protected spawn. Show both fence points independently. Demonstrate that a blocked DPF read never holds the workspace Store lock or prevents the receiver floor from committing. Prove neither a stale route nor fallback reaches protected admission after the receiver fence. Include an attempt with one current scope and one stale or missing scope, and prove that a membership-only floor leaves unrelated subject and host attempts untouched. Reapply a new epoch only under a fresh governed approval. No production route until joint conformance is proven.
+
+Addendum agreement and review target Nov 27–Dec 4. DPF nonproduction transport/ack candidate Dec 16–22 if the qualification and fixture dependencies clear. Dec 22–Jan 9 is the risk window. DPF2's reported post-transport week is Dec 23–30, with risk to Jan 16 if handoff slips to Jan 9. Holiday availability, the S5 room broker and the T2 lineage remain separate constraints. These are low-confidence planning ranges and do not commit activation.
+
+### Publication in the implementation delivery
+
+Plan one accountable S6 implementation PR covering qualified host registry and binding, ordered transport, epoch revocation and acknowledgement, and exact-attempt reattachment. Use separate test-first commits and focused checks, then one full integrated build/check gate. Include the plan and this addendum in the same delivery unless the plan gate requires prior immutable publication. BI-AFF3F2BD remains a separately governed dependency unless the planning gate establishes shared acceptance. S6 does not absorb release-owner qualification issuance or change who may authorize it.
+
+## Backlog coverage
+
+- Decision: atomic
+- Parent: BI-5A866218
+- Receipt: blocked-by: the exact signed plan blob must be available from the provider before the Workroom can record live coverage.
+- Rationale: Every phase uses the same Workroom attempt, pinned qualification and protected receiver. Registration without binding, revocable transport without exact reattachment, or reattachment without revocation cannot ship as dispatch.
+- Dependencies: BI-AFF3F2BD release-owner qualification issuance and audit, BI-687E7D81 S5 projection and broker, BI-B62B218E membership, BI-67B2B608 T2 lineage, DPF2 FB-2c receiver and fixture. BI-224F56F1 remains untouched.
+
+The plan and addendum ship with the implementation PR. Publish their exact topic-branch blob for plan admission first, without opening a separate PR. Record live coverage and independent plan review before code. Where the effective delivery shape does not issue a formal plan gate, use the actual admission result and keep the coordinator's independent exact-plan review visible.
