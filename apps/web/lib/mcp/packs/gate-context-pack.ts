@@ -9,10 +9,10 @@
 //
 // Grants mirror agent-grants.ts TOOL_TO_GRANTS, which stays the gating source.
 
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
+import type { RegisteredToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
 
-const definitions: ToolDefinition[] = [
+const definitions: RegisteredToolDefinition[] = [
   {
     name: "get_change_gate_context",
     description: "Return the CI gate constraints for planned or changed files, derived from the live gate registries.",
@@ -34,6 +34,7 @@ const definitions: ToolDefinition[] = [
         buildId: { type: "string", description: "Optional FB-* build id." },
       },
     },
+    workroomAccess: "gate",
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: false,

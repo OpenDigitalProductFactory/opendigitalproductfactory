@@ -13,7 +13,7 @@
 
 import { prisma } from "@dpf/db";
 
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
+import type { RegisteredToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
 import {
   resolveActiveBuildId,
@@ -21,11 +21,12 @@ import {
   logBuildActivity,
 } from "@/lib/mcp/build-tool-helpers";
 
-const definitions: ToolDefinition[] = [
+const definitions: RegisteredToolDefinition[] = [
   {
     name: "validate_schema",
     description: "Validate the Prisma schema in the sandbox for common errors: missing inverse relations, undefined types, unindexed foreign keys. MUST be called before running prisma migrate. Returns specific errors with fix instructions.",
     inputSchema: { type: "object", properties: {} },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: false,
@@ -42,6 +43,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["disposition"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_capabilities",
     executionMode: "immediate",
     sideEffect: true,

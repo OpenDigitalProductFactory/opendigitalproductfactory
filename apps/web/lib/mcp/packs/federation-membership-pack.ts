@@ -15,10 +15,10 @@ import {
   isInstallationEnvironmentClass,
 } from "@dpf/db/installation-operating-intent";
 
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
+import type { RegisteredToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack } from "../tool-pack";
 
-const definitions: ToolDefinition[] = [
+const definitions: RegisteredToolDefinition[] = [
   {
     name: "issue_organization_join_file",
     description:
@@ -47,6 +47,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["intendedPeer", "environmentClass"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_platform",
     executionMode: "immediate",
     sideEffect: true,
@@ -70,6 +71,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["joinFileText"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_platform",
     executionMode: "immediate",
     sideEffect: true,

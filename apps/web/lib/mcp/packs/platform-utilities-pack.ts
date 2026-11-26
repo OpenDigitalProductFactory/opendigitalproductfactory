@@ -22,10 +22,10 @@
 
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
+import type { RegisteredToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
 
-const definitions: ToolDefinition[] = [
+const definitions: RegisteredToolDefinition[] = [
   {
     name: "create_digital_product",
     description: "Register a new digital product in the inventory",
@@ -39,6 +39,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["name", "productId"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_backlog",
     sideEffect: true,
   },
@@ -64,6 +65,7 @@ const definitions: ToolDefinition[] = [
       },
       required: [],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_finance",
     executionMode: "immediate",
     sideEffect: false,
@@ -94,6 +96,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["task", "siteKey", "targetDomains"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: null,
     requiresExternalAccess: true,
     executionMode: "immediate",
@@ -119,6 +122,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["action"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_provider_connections",
     sideEffect: true,
     // reaches a third party → consult-gated (TAK §8.4.1).
@@ -136,6 +140,7 @@ const definitions: ToolDefinition[] = [
       },
       required: [],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_inventory",
     sideEffect: false,
   },
@@ -152,6 +157,7 @@ const definitions: ToolDefinition[] = [
         },
       },
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_provider_connections",
     executionMode: "immediate",
     sideEffect: true,

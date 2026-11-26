@@ -95,7 +95,7 @@
     "apps/web/lib/mcp/marketing-cadence-handler.ts": 1,
     "apps/web/lib/mcp/org-context-bundle.ts": 1,
     "apps/web/lib/mcp/packs/founder-review-pack.ts": 1,
-    "apps/web/lib/mcp/packs/marketing-ops-pack.ts": 2,
+    "apps/web/lib/mcp/packs/marketing-ops-pack.ts": 1,
     "apps/web/lib/mcp/packs/org-decision-pack.ts": 2,
     "apps/web/lib/mcp/packs/principle-decide-pack.ts": 1,
     "apps/web/lib/mcp/packs/product-outcomes-pack.ts": 1,

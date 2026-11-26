@@ -19,11 +19,11 @@
 // portal. A judge calibrated on agent-authored verdicts is calibrated against
 // itself, so this is a correctness boundary, not a permissions nicety.
 
-import type { ToolDefinition, ToolResult, ToolExecutionContext } from "@/lib/mcp-tool-types";
+import type { RegisteredToolDefinition, ToolResult, ToolExecutionContext } from "@/lib/mcp-tool-types";
 import { can } from "@/lib/permissions";
 import type { ToolPack } from "../tool-pack";
 
-const definitions: ToolDefinition[] = [
+const definitions: RegisteredToolDefinition[] = [
   {
     name: "capture_ux_critique",
     description:
@@ -74,6 +74,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["title", "route", "finding", "lens"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_operations",
     executionMode: "immediate",
     sideEffect: true,
@@ -103,6 +104,7 @@ const definitions: ToolDefinition[] = [
       },
       required: [],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_operations",
     executionMode: "immediate",
     sideEffect: false,

@@ -13,7 +13,7 @@
 // mirror agent-grants.ts TOOL_TO_GRANTS, which stays the gating source.
 
 import { DISCOVERY_TRIAGE_AGENT_ID } from "@dpf/db";
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
+import type { RegisteredToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { DiscoveryTriageRunResult } from "@/lib/discovery-triage-runner";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
 
@@ -65,7 +65,7 @@ export function compactDiscoveryTriageData(
   return data;
 }
 
-const definitions: ToolDefinition[] = [
+const definitions: RegisteredToolDefinition[] = [
   {
     name: "discovery_sweep",
     description: "Run a fresh discovery pass to refresh attribution, topology, and evidence quality across the estate.",
@@ -74,6 +74,7 @@ const definitions: ToolDefinition[] = [
       properties: {},
       required: [],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_provider_connections",
     sideEffect: true,
     // reaches a third party → consult-gated (TAK §8.4.1).
@@ -96,6 +97,7 @@ const definitions: ToolDefinition[] = [
       },
       required: [],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_provider_connections",
     executionMode: "immediate",
     sideEffect: true,
@@ -108,6 +110,7 @@ const definitions: ToolDefinition[] = [
       properties: {},
       required: [],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_backlog",
     executionMode: "immediate",
     sideEffect: true,
@@ -127,6 +130,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["entityId"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_provider_connections",
     sideEffect: true,
   },
@@ -140,6 +144,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["entityId"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_provider_connections",
     sideEffect: true,
     // destroys state → consult-gated (TAK §8.4.1).
@@ -156,6 +161,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["issueId", "resolution"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_provider_connections",
     sideEffect: true,
   },
@@ -169,6 +175,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["digitalProductId"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_provider_connections",
     executionMode: "immediate",
     sideEffect: true,
@@ -187,6 +194,7 @@ const definitions: ToolDefinition[] = [
       },
       required: [],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_provider_connections",
     sideEffect: true,
     // reaches a third party → consult-gated (TAK §8.4.1).
@@ -197,6 +205,7 @@ const definitions: ToolDefinition[] = [
     name: "list_discovery_connections",
     description: "List authorized Estate Discovery connections and their non-secret status/configuration summary. Credentials are never returned.",
     inputSchema: { type: "object", properties: {}, required: [] },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_provider_connections",
     executionMode: "immediate",
     sideEffect: false,
@@ -217,6 +226,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["name", "endpointUrl"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_provider_connections",
     sideEffect: true,
     // reaches a third party → consult-gated (TAK §8.4.1).
@@ -239,6 +249,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["name", "endpointUrl", "collectorType"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_provider_connections",
     executionMode: "immediate",
     sideEffect: true,

@@ -56,7 +56,7 @@ describe("resolveWorkroomSessionToken", () => {
 
   it("refuses another prefix, another kind, a revoked or idle-expired token, and a token whose room ended", async () => {
     await expect(resolveWorkroomSessionToken("dpfmcp_abc", NOW)).resolves.toBeNull();
-    for (const over of [{ kind: "operator" }, { revokedAt: NOW }, { expiresAt: new Date(NOW.getTime() - 1) }]) {
+    for (const over of [{ kind: "operator" }, { kind: "workroom_session_scoped" }, { revokedAt: NOW }, { expiresAt: new Date(NOW.getTime() - 1) }]) {
       db.mcpApiToken.findUnique.mockResolvedValueOnce(row(over));
       await expect(resolveWorkroomSessionToken("dpfroom_abc", NOW)).resolves.toBeNull();
     }

@@ -2,12 +2,12 @@
 // handlers retain their existing delegation behavior. Exact-response feedback
 // handlers use the shared transactional domain, with read/write grants distinct.
 
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
+import type { RegisteredToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
 import { THREAD_TOOL_GRANTS } from "@/lib/tak/thread-tool-grants";
 import { responseFeedbackDefinitions, responseFeedbackHandlers } from "./work-thread-feedback";
 
-const definitions: ToolDefinition[] = [
+const definitions: RegisteredToolDefinition[] = [
   ...responseFeedbackDefinitions,
   {
     name: "spawn_work_thread",
@@ -20,6 +20,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["objective"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: null,
     sideEffect: true,
   },
@@ -32,6 +33,7 @@ const definitions: ToolDefinition[] = [
         threadId: { type: "string", description: "Thread id to cancel. Defaults to the current thread." },
       },
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: null,
     sideEffect: true,
     // destroys state → consult-gated (TAK §8.4.1).
@@ -47,6 +49,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["threadId"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: null,
     sideEffect: false,
   },
@@ -57,6 +60,7 @@ const definitions: ToolDefinition[] = [
       type: "object",
       properties: {},
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: null,
     sideEffect: false,
   },

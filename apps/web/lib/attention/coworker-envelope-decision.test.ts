@@ -33,7 +33,6 @@ describe("primary decision disclosure", () => {
   it.each([
     ["request_self_upgrade", { reason: "Approved release batch" }, "Request an update for this app?"],
     ["request_self_upgrade", {}, "Request an update for this app?"],
-    ["merge_backlog_items", { canonicalItemId: "BI-KEEP", duplicateItemId: "BI-DUP" }, "Combine these duplicate work requests?"],
     ["release_nonprod_environment_lease", { leaseId: "NPEL-TEST" }, "Release this shared test reservation?"],
   ])("names %s without claiming verified effects or work names", (toolName, proposedParameters, title) => {
     const decision = summarizeCoworkerEnvelopeDecision({ ...RESEARCH, toolName, proposedParameters, consequence: "irreversible" });
@@ -47,9 +46,28 @@ describe("primary decision disclosure", () => {
   });
 
   it.each([
+    ["merge_backlog_items", { canonicalItemId: "BI-KEEP", duplicateItemId: "BI-DUP", reconcileOnly: false }, "add its recorded demand"],
+    ["retire_backlog_item", { outcome: "duplicate", itemId: "BI-DUP", duplicateOfId: "BI-KEEP", rationale: "Same request." }, "link it to"],
+  ])("states the exact effect of %s before authorization", (toolName, proposedParameters, effect) => {
+    const decision = summarizeCoworkerEnvelopeDecision({ ...RESEARCH, toolName, proposedParameters, consequence: "irreversible" });
+    const primary = envelopePrimaryDecision(decision);
+    expect(primary.description).toContain("BI-DUP");
+    expect(primary.description).toContain("BI-KEEP");
+    expect(primary.description).toContain(effect);
+    expect(primary.consequence).toContain("history");
+    expect(primary.recommendation).not.toContain("hold");
+    expect(primary.unresolved).toBe(false);
+    expect(JSON.parse(decision.completeProposedContent!)).toEqual(proposedParameters);
+  });
+
+  it.each([
     ["request_self_upgrade", { reason: 4 }],
     ["request_self_upgrade", { reason: "Update", scope: "another app" }],
     ["merge_backlog_items", { canonicalItemId: "BI-KEEP" }],
+    ["merge_backlog_items", { canonicalItemId: "BI-KEEP", duplicateItemId: "BI-DUP", reconcileOnly: true }],
+    ["merge_backlog_items", { canonicalItemId: "BI-DUP", duplicateItemId: "BI-DUP" }],
+    ["retire_backlog_item", { itemId: "BI-DUP", outcome: "defer", duplicateOfId: "BI-KEEP", rationale: "Review later." }],
+    ["retire_backlog_item", { itemId: "BI-DUP", outcome: "duplicate", duplicateOfId: "BI-KEEP" }],
     ["release_nonprod_environment_lease", { leaseId: "" }],
   ])("keeps malformed %s proposals generic with material facts visible", (toolName, proposedParameters) => {
     const primary = envelopePrimaryDecision(summarizeCoworkerEnvelopeDecision({ ...RESEARCH, toolName, proposedParameters }));
@@ -409,5 +427,14 @@ describe("room admission with a data access raise", () => {
       recommenderAgentId: "AGT-EXT-CLAUDE", authorizerUserId: "owner", consequence: "authority",
     });
     expect(decision.kind).not.toBe("admission");
+  });
+});
+
+it("names a proposed merge without resolving an unknown effect", () => {
+  const request = { canonicalItemId: "BI-KEEP", duplicateItemId: "BI-DUP", access: false };
+  const decision = summarizeCoworkerEnvelopeDecision({ ...RESEARCH, toolName: "merge_backlog_items", proposedParameters: request, consequence: "irreversible" });
+  expect(envelopePrimaryDecision(decision)).toMatchObject({
+    title: "Combine these duplicate work requests?", unresolved: true,
+    facts: expect.arrayContaining([{ label: "Access", value: "false" }]),
   });
 });

@@ -5,10 +5,10 @@
 // coworker; analyze MCP/governed-tool call efficiency (thrash, retries,
 // volume) from ToolExecution; and analyze A2A coworker↔coworker edge health.
 
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
+import type { RegisteredToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack } from "../tool-pack";
 
-const definitions: ToolDefinition[] = [
+const definitions: RegisteredToolDefinition[] = [
   {
     name: "dispatch_consolidation_bet",
     description:
@@ -23,6 +23,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["betKey"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_backlog",
     executionMode: "immediate",
     sideEffect: true,
@@ -55,6 +56,7 @@ const definitions: ToolDefinition[] = [
       },
       required: [],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_platform",
     executionMode: "immediate",
     // notify/dispatchAiOps write platform rows; default path is read-only analysis.
@@ -85,6 +87,7 @@ const definitions: ToolDefinition[] = [
       },
       required: [],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: true,

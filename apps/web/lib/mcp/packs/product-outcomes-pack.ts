@@ -1,5 +1,5 @@
 import { prisma } from "@dpf/db";
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
+import type { RegisteredToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import {
   PRODUCT_OBJECTIVE_REVIEW_CADENCES,
   PRODUCT_OBJECTIVE_STATUSES,
@@ -26,7 +26,7 @@ import { designatePlatformWorkProduct, type DeliveredWorkOutcomeDb } from "@/lib
 import type { ToolPack } from "../tool-pack";
 import { queueProductManagementPlaybookRefreshForObjective } from "@/lib/product-management/product-management-playbook-refresh";
 
-const definitions: ToolDefinition[] = [
+const definitions: RegisteredToolDefinition[] = [
   {
     name: "create_product_objective",
     description:
@@ -69,6 +69,7 @@ const definitions: ToolDefinition[] = [
         "measureDefinition",
       ],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_backlog",
     sideEffect: true,
   },
@@ -103,6 +104,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["objectiveId"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_backlog",
     sideEffect: true,
   },
@@ -119,6 +121,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["objectiveId"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_backlog",
     sideEffect: true,
   },
@@ -134,6 +137,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["objectiveId", "to"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_backlog",
     sideEffect: true,
   },
@@ -153,6 +157,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["objectiveId", "backlogItemId", "contributionKind"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_backlog",
     sideEffect: true,
   },
@@ -178,6 +183,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["objectiveId", "observedAt", "sourceKind"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_backlog",
     sideEffect: true,
   },
@@ -209,6 +215,7 @@ const definitions: ToolDefinition[] = [
         "sourceKind",
       ],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_backlog",
     sideEffect: true,
   },
@@ -227,6 +234,7 @@ const definitions: ToolDefinition[] = [
       },
       required: ["productId", "decisionRef"],
     },
+    workroomAccess: "outside-workroom",
     requiredCapability: "manage_backlog",
     sideEffect: true,
     // Decides whose product objectives receive the platform's delivered-work

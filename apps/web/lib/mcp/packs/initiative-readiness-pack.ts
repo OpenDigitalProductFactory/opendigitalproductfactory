@@ -10,7 +10,7 @@ import {
   recordInitiativeObjectiveMappingProposal,
   recordInitiativeSpecApproval,
 } from "@/lib/backlog/initiative-readiness";
-import type { ToolDefinition, ToolExecutionContext, ToolResult } from "@/lib/mcp-tool-types";
+import type { RegisteredToolDefinition, ToolExecutionContext, ToolResult } from "@/lib/mcp-tool-types";
 import {
   INITIATIVE_READINESS_LANES as LANES,
   readinessLaneForGate,
@@ -46,7 +46,7 @@ const artifactRefSchema = {
   },
 };
 
-function inputSchemaFor(name: string, lane: Lane): ToolDefinition["inputSchema"] {
+function inputSchemaFor(name: string, lane: Lane): RegisteredToolDefinition["inputSchema"] {
   return {
     type: "object",
     properties: {
@@ -158,16 +158,17 @@ function gateGuidance(lane: Lane): string {
   return ` What satisfies the research gate depends on the item's profile — ${shapes.join(" | ")}.`;
 }
 
-function definitionBase(name: string, lane: Lane): Omit<ToolDefinition, "name" | "inputSchema"> {
+function definitionBase(name: string, lane: Lane): Omit<RegisteredToolDefinition, "name" | "inputSchema"> {
   return {
     description: `Record authenticated initiative evidence for only these gate lanes: ${lane.gates.join(", ")}. Artifact identity, digest, subject, author, reviewer, and authority are server resolved.${gateGuidance(lane)} Worked example: ${initiativeWorkedExample(name, lane)}`,
+    workroomAccess: "outside-workroom",
     requiredCapability: lane.capability,
     executionMode: "immediate",
     sideEffect: true,
   };
 }
 
-const definitions: ToolDefinition[] = [
+const definitions: RegisteredToolDefinition[] = [
   {
     name: "record_initiative_evidence",
     inputSchema: inputSchemaFor("record_initiative_evidence", LANES.record_initiative_evidence),

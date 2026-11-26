@@ -354,17 +354,18 @@ describe("CoworkerEnvelopeApproval", () => {
 
 describe("OwnerDecisionCards routing", () => {
   it.each([
-    ["request_self_upgrade", { reason: "Ready release batch" }, "Request an update for this app?"],
-    ["merge_backlog_items", { canonicalItemId: "BI-KEEP", duplicateItemId: "BI-DUP" }, "Combine these duplicate work requests?"],
-    ["release_nonprod_environment_lease", { leaseId: "NPEL-TEST" }, "Release this shared test reservation?"],
-  ])("shows the %s question before opening technical evidence", (toolName, proposedParameters, title) => {
+    ["request_self_upgrade", { reason: "Ready release batch" }, "Request an update for this app?", "Keep this on hold"],
+    ["release_nonprod_environment_lease", { leaseId: "NPEL-TEST" }, "Release this shared test reservation?", "Keep this on hold"],
+    ["merge_backlog_items", { canonicalItemId: "BI-KEEP", duplicateItemId: "BI-DUP" }, "Combine these duplicate work requests?", "add its recorded demand"],
+    ["retire_backlog_item", { outcome: "duplicate", itemId: "BI-DUP", duplicateOfId: "BI-KEEP", rationale: "Same work" }, "Retire this duplicate work request?", "does not combine their recorded demand"],
+  ])("shows the %s question and effect before technical evidence", (toolName, proposedParameters, title, effect) => {
     const entry = entryFor({ manifestActionId: toolName, proposedParameters, taskRun: null });
     const { container } = render(<OwnerDecisionCards entries={[entry]} />);
     const visible = visibleUtterances(defaultVisibleHtml(container.innerHTML)).join(" ");
     expect(visible).toContain(title);
-    expect(visible).toContain("Keep this on hold until its effect is clear.");
-    expect(visible).not.toContain("BI-KEEP");
-    expect(visible).not.toContain("NPEL-TEST");
+    expect(visible).toContain(effect);
+    expect(visible).not.toContain(effect === "Keep this on hold" ? "NPEL-TEST" : "Keep this on hold");
+    if (effect !== "Keep this on hold") expect(visible).toMatch(/BI-DUP.*BI-KEEP/);
     expect(container.querySelector("pre")?.closest("details")?.open).toBe(false);
     expect(screen.getByRole("button", { name: "Authorize" }).closest("details")).toBeNull();
     expect(fetchMock).not.toHaveBeenCalled();

@@ -214,6 +214,7 @@ export const MCP_PROGRESSIVE_DISCLOSURE_INSTRUCTIONS =
 // The synthetic load_tools tool as it appears on tools/list. Not a granted
 // domain tool — the route handles it inline in tools/call. Description is
 // provenance-free per the tool-economy hygiene guard.
+export const LOAD_TOOLS_WORKROOM_ACCESS = "outside-workroom" as const;
 export const LOAD_TOOLS_LISTED = {
   name: LOAD_TOOLS_TOOL_NAME,
   description:
