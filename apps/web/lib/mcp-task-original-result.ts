@@ -35,6 +35,7 @@ export type OriginalReviewResult = {
   observations: Observation[];
   receipt?: { receiptId: string; gate: string; decision: string };
   terminalWriterRejection?: ReturnType<typeof terminalWriterRejectionStructuredContent>;
+  terminalWriterRejectionUnavailable?: "budget";
   missingProof: string[];
   proofInventory?: OriginalProofInventory;
   proofInventoryUnavailable?: "budget";
@@ -262,13 +263,6 @@ export async function readOriginalReviewResult(input: ReadInput): Promise<Origin
       return unknown(input.taskRunId, "original-snapshot-changed");
     }
     if (!await mayRead(input, latest, binding)) return unknown(input.taskRunId, "current-original-owner-content-access-required");
-    // Reuse the public hold classification, not the replay response payload.
-    // This is a pure projection and never submits or resumes the original task.
-    const rejection = wait?.writerRejection;
-    if (task.status === "input-required" && wait && rejection
-      && projectRemoteTaskReplay({ existing: task, requestMatches: true }).result.waitReason === TERMINAL_WRITER_REJECTED_WAIT_REASON) {
-      result.terminalWriterRejection = terminalWriterRejectionStructuredContent(wait.writerToolName, wait.attempt, rejection);
-    }
     const uniqueReceipts = new Map(receipts.map(value => [value.receiptId, value]));
     if (resolution && (uniqueReceipts.size !== 1 || !uniqueReceipts.has(String(resolution.reviewReceiptId)))) {
       result.missingProof.push("historical-receipt-binding-mismatch");
@@ -282,6 +276,18 @@ export async function readOriginalReviewResult(input: ReadInput): Promise<Origin
     // never dispatched, or that every child/effect settled. Queue status,
     // printable claims and outer-process close cannot produce those verdicts.
     if (JSON.stringify(result).length > ORIGINAL_REVIEW_RESULT_CHAR_CAP) return unknown(input.taskRunId, "original-result-over-budget");
+    // Reuse the public hold classification, not the replay response payload.
+    // This is a pure projection and never submits or resumes the original task.
+    const rejection = wait?.writerRejection;
+    if (task.status === "input-required" && wait && rejection
+      && projectRemoteTaskReplay({ existing: task, requestMatches: true }).result.waitReason === TERMINAL_WRITER_REJECTED_WAIT_REASON) {
+      result.terminalWriterRejection = terminalWriterRejectionStructuredContent(wait.writerToolName, wait.attempt, rejection);
+      if (JSON.stringify(result).length > ORIGINAL_REVIEW_RESULT_CHAR_CAP) {
+        delete result.terminalWriterRejection;
+        result.terminalWriterRejectionUnavailable = "budget";
+        if (JSON.stringify(result).length > ORIGINAL_REVIEW_RESULT_CHAR_CAP) delete result.terminalWriterRejectionUnavailable;
+      }
+    }
     // Auxiliary diagnostics must never hide an otherwise fitting original
     // receipt or observation. Preserve the complete base result and the cap.
     result.proofInventory = reconcileOriginalProofInventory(proofBefore, proofAfter);

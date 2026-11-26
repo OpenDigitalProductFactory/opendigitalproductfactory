@@ -88,6 +88,25 @@ describe("original review read-only evidence collection", () => {
     }
   });
 
+  it("preserves fitting original evidence when JSON escaping pushes the rejection over budget", async () => {
+    db.writers.mockResolvedValue([{ ...writer, success: false, result: { success: false } }]);
+    db.task.mockResolvedValue(rejectedRow());
+    const base = await readOriginalReviewResult(input);
+    expect(base?.binding).toBeDefined();
+    expect(base?.observations).not.toHaveLength(0);
+    const value = rejectedRow();
+    value.progressPayload.terminalWriterWait.writerRejection.message = String.fromCharCode(34, 92).repeat(2_500);
+    db.task.mockResolvedValue(value);
+    const result = await readOriginalReviewResult(input);
+    expect(result).toMatchObject({
+      reason: "original-execution-proof-incomplete", replayAllowed: false,
+      binding: base?.binding, observations: base?.observations,
+      terminalWriterRejectionUnavailable: "budget",
+    });
+    expect(result).not.toHaveProperty("terminalWriterRejection");
+    expect(JSON.stringify(result).length).toBeLessThanOrEqual(ORIGINAL_REVIEW_RESULT_CHAR_CAP);
+  });
+
   it("does not return a stale rejection after the task leaves the hold", async () => {
     db.task.mockResolvedValue(rejectedRow("completed"));
     expect(await readOriginalReviewResult(input)).not.toHaveProperty("terminalWriterRejection");
