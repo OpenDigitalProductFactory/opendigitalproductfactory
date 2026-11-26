@@ -42,6 +42,7 @@ vi.mock("@dpf/db", () => ({
       createMany: vi.fn(),
     },
     principalAlias: { findUnique: vi.fn() },
+    s5RehearsalRequesterEnrollment: { findUnique: vi.fn() },
     passwordResetToken: {
       create: vi.fn(),
       findUnique: vi.fn(),
@@ -69,6 +70,7 @@ import { prisma } from "@dpf/db";
 import {
   addUserPlatformRole,
   adminIssuePasswordReset,
+  adminResetUserPassword,
   completePasswordReset,
   createUserAccount,
   requestPasswordReset,
@@ -105,6 +107,8 @@ describe("user actions", () => {
       async (callback: (tx: typeof prisma) => Promise<unknown>) => callback(prisma),
     );
     mockPrisma.platformConfig.findUnique.mockResolvedValue(null);
+    // Default: no enrolled S5 rehearsal requester (BI-9F7192F9); guard tests override.
+    mockPrisma.s5RehearsalRequesterEnrollment.findUnique.mockResolvedValue(null);
     // Default: principal sync resolves (BI-4150F4D6); tests override as needed.
     (syncUserPrincipal as ReturnType<typeof vi.fn>).mockResolvedValue({} as never);
   });
@@ -347,5 +351,69 @@ describe("user actions", () => {
       const { revalidatePath } = await import("next/cache");
       expect(revalidatePath).not.toHaveBeenCalled();
     });
+  });
+});
+
+describe("governed rehearsal requester guards (BI-9F7192F9 phase 8, AC-E7)", () => {
+  const GOVERNED = "governed_rehearsal_requester";
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockAuth.mockResolvedValue(authorizedSession);
+    mockCan.mockReturnValue(true);
+    mockGetUserTeamIds.mockResolvedValue(["team-1"]);
+    mockBuildPrincipalContext.mockReturnValue({ platformRoleIds: ["HR-300"] });
+    mockResolveGovernedAction.mockReturnValue({ decision: "allow", rationaleCode: "ok" });
+    mockPrisma.$transaction.mockImplementation(async (callback: (tx: typeof prisma) => Promise<unknown>) => callback(prisma));
+    mockPrisma.platformConfig.findUnique.mockResolvedValue(null);
+    mockPrisma.platformRole.findUnique.mockResolvedValue({ id: "role-db-1" });
+    mockPrisma.user.findUnique.mockResolvedValue({ id: "requester", email: "rehearsal-0123456789abcdef@s5-rehearsal.invalid", isActive: true, isSuperuser: false });
+  });
+
+  // The marker outlives retirement: an active and a retired enrollment both answer the same unique read.
+  describe.each(["active", "retired"])("with an %s enrollment", (lifecycle) => {
+    beforeEach(() => {
+      mockPrisma.s5RehearsalRequesterEnrollment.findUnique.mockResolvedValue({ id: `enr-${lifecycle}` });
+    });
+
+    it("refuses lifecycle and role changes without writing", async () => {
+      await expect(updateUserLifecycle({ userId: "requester", roleId: "HR-100", isActive: true }))
+        .resolves.toEqual({ ok: false, message: GOVERNED });
+      expect(await addUserPlatformRole({ userId: "requester", roleId: "HR-200" })).toMatchObject({ ok: false });
+      expect(mockPrisma.user.update).not.toHaveBeenCalled();
+      expect(mockPrisma.userGroup.create).not.toHaveBeenCalled();
+      expect(mockPrisma.userGroup.createMany).not.toHaveBeenCalled();
+    });
+
+    it("refuses admin reset and reset issue, and issues nothing", async () => {
+      await expect(adminResetUserPassword({ userId: "requester", newPassword: "ValidPassword1!" }))
+        .resolves.toEqual({ ok: false, message: GOVERNED });
+      await expect(adminIssuePasswordReset({ userId: "requester" })).resolves.toEqual({ ok: false, message: GOVERNED });
+      expect(mockPrisma.user.update).not.toHaveBeenCalled();
+      expect(mockPrisma.passwordResetToken.create).not.toHaveBeenCalled();
+    });
+
+    it("refuses to complete a reset, even with a token issued before enrollment", async () => {
+      mockPrisma.passwordResetToken.findUnique.mockResolvedValue({
+        id: "old-token", expiresAt: new Date("2099-01-01T00:00:00Z"), consumedAt: null,
+        user: { id: "requester", email: "rehearsal-0123456789abcdef@s5-rehearsal.invalid", isActive: true },
+      });
+      await expect(completePasswordReset({ token: "raw", newPassword: "ValidPassword1!", confirmPassword: "ValidPassword1!" }))
+        .resolves.toEqual({ ok: false, message: GOVERNED });
+      expect(mockPrisma.user.update).not.toHaveBeenCalled();
+      expect(mockPrisma.passwordResetToken.update).not.toHaveBeenCalled();
+    });
+
+    it("keeps the reset request neutral and issues nothing", async () => {
+      const result = await requestPasswordReset({ email: "rehearsal-0123456789abcdef@s5-rehearsal.invalid" });
+      expect(result).toEqual({ ok: true, message: expect.stringContaining("If an account exists") });
+      expect(mockPrisma.passwordResetToken.create).not.toHaveBeenCalled();
+    });
+  });
+
+  it("fails closed when the marker cannot be read", async () => {
+    mockPrisma.s5RehearsalRequesterEnrollment.findUnique.mockRejectedValue(new Error("db down"));
+    await expect(updateUserLifecycle({ userId: "requester", roleId: "HR-100", isActive: true }))
+      .resolves.toEqual({ ok: false, message: GOVERNED });
+    expect(mockPrisma.user.update).not.toHaveBeenCalled();
   });
 });

@@ -15,6 +15,7 @@ import { getUserTeamIds, createAuthorizationDecisionLog } from "@/lib/governance
 import { buildPrincipalContext } from "@/lib/principal-context";
 import { resolveGovernedAction } from "@/lib/governance-resolver";
 import { syncEmployeePrincipal } from "@/lib/identity/principal-linking";
+import { GOVERNED_REQUESTER_REFUSAL, refusesGovernedRequester } from "@/lib/identity/s5-rehearsal-enrollment.server";
 import { validateLifecycleTransition, validateEmployeeProfileInput, type EmployeeProfileInput, type EmploymentEventType, type WorkforceStatus } from "@/lib/workforce-types";
 import { wouldCreateManagerCycle } from "@/lib/workforce/org-chart-model";
 import { patchOptional } from "@/lib/workforce/patch-optional";
@@ -167,6 +168,8 @@ async function withGovernedWorkforceAction(input: {
 
 async function ensureUserLinkIsAvailable(userId: string | null, employeeProfileId?: string): Promise<string | null> {
   if (!userId) return null;
+  // Profile create and relink both pass here; a governed rehearsal requester is never linked (BI-9F7192F9).
+  if (await refusesGovernedRequester(userId)) return GOVERNED_REQUESTER_REFUSAL;
 
   const existing = await prisma.employeeProfile.findUnique({
     where: { userId },

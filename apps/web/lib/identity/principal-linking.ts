@@ -14,6 +14,7 @@ type PrincipalDb = Pick<
   | "customerContact"
   | "principal"
   | "principalAlias"
+  | "s5RehearsalRequesterEnrollment"
 >;
 
 type PrincipalAliasDb = Pick<typeof prisma, "principalAlias">;
@@ -234,6 +235,11 @@ export async function syncEmployeePrincipal(
 
   if (!employee) {
     throw new Error(`Employee profile ${employeeProfileId} not found.`);
+  }
+  if (employee.userId) {
+    // Loaded lazily: the guard module is server-only and imports this module (BI-9F7192F9).
+    const { GOVERNED_REQUESTER_REFUSAL, refusesGovernedRequester } = await import("./s5-rehearsal-enrollment.server");
+    if (await refusesGovernedRequester(employee.userId, db)) throw new Error(GOVERNED_REQUESTER_REFUSAL);
   }
 
   const aliases: AliasRecord[] = [

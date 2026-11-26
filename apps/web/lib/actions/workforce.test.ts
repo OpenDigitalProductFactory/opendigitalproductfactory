@@ -57,6 +57,9 @@ vi.mock("@dpf/db", () => ({
     workroomActivity: {
       create: vi.fn(),
     },
+    s5RehearsalRequesterEnrollment: {
+      findUnique: vi.fn(),
+    },
     $transaction: vi.fn(),
   },
 }));
@@ -87,6 +90,8 @@ beforeEach(() => {
   vi.clearAllMocks();
 
   vi.mocked(prisma.$transaction).mockImplementation(async (callback) => callback(prisma as never));
+  // Default: no enrolled S5 rehearsal requester (BI-9F7192F9); guard tests override.
+  vi.mocked(prisma.s5RehearsalRequesterEnrollment.findUnique).mockResolvedValue(null);
   // Undeclared employing jurisdictions: the actuator resolves the worker to
   // operator work rather than opening a room, which is the correct posture for
   // these tests — they assert profile creation, not actuation.
@@ -353,5 +358,28 @@ describe("recordEmploymentLifecycleEvent", () => {
     expect(result.ok).toBe(false);
     expect(result.message).toMatch(/termination date/i);
     expect(vi.mocked(prisma.employmentEvent.create)).not.toHaveBeenCalled();
+  });
+});
+
+describe("governed rehearsal requester link guard (BI-9F7192F9 phase 8, AC-E7)", () => {
+  const profile = { employeeId: "EMP-900", firstName: "Rehearsal", lastName: "Requester", status: "active" as const, userId: "requester" };
+
+  describe.each(["active", "retired"])("with an %s enrollment", (lifecycle) => {
+    beforeEach(() => {
+      vi.mocked(prisma.s5RehearsalRequesterEnrollment.findUnique).mockResolvedValue({ id: `enr-${lifecycle}` } as never);
+    });
+
+    it("refuses to create a profile linked to the requester", async () => {
+      await expect(createEmployeeProfile(profile)).resolves.toEqual({ ok: false, message: "governed_rehearsal_requester" });
+      expect(prisma.employeeProfile.create).not.toHaveBeenCalled();
+    });
+
+    it("refuses to relink an existing profile to the requester", async () => {
+      vi.mocked(prisma.employeeProfile.findUnique).mockImplementation((async (args: { where: { id?: string } }) =>
+        (args.where.id ? { id: "emp-db-1", userId: null } : null)) as never);
+      await expect(updateEmployeeProfile({ ...profile, employeeProfileId: "emp-db-1" }))
+        .resolves.toEqual({ ok: false, message: "governed_rehearsal_requester" });
+      expect(prisma.employeeProfile.update).not.toHaveBeenCalled();
+    });
   });
 });

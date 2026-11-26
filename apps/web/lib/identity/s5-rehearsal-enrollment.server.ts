@@ -57,6 +57,18 @@ export async function isGovernedRequester(
   return row !== null;
 }
 
+/** The refusal every guard returns for an enrolled requester (phase 8, AC-E7). */
+export const GOVERNED_REQUESTER_REFUSAL = "governed_rehearsal_requester";
+
+/** Guard form of the marker: an unreadable marker counts as governed, so a guard never fails open. */
+export async function refusesGovernedRequester(userId: string, db?: GovernedRequesterReader): Promise<boolean> {
+  try {
+    return await isGovernedRequester(userId, db);
+  } catch {
+    return true;
+  }
+}
+
 // ── Audit evidence (phase 3, AC-E8) ─────────────────────────────────────────
 // Each successful command writes one typed, transaction-bound
 // AuthorizationDecisionLog row. Audit only: lifecycle never reads it, the S5

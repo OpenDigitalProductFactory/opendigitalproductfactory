@@ -10,6 +10,7 @@ import { resolveGovernedAction } from "@/lib/governance-resolver";
 import { summarizeGovernedLifecycleAttempt } from "@/lib/user-governance";
 import { syncUserPrincipal } from "@/lib/identity/principal-linking";
 import { passwordPolicyErrors } from "@/lib/identity/password-policy";
+import { GOVERNED_REQUESTER_REFUSAL, refusesGovernedRequester } from "@/lib/identity/s5-rehearsal-enrollment.server";
 import { getT } from "@/lib/i18n/t.server";
 import { err, ok, type ActionResult } from "@/lib/shared/action-result";
 import {
@@ -233,6 +234,7 @@ export async function adminResetUserPassword(input: {
     riskBand: "high",
     objectRef: input.userId,
     run: async () => {
+      if (await refusesGovernedRequester(input.userId)) return { ok: false, message: GOVERNED_REQUESTER_REFUSAL };
       const password = input.newPassword.trim();
       const policyErrors = passwordPolicyErrors(password);
       if (policyErrors.length > 0) return { ok: false, message: policyErrors[0] ?? "Password policy failed." };
@@ -270,7 +272,7 @@ export async function requestPasswordReset(input: {
     select: { id: true, isActive: true },
   });
 
-  if (!target?.isActive) {
+  if (!target?.isActive || (await refusesGovernedRequester(target.id))) {
     return { ok: true, message: neutralMessage };
   }
 
@@ -294,6 +296,7 @@ export async function adminIssuePasswordReset(input: {
     riskBand: "high",
     objectRef: input.userId,
     run: async (actor) => {
+      if (await refusesGovernedRequester(input.userId)) return { ok: false, message: GOVERNED_REQUESTER_REFUSAL };
       const target = await prisma.user.findUnique({
         where: { id: input.userId },
         select: { id: true, email: true, isActive: true },
@@ -369,6 +372,10 @@ export async function completePasswordReset(input: {
   ) {
     return { ok: false, message: "This password reset link is invalid or expired." };
   }
+  // A token issued before enrollment is refused too: the marker, not the token's age, decides.
+  if (await refusesGovernedRequester(resetToken.user.id)) {
+    return { ok: false, message: GOVERNED_REQUESTER_REFUSAL };
+  }
 
   const passwordHash = await hashPassword(input.newPassword);
 
@@ -398,6 +405,7 @@ export async function updateUserLifecycle(input: {
     riskBand: "medium",
     objectRef: input.userId,
     run: async (actor) => {
+      if (await refusesGovernedRequester(input.userId)) return { ok: false, message: GOVERNED_REQUESTER_REFUSAL };
       const roleDbId = await resolveRoleDbId(input.roleId);
       if (!roleDbId) return { ok: false, message: "Selected role does not exist." };
 
@@ -447,6 +455,7 @@ export async function addUserPlatformRole(input: { userId: string; roleId: strin
   if (typeof input?.userId !== "string" || !input.userId || typeof input.roleId !== "string" || !input.roleId) {
     return err(t("userLifecycle.addSelectRole"));
   }
+  if (await refusesGovernedRequester(input.userId)) return err(GOVERNED_REQUESTER_REFUSAL);
 
   let result: AddPlatformRoleResult;
   try {

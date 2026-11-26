@@ -2,6 +2,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@dpf/db", () => ({
   prisma: {
+    s5RehearsalRequesterEnrollment: {
+      findUnique: vi.fn(),
+    },
     user: {
       findUnique: vi.fn(),
       findMany: vi.fn(),
@@ -43,6 +46,8 @@ import {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // Default: no enrolled S5 rehearsal requester (BI-9F7192F9); guard tests override.
+  vi.mocked(prisma.s5RehearsalRequesterEnrollment.findUnique).mockResolvedValue(null);
 });
 
 describe("syncUserPrincipal", () => {
@@ -435,5 +440,25 @@ describe("listActiveHumanPrincipalsForUsers", () => {
     vi.mocked(prisma.principal.findMany).mockResolvedValue([] as never);
     await expect(listActiveHumanPrincipalsForUsers()).resolves.toEqual([]);
     expect(prisma.user.findMany).not.toHaveBeenCalled();
+  });
+});
+
+describe("syncEmployeePrincipal governed rehearsal requester guard (BI-9F7192F9 phase 8, AC-E7)", () => {
+  it.each(["active", "retired"])("refuses to sync an employee linked to an %s requester, writing nothing", async (lifecycle) => {
+    vi.mocked(prisma.employeeProfile.findUnique).mockResolvedValue({
+      id: "emp-db-9", employeeId: "EMP-900", userId: "requester", displayName: "Rehearsal", status: "active", workEmail: null,
+    } as never);
+    vi.mocked(prisma.s5RehearsalRequesterEnrollment.findUnique).mockResolvedValue({ id: `enr-${lifecycle}` } as never);
+    await expect(syncEmployeePrincipal("emp-db-9")).rejects.toThrow("governed_rehearsal_requester");
+    expect(prisma.principal.create).not.toHaveBeenCalled();
+    expect(prisma.principalAlias.createMany).not.toHaveBeenCalled();
+  });
+
+  it("fails closed when the marker cannot be read", async () => {
+    vi.mocked(prisma.employeeProfile.findUnique).mockResolvedValue({
+      id: "emp-db-9", employeeId: "EMP-900", userId: "requester", displayName: "Rehearsal", status: "active", workEmail: null,
+    } as never);
+    vi.mocked(prisma.s5RehearsalRequesterEnrollment.findUnique).mockRejectedValue(new Error("db down"));
+    await expect(syncEmployeePrincipal("emp-db-9")).rejects.toThrow("governed_rehearsal_requester");
   });
 });
