@@ -24,4 +24,4 @@ Add `scripts/dev-portal-lease.sh`, `scripts/lib/dev-portal-lease-claim-key.test.
 
 ## Backlog coverage
 
-BI-5C193A3F covers F1–F3, AC-1–AC-3, DB-PROOF and V1. Stacked successors are BI-8EA98961, then BI-60FC9291. No independent review or immutable coverage receipt is claimed in this draft.
+BI-5C193A3F maps F1, F2 and F3 to OBJ-1 and verifies it through AC-1, AC-2 and AC-3 under DB-PROOF (V1). Stacked successors are BI-8EA98961, then BI-60FC9291. No independent review or immutable coverage receipt is claimed in this draft.
