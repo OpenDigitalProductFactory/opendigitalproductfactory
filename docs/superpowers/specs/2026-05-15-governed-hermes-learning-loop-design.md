@@ -1,3 +1,7 @@
+---
+status: draft
+---
+
 # Governed Hermes-Style Coworker Learning Loop Design
 
 | Field | Value |
