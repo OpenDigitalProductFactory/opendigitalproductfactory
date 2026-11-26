@@ -107,6 +107,43 @@ does not identify which client or service used it. BI-6401919E tracks provider
 evidence to bind a delayed first removal observation back to the exact source
 that its merge group tested.
 
+**Unresolved review conversations on an armed PR (BI-1B868C6D).** Preserve
+the existing armed request and record a named hold for the exact observed
+head when the PR is open, not enrolled, has terminal passing required checks,
+and a complete conversation read identifies unresolved merge-blocking
+threads. Outdated unresolved conversations count. Record the head, count,
+available thread links, accountable PR or review owner, and their next action.
+Send one attention ask per head and blocker through the existing hold route.
+Quiet and observe-only rooms record the hold without sending an ask.
+An incomplete conversation read is unknown, not zero. Queue membership,
+closure or merge, a recorded queue removal or disarm, stale authority, and
+stronger current blockers such as a conflict or changes-requested review
+retain their existing dispositions.
+
+Order of work for BI-1B868C6D:
+
+1. Reproduce the silent armed wait in `github-pr-readiness.ts` with a green
+   armed fixture and an unresolved outdated conversation. Keep armed as the
+   queue-intent state and carry the named hold as separate evidence.
+2. In `build-pr-delivery-reconcile.ts`, persist and route that hold by exact
+   head via the existing Workroom follow-through path. The next action is for
+   the author to address current findings and for an authorized actor to
+   resolve the conversations. The worker never replies to or resolves a thread.
+3. Recheck on the existing tick. Clear the conversation hold only on complete
+   evidence of resolution or when a superseding provider disposition applies.
+   With no remaining conversations, keep observing the same armed request.
+   Never send a second queue request, re-arm a disarm, or transfer intent to
+   a new head. Only GitHub confirms queue entry or merge.
+4. Verify a single hold and attention ask, quiet-room silence, and convergence
+   through resolution then confirmed entry or merge. Negative cases cover
+   incomplete review pages, pending or failing checks, prior removal, actual
+   queue entry, zero unresolved threads, stale authority, and other blockers.
+   Assert no GitHub mutations in both the hold and recheck.
+
+This changes blocker visibility in the existing worker. CI repair dispatch
+identity is BI-C9741512, and completion of an already delivered Workroom is
+BI-D5830561. Neither is required to report this hold.
+
 ### 3.3 Inputs: events first, poll as the safety net
 
 - **Webhook.** The receiver adds `check_suite` (completed), `workflow_run`
