@@ -125,6 +125,13 @@ export async function announcePrFollowThrough(input: {
   const key = decision.followThrough.attentionKey;
   if (!key || key === input.priorAttentionKey) return "quiet";
 
+  const identityAction = decision.kind === "attention"
+    ? decision.reason === "repair-identity-unavailable"
+      ? "Workroom coordinator: confirm an eligible repair identity. Build Studio will recheck eligibility on the next delivery tick."
+      : decision.reason === "repair-identity-refused"
+        ? "Workroom coordinator: resolve the authorization refusal. Build Studio will keep watching this head, without retrying the refused action."
+        : null
+    : null;
   const summary = decision.kind === "repair"
     ? decision.mode === "propose"
       ? `${pr} is red on ${checksLine(decision)}. A repair is staged for a person to run.`
@@ -133,6 +140,7 @@ export async function announcePrFollowThrough(input: {
   await record(summary, {
     decision: decision.kind,
     headSha: decision.headSha,
+    ...(identityAction ? { nextAction: identityAction } : {}),
     ...(decision.kind === "repair" ? { mode: decision.mode, packet: decision.packet } : { target: decision.target, reason: decision.reason }),
   });
   if (decision.kind === "repair" && decision.mode === "record") return "announced";
@@ -141,6 +149,7 @@ export async function announcePrFollowThrough(input: {
     title: `Workroom ${room.capsuleId} needs a decision on ${pr}`,
     description:
       `${summary}\n\nHead: ${decision.headSha}\nPR: ${room.prUrl}\n\n`
+      + (identityAction ? `${identityAction}\n\n` : "")
       + "The room never merges by hand, force-pushes, dismisses a check or weakens a test. "
       + "The merge queue remains the only path to main.",
     dedupeKey: `${room.capsuleId}:${key}`,

@@ -20,9 +20,11 @@ import {
   type CaptureBuildPrDeps,
 } from "./capture-build-pr";
 import {
+  attentionKeyFor,
   decidePrFollowThrough,
   type PrFollowThroughDecision,
   type PrRepairAuthority,
+  type PrRepairDispatchResult,
   type PrRepairPacket,
 } from "./pr-follow-through";
 import { MAX_UNKNOWN_OBSERVATIONS, consecutiveUnknownObservations, nextUnknownObservation } from "./build-pr-delivery-recheck";
@@ -146,7 +148,7 @@ export function resolveBuildPrReconcilerMode(value = process.env.DPF_BUILD_PR_DE
   return normalized === "shadow" || normalized === "enforce" ? normalized : "off";
 }
 
-export type DispatchPrRepair = (packet: PrRepairPacket) => Promise<"dispatched" | "unavailable">;
+export type DispatchPrRepair = (packet: PrRepairPacket) => Promise<PrRepairDispatchResult>;
 
 /**
  * Apply the CI follow-through decision's own effects (BI-88341B5D §3.4–3.5):
@@ -208,6 +210,24 @@ async function applyFollowThroughEffects(input: {
       ? await input.dispatchRepair(decision.packet)
       : "unavailable";
     if (dispatched === "dispatched") return { decision, actuated: true, note: null };
+    if (dispatched === "repair-identity-unavailable" || dispatched === "repair-identity-refused") {
+      return {
+        decision: {
+          kind: "attention",
+          target: "process-overseer",
+          reason: dispatched,
+          headSha: decision.headSha,
+          followThrough: {
+            ...decision.followThrough,
+            hold: "awaiting-person",
+            attempts: input.prior.attempts,
+            attentionKey: attentionKeyFor(dispatched, decision.headSha),
+          },
+        },
+        actuated: false,
+        note: dispatched,
+      };
+    }
     return {
       decision: {
         ...decision,
