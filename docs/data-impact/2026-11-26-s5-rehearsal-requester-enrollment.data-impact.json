@@ -1,0 +1,39 @@
+{
+  "version": "1",
+  "accountableOwner": "portfolio-management",
+  "summary": "BI-9F7192F9 phase 1 (design docs/superpowers/specs/2026-11-26-s5-rehearsal-requester-enrollment-design.md; owner P2 decision 'Raise by one', DI-2229DA83C80C, contraction BI-A21DB89E). Migration 20261126090000_s5_rehearsal_requester_enrollment adds S5RehearsalRequesterEnrollment, the retained record and single durable marker of an owner-enrolled, never-active synthetic S5 rehearsal requester, plus the S5RehearsalRequesterRetirementReason enum. An all-or-none lifecycle CHECK, a BEFORE UPDATE trigger (facts immutable; only active -> retired, once) and a BEFORE DELETE trigger (rows retained) guard it. Back-relations are added on User (one) and Principal (three). No existing table or row changes.",
+  "affectedCopies": [
+    "S5RehearsalRequesterEnrollment rows: inserted only by the owner-operated preview enrollment (later phases of BI-9F7192F9, inert until BI-8EA98961, BI-5C193A3F, BI-60FC9291, BI-588688A7 and BI-C7100183 are served) and moved active -> retired only by owner retirement. Read by isGovernedRequester (apps/web/lib/identity/s5-rehearsal-enrollment.server.ts). Never deleted; linked User and Principal rows cannot be deleted while it exists.",
+    "Sanitized clone: the table is sensitivity=restricted, so the clone skips it; the clone destination fence and requester-bearing source refusal land in phase 2 of this item."
+  ],
+  "privacyAssessment": {
+    "personalData": false,
+    "sensitivity": "restricted: identity and security-audit evidence references for a synthetic rehearsal account (setup digest and ruling/reservation/attempt/fixture/installation/lease/DB-identity references) plus the enrolling and retiring Principals. No password, hash, token, session or real personal data.",
+    "dataSubjectRights": "The subject is a synthetic, owner-held rehearsal account, not a person. The enrolling and retiring Principals are governed on their own records.",
+    "reviewDisposition": "Business record retained for the life of the installation's database (retention=domain). Evidence is per-installation and per-database; it does not travel across a clone or reset."
+  },
+  "migration": {
+    "name": "20261126090000_s5_rehearsal_requester_enrollment",
+    "backfill": "None. The table starts empty.",
+    "rollback": "Forward-only and additive. Before any row exists, a manual down drops the table, the enum and the two guard functions (noted in the migration header). Once a row exists it is retained evidence and is not dropped."
+  },
+  "tests": [
+    "packages/db/src/s5-rehearsal-requester-enrollment.pg.test.ts",
+    "apps/web/lib/identity/s5-rehearsal-enrollment.server.test.ts"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:s5-rehearsal-requester-enrollment",
+      "prismaModel": "S5RehearsalRequesterEnrollment",
+      "lifecycleDisposition": "Business record, retained: rows cannot be deleted (BEFORE DELETE trigger); facts are immutable and the only transition is active -> retired, written once. Restrict foreign keys keep the linked User and Principals while the record exists.",
+      "fields": [
+        { "fieldId": "data:s5-rehearsal-requester-enrollment#setupDigest", "resolution": "not-applicable", "reason": "sha256 of the canonical setup key; an opaque digest, not a reference to a person.", "provenance": "design: Retained record", "flags": [] },
+        { "fieldId": "data:s5-rehearsal-requester-enrollment#userId", "resolution": "inherited", "reason": "Foreign key to the synthetic requester User; governed by the User asset.", "provenance": "design: Retained record", "flags": [] },
+        { "fieldId": "data:s5-rehearsal-requester-enrollment#principalId", "resolution": "inherited", "reason": "Foreign key to the synthetic requester's human Principal; governed by the Principal asset.", "provenance": "design: Retained record", "flags": [] },
+        { "fieldId": "data:s5-rehearsal-requester-enrollment#enrolledByPrincipalId", "resolution": "inherited", "reason": "Foreign key to the enrolling owner Principal; governed by the Principal asset.", "provenance": "design: Retained record", "flags": [] },
+        { "fieldId": "data:s5-rehearsal-requester-enrollment#retiredByPrincipalId", "resolution": "inherited", "reason": "Foreign key to the retiring owner Principal; governed by the Principal asset.", "provenance": "design: Retained record", "flags": [] }
+      ]
+    }
+  ]
+}

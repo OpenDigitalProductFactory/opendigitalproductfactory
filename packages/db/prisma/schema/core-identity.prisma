@@ -128,6 +128,7 @@ model User {
   workbookRowsCreated              WorkbookRow[]                       @relation("WorkbookRowCreatedBy")
   workbookViewsCreated             WorkbookView[]                      @relation("WorkbookViewCreatedBy")
   payrollTaxRulesRatified          PayrollTaxRule[]                    @relation("PayrollTaxRuleRatifiedBy")
+  s5RehearsalRequesterEnrollment   S5RehearsalRequesterEnrollment?
 
   @@unique([automationVerificationId, automationProfile, automationSlot], map: "User_automation_fixture_key")
   @@index([automationExpiresAt, id])
@@ -319,6 +320,9 @@ model Principal {
   controlledSubstanceCountsWitnessed       ControlledSubstanceCount[]                @relation("ControlledSubstanceCountWitness")
   controlledSubstanceDiscrepanciesOpened   ControlledSubstanceDiscrepancy[]          @relation("ControlledSubstanceDiscrepancyOpener")
   controlledSubstanceDiscrepanciesResolved ControlledSubstanceDiscrepancy[]          @relation("ControlledSubstanceDiscrepancyResolver")
+  s5RehearsalRequesterSubject              S5RehearsalRequesterEnrollment?           @relation("S5RehearsalRequesterSubject")
+  s5RehearsalRequestersEnrolled            S5RehearsalRequesterEnrollment[]          @relation("S5RehearsalRequesterEnrolledBy")
+  s5RehearsalRequestersRetired             S5RehearsalRequesterEnrollment[]          @relation("S5RehearsalRequesterRetiredBy")
 
   @@index([sponsorPrincipalId])
   @@index([kind, authorityMode])
@@ -1077,4 +1081,44 @@ model OrgSettings {
   appliedProfileSlug String?
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
+}
+
+/// Owner-enrolled synthetic requester for one S5 rehearsal setup (BI-9F7192F9). Facts are immutable; the only
+/// transition is active -> retired, written once; rows cannot be deleted. Retained per installation and database.
+/// The CHECK and the update/delete triggers live in migration 20261126090000_s5_rehearsal_requester_enrollment.
+/// @dpf lifecycle=business-record retention=domain sensitivity=restricted categories=security-audit,identity owner=platform-owner steward=data-steward
+model S5RehearsalRequesterEnrollment {
+  id                    String                                @id @default(cuid())
+  /// Full sha256(canonicalJson({schema:"s5-rehearsal-setup.v1", rulingRef, reservationRef})).
+  setupDigest           String                                @unique
+  /// Retained evidence references, deliberately not foreign keys.
+  rulingRef             String
+  reservationRef        String
+  attemptRef            String
+  fixtureRef            String
+  installationRef       String
+  leaseRef              String
+  dbIdentityRef         String
+  userId                String                                @unique
+  principalId           String                                @unique
+  enrolledByPrincipalId String
+  enrolledAt            DateTime                              @default(now())
+  lifecycle             RecordLifecycle                       @default(active)
+  lifecycleAt           DateTime?
+  retirementReason      S5RehearsalRequesterRetirementReason?
+  retiredByPrincipalId  String?
+  user                  User                                  @relation(fields: [userId], references: [id], onDelete: Restrict)
+  principal             Principal                             @relation("S5RehearsalRequesterSubject", fields: [principalId], references: [id], onDelete: Restrict)
+  enrolledByPrincipal   Principal                             @relation("S5RehearsalRequesterEnrolledBy", fields: [enrolledByPrincipalId], references: [id], onDelete: Restrict)
+  retiredByPrincipal    Principal?                            @relation("S5RehearsalRequesterRetiredBy", fields: [retiredByPrincipalId], references: [id], onDelete: Restrict)
+
+  @@index([enrolledByPrincipalId])
+  @@index([retiredByPrincipalId])
+}
+
+enum S5RehearsalRequesterRetirementReason {
+  rehearsal_complete
+  quarantine_after_failure
+  setup_superseded
+  operator_cleanup
 }

@@ -4,7 +4,7 @@ status: draft
 
 # Plan: owner-operated inactive enrollment and retirement of the S5 rehearsal requester
 
-Backlog item BI-9F7192F9, Workroom WC-4EBA473D. Design: `docs/superpowers/specs/2026-11-26-s5-rehearsal-requester-enrollment-design.md`, revision 9 (converged). Shape: delivery-small.
+**Backlog item:** BI-9F7192F9. Workroom WC-4EBA473D. Design: `docs/superpowers/specs/2026-11-26-s5-rehearsal-requester-enrollment-design.md`, revision 9 (converged). Shape: delivery-small.
 
 This plan covers server-side work only. It ships inert, and the requester is never active.
 
@@ -15,6 +15,12 @@ The following are deferred to activation readiness:
 - the Admin guide
 
 Activation, sessions, delegation and issuance belong to BI-9F5D1052.
+
+## Backlog coverage
+
+- Decision: atomic
+- Receipt: `cmwxihlui122k0ese6sp6v8ij`
+- Dependencies: BI-8EA98961, BI-5C193A3F, BI-60FC9291, BI-588688A7, BI-C7100183 (served proofs; the code holds until they land). Deferred UI and activation: BI-9F5D1052.
 
 ## Preconditions (hold Red until all are met)
 
