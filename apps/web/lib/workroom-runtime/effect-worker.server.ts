@@ -7,7 +7,7 @@
 // Reproduces T3 Code's EffectWorker shape (pingdotgg/t3code@24e77473, MIT).
 
 import type { EffectKind } from "./runtime-decider";
-import type { ClaimedEffect } from "./workroom-effect-store";
+import type { ClaimedEffect, PersistedEffectKind } from "./workroom-effect-store";
 
 export const EFFECT_LEASE_MS = 2 * 60_000;
 export const EFFECT_SWEEP_MS = 5_000;
@@ -40,13 +40,13 @@ export type EffectReport = {
   retryAfterMs?: number;
 };
 
-export type EffectWorkerDeps = {
+export type EffectWorkerDeps<Kind extends PersistedEffectKind = EffectKind> = {
   owner: string;
-  claim(input: { owner: string; liveGenerations: string[]; limit: number; leaseMs: number }): Promise<ClaimedEffect[]>;
+  claim(input: { owner: string; liveGenerations: string[]; limit: number; leaseMs: number }): Promise<ClaimedEffect<Kind>[]>;
   recoverExpired(): Promise<number>;
   liveGenerations(): string[];
-  execute(effect: ClaimedEffect): Promise<Record<string, unknown> | void>;
-  report(effect: ClaimedEffect, report: EffectReport): Promise<void>;
+  execute(effect: ClaimedEffect<Kind>, signal: AbortSignal): Promise<Record<string, unknown> | void>;
+  report(effect: ClaimedEffect<Kind>, report: EffectReport): Promise<void>;
   leaseMs?: number;
   batch?: number;
   log?: (message: string) => void;
@@ -57,13 +57,13 @@ export const effectBackoffMs = (attempt: number) => Math.min(60_000, 1000 * 2 **
 
 export const effectResultCommandId = (effect: Pick<ClaimedEffect, "id" | "attemptCount">) => `effect-result:${effect.id}:${effect.attemptCount}`;
 
-export function createEffectWorker(deps: EffectWorkerDeps) {
+export function createEffectWorker<Kind extends PersistedEffectKind = EffectKind>(deps: EffectWorkerDeps<Kind>) {
   const log = deps.log ?? ((message: string) => console.error(`[workroom-runtime] ${message}`));
   let draining: Promise<number> | null = null;
   let again = false;
   let timer: ReturnType<typeof setInterval> | null = null;
 
-  async function reportWithRetry(effect: ClaimedEffect, report: EffectReport): Promise<void> {
+  async function reportWithRetry(effect: ClaimedEffect<Kind>, report: EffectReport): Promise<void> {
     for (let attempt = 1; ; attempt += 1) {
       try {
         await deps.report(effect, report);
@@ -71,7 +71,7 @@ export function createEffectWorker(deps: EffectWorkerDeps) {
       } catch (error) {
         if (attempt >= 3) {
           // The lease expires and the effect runs again; the report's id makes the next report a replay.
-          log(`report for ${effect.kind as EffectKind} ${effect.id} failed: ${error instanceof Error ? error.message : "unknown"}`);
+          log(`report for ${effect.kind} ${effect.id} failed: ${error instanceof Error ? error.message : "unknown"}`);
           return;
         }
         await new Promise((resolve) => setTimeout(resolve, 100 * attempt));
@@ -79,14 +79,19 @@ export function createEffectWorker(deps: EffectWorkerDeps) {
     }
   }
 
-  async function runOne(effect: ClaimedEffect): Promise<void> {
+  async function runOne(effect: ClaimedEffect<Kind>): Promise<void> {
     let report: EffectReport;
     let timer: ReturnType<typeof setTimeout> | null = null;
+    const controller = new AbortController();
     try {
       // Give up well inside the lease, so no second claim of this effect can start while this one still runs.
       const timeoutMs = Math.floor((deps.leaseMs ?? EFFECT_LEASE_MS) * 0.75);
-      const timeout = new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error(`timed out after ${timeoutMs} ms`)), timeoutMs); });
-      const result = await Promise.race([deps.execute(effect), timeout]);
+      const timeout = new Promise<never>((_, reject) => { timer = setTimeout(() => {
+        const error = new Error(`timed out after ${timeoutMs} ms`);
+        reject(error);
+        controller.abort(error);
+      }, timeoutMs); });
+      const result = await Promise.race([deps.execute(effect, controller.signal), timeout]);
       report = { outcome: "succeeded", final: true, result: result ?? {} };
     } catch (error) {
       const message = error instanceof Error ? error.message : "unknown error";

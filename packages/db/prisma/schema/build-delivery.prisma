@@ -224,6 +224,25 @@ model CodebaseManifest {
   @@index([digitalProductId])
 }
 
+/// Candidate execution receiver observed by its own installation. This registration never grants authority.
+/// @dpf lifecycle=operational retention=domain sensitivity=internal categories=operational owner=platform-operator steward=data-steward
+model ExecutionHost {
+  id                  String    @id @default(cuid())
+  installationRef     String
+  hostRef             String
+  /// Immutable for this registration. A replacement receiver needs a new registration.
+  receiverRef         String
+  loopbackEndpointRef String?
+  tailnetEndpointRef  String?
+  httpsEndpointRef    String?
+  registeredAt        DateTime  @default(now())
+  lastObservedAt      DateTime
+  retiredAt           DateTime?
+
+  @@unique([installationRef, hostRef])
+  @@index([installationRef, retiredAt])
+}
+
 model RuntimeTarget {
   id                     String                @id @default(cuid())
   targetId               String                @unique
