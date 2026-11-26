@@ -119,6 +119,22 @@ describe("runBuildPrDeliveryReconcile — every room with a PR, whichever client
 
   registerQueueTransitionTests({ mocks, room, observation, runBuildPrDeliveryReconcile });
 
+  it("persists and routes an exact-head hold without a provider write", async () => {
+    mocks.findMany.mockResolvedValue([room({ workspaceState: publicationIntentWorkspace() })]);
+    const url = "https://github.com/o/r/pull/9#discussion_r314";
+    const green = observation([{ name: "ci", status: "COMPLETED", conclusion: "SUCCESS" }]);
+    mocks.observe.mockResolvedValue({ ...green, autoMergeEnabled: true,
+      unresolvedReviewThreads: 1, unresolvedReviewThreadUrls: [url] });
+    await runBuildPrDeliveryReconcile();
+    const reports = mocks.createIssue.mock.calls.map(([report]) => report);
+    expect(reports).toMatchObject([{ description: expect.stringContaining(url),
+      dedupeKey: "build-pr-delivery:WC-X:conversation-hold:sha1:routed" }]);
+    const [[change]] = mocks.updateMany.mock.calls;
+    expect(change.data.workspaceState.prDelivery).toMatchObject({ status: "armed",
+      conversationHold: { headSha: "sha1", count: 1, routeReportId: "PIR-1" } });
+    expect(mocks.fetch.mock.calls.concat(mocks.publish.mock.calls, mocks.dispatch.mock.calls)).toEqual([]);
+  });
+
   it("eventually observes every eligible room despite repeated unrelated drive timestamp writes", async () => {
     let clock = Date.parse("2026-11-01T00:00:00Z");
     let cursor: string | null = null;
