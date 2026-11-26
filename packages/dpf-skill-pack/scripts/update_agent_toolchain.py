@@ -2101,9 +2101,8 @@ def install_grok_plugin(managed: Path, dry_run: bool) -> str:
 # reached Grok.
 CLIENT_HOOK_PLANES_FILE = "client-hook-planes.json"
 PLUGIN_ROOT_TOKEN = "${CLAUDE_PLUGIN_ROOT}/hooks/"
-# Stop is NOT SessionEnd (BI-E5D810B8). Grok fires `Stop` after every turn, so
-# hooks.json keeps the destructive reaper (worktree-session-hygiene) on
-# SessionEnd only; the generated Grok plane inherits that from hooks.json.
+# Grok inherits the SessionEnd refusal audit from hooks.json. Neither
+# Stop nor SessionEnd removes a checkout (BI-F52EF21B).
 
 
 # PostToolUse (BI-AB4EA033, BI-C3D3762B): re-cache the claim guard's marker from

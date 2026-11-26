@@ -26,7 +26,7 @@ function hookCommandsFor(eventName) {
 function runHook(payload, env = {}) {
   return spawnSync(process.execPath, [script], {
     encoding: "utf8",
-    env: { ...process.env, ...env },
+    env: { ...process.env, T3CODE_THREAD_ID: "", ...env },
     input: JSON.stringify(payload),
     windowsHide: true,
     timeout: 30_000,

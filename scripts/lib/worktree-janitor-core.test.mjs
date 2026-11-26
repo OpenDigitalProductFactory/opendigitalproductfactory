@@ -10,6 +10,7 @@ import {
 const base = {
   path: "D:/DPF-worktrees/topic",
   branch: "feat/topic",
+  branchWork: "has-commits",
   isRoot: false,
   pinned: false,
   hasActiveLease: false,
@@ -40,6 +41,31 @@ describe("classifyWorktree", () => {
     const r = classifyWorktree({ ...base, merged: true, dirty: false });
     assert.equal(r.verdict, "PRUNE_TIER_A");
     assert.equal(r.tier, "A");
+  });
+
+  it("keeps a branch at its creation base even when ancestry or a reused PR name looks merged", () => {
+    const r = classifyWorktree({ ...base, merged: true, branchWork: "no-commits", ageDays: 40 });
+    assert.equal(r.verdict, "KEEP");
+    assert.equal(r.tier, null);
+    assert.match(r.reason, /no commits beyond its base/);
+  });
+
+  it("keeps a branch whose base cannot be verified", () => {
+    const r = classifyWorktree({ ...base, merged: true, branchWork: "unknown" });
+    assert.equal(r.verdict, "KEEP");
+    assert.equal(r.tier, null);
+    assert.match(r.reason, /base could not be verified/);
+  });
+
+  it("keeps any checkout when a required liveness input is unknown", () => {
+    for (const input of ["t3SettlementUnknown", "heartbeatUnavailable", "processCwdUnavailable"]) {
+      for (const branch of [base.branch, null]) {
+        const verdict = classifyWorktree({ ...base, [input]: true, branch, merged: true, ageDays: 40 },
+          { pruneDetached: true });
+        assert.equal(verdict.verdict, "KEEP", input);
+        assert.equal(verdict.tier, null);
+      }
+    }
   });
 
   it("live session KEEPS a merged+clean worktree that would otherwise be Tier-A", () => {
@@ -108,6 +134,7 @@ describe("summarizeDecisions", () => {
 describe("Workroom claims outrank a merged, clean tree", () => {
   const merged = (extra) => ({
     branch: "fix/topic",
+    branchWork: "has-commits",
     isRoot: false,
     pinned: false,
     hasActiveLease: false,

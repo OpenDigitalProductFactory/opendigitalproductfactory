@@ -45,7 +45,7 @@ be written the worktree is kept instead (BI-EBBBDF40).
 
 The janitor's own protections still apply and are not negotiable by this script:
 `.worktree-pinned` is always honoured, dirty worktrees are refused, the root
-clone is skipped, and removals go through the junction-safe helper.
+clone is skipped, and eligible checkouts are renamed before their files are purged without following junctions.
 
 ### Other flags
 
@@ -147,11 +147,21 @@ The queue function `build/pr-merged-reap` subscribes to `build/pr-merged.receive
 node scripts/worktree-janitor.mjs --branch <headRefName> --json --tier-a-only [--live]
 ```
 
-This closes the gap the SessionEnd hook structurally cannot: that hook can only reap a Tier-A tree, Tier A requires `merged`, and the normal sequence is push, end the thread, merge later — so at SessionEnd the branch is unmerged and the hook correctly declines. Measured on the development install: 101 worktrees with 48 merged and unreaped on 2026-09-09; a manual sweep took it to 55 and it was 157 by 2026-09-22.
+This handles a branch that merges after its provider process exits. Provider SessionEnd is audit-only (BI-F52EF21B).
 
 **It delegates rather than deleting**, and that is load-bearing rather than tidy. `classifyWorktree` places its liveness gate above the merged/Tier-A check precisely because *"the moment a live session's PR merges, its clean tree first becomes Tier-A eligible — exactly when it must NOT be reaped."* A merge-triggered reaper is the caller that walks into that window, so it must go through the classifier, never around it.
 
 It uses the same two flags as the scheduled sweep, so there is one switch to reason about: `DPF_WORKTREE_JANITOR_ENABLED` to run at all, `DPF_WORKTREE_JANITOR_AUTO_REAP` to remove rather than report. Both default off. A scan that cannot reach its subject logs UNHEALTHY and reports `ran: false` — never success.
+
+## Reap audit and quarantine
+
+SessionEnd logs a refusal in `dpf-worktree-reap.jsonl` in the common Git directory. The Node janitor writes its live decisions to the same log, with the path, branch, tier, reason and outcome. If the log is unwritable, the record goes to stderr. Dry runs report the decisions without editing the log.
+
+A named branch needs a reachable commit recorded as work on that branch after creation. A fast-forward or reset that only inherits main does not count. If the janitor cannot prove branch work, it keeps the checkout regardless of age or `--allow-fresh`.
+
+The Node janitor cannot verify settled or archived T3 threads on a host without an authoritative settlement signal, so it keeps checkouts under `~/.t3/worktrees/` even when they have no heartbeat and their work is merged. The bridge can keep its liveness slot until host settlement, but the absence of that slot is not proof that the thread ended. A corrupt or unreadable heartbeat also keeps the checkout.
+
+Before removal the janitor verifies that Git status is readable and clean, including untracked files. It takes a new process CWD snapshot just before each rename. If the snapshot is unavailable, including on hosts without supported CWD enumeration, it leaves the checkout intact. Otherwise it renames the checkout to a sibling `.dpf-reap-*` directory, unregisters the now-absent original path without force, then purges the quarantine without following dependency links. The `started` audit record gives the quarantine path. A stopped purge can leave debris in quarantine but not a partly deleted worktree at the original path. A refusal to unregister normally restores the original checkout intact. If rollback cannot be verified, leave the quarantine in place for operator inspection. Its `original-path` file identifies the checkout, and a missing final outcome is not proof that the purge completed.
 
 ## Related
 

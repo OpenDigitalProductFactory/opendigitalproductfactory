@@ -396,7 +396,7 @@ The thread that pushes should be able to end at the push. It could not, because 
 
 What filled the gap was `build/pr-delivery-reconcile`, a REST poll every five minutes, scoped to Workrooms carrying a linked feature build. Agent-authored pull requests were not covered at all. Two things depended on a fact that arrived late or never:
 
-- a worktree becomes Tier-A reapable **at the instant its PR merges**, and the SessionEnd reaper has already run and correctly declined by then;
+- if no liveness guard applies, a worktree can become Tier A when its PR merges, after the provider process has exited;
 - completion needs `mergedThroughGates`, so a merged item could sit with recorded evidence and no receipt.
 
 Now the receiver emits `build/pr-merged.received` carrying repository, number, head branch, head sha, merge commit and merge time. `readPullRequestMergedSignal` (`apps/web/lib/build/pull-request-merged-signal.ts`) is the pure decision and is deliberately strict about one thing: **a closed-unmerged pull request carries the same `action`**, and treating it as delivery would record evidence for abandoned work and reap the worktree holding the only copy of the branch. A rebase merge legitimately has no merge commit, so that field stays optional rather than making the payload look malformed.
@@ -415,9 +415,9 @@ The five-minute cron stays as a **backstop** for missed deliveries. That is the 
 
 `build/pr-merged.received` now has a second subscriber: `build/pr-merged-reap`.
 
-The SessionEnd hook remains the primary reaper and it is correct — but it can only reap a Tier-A tree, and Tier A requires `merged`. The normal sequence is gate, push, open PR, **end the thread**, and the PR merges in the queue later. At SessionEnd the branch is unmerged, so the hook correctly declines and nothing revisits that worktree. Measured: 2026-09-09 saw 101 worktrees with 48 merged and unreaped; a manual sweep took it to 55 and it was back to 157 by 2026-09-22.
+The merge event and the scheduled janitor are the platform-owned removal paths. Provider SessionEnd never removes a checkout because provider exit does not prove that its host thread has ended (BI-F52EF21B).
 
-**The subscriber does not implement its own rules.** It runs `scripts/worktree-janitor.mjs --branch <headRefName> --json --tier-a-only`, so every existing protection still decides: a live session heartbeat, an active Workroom claim, `.worktree-pinned`, an active lease, an open PR, a dirty tree. Removal goes through the junction-safe helper, which matters because each worktree carries roughly 28 junctions into the root clone's `node_modules` and a recursive delete that follows one is what wiped `packages/*` on 2026-08-15.
+**The subscriber does not implement its own rules.** It runs `scripts/worktree-janitor.mjs --branch <headRefName> --json --tier-a-only`, so every existing protection still decides: a live session heartbeat, an active Workroom claim, `.worktree-pinned`, an active lease, an open PR, a dirty tree. Eligible checkouts are renamed out of the way before unregistering and purging them. The janitor never follows their dependency links.
 
 That delegation is deliberate rather than tidy. `classifyWorktree` places its liveness gate **above** the merged/Tier-A check, and says why: *"the moment a live session's PR merges, its clean tree first becomes Tier-A eligible — exactly when it must NOT be reaped."* A merge-triggered reaper is precisely the caller that walks into that window, so it must go through the classifier, never around it.
 
