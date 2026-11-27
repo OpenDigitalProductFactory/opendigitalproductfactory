@@ -7,7 +7,7 @@ import { canonicalJson } from "@dpf/integration-shared/canonical-json";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { readT4GitPage } from "./t4-source-read-git.server";
-import { createT4SourceReadWire, type T4ReadPorts } from "./t4-source-read-wire.server";
+import { createT4SourceReadWire, validateT4SourceReadReply, type T4ReadPorts } from "./t4-source-read-wire.server";
 
 const roots: string[] = [];
 afterEach(() => { for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true }); });
@@ -182,5 +182,68 @@ describe("T4 protected read boundary", () => {
     expect(f.read).toHaveBeenCalledTimes(1);
     expect((await f.send()).status).not.toBe(200);
     expect(f.read).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("T4 signed profile parity", () => {
+  const loneSurrogate = String.fromCharCode(0xd800);
+  const returnedPage = { kind: "page", startLine: 1, endLine: 2, content: "alpha\né\n", utf8Bytes: 9, nextLine: 3 };
+  const unresolved = { kind: "unresolved", mayResend: false };
+
+  function replyFixture(f: ReturnType<typeof wire>) {
+    const requestDigest = createHash("sha256").update(canonicalJson(f.call)).digest("hex");
+    const expected = { ...identity, correlation, requestDigest, target: f.call.target, window, publicKey: f.server.publicKey };
+    const envelope = { profile, kind: "source-read-result", issuer: "dpf", audience: "control", hostRef: identity.hostRef,
+      correlation, requestDigest, target: f.call.target, result: returnedPage };
+    const validate = (value: unknown, key = f.server.privateKey) => {
+      const bytes = Buffer.from(canonicalJson(value));
+      return validateT4SourceReadReply({ status: 200, bytes, signature: sign(null, bytes, key).toString("base64url") }, expected);
+    };
+    return { expected, envelope, validate };
+  }
+
+  it("rejects a signature-valid escaped surrogate in the admitted target before authority lookup", async () => {
+    const f = wire();
+    f.call.target = { ...f.call.target, path: "bad-" + loneSurrogate + ".txt" };
+    f.admission.target = f.call.target;
+    const response = await f.send();
+    expect(response.status).toBe(400);
+    expect(f.ports.readCurrent).not.toHaveBeenCalled();
+    expect(f.ports.consumeOnce).not.toHaveBeenCalled();
+    expect(f.read).not.toHaveBeenCalled();
+  });
+
+  it("preserves a well-formed surrogate pair in page content", () => {
+    const { envelope, validate } = replyFixture(wire());
+    const page = { kind: "page", startLine: 1, endLine: 1, content: "😀\n", utf8Bytes: 5, nextLine: 2 };
+    expect(validate({ ...envelope, result: page })).toEqual({ kind: "verified", result: page, mayResend: false });
+  });
+
+  it("rejects lone surrogate values and keys in signature-valid replies", () => {
+    const { envelope, expected, validate } = replyFixture(wire());
+    const invalidTarget = { ...envelope.target, path: "bad-" + loneSurrogate + ".txt" };
+    const bytes = Buffer.from(canonicalJson({ ...envelope, target: invalidTarget }));
+    const f = wire();
+    expect(validateT4SourceReadReply({ status: 200, bytes, signature: sign(null, bytes, f.server.privateKey).toString("base64url") },
+      { ...expected, target: invalidTarget, publicKey: f.server.publicKey })).toEqual(unresolved);
+    expect(validate({ ...envelope, result: { ...returnedPage, content: "a\n" + loneSurrogate + "\n", utf8Bytes: 6 } })).toEqual(unresolved);
+    expect(validate({ ...envelope, [loneSurrogate]: "invalid key" })).toEqual(unresolved);
+  });
+
+  it.each([400, 403, 404, 409, 503])("does not settle or authorize resend from unsigned HTTP %s", status => {
+    const { expected } = replyFixture(wire());
+    expect(validateT4SourceReadReply({ status, bytes: Buffer.alloc(0), signature: null }, expected)).toEqual(unresolved);
+  });
+
+  it("recognizes only a signature-valid exact bound page or typed refusal", () => {
+    const f = wire();
+    const { envelope, validate } = replyFixture(f);
+    expect(validate(envelope)).toEqual({ kind: "verified", result: returnedPage, mayResend: false });
+    const refused = { kind: "refused", code: "source-unavailable" };
+    expect(validate({ ...envelope, result: refused })).toEqual({ kind: "verified", result: refused, mayResend: false });
+    expect(validate({ ...envelope, requestDigest: "1".repeat(64) })).toEqual(unresolved);
+    expect(validate({ ...envelope, correlation: { ...correlation, attemptRef: "sibling" } })).toEqual(unresolved);
+    expect(validate({ ...envelope, result: { ...returnedPage, utf8Bytes: 8 } })).toEqual(unresolved);
+    expect(validate(envelope, f.peer.privateKey)).toEqual(unresolved);
   });
 });
