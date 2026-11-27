@@ -115,6 +115,7 @@ import { buildLifecyclePack } from "./packs/build-lifecycle-pack";
 import { buildReviewPack } from "./packs/build-review-pack";
 import { buildChangePack } from "./packs/build-change-pack";
 import { gateContextPack } from "./packs/gate-context-pack";
+import { mcpTaskResultPack } from "./packs/mcp-task-result-pack";
 import { federationMembershipPack } from "./packs/federation-membership-pack";
 import { uxVerificationPack } from "./packs/ux-verification-pack";
 import { workPatternExperimentPack } from "./packs/work-pattern-experiment-pack";
@@ -202,6 +203,7 @@ export const TOOL_PACK_REGISTRY = composeToolPacks([
   buildReviewPack,
   buildChangePack,
   gateContextPack,
+  mcpTaskResultPack,
   adminPack,
   buildEnginePack,
   buildEvidencePack,
