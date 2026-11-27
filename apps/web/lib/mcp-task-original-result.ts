@@ -5,7 +5,8 @@ import { canonicalJson } from "@dpf/integration-shared/canonical-json";
 import { deterministicExternalTaskRunId, parseResourceWaitProjection } from "./mcp-task-capacity-contract";
 import { reconstructPersistedRemoteTask, type PersistedRemoteTask } from "./mcp-task-persisted-request";
 import { parseInitiativeReviewBinding, validateInitiativeReviewAuthorityScope, type InitiativeReviewBinding } from "./mcp-task-review-contract";
-import { parseTerminalWriterWait } from "./mcp-task-replay-projection";
+import { TERMINAL_WRITER_REJECTED_WAIT_REASON, terminalWriterRejectionStructuredContent } from "./mcp-task-terminal-writer-escalation";
+import { parseTerminalWriterWait, projectRemoteTaskReplay } from "./mcp-task-replay-projection";
 import { loadInitiativeReviewOutcome } from "./mcp-task-review-outcome";
 import { sanitizeNativeCliDiagnostics } from "./shared/execution-uncertainty";
 import { isRecord } from "./shared/coerce";
@@ -33,6 +34,8 @@ export type OriginalReviewResult = {
     reviewerAgentId: string; itemId: string; gate: string; artifactRef: InitiativeReviewBinding["artifactRef"]; workroomId: string };
   observations: Observation[];
   receipt?: { receiptId: string; gate: string; decision: string };
+  terminalWriterRejection?: ReturnType<typeof terminalWriterRejectionStructuredContent>;
+  terminalWriterRejectionUnavailable?: "budget";
   missingProof: string[];
   proofInventory?: OriginalProofInventory;
   proofInventoryUnavailable?: "budget";
@@ -273,6 +276,18 @@ export async function readOriginalReviewResult(input: ReadInput): Promise<Origin
     // never dispatched, or that every child/effect settled. Queue status,
     // printable claims and outer-process close cannot produce those verdicts.
     if (JSON.stringify(result).length > ORIGINAL_REVIEW_RESULT_CHAR_CAP) return unknown(input.taskRunId, "original-result-over-budget");
+    // Reuse the public hold classification, not the replay response payload.
+    // This is a pure projection and never submits or resumes the original task.
+    const rejection = wait?.writerRejection;
+    if (task.status === "input-required" && wait && rejection
+      && projectRemoteTaskReplay({ existing: task, requestMatches: true }).result.waitReason === TERMINAL_WRITER_REJECTED_WAIT_REASON) {
+      result.terminalWriterRejection = terminalWriterRejectionStructuredContent(wait.writerToolName, wait.attempt, rejection);
+      if (JSON.stringify(result).length > ORIGINAL_REVIEW_RESULT_CHAR_CAP) {
+        delete result.terminalWriterRejection;
+        result.terminalWriterRejectionUnavailable = "budget";
+        if (JSON.stringify(result).length > ORIGINAL_REVIEW_RESULT_CHAR_CAP) delete result.terminalWriterRejectionUnavailable;
+      }
+    }
     // Auxiliary diagnostics must never hide an otherwise fitting original
     // receipt or observation. Preserve the complete base result and the cap.
     result.proofInventory = reconcileOriginalProofInventory(proofBefore, proofAfter);

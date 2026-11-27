@@ -65,7 +65,53 @@ beforeEach(() => {
   db.outcome.mockResolvedValue({ receiptId, gate: "design-spec", decision: "fail", artifactRef: raw.initiativeReviewBinding.artifactRef });
 });
 
+const rejection = { schemaVersion: 1, error: "PACKET_INVALID", message: "Fix the objective link.", observedAt: at.toISOString() };
+function rejectedRow(status = row.status) {
+  return { ...row, status, progressPayload: { dispatch: row.progressPayload.dispatch,
+    terminalWriterWait: { ...row.progressPayload.terminalWriterWait, writerRejection: { ...rejection, privateField: "private-wait-data" } },
+  } };
+}
+
 describe("original review read-only evidence collection", () => {
+  it("returns the exact current rejection through the original read without exposing private payloads", async () => {
+    db.task.mockResolvedValue(rejectedRow());
+    db.writers.mockResolvedValue([{ ...writer, success: false, result: { success: false, message: "private-writer-data" } }]);
+    const result = await readOriginalReviewResult(input);
+    expect(result).toMatchObject({ readOnly: true, replayAllowed: false });
+    expect(result?.terminalWriterRejection).toEqual({
+      error: "terminal_writer_rejected", writerToolName: writer.toolName, attempt: 1,
+      writerRejection: { error: rejection.error, message: rejection.message },
+      action: "fix-packet-and-resume",
+    });
+    for (const privateText of [raw.prompt, raw.idempotencyKey, "private-writer-data", "private-wait-data"]) {
+      expect(JSON.stringify(result)).not.toContain(privateText);
+    }
+  });
+
+  it("preserves fitting original evidence when JSON escaping pushes the rejection over budget", async () => {
+    db.writers.mockResolvedValue([{ ...writer, success: false, result: { success: false } }]);
+    db.task.mockResolvedValue(rejectedRow());
+    const base = await readOriginalReviewResult(input);
+    expect(base?.binding).toBeDefined();
+    expect(base?.observations).not.toHaveLength(0);
+    const value = rejectedRow();
+    value.progressPayload.terminalWriterWait.writerRejection.message = String.fromCharCode(34, 92).repeat(2_500);
+    db.task.mockResolvedValue(value);
+    const result = await readOriginalReviewResult(input);
+    expect(result).toMatchObject({
+      reason: "original-execution-proof-incomplete", replayAllowed: false,
+      binding: base?.binding, observations: base?.observations,
+      terminalWriterRejectionUnavailable: "budget",
+    });
+    expect(result).not.toHaveProperty("terminalWriterRejection");
+    expect(JSON.stringify(result).length).toBeLessThanOrEqual(ORIGINAL_REVIEW_RESULT_CHAR_CAP);
+  });
+
+  it("does not return a stale rejection after the task leaves the hold", async () => {
+    db.task.mockResolvedValue(rejectedRow("completed"));
+    expect(await readOriginalReviewResult(input)).not.toHaveProperty("terminalWriterRejection");
+  });
+
   it.each(["docs/spec.md", "docs/spec-aa.md"])("preserves fitting base receipts at the auxiliary budget boundary (%s)", async path => {
     const binding = { ...raw.initiativeReviewBinding, artifactRef: { ...raw.initiativeReviewBinding.artifactRef, path } };
     const request = parseRemoteTaskSubmitParams({ ...raw, initiativeReviewBinding: binding });
@@ -192,12 +238,14 @@ describe("original review read-only evidence collection", () => {
   });
 
   it.each(["owner", "actor", "room", "revoked", "scope", "agent-grant"])("returns no protected provenance after %s denial", async failure => {
-    if (failure === "owner") db.task.mockResolvedValue({ ...row, userId: "other" });
+    db.task.mockResolvedValue(rejectedRow());
+    if (failure === "owner") db.task.mockResolvedValue({ ...rejectedRow(), userId: "other" });
     if (failure === "actor") db.token.mockResolvedValue({ userId: "human", agentId: "AGT-OTHER" });
     if (failure === "room" || failure === "revoked") db.agentAccess.mockResolvedValue({ decision: { level: "none" } });
     if (failure === "agent-grant") db.agent.mockResolvedValue({ status: "active", archived: false, toolGrants: [], toolGrantRevocations: [] });
     const result = await readOriginalReviewResult(failure === "scope" ? { ...input, tokenGrantScopes: [] } : input);
     expect(result).toMatchObject({ classification: "unknown", observations: [] });
+    expect(result).not.toHaveProperty("terminalWriterRejection");
     expect(result).not.toHaveProperty("binding"); expect(result).not.toHaveProperty("receipt"); expect(db.writers).not.toHaveBeenCalled();
     expect(db.tools).not.toHaveBeenCalled(); expect(db.artifacts).not.toHaveBeenCalled();
     expect(db.approvals).not.toHaveBeenCalled(); expect(db.operations).not.toHaveBeenCalled();
