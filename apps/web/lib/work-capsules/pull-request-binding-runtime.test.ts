@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   run: vi.fn(), snapshots: vi.fn(), rooms: vi.fn(), roomFindFirst: vi.fn(),
   roomCreate: vi.fn(), update: vi.fn(), journal: vi.fn(), relationCreateMany: vi.fn(),
   transaction: vi.fn(), storefrontConfig: vi.fn(), organization: vi.fn(), platformDevConfig: vi.fn(),
+  principalAlias: vi.fn(), user: vi.fn(), participants: vi.fn(), participantCreate: vi.fn(), participantUpdate: vi.fn(),
 }));
 vi.mock("@dpf/db", () => ({ prisma: {
   contributorInventorySyncRun: { findUnique: mocks.run },
@@ -14,6 +15,8 @@ vi.mock("@dpf/db", () => ({ prisma: {
   workroom: { findMany: mocks.rooms, findFirst: mocks.roomFindFirst, create: mocks.roomCreate },
   storefrontConfig: { findFirst: mocks.storefrontConfig },
   organization: { findFirst: mocks.organization },
+  principalAlias: { findFirst: mocks.principalAlias },
+  user: { findFirst: mocks.user },
   platformDevConfig: { findUnique: mocks.platformDevConfig },
   $transaction: mocks.transaction,
 } }));
@@ -52,11 +55,19 @@ beforeEach(() => {
   mocks.relationCreateMany.mockResolvedValue({ count: 1 });
   mocks.storefrontConfig.mockResolvedValue({ archetype: { category: "software-platform" } });
   mocks.organization.mockResolvedValue({ topAccountablePrincipalId: "principal-owner" });
+  mocks.principalAlias.mockImplementation(async ({ where }) => where.principalId === "principal-owner"
+    ? { aliasValue: "user-owner" } : null);
+  mocks.user.mockImplementation(async ({ where }) => where.id === "user-owner" && where.workHandedOverAt === null
+    ? { id: "user-owner" } : null);
+  mocks.participants.mockResolvedValue([]);
   mocks.platformDevConfig.mockResolvedValue({ upstreamRemoteUrl: `https://github.com/${repository}.git` });
   mocks.transaction.mockImplementation(async (fn) => fn({
     workroom: { findFirst: mocks.roomFindFirst, create: mocks.roomCreate, updateMany: mocks.update },
     workroomActivity: { create: mocks.journal },
     workroomRelation: { createMany: mocks.relationCreateMany },
+    principalAlias: { findFirst: mocks.principalAlias },
+    user: { findFirst: mocks.user },
+    workroomParticipant: { findMany: mocks.participants, create: mocks.participantCreate, update: mocks.participantUpdate },
   }));
 });
 
@@ -254,6 +265,9 @@ describe("FLOW-PR-1 open PR custody adoption and lapsed-lease reconciliation", (
       skippedReason: null,
     });
     expect(mocks.roomCreate).toHaveBeenCalledTimes(1);
+    expect(mocks.participantCreate).toHaveBeenCalledWith({ data: expect.objectContaining({
+      workroomId: "created-room-row", principalId: "principal-owner", roles: ["coordinator"], lifecycle: "active",
+    }) });
     const createdData = mocks.roomCreate.mock.calls[0][0].data;
     expect(createdData).toMatchObject({
       source: "scheduled-steward",
@@ -349,6 +363,77 @@ describe("FLOW-PR-1 open PR custody adoption and lapsed-lease reconciliation", (
     expect(replayRes.custody).toMatchObject({ adopted: 0, alreadyOwned: 1, handedOff: 0 });
     expect(mocks.roomCreate).not.toHaveBeenCalled();
     expect(mocks.update).not.toHaveBeenCalled();
+  });
+
+  it("does not count a reviewer-only bot custody room as owned when no admitted actor can recover it", async () => {
+    const reviewer = { principalId: "principal-reviewer", roles: ["coordinator"], principal: { kind: "agent", status: "active" } };
+    mocks.organization.mockResolvedValue({ topAccountablePrincipalId: null });
+    const reviewerOnly = {
+      ...room,
+      baseBranch: "main",
+      pullRequestNumber: observation.number,
+      pullRequestUrl: observation.url,
+      executorKind: "build-studio",
+      executorRef: "standing-room:WC-PRFLOW",
+      featureBuildId: null,
+      leaseHolderPrincipalId: reviewer.principalId,
+      leaseExpiresAt: null,
+      createdByPrincipalId: reviewer.principalId,
+      requestedByPrincipalId: reviewer.principalId,
+      lastSyncedAt: now,
+      participants: [],
+      workspaceState: {
+        prCustody: {
+          mode: "build-studio-custody",
+          recoveryReason: null,
+          repositoryFullName: repository,
+          prNumber: observation.number,
+          headSha: observation.headSha,
+          headRepositoryFullName: repository,
+          authorLogin: openRow.custodySource.authorLogin,
+          authorType: openRow.custodySource.authorType,
+          accountableOwnerPrincipalId: reviewer.principalId,
+          standingRoomCapsuleId: standingRoom.capsuleId,
+        },
+      },
+    };
+    const sweep = async (custody: object) => {
+      mocks.roomFindFirst.mockResolvedValueOnce({ ...standingRoom, participants: [reviewer] });
+      mocks.rooms.mockResolvedValueOnce([]).mockResolvedValueOnce([custody]);
+      return reconcileInventoryPullRequestBindings("current-run", now, { ok: true, rows: [openRow] }, { reconcileCustody: true });
+    };
+
+    const result = await sweep(reviewerOnly);
+    expect(result.custody).toMatchObject({ adopted: 0, handedOff: 0, alreadyOwned: 0, awaitingAuthorization: 1 });
+    expect(mocks.roomCreate).not.toHaveBeenCalled();
+    expect(mocks.participantCreate).not.toHaveBeenCalled();
+    const held = mocks.update.mock.calls[0][0].data.workspaceState;
+    expect(held.prCustody).toMatchObject({
+      mode: "observe-only", recoveryReason: "accountable-owner-not-admitted", headSha: observation.headSha,
+      hold: { role: "pull-request-flow coordinator", nextCheck: "next-complete-pr-inventory-sweep" },
+    });
+    expect(mocks.journal).toHaveBeenCalledTimes(1);
+    const replay = await sweep({ ...reviewerOnly, workspaceState: held });
+    expect(replay.custody).toMatchObject({ alreadyOwned: 0, awaitingAuthorization: 1 });
+    expect(mocks.journal).toHaveBeenCalledTimes(1);
+    expect(mocks.update).toHaveBeenCalledTimes(1);
+
+    const resumed = await sweep({ ...reviewerOnly, workspaceState: held,
+      participants: [{ principalId: "principal-owner", lifecycle: "active" }] });
+    expect(resumed.custody).toMatchObject({ adopted: 0, handedOff: 1, awaitingAuthorization: 0 });
+    const resumeWrite = mocks.update.mock.calls[1][0];
+    expect(resumeWrite.where).toMatchObject({ id: reviewerOnly.id, headSha: observation.headSha,
+      participants: { some: { principalId: "principal-owner", lifecycle: "active" } } });
+    expect(resumeWrite.data).not.toHaveProperty("leaseHolderPrincipalId");
+    const resumedState = resumeWrite.data.workspaceState;
+    expect(resumedState.prCustody).toMatchObject({ mode: "build-studio-custody", accountableOwnerPrincipalId: "principal-owner" });
+    expect(resumedState.prCustody).not.toHaveProperty("hold");
+    expect((await sweep({ ...reviewerOnly, workspaceState: resumedState,
+      participants: [{ principalId: "principal-owner", lifecycle: "active" }] })).custody)
+      .toMatchObject({ alreadyOwned: 1, handedOff: 0, awaitingAuthorization: 0 });
+    expect(mocks.update).toHaveBeenCalledTimes(2);
+    expect(mocks.journal).toHaveBeenCalledTimes(2);
+    expect(mocks.roomCreate).not.toHaveBeenCalled();
   });
 
   it("keeps a fork PR sharing the same branch ref visible without colliding on branch identity", async () => {
@@ -519,6 +604,26 @@ describe("FLOW-PR-1 open PR custody adoption and lapsed-lease reconciliation", (
     }));
   });
 
+  it("takes standing custody in the existing room when an exact PR has no executor or owner", async () => {
+    const unowned = { ...room, baseBranch: "main", pullRequestNumber: observation.number,
+      pullRequestUrl: observation.url, executorKind: null, executorRef: null, featureBuildId: null,
+      leaseHolderPrincipalId: null, leaseExpiresAt: null, createdByPrincipalId: null, requestedByPrincipalId: null,
+      lastSyncedAt: now, workspaceState: {}, participants: [] };
+    mocks.rooms.mockResolvedValueOnce([]).mockResolvedValueOnce([unowned]);
+    mocks.roomFindFirst.mockResolvedValueOnce({ ...standingRoom, participants: [{ principalId: "principal-reviewer", roles: ["coordinator"] }] });
+
+    const result = await reconcileInventoryPullRequestBindings("current-run", now,
+      { ok: true, rows: [openRow] }, { reconcileCustody: true });
+
+    expect(result.custody).toMatchObject({ adopted: 0, handedOff: 1, awaitingAuthorization: 0 });
+    expect(mocks.roomCreate).not.toHaveBeenCalled();
+    expect(mocks.update.mock.calls[0][0]).toMatchObject({ where: { id: unowned.id, updatedAt: now },
+      data: { executorKind: "build-studio", leaseHolderPrincipalId: "principal-owner" } });
+    expect(mocks.participantCreate).toHaveBeenCalledWith({ data: expect.objectContaining({
+      workroomId: unowned.id, principalId: "principal-owner", roles: ["coordinator"],
+    }) });
+  });
+
   it("refuses lapsed-lease takeover for a different human owner and skips non-software-platform installs", async () => {
     const otherOwnerLapsed = {
       ...room,
@@ -547,7 +652,13 @@ describe("FLOW-PR-1 open PR custody adoption and lapsed-lease reconciliation", (
       { reconcileCustody: true },
     );
     expect(mismatchRes.custody).toMatchObject({ handedOff: 0, awaitingAuthorization: 1 });
-    expect(mocks.update).not.toHaveBeenCalled();
+    expect(mocks.update).toHaveBeenCalledTimes(1);
+    expect(mocks.update.mock.calls[0][0].data).not.toHaveProperty("executorKind");
+    expect(mocks.update.mock.calls[0][0].data.workspaceState.prCustodyHold).toMatchObject({
+      principalId: "different-owner", reason: "existing-owner-handoff-required", headSha: observation.headSha,
+      nextCheck: "next-complete-pr-inventory-sweep",
+    });
+    expect(mocks.participantCreate).not.toHaveBeenCalled();
 
     // Non-software-platform archetype
     mocks.storefrontConfig.mockResolvedValue({ archetype: { category: "food-hospitality" } });
