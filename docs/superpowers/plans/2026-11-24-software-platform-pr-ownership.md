@@ -16,6 +16,16 @@ This plan implements the [PR ownership design](../specs/2026-11-24-software-plat
 
 **VERIFY-PR-1** covers AC-PR-1 with replay, concurrent binding and adoption, ETag reuse, an old still-open PR, partial pages, provider outage, stale head, a fork sharing the same ref, a live lease, and an eligible lapsed lease. Assert one room per PR, with a recovery reason where the system can observe but cannot act.
 
+### Custody admission and recheck
+
+`WC-0147A0E4` completes the existing inventory and ownership phase for rooms that have a PR but no actor able to advance it. The standing duty can steward a PR, but a reviewer on its roster is not automatically a repair executor. Resolve a recorded active human who can own the work and use the existing Workroom ownership path when creating custody or handing off an eligible lapsed lease. Leave active leases, valid owners, existing admission decisions, and the repair dispatcher's authority checks intact.
+
+On a complete inventory sweep, check the exact PR and head before reconciling existing custody. If nobody admitted can act, keep the same room in observation and record a hold naming the next responsible coordinator or existing owner. Recheck on the next complete sweep. Repeated observations of the same hold do not create more rooms or activity. An admitted, eligible coordinator can resume same-head custody without changing an existing lease or overriding an advise-only posture. A different lapsed owner still requires the normal handoff.
+
+Extend **VERIFY-PR-1** with a reviewer-only dependency PR already in custody. Verify one hold across a replay, then admit an eligible coordinator and verify one resume on the same room. Also verify that an exact ownerless PR reuses its room, a current lease is untouched, and a lapsed room with a different owner records a hold without transferring it. Use the binding runtime's focused tests and the localization, style, and Spec/Plan/Doc guards before the exact-tree gate.
+
+The installed acceptance in **VERIFY-PR-3** still requires an eligible dependency PR to reach a provider-confirmed outcome without a chat takeover. A mislabeled dependency PR such as #7184 needs an authorized supersession decision or an acknowledged hold on its actual head. It is not a successful merge fixture.
+
 ## 2. Bounded repair and protected publication
 
 **FLOW-PR-2** extends `build-pr-delivery-reconcile.ts` and `pr-ci-repair.ts` after FLOW-PR-1. Use the existing repair dispatcher, outcome record, review readiness refresh, and queue writer. Select a repair executor for verified PR-only custody through the existing Workroom authority path. A FeatureBuild, when already linked, keeps its established path. The repair dispatcher spends the existing per-PR attempt allowance and records a bounded hold or escalation when it cannot acquire an eligible worker.

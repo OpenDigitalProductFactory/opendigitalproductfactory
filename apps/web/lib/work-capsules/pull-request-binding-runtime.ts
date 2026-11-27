@@ -359,7 +359,7 @@ async function reconcileOpenPullRequestCustody(input: {
           });
           if (update.count !== 1) return false;
           await tx.workroomActivity.create({ data: {
-            workCapsuleId: existing.id, kind: recoveryReason ? "pr-custody-hold" : "pr-custody-resumed",
+            workCapsuleId: existing.id, kind: recoveryReason ? "pull-request-custody-hold" : "pull-request-custody-resumed",
             summary: recoveryReason ? `PR #${observation.number} waits for the pull-request-flow coordinator (${recoveryReason}).`
               : `PR #${observation.number} custody resumed with an admitted accountable actor.`,
             payload: { syncRunId, ...metadata },
@@ -395,7 +395,7 @@ async function reconcileOpenPullRequestCustody(input: {
                 data: { workspaceState: { ...state, prCustodyHold: newHold } as import("@dpf/db").Prisma.InputJsonValue },
               });
               if (update.count !== 1) return false;
-              await tx.workroomActivity.create({ data: { workCapsuleId: existing.id, kind: "pr-custody-hold",
+              await tx.workroomActivity.create({ data: { workCapsuleId: existing.id, kind: "pull-request-custody-hold",
                 summary: `PR #${observation.number} waits for its existing owner or the pull-request-flow coordinator (${reason}).`,
                 payload: { syncRunId, pullRequestNumber: observation.number, ...newHold } } });
               return true;
