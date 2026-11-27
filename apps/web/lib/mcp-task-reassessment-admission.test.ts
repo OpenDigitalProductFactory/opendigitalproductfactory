@@ -94,6 +94,46 @@ async function sealingFixture() {
   return { ...f, predecessors, oldProgress, database, sealInput: { persistedInput, parsed: f.input.parsed, proof: f.input.proof,
     originals: f.input.originals, qualification, authorityDecisionId: f.input.authorityDecisionId } };
 }
+function singleFixture() {
+  const f = fixture(), binding = f.input.parsed.initiativeReviewBinding!;
+  binding.itemId = "BI-348CC53B"; binding.gate = "spec-approval";
+  f.input.originals = [f.input.originals[1]!];
+  const original = f.input.originals[0]!;
+  original.readback.binding!.itemId = binding.itemId;
+  binding.presentReassessment!.originalTaskRunId = original.taskRunId;
+  binding.presentReassessment!.originalRequestDigest = original.requestDigest;
+  binding.presentReassessment!.predecessorTaskRunIds = [original.taskRunId];
+  f.input.proof.policy = { ...f.input.proof.policy, schemaVersion: 2, subjectItemId: "BI-348CC53B", maxAssessments: 1,
+    requirements: [f.input.proof.policy.requirements[1]!] };
+  f.input.parsed.authorityScope = [`backlog-item:${binding.itemId}`, "tool:read_source_at_version", "tool:record_initiative_design_review"];
+  const key = createHash("sha256").update(canonicalJson({ itemId: binding.itemId, gate: binding.gate, artifactRef: binding.artifactRef, present: binding.presentReassessment })).digest("hex");
+  f.input.parsed.idempotencyKey = `review-reassessment-v1-${key}`;
+  return f;
+}
+
+describe("closed S5 transaction allocation", () => {
+  it("admits the exact one-original closed policy", async () => {
+    const f = singleFixture();
+    await expect(createPresentReassessmentAdmission(f.input, { validateAuthority: f.validateAuthority }).admissionGuard(f.tx)).resolves.toBeUndefined();
+  });
+  it("conserves allocation across changed artifact and family", async () => {
+    const f = singleFixture(); lineage.rows.push({ id: "spent", taskRunId: "TR-spent", requestDigest: "f".repeat(64), status: "canceled",
+      binding: { ...f.input.parsed.initiativeReviewBinding!, artifactRef: { ...f.input.parsed.initiativeReviewBinding!.artifactRef, commitSha: "f".repeat(40) } } });
+    await expect(createPresentReassessmentAdmission(f.input, { validateAuthority: f.validateAuthority }).admissionGuard(f.tx))
+      .rejects.toMatchObject({ code: "reassessment-allocation-limit-exhausted" });
+  });
+  it("joins only an exact accepted request identity", async () => {
+    const f = singleFixture(); lineage.rows.push({ id: "winner", taskRunId: "TR-winner", requestDigest: remoteTaskRequestDigest(f.input.parsed), binding: f.input.parsed.initiativeReviewBinding });
+    await expect(createPresentReassessmentAdmission(f.input, { validateAuthority: f.validateAuthority }).admissionGuard(f.tx))
+      .rejects.toMatchObject({ code: "reassessment-existing-assessment", taskRunId: "TR-winner" });
+  });
+  it("refuses a same-artifact different request instead of joining", async () => {
+    const f = singleFixture(); lineage.rows.push({ id: "winner", taskRunId: "TR-winner", requestDigest: "f".repeat(64), binding: f.input.parsed.initiativeReviewBinding });
+    await expect(createPresentReassessmentAdmission(f.input, { validateAuthority: f.validateAuthority }).admissionGuard(f.tx))
+      .rejects.toMatchObject({ code: "reassessment-allocation-limit-exhausted" });
+  });
+});
+
 describe("atomic present reassessment allocation", () => {
   it("joins the existing exact requirement across families instead of allocating again", async () => {
     const f = fixture(); lineage.rows.push({ id: "existing", taskRunId: "TR-other-family", requestDigest: "f".repeat(64), binding: f.input.parsed.initiativeReviewBinding });

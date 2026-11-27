@@ -79,6 +79,16 @@ function exhaustedProgress(kind: "wait" | "escalation" = "wait") {
     : { terminalWriterEscalation: { schemaVersion: 1, code: "terminal_writer_retry_exhausted", writerToolName: "record_initiative_design_review",
         action: "select-different-reviewer-provider", attempt: 3, observedAt: "2026-10-22T12:00:00.000Z" } };
 }
+describe("closed S5 authority allocation", () => {
+  it("refuses a second accepted subject allocation on a different artifact", async () => {
+    const f = freshLineageFixture();
+    Object.assign(f.context.proof.policy, { schemaVersion: 2, maxAssessments: 1 });
+    f.snapshot.rows.push({ ...f.own, taskRunId: "TR-spent", requestDigest: "f".repeat(64),
+      binding: { ...f.own.binding, artifactRef: { ...f.own.binding.artifactRef, commitSha: "f".repeat(40) } } });
+    await expect(f.validate(f.tx as never, f.context as never)).rejects.toMatchObject({ code: "reassessment-allocation-limit-exhausted" });
+  });
+});
+
 describe("normal current authority remains mandatory", () => {
   it("rechecks the real request allow decision and both actor/grant owners inside the provided transaction", async () => {
     const f = fixture(); await f.validate(f.tx as never, f.context as never);

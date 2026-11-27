@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseReassessmentPolicy, parsePresentReassessmentRelation, reassessmentPolicyDigest, type ReassessmentPolicy } from "./mcp-task-reassessment-policy";
+import { validReassessmentPolicyShape, parseReassessmentPolicy, parsePresentReassessmentRelation, reassessmentPolicyDigest, type ReassessmentPolicy } from "./mcp-task-reassessment-policy";
 import { parseRemoteTaskSubmitParams } from "./mcp-task-submit-params";
 import { REMOTE_TASK_REQUEST_DIGEST_VERSION, remoteTaskRequestDigest, remoteTaskRequestMatches } from "./mcp-task-capacity-contract";
 
@@ -42,6 +42,36 @@ describe("approved immutable reassessment policy", () => {
     document(policy) + "\n```review-reassessment-policy-v1\n{",
   ])("refuses absent, ambiguous or expanded authority", (source) => {
     expect(parseReassessmentPolicy(source)).toBeNull();
+  });
+});
+
+describe("closed S5 policy version", () => {
+  const single = { ...policy, schemaVersion: 2, subjectItemId: "BI-348CC53B", maxAssessments: 1,
+    requirements: [policy.requirements[1]] };
+  const v2 = (value: unknown) => document(value).replaceAll("review-reassessment-policy-v1", "review-reassessment-policy-v2");
+  it("accepts only the explicitly versioned single spec approval", () => {
+    expect(parseReassessmentPolicy(v2(single))).toEqual(single);
+    expect(parseReassessmentPolicy(document(single))).toBeNull();
+  });
+  it.each([
+    { ...single, subjectItemId: "BI-285EF102" },
+    { ...single, maxAssessments: 2 },
+    { ...single, requirements: policy.requirements },
+    { ...single, requirements: [policy.requirements[0]] },
+    { ...single, originalReplay: true },
+  ])("rejects expanded S5 authority", value => expect(parseReassessmentPolicy(v2(value))).toBeNull());
+  it.each([
+    { ...single, extra: true }, { ...single, originalReplay: true },
+    { ...single, historicalConsumption: "zero" }, { ...single, currentLimits: "waived" },
+    { ...single, operatorEvidenceActivityIds: [] }, { ...single, operatorEvidenceActivityIds: ["x", "x"] },
+    { ...single, requirements: [{ ...single.requirements[0], originalRequestDigest: "invalid" }] },
+    { ...single, requirements: [{ ...single.requirements[0], maxAssessments: 2 }] },
+    { ...policy, requirements: [policy.requirements[0], policy.requirements[0]] },
+  ])("shared validator refuses malformed full structure", value => {
+    expect(validReassessmentPolicyShape(value)).toBe(false);
+  });
+  it("rejects mixed recognized version blocks", () => {
+    expect(parseReassessmentPolicy(document(policy) + v2(single))).toBeNull();
   });
 });
 

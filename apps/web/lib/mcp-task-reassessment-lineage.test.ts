@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { remoteTaskRequestDigest } from "./mcp-task-capacity-contract";
 import { parseRemoteTaskSubmitParams } from "./mcp-task-submit-params";
 import { collectReassessmentLineage, lockReassessmentLineage, revalidateReassessmentLineage } from "./mcp-task-reassessment-lineage";
+import type { ReassessmentPolicy } from "./mcp-task-reassessment-policy";
 import type { Prisma } from "@dpf/db";
 import { parseInitiativeReviewBinding, type InitiativeReviewBinding } from "./mcp-task-review-contract";
 
@@ -49,6 +50,33 @@ function matches(row: Record<string, unknown>, where: Record<string, unknown>): 
     throw new Error(`Unsupported fixture predicate: ${key}`);
   });
 }
+describe("closed S5 subject-wide lineage", () => {
+  it("includes a present allocation across unrelated artifacts and original families", async () => {
+    const f = fixture();
+    const singleBinding = { ...binding, itemId: "BI-348CC53B", gate: "spec-approval" };
+    function convert(row: ReturnType<typeof request>, present = false) {
+      const b = { ...row.a2aMetadata.initiativeReviewBinding, itemId: singleBinding.itemId, gate: "spec-approval",
+        ...(present ? { presentReassessment: { schemaVersion: 1, authorizationItemId: "BI-7906C73E", baselineId: "baseline-other", policyDigest: "c".repeat(64),
+          originalTaskRunId: "TR-unrelated", originalRequestDigest: "a".repeat(64), predecessorTaskRunIds: ["TR-unrelated"], authorityArtifact: binding.artifactRef } } : {}) };
+      row.authorityScope = [`backlog-item:${singleBinding.itemId}`, "tool:record_initiative_design_review", "tool:read_source_at_version"];
+      row.a2aMetadata.initiativeReviewBinding = parseInitiativeReviewBinding(b)!;
+      const parsed = parseRemoteTaskSubmitParams({ agentId: row.currentAgentId, routeContext: row.routeContext, title: row.title, objective: row.objective,
+        prompt: row.objective, idempotencyKey: row.a2aMetadata.idempotencyKey, riskClass: "bounded-write", authorityScope: row.authorityScope, initiativeReviewBinding: b });
+      if (typeof parsed === "string") throw new Error(parsed);
+      row.a2aMetadata.requestDigest = remoteTaskRequestDigest(parsed);
+    }
+    f.rows.forEach(row => convert(row));
+    const spent = request("TR-spent", "another-owner", "spec-approval", { ...binding.artifactRef, commitSha: "d".repeat(40) } as typeof binding.artifactRef);
+    const unrelated = request("TR-unrelated", "another-owner", "spec-approval", { ...binding.artifactRef, commitSha: "d".repeat(40) } as typeof binding.artifactRef);
+    convert(unrelated); convert(spent, true); f.rows.push(unrelated, spent);
+    f.mocks.backlogItem.findUnique.mockResolvedValue({ id: "subject-row", itemId: singleBinding.itemId, organizationId: "org" });
+    const input = { ...f.input, binding: parseInitiativeReviewBinding(singleBinding)!, originals: [{ taskRunId: f.rows[0]!.taskRunId, requestDigest: f.rows[0]!.a2aMetadata.requestDigest }],
+      policy: { schemaVersion: 2, subjectItemId: "BI-348CC53B", maxAssessments: 1, historicalConsumption: "retain-unknown", currentLimits: "normal-recorded", originalReplay: false,
+        operatorEvidenceActivityIds: ["evidence"], requirements: [{ gate: "spec-approval", maxAssessments: 1, originalRequestDigest: f.rows[0]!.a2aMetadata.requestDigest }] } as ReassessmentPolicy };
+    expect((await collectReassessmentLineage(f.tx, input)).rows.map(row => row.taskRunId)).toContain("TR-spent");
+  });
+});
+
 describe("authoritative bounded reassessment lineage", () => {
   it("includes accepted history across humans, reviewers and terminal states", async () => {
     const f = fixture(); const snapshot = await collectReassessmentLineage(f.tx, f.input);

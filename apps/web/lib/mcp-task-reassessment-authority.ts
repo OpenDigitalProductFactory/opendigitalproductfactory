@@ -147,13 +147,13 @@ export function createPresentReassessmentAuthority(input: {
         const subject = await tx.backlogItem.findUnique({ where: { itemId: binding.itemId }, select: { id: true, organizationId: true } });
         if (!subject || subject.id !== proof.subjectRowId) refuse("reassessment-lineage-unproven");
         snapshot = await collectReassessmentLineage(tx, { binding, organizationId: subject.organizationId,
-          originals: context.originals.map(row => ({ taskRunId: row.taskRunId, requestDigest: row.requestDigest })) });
+          ...(proof.policy.schemaVersion === 2 ? { policy: proof.policy } : {}), originals: context.originals.map(row => ({ taskRunId: row.taskRunId, requestDigest: row.requestDigest })) });
       } catch { refuse("reassessment-lineage-unproven"); }
       const present = snapshot.rows.filter(row => row.binding.presentReassessment);
       const own = present.filter(row => row.taskRunId === root.taskRunId);
       if (own.length !== 1 || own[0]!.userId !== root.userId || own[0]!.currentAgentId !== root.agentId
         || own[0]!.requestDigest !== root.requestDigest || !equal(own[0]!.binding, binding)) refuse("reassessment-lineage-unproven");
-      if (present.length > 2 || present.filter(row => row.binding.gate === binding.gate && equal(row.binding.artifactRef, binding.artifactRef)).length > 1) {
+      if (present.length > (proof.policy.schemaVersion === 2 ? proof.policy.maxAssessments : 2) || present.filter(row => row.binding.gate === binding.gate && equal(row.binding.artifactRef, binding.artifactRef)).length > 1) {
         refuse("reassessment-allocation-limit-exhausted");
       }
     }

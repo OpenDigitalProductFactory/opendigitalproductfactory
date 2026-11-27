@@ -1,3 +1,4 @@
+import { validReassessmentPolicyShape, type ReassessmentPolicy } from "./mcp-task-reassessment-policy";
 import { createHash } from "node:crypto";
 import { canonicalJson } from "@dpf/integration-shared/canonical-json";
 import type { Prisma } from "@dpf/db";
@@ -6,7 +7,7 @@ import { parseRemoteTaskSubmitParams } from "./mcp-task-submit-params";
 import { remoteTaskRequestMatches } from "./mcp-task-capacity-contract";
 
 export type ReassessmentLineageInput = { binding: InitiativeReviewBinding; organizationId: string | null;
-  originals: readonly { taskRunId: string; requestDigest: string }[] };
+  originals: readonly { taskRunId: string; requestDigest: string }[]; policy?: ReassessmentPolicy };
 export type ReassessmentLineageRow = { id: string; taskRunId: string; userId: string; currentAgentId: string | null;
   parentTaskRunId: string | null; status: string; requestDigest: string; binding: InitiativeReviewBinding;
   authorityScope: unknown; a2aMetadata: unknown; progressPayload: unknown; updatedAt: string };
@@ -109,6 +110,7 @@ export async function collectReassessmentLineage(tx: Prisma.TransactionClient, i
     || input.originals.length > 2 || new Set(input.originals.map(row => row.taskRunId)).size !== input.originals.length
     || new Set(input.originals.map(row => row.requestDigest)).size !== input.originals.length
     || input.originals.some(row => !row.taskRunId.startsWith("TR-") || !/^[a-f0-9]{64}$/.test(row.requestDigest))) return fail();
+  if (input.policy && (!validReassessmentPolicyShape(input.policy) || input.policy.subjectItemId !== input.binding.itemId)) return fail();
   const subject = await tx.backlogItem.findUnique({ where: { itemId: input.binding.itemId }, select: { id: true, itemId: true, organizationId: true } });
   if (!subject || subject.organizationId !== input.organizationId) return fail();
   const aliases = [subject.id, subject.itemId];
@@ -123,7 +125,7 @@ export async function collectReassessmentLineage(tx: Prisma.TransactionClient, i
   if (!keys.has(key(input.binding))) return fail();
   for (const row of await subjectCandidates(tx, subject)) {
     const checked = accepted(row, false);
-    if (checked && aliases.includes(checked.binding.itemId) && keys.has(key(checked.binding))) members.set(checked.id, checked);
+    if (checked && aliases.includes(checked.binding.itemId) && (keys.has(key(checked.binding)) || input.policy?.schemaVersion === 2 && !!checked.binding.presentReassessment)) members.set(checked.id, checked);
   }
   for (let depth = 0; depth <= MAX_TASKS; depth++) {
     const before = members.size, current = [...members.values()], ids = current.flatMap(row => [row.id, row.taskRunId]);
