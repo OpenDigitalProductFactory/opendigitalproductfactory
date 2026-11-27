@@ -61,6 +61,54 @@ If a peer mirror is in progress or holds an active claim, the claim is refused w
 
 Claiming a peer's mirror is likewise refused unless forced: the mirror is the peer's record, and its delivery is the peer's.
 
+#### Owned recovery for a refused claim (BI-35E8A80F)
+
+This is a proposed successor to the refusal path, not deployed behavior. It
+preserves the duplicate-work guard and uses the home-only claim contract in
+[Production authority and development companion](2026-10-27-production-authority-development-companion-design.md)
+§5.2. The approved rules for existing claims are unchanged.
+
+**OBJ-CLAIM-RECOVERY:** A refused claim leads to one attributable recovery
+action or an explicit owned wait. A verified home disposition re-enters
+ordinary admission without an operator prompting it.
+
+A holder's published lease is evidence to reconcile, not permission to take
+the claim. Keep the refusal with the exact home, item, holder, observed claim
+identity and the current request identity. Resolve the home Workroom or
+coworker through its current delegated action authority and trusted route.
+Governing policy directs the decision but does not grant access. If no actor
+or trusted route is available, return that state with the accountable local
+coordination role, the event that would reopen it, and the next bounded check.
+Record acknowledged dispatch only from the underlying action, not from
+accepting a message into an outbox. Unrelated admissions remain independent.
+
+The original refusal occurs before creating a claimant Workroom. Use the
+existing requesting work/task context or a currently authorized coordination
+owner to retain the recovery obligation. Do not create a shadow claimant or
+write the mirrored item to store it. Where neither context is admitted, report
+the missing owner or authority instead of inventing a binding, sending to the
+home, or retrying under a different actor. Confirm the exact durable owner and
+write boundary during implementation admission.
+
+Only an attributable home disposition, received through the trusted exchange,
+can reopen ordinary admission. The existing sync compares claim changes
+independently of item version. Reconcile the committed claim observation to
+the original recovery identity and re-evaluate admission once, verifying
+current principal, scope, source and consent before any start. Duplicate or
+stale observations cannot authorize another effect. A lost acknowledgment
+requires readback of the original result, not a replacement request. Polling in
+the existing reconciliation path is a bounded recovery mechanism, not another
+scheduler. No grant, schema, installation transport or ledger is introduced.
+
+| ID | Objective | Acceptance |
+|---|---|---|
+| AC-CLAIM-01 | OBJ-CLAIM-RECOVERY | Repeated identical refusals retain one owned obligation, keep the active claim held, and do not treat expiry as release. |
+| AC-CLAIM-02 | OBJ-CLAIM-RECOVERY | Missing authority or unreachable home remains an owned wait that allows unrelated admitted work. Only a genuinely reserved act or exhausted authorized recovery reaches a human. |
+| AC-CLAIM-03 | OBJ-CLAIM-RECOVERY | A trusted disposition at an unchanged item version re-enters ordinary admission once. Restart, duplicate and stale delivery do not lose or repeat an acknowledged effect. |
+| AC-CLAIM-04 | OBJ-CLAIM-RECOVERY | Synthetic proof captures admitted action, acknowledgment, terminal evidence and recovery, separately from activity or enqueue. |
+
+Sequencing and proof are in the [repair plan](../plans/2026-11-27-federated-workroom-claim-recovery.md).
+
 ### 3.6 A merged PR closes the twins it closes
 `applyGitHubPullRequestToBacklog` already moves the items a merged PR names to `awaiting-acceptance`. It now also moves this install's own items that share an intake origin marker with any named item, mirror or local, under the same coding-pool status rule. It records the twin as the reason. Mirrors are never moved here; the peer's merge signal moves its own copy.
 
