@@ -2,12 +2,16 @@ import { parseCapturedJson } from "./shared/captured-effect-store";
 import { createHash } from "node:crypto";
 import { canonicalJson } from "@dpf/integration-shared/canonical-json";
 
-export type ReassessmentPolicy = {
-  schemaVersion: 1; subjectItemId: "BI-285EF102"; maxAssessments: 2;
+type ReassessmentPolicyCommon = {
   historicalConsumption: "retain-unknown"; currentLimits: "normal-recorded"; originalReplay: false;
   operatorEvidenceActivityIds: string[];
   requirements: Array<{ gate: "design-spec" | "spec-approval"; originalRequestDigest: string; maxAssessments: 1 }>;
 };
+export type ReassessmentPolicy = ReassessmentPolicyCommon & (
+  | { schemaVersion: 1; subjectItemId: "BI-285EF102"; maxAssessments: 2 }
+  | { schemaVersion: 2; subjectItemId: "BI-348CC53B"; maxAssessments: 1 }
+);
+
 export type PresentReassessmentRelation = {
   schemaVersion: 1; authorizationItemId: string; baselineId: string; policyDigest: string;
   originalTaskRunId: string; originalRequestDigest: string; predecessorTaskRunIds: string[];
@@ -25,22 +29,29 @@ const unique = (v: unknown, max: number): v is string[] => Array.isArray(v) && v
  * independently approved, current immutable baseline and live owner checks. */
 export function parseReassessmentPolicy(source: string): ReassessmentPolicy | null {
   if (typeof source !== "string" || Buffer.byteLength(source) > 1024 * 1024) return null;
-  const blocks = [...source.matchAll(/^```review-reassessment-policy-v1\s*\r?\n([\s\S]*?)^```[ \t]*$/gm)];
-  if (blocks.length !== 1 || [...source.matchAll(/^```review-reassessment-policy-v1[ \t]*\r?$/gm)].length !== 1) return null;
+  const blocks = [...source.matchAll(/^```review-reassessment-policy-v([12])\s*\r?\n([\s\S]*?)^```[ \t]*$/gm)];
+  if (blocks.length !== 1 || [...source.matchAll(/^```review-reassessment-policy-v[12][ \t]*\r?$/gm)].length !== 1) return null;
   let v: unknown;
-  try { v = parseCapturedJson(blocks[0]![1]!); } catch { return null; }
+  try { v = parseCapturedJson(blocks[0]![2]!); } catch { return null; }
+  return validReassessmentPolicyShape(v) && v.schemaVersion === Number(blocks[0]![1]) ? v : null;
+}
+
+/** Full closed value validation shared by parser and transaction consumers. */
+export function validReassessmentPolicyShape(v: unknown): v is ReassessmentPolicy {
   if (!object(v) || !keys(v, ["schemaVersion", "subjectItemId", "maxAssessments", "historicalConsumption", "currentLimits", "originalReplay", "operatorEvidenceActivityIds", "requirements"])
-    || v.schemaVersion !== 1 || v.subjectItemId !== "BI-285EF102" || v.maxAssessments !== 2
+    || !(v.schemaVersion === 1 && v.subjectItemId === "BI-285EF102" && v.maxAssessments === 2 && Array.isArray(v.requirements) && v.requirements.length === 2
+      || v.schemaVersion === 2 && v.subjectItemId === "BI-348CC53B" && v.maxAssessments === 1 && Array.isArray(v.requirements) && v.requirements.length === 1)
     || v.historicalConsumption !== "retain-unknown" || v.currentLimits !== "normal-recorded" || v.originalReplay !== false
-    || !unique(v.operatorEvidenceActivityIds, 20) || !Array.isArray(v.requirements) || v.requirements.length !== 2) return null;
+    || !unique(v.operatorEvidenceActivityIds, 20) || !Array.isArray(v.requirements) ) return false;
   const gates = new Set<string>(); const originals = new Set<string>();
   for (const requirement of v.requirements) {
     if (!object(requirement) || !keys(requirement, ["gate", "originalRequestDigest", "maxAssessments"])
       || !["design-spec", "spec-approval"].includes(String(requirement.gate)) || !digest(requirement.originalRequestDigest)
-      || requirement.maxAssessments !== 1 || gates.has(String(requirement.gate)) || originals.has(requirement.originalRequestDigest)) return null;
+      || v.schemaVersion === 2 && requirement.gate !== "spec-approval"
+      || requirement.maxAssessments !== 1 || gates.has(String(requirement.gate)) || originals.has(requirement.originalRequestDigest)) return false;
     gates.add(String(requirement.gate)); originals.add(requirement.originalRequestDigest);
   }
-  return v as ReassessmentPolicy;
+  return true;
 }
 
 /** All additive relation bytes survive request digest reconstruction. An older

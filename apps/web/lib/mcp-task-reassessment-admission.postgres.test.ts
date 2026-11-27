@@ -36,21 +36,22 @@ describe.skipIf(!url)("atomic production reassessment hooks on PostgreSQL", () =
     for (const table of ["TaskArtifact", "TaskMessage", "TaskRun"]) await fixture.pool.query(`DROP TRIGGER IF EXISTS "admission_failure" ON "${table}"`);
     await fixture.pool.query(`TRUNCATE ${tables.map(table => `"${table}"`).join(",")}`);
   });
-  function packet(gate: "design-spec" | "spec-approval", presentReassessment?: unknown) {
-    const binding = parseInitiativeReviewBinding({ itemId: "BI-285EF102", gate, writerToolName: "record_initiative_design_review", expectedCurrentBaselineId: null,
+  function packet(gate: "design-spec" | "spec-approval", presentReassessment?: unknown, subject = "BI-285EF102") {
+    const binding = parseInitiativeReviewBinding({ itemId: subject, gate, writerToolName: "record_initiative_design_review", expectedCurrentBaselineId: null,
       artifactRef, workroomRef, ...(presentReassessment ? { presentReassessment } : {}) })!;
     const key = presentReassessment ? `review-reassessment-v1-${hash({ itemId: binding.itemId, gate, artifactRef, present: binding.presentReassessment })}` : `fixture-original-${gate}`;
     const parsed = parseRemoteTaskSubmitParams({ agentId: "reviewer", routeContext: "/build", title: "Synthetic exact assessment",
       objective: "Synthetic exact assessment only", prompt: "Synthetic exact assessment only", riskClass: "bounded-write", idempotencyKey: key,
-      initiativeReviewBinding: binding, authorityScope: ["backlog-item:BI-285EF102", "tool:read_source_at_version", "tool:record_initiative_design_review"] });
+      initiativeReviewBinding: binding, authorityScope: [`backlog-item:${subject}`, "tool:read_source_at_version", "tool:record_initiative_design_review"] });
     if (typeof parsed === "string") throw new Error(parsed); return parsed;
   }
-  async function setup() {
-    await fixture.db.backlogItem.createMany({ data: [{ id: "fixture-subject", itemId: "BI-285EF102", title: "Synthetic subject", status: "open", type: "product", workType: "feature", scopeKind: "platform" },
+  async function setup(single = false) {
+    const subject = single ? "BI-348CC53B" : "BI-285EF102";
+    await fixture.db.backlogItem.createMany({ data: [{ id: "fixture-subject", itemId: subject, title: "Synthetic subject", status: "open", type: "product", workType: "feature", scopeKind: "platform" },
       { id: "fixture-authorization", itemId: "BI-7906C73E", title: "Synthetic authorization", status: "open", type: "product", workType: "feature", scopeKind: "platform" }] });
     const originals: AuthorizedReassessmentOriginal[] = [];
-    for (const gate of ["design-spec", "spec-approval"] as const) {
-      const parsed = packet(gate), requestDigest = remoteTaskRequestDigest(parsed), taskRunId = `TR-fixture-original-${gate}`;
+    for (const gate of (single ? ["spec-approval"] : ["design-spec", "spec-approval"]) as Array<"design-spec" | "spec-approval">) {
+      const parsed = packet(gate, undefined, subject), requestDigest = remoteTaskRequestDigest(parsed), taskRunId = `TR-fixture-original-${gate}`;
       const row = await fixture.db.taskRun.create({ data: { taskRunId, userId: "fixture-owner", currentAgentId: parsed.agentId,
         title: parsed.title, objective: parsed.objective, routeContext: parsed.routeContext, status: "input-required", authorityScope: json(parsed.authorityScope),
         progressPayload: json(progress), a2aMetadata: json({ trigger: "external-mcp", requestDigestVersion: 2, requestDigest, requestedAgentId: parsed.agentId,
@@ -58,11 +59,11 @@ describe.skipIf(!url)("atomic production reassessment hooks on PostgreSQL", () =
       await fixture.db.taskMessage.create({ data: { id: randomUUID(), messageId: randomUUID(), taskRunId: row.id, role: "user", parts: json([{ type: "message", text: parsed.prompt }]) } });
       originals.push({ gate, taskRunId, requestDigest, readback: { schemaVersion: 1, taskRunId, classification: "unknown", readOnly: true, replayAllowed: false,
         bounded: true, reason: "Synthetic unknown history", observations: [], missingProof: ["settlement"], binding: { requestDigest, checkpointUpdatedAt: row.updatedAt.toISOString(),
-          attempt: 1, dispatchAttempt: 1, writerAttempt: 1, reviewerAgentId: parsed.agentId, itemId: "BI-285EF102", gate, writerToolName: "record_initiative_design_review", artifactRef, workroomId: workroomRef.workroomId } } });
+          attempt: 1, dispatchAttempt: 1, writerAttempt: 1, reviewerAgentId: parsed.agentId, itemId: subject, gate, writerToolName: "record_initiative_design_review", artifactRef, workroomId: workroomRef.workroomId } } });
     }
-    const policy: ApprovedReassessmentPolicy["policy"] = { schemaVersion: 1, subjectItemId: "BI-285EF102", maxAssessments: 2, historicalConsumption: "retain-unknown",
+    const policy = { ...(single ? { schemaVersion: 2, subjectItemId: "BI-348CC53B", maxAssessments: 1 } : { schemaVersion: 1, subjectItemId: "BI-285EF102", maxAssessments: 2 }), historicalConsumption: "retain-unknown",
       currentLimits: "normal-recorded", originalReplay: false, operatorEvidenceActivityIds: ["synthetic-owner-evidence"],
-      requirements: originals.map(original => ({ gate: original.gate, originalRequestDigest: original.requestDigest, maxAssessments: 1 })) };
+      requirements: originals.map(original => ({ gate: original.gate, originalRequestDigest: original.requestDigest, maxAssessments: 1 })) } as ApprovedReassessmentPolicy["policy"];
     const proof: ApprovedReassessmentPolicy = { policy, policyDigest: reassessmentPolicyDigest(policy), baselineId: "baseline-fixture", artifactDigest: "sha256:" + "c".repeat(64),
       authorityArtifact: artifactRef, authorizationItemId: "BI-7906C73E", authorizationRowId: "fixture-authorization", subjectRowId: "fixture-subject" };
     return { originals, proof };
@@ -70,7 +71,7 @@ describe.skipIf(!url)("atomic production reassessment hooks on PostgreSQL", () =
   function inputFor(f: Awaited<ReturnType<typeof setup>>, taskRunId: string, gate: "design-spec" | "spec-approval" = "design-spec"): PresentReassessmentAdmissionInput {
     const original = f.originals.find(original => original.gate === gate)!;
     const parsed = packet(gate, { schemaVersion: 1, authorizationItemId: f.proof.authorizationItemId, baselineId: f.proof.baselineId, policyDigest: f.proof.policyDigest,
-      originalTaskRunId: original.taskRunId, originalRequestDigest: original.requestDigest, predecessorTaskRunIds: [original.taskRunId], authorityArtifact: f.proof.authorityArtifact });
+      originalTaskRunId: original.taskRunId, originalRequestDigest: original.requestDigest, predecessorTaskRunIds: [original.taskRunId], authorityArtifact: f.proof.authorityArtifact }, f.proof.policy.subjectItemId);
     const budget = reassessmentBudgetFixture(); budget.registryLimits.perTaskTokenLimit = 50_000; budget.executionConfigLimits.perTaskTokenLimit = 50_000; budget.configuredPerTaskLimit = 50_000;
     const { configurationDigest: _digest, ...unsigned } = budget; budget.configurationDigest = hash(unsigned);
     return { parsed, taskRunId, userId: "fixture-owner", actingAgentId: "fixture-author", authorityDecisionId: "fixture-normal-authority", ...f,
@@ -132,6 +133,57 @@ describe.skipIf(!url)("atomic production reassessment hooks on PostgreSQL", () =
     const loser = results[0]!.status === "rejected" ? left : right;
     await expect(admit(loser)).rejects.toMatchObject({ code: "reassessment-existing-assessment" });
     expect(await fixture.db.taskRun.count()).toBe(3); expect(await fixture.db.taskArtifact.count()).toBe(1); expect(await fixture.db.toolExecution.count()).toBe(0);
+  });
+  async function changedFamily(input: PresentReassessmentAdmissionInput) {
+    const next = structuredClone(input), binding = next.parsed.initiativeReviewBinding!;
+    if (binding.artifactRef.kind !== "repo-blob-at-commit") throw new Error("Expected immutable blob");
+    binding.artifactRef = { ...binding.artifactRef, commitSha: "e".repeat(40) };
+    binding.workroomRef!.headSha = "e".repeat(40);
+    const original = next.originals[0]!;
+    const originalBinding = { ...binding }; delete originalBinding.presentReassessment;
+    const originalPacket = { ...next.parsed, idempotencyKey: "fixture-changed-original", initiativeReviewBinding: originalBinding };
+    const originalDigest = remoteTaskRequestDigest(originalPacket);
+    original.taskRunId = "TR-S5-changed-original"; original.requestDigest = originalDigest;
+    original.readback.taskRunId = original.taskRunId;
+    original.readback.binding = { ...original.readback.binding!, requestDigest: originalDigest, artifactRef: binding.artifactRef };
+    const row = await fixture.db.taskRun.create({ data: { taskRunId: original.taskRunId, userId: next.userId, currentAgentId: next.parsed.agentId,
+      title: originalPacket.title, objective: originalPacket.objective, routeContext: originalPacket.routeContext, status: "input-required", authorityScope: json(originalPacket.authorityScope),
+      progressPayload: json(progress), a2aMetadata: json({ trigger: "external-mcp", requestDigestVersion: 2, requestDigest: originalDigest,
+        requestedAgentId: originalPacket.agentId, idempotencyKey: originalPacket.idempotencyKey, riskClass: originalPacket.riskClass,
+        requestObjective: originalPacket.objective, initiativeReviewBinding: originalBinding }) } });
+    await fixture.db.taskMessage.create({ data: { id: randomUUID(), messageId: randomUUID(), taskRunId: row.id, role: "user", parts: json([{ type: "message", text: originalPacket.prompt }]) } });
+    next.proof.policy.requirements[0]!.originalRequestDigest = originalDigest;
+    next.proof.policyDigest = reassessmentPolicyDigest(next.proof.policy); next.proof.baselineId = "baseline-changed-policy";
+    Object.assign(binding.presentReassessment!, { originalTaskRunId: original.taskRunId, originalRequestDigest: originalDigest,
+      predecessorTaskRunIds: [original.taskRunId], policyDigest: next.proof.policyDigest, baselineId: next.proof.baselineId });
+    next.taskRunId = "TR-S5-changed-present";
+    next.parsed.idempotencyKey = `review-reassessment-v1-${hash({ itemId: binding.itemId, gate: binding.gate, artifactRef: binding.artifactRef, present: binding.presentReassessment })}`;
+    return next;
+  }
+  it("serializes S5 allocation across changed artifacts and policy families", async () => {
+    const f = await setup(true), left = inputFor(f, "TR-S5-first-family", "spec-approval"), right = await changedFamily(left);
+    const results = await Promise.allSettled([admit(left), admit(right)]);
+    expect(results.filter(result => result.status === "fulfilled")).toHaveLength(1);
+    const loser = results[0]!.status === "rejected" ? left : right;
+    await expect(admit(loser)).rejects.toMatchObject({ code: "reassessment-allocation-limit-exhausted" });
+    expect(await fixture.db.taskArtifact.count()).toBe(1);
+    expect(await fixture.db.taskRun.count()).toBe(3);
+    expect(await fixture.db.toolExecution.count()).toBe(0);
+  });
+  it("conserves S5 total one across concurrent keys and terminal outcomes", async () => {
+    const f = await setup(true), left = inputFor(f, "TR-S5-left", "spec-approval"), right = inputFor(f, "TR-S5-right", "spec-approval");
+    right.parsed = { ...right.parsed, title: "Different accepted request" };
+    const results = await Promise.allSettled([admit(left), admit(right)]);
+    expect(results.filter(result => result.status === "fulfilled")).toHaveLength(1);
+    const winner = results[0]!.status === "fulfilled" ? left : right;
+    const loser = winner === left ? right : left;
+    for (const status of ["working", "failed", "canceled", "input-required"] as const) {
+      await fixture.db.taskRun.update({ where: { taskRunId: winner.taskRunId }, data: { status } });
+      await expect(admit(loser)).rejects.toMatchObject({ code: "reassessment-allocation-limit-exhausted" });
+    }
+    expect(await fixture.db.taskRun.count()).toBe(2);
+    expect(await fixture.db.taskArtifact.count()).toBe(1);
+    expect(await fixture.db.toolExecution.count()).toBe(0);
   });
   it.each(["TaskArtifact", "TaskMessage"])("rolls back every allocation byte when %s persistence fails", async table => {
     const f = await setup();

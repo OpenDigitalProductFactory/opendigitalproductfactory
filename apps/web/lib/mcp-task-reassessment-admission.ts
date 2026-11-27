@@ -1,3 +1,4 @@
+import { validReassessmentPolicyShape, type ReassessmentPolicy } from "./mcp-task-reassessment-policy";
 import { createHash, randomUUID } from "node:crypto";
 import { canonicalJson } from "@dpf/integration-shared/canonical-json";
 import { prisma, type Prisma } from "@dpf/db";
@@ -46,8 +47,8 @@ function validatePacket(input: Pick<PresentReassessmentAdmissionInput, "parsed" 
   const original = originals.find(row => row.gate === binding?.gate);
   if (typeof normalized === "string" || !equal(normalized, parsed) || !binding?.workroomRef || !relation || !original
     || binding.itemId !== proof.policy.subjectItemId || binding.writerToolName !== "record_initiative_design_review"
-    || proof.policy.maxAssessments !== 2 || proof.policy.historicalConsumption !== "retain-unknown" || proof.policy.currentLimits !== "normal-recorded" || proof.policy.originalReplay !== false
-    || proof.policy.requirements.length !== 2 || originals.length !== 2
+    || !validReassessmentPolicyShape(proof.policy) || proof.policy.historicalConsumption !== "retain-unknown" || proof.policy.currentLimits !== "normal-recorded" || proof.policy.originalReplay !== false
+    || originals.length !== proof.policy.requirements.length
     || proof.policy.requirements.some(requirement => requirement.maxAssessments !== 1 || !originals.some(row => row.gate === requirement.gate && row.requestDigest === requirement.originalRequestDigest))
     || originals.some(row => row.readback.replayAllowed !== false || row.readback.classification === "receipt-complete"
       || row.readback.binding?.requestDigest !== row.requestDigest || row.readback.binding.itemId !== binding.itemId || row.readback.binding.gate !== row.gate)
@@ -75,18 +76,20 @@ async function lockedLineage(tx: Prisma.TransactionClient, parsed: RemoteTaskSub
   const subject = await tx.backlogItem.findUnique({ where: { itemId: proof.policy.subjectItemId }, select: { id: true, organizationId: true } });
   if (!subject || subject.id !== proof.subjectRowId) return refuse("reassessment-policy-unproven");
   const snapshot = await collectReassessmentLineage(tx, { binding: parsed.initiativeReviewBinding!, organizationId: subject.organizationId,
-    originals: originals.map(row => ({ taskRunId: row.taskRunId, requestDigest: row.requestDigest })) });
+    ...(proof.policy.schemaVersion === 2 ? { policy: proof.policy } : {}), originals: originals.map(row => ({ taskRunId: row.taskRunId, requestDigest: row.requestDigest })) });
   const token = await lockReassessmentLineage(tx, snapshot, [proof.policy.subjectItemId, proof.authorizationItemId]);
   return revalidateReassessmentLineage(tx, token);
 }
 
-function existingAssessments(snapshot: ReassessmentLineageSnapshot, parsed: RemoteTaskSubmitParams, ownTaskRunId?: string): void {
+function existingAssessments(snapshot: ReassessmentLineageSnapshot, parsed: RemoteTaskSubmitParams, policy: ReassessmentPolicy, ownTaskRunId?: string): void {
   const binding = parsed.initiativeReviewBinding!;
   const present = snapshot.rows.filter(row => row.binding.presentReassessment && row.taskRunId !== ownTaskRunId);
-  const matching = present.filter(row => row.binding.gate === binding.gate && equal(row.binding.artifactRef, binding.artifactRef));
+  const matching = present.filter(row => policy.schemaVersion === 2
+    ? row.requestDigest === remoteTaskRequestDigest(parsed) && equal(row.binding, binding)
+    : row.binding.gate === binding.gate && equal(row.binding.artifactRef, binding.artifactRef));
   if (matching.length > 1) refuse("reassessment-allocation-limit-exhausted");
   if (matching.length === 1) throw new ReassessmentAdmissionJoin(matching[0]!.taskRunId, matching[0]!.requestDigest);
-  if (present.length >= 2) refuse("reassessment-allocation-limit-exhausted");
+  if (present.length >= policy.maxAssessments) refuse("reassessment-allocation-limit-exhausted");
 }
 
 /** The factory is server-only. Neither tool parameters nor a relation DTO can
@@ -101,7 +104,7 @@ export function createPresentReassessmentAdmission(input: PresentReassessmentAdm
     admissionGuard: async (tx: Prisma.TransactionClient) => {
       const snapshot = await lockedLineage(tx, input.parsed, input.proof, input.originals);
       await dependencies.validateAuthority(tx, { proof: input.proof, originals: input.originals, parsed: input.parsed, snapshot });
-      existingAssessments(snapshot, input.parsed);
+      existingAssessments(snapshot, input.parsed, input.proof.policy);
       const now = Date.now(); prepared.set(tx, { snapshot, startedAt: new Date(now).toISOString(), deadlineAt: new Date(now + input.candidate.bounds.maxDurationMs).toISOString() });
     },
     afterTaskCreated: async (tx: Prisma.TransactionClient, run: { id: string; taskRunId: string; contextId: string | null }) => {
@@ -151,7 +154,7 @@ export async function sealPresentReassessmentExecution(input: PresentReassessmen
     const snapshot = await lockedLineage(tx, input.parsed, input.proof, input.originals);
     const member = snapshot.rows.find(row => row.id === execution.taskRunRecordId && row.taskRunId === execution.taskRunId);
     if (!member || member.requestDigest !== execution.requestDigest || !equal(member.binding, execution.binding)) return refuse("reassessment-lineage-unproven");
-    existingAssessments(snapshot, input.parsed, execution.taskRunId);
+    existingAssessments(snapshot, input.parsed, input.proof.policy, execution.taskRunId);
     const row = await tx.taskRun.findUnique({ where: { taskRunId: execution.taskRunId } });
     const metadata = object(row?.a2aMetadata) ? row.a2aMetadata : null;
     const stored = await tx.taskArtifact.findUnique({ where: { artifactId: locator.manifestArtifactId } });
