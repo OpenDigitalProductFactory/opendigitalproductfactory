@@ -50,7 +50,7 @@ umask 077
 mkdir -p "$OUT_DIR/files"
 
 CONTAINER="dpf-synthetic-restore-$$"
-cleanup() { docker rm -f "$CONTAINER" >/dev/null 2>&1 || true; }
+cleanup() { docker rm -fv "$CONTAINER" >/dev/null 2>&1 || true; }
 trap cleanup EXIT
 
 echo "[synthetic-restore] source $SOURCE_SHA, migration head $MIGRATION_HEAD"
