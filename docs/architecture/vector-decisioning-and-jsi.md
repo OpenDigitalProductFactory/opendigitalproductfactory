@@ -66,7 +66,7 @@ DPF partitions decision authority into four non-inheriting scopes (`docs/design/
 |---|---|---|---|
 | **WWMD** — "What would Mark do?" | Platform/founder doctrine | Founder-kernel wiki, ratified commandments | Platform/Build-Studio decisions; **advisory-only** for any customer business decision |
 | **WWWD** — "What would we do?" | This organization's policy | `DecisionPerspectiveProfile{kind:"organization"}`, org stance material | Customer/org default |
-| **WSID** — "What should a competent professional do?" | Craft-level judgment | Profession corpus (`docs/professions/registry.json`, 23 families, 170 corpus pages as of 2026-06-16, BI-48B3CEC4) | Craft floor for specialist coworkers |
+| **WSID** — "What should a competent professional do?" | Craft-level judgment | Profession corpus (`docs/professions/registry.json`, 27 families, 228 corpus pages as of 2026-11-27; originally shipped as 23 families under BI-48B3CEC4) | Craft floor for specialist coworkers |
 | **Per-decision override** — "What do I need here?" | This one decision | User choice, bounded by policy | Local override within hard limits |
 
 Precedence is strict subsidiarity: the most-local scope that *owns* the decision applies; a
@@ -89,11 +89,11 @@ non-inherit rule to *software authority scopes* rather than governmental ones.
 ### 2.1 The dimension registry
 
 `PRINCIPLE_DIMENSIONS` (`packages/db/src/wiki-taxonomy.ts`) is a closed, compile-time-enforced set
-of 20 named axes — e.g. `blast_radius`, `reversibility`, `data_privacy`, `long_term_maintainability`,
-`governance_compliance`, `evidence_density`, `speed_to_value`, `cost_efficiency`,
-`human_cognitive_load`, `operator_effort`. **Each axis is defined individually — meaning, sign,
-scope, projection, and where its weight comes from — in the [Decision Vectors
-reference](decision-vectors.md); this section states only the structure.** Every kernel principle, org-policy item, and
+of 24 named axes — 16 spine axes (including the 4 constitutional business-alignment axes `mission_fit`,
+`market_fit`, `product_fit`, `gtm_fit`) and 8 demoted profession-local axes — complemented by 11
+namespaced craft axes in `packages/db/src/profession-local-axes.ts` (**35 axes** in total). **Each
+axis is defined individually — meaning, sign, scope, projection, and where its weight comes from —
+in the [Decision Vectors reference](decision-vectors.md); this section states only the structure.** Every kernel principle, org-policy item, and
 profession-corpus page that participates in structured scoring declares a **signed
 `principleDimensionVector`** — a hand-authored weight per axis it cares about, with a written
 rationale (`principleWeightRationale`).
