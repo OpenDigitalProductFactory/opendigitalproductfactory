@@ -743,6 +743,12 @@ refusal also returns the same projection and an exact `tasks/result` locator
 when the immutable original request matches. Neither route supplies dispatch
 authority or performs receipt-backed status healing.
 
+A client that can only send `tools/call` (Codex and Claude Code today) uses the
+`read_task_result` tool with the same `taskId` and optional `requestDigest`
+(BI-B1A6A2BE). It calls the same handler as `tasks/result`. The acting coworker
+and grant scopes come from the authenticated connection, never from arguments,
+so the same owner, coworker, scope and Workroom checks apply. It is read-only.
+
 `receipt-complete` means an existing genuine governed writer receipt matches the
 original task, digest, attempt, checkpoint and immutable artifact; its recorded
 decision can be pass, fail or not-applicable. `proven-not-dispatched` and
