@@ -317,7 +317,7 @@ export async function runBuildPrDeliveryReconcile(): Promise<{
       });
       // Build Studio rooms were gated by autonomy eligibility above.
       const actuationAllowed = capsule.featureBuildId ? true : posture.actuationAllowed;
-      if (mode === "enforce" && actuationAllowed && !holdsPrQueueAttempt(state, readiness)
+      if (mode === "enforce" && actuationAllowed && !holdsPrQueueAttempt(state, readiness, observation)
         && (readiness.kind !== "ready" || (state.queueIntentHeadSha === readiness.headSha
           && state.pendingQueueUpdate?.fromHeadSha !== readiness.headSha))) {
         // A passed review's status expires after an hour (BI-4D0B2AAB); refresh
@@ -376,6 +376,30 @@ export async function runBuildPrDeliveryReconcile(): Promise<{
               featureBuildId: capsule.featureBuildId,
               triggerKind: "build-pr-delivery-reconcile",
               dedupeKey: `build-pr-delivery:${capsule.capsuleId}:queue-hold:${hold.reason === "disarmed" ? "disarmed" : hold.headSha}:${hold.eventId}`,
+            },
+          });
+          return filed.error ? null : filed.reportId;
+        },
+        routeConversationHold: async (hold) => {
+          const fact = `${hold.count} unresolved review conversation(s) on armed head ${hold.headSha}`;
+          const filed = await routeToHuman({
+            producer: "build-pr-delivery",
+            subject: { kind: "workroom", id: capsule.capsuleId },
+            blockingFacts: [hold.reason, fact],
+            report: {
+              source: capsule.featureBuildId ? "build-studio" : "workroom-pr-follow-through",
+              severity: "medium",
+              title: `PR #${prNumber} is armed but review conversations are unresolved`,
+              description: [
+                `Workroom ${capsule.capsuleId}: ${fact}.`,
+                ...hold.urls,
+                `Next action for the ${hold.owner}: ${hold.nextAction}`,
+                "Build Studio will recheck on the existing tick. It will not resolve threads or send a new queue request.",
+                prUrl,
+              ].join("\n"),
+              featureBuildId: capsule.featureBuildId,
+              triggerKind: "build-pr-delivery-reconcile",
+              dedupeKey: `build-pr-delivery:${capsule.capsuleId}:conversation-hold:${hold.headSha}`,
             },
           });
           return filed.error ? null : filed.reportId;

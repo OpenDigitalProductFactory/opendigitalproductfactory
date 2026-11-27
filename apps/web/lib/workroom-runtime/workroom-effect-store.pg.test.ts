@@ -10,12 +10,14 @@ import type { Pool } from "pg";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { createJobsPool } from "@/lib/jobs/postgres/pool";
-import { claimEffects, insertEffects, recoverExpiredLeases, retireEffects, retireOrphanedEffects, settleEffect, type EffectSqlDb } from "./workroom-effect-store";
+import { claimEffects, claimProtectedLaunchEffects, insertEffects, recoverExpiredLeases, recoverExpiredProtectedLaunchLeases,
+  retireEffects, retireOrphanedEffects, settleEffect, type EffectSqlDb } from "./workroom-effect-store";
 
 const DATABASE_URL = process.env.DPF_JOBS_TEST_DATABASE_URL?.trim() ?? "";
 const MIGRATION = join(__dirname, "../../../../packages/db/prisma/migrations/20261114060000_workroom_effect_outbox/migration.sql");
 const SETUP_MIGRATION = join(__dirname, "../../../../packages/db/prisma/migrations/20261114080000_workroom_room_setup_effect/migration.sql");
 const DISPATCH_MIGRATION = join(__dirname, "../../../../packages/db/prisma/migrations/20261120180000_workroom_dispatch_build_effect/migration.sql");
+const PROTECTED_LAUNCH_MIGRATION = join(__dirname, "../../../../packages/db/prisma/migrations/20261125174000_execution_hosts_and_protected_launch_effect/migration.sql");
 const T0 = new Date("2026-11-14T05:00:00.000Z");
 const later = (ms: number) => new Date(T0.getTime() + ms);
 
@@ -44,6 +46,9 @@ describe.skipIf(!DATABASE_URL)("Workroom runtime outbox (real database)", () => 
     const dispatch = readFileSync(DISPATCH_MIGRATION, "utf8");
     await pool.query(dispatch);
     await pool.query(dispatch);
+    const protectedLaunch = readFileSync(PROTECTED_LAUNCH_MIGRATION, "utf8");
+    await pool.query(protectedLaunch);
+    await pool.query(protectedLaunch);
   });
 
   afterAll(async () => {
@@ -58,6 +63,28 @@ describe.skipIf(!DATABASE_URL)("Workroom runtime outbox (real database)", () => 
 
   const statuses = async () => (await pool.query(`SELECT "commandKey", "status"::text AS status FROM "WorkroomEffect" ORDER BY "sequence"`)).rows;
   const claim = (liveGenerations: string[], now = T0) => claimEffects(run, { owner: "host-1", liveGenerations, limit: 10, leaseMs: 60_000, now });
+
+  it("does not lease protected execution to the local supervisor or skip its place in room order", async () => {
+    await insertEffects(run, { roomRowId: "row-1", commandId: "protected", generation: null, now: T0,
+      effects: [{ kind: "launch-protected-session", payload: { sessionRef: "session-1", stageAttemptRef: "attempt-1" } }] });
+    await insertEffects(run, { roomRowId: "row-1", commandId: "after", generation: null, now: T0,
+      effects: [{ kind: "revoke-token", payload: {} }] });
+    await insertEffects(run, { roomRowId: "row-2", commandId: "sibling", generation: null, now: T0,
+      effects: [{ kind: "revoke-token", payload: {} }] });
+    expect((await claim([])).map((effect) => effect.commandKey)).toEqual(["sibling"]);
+    expect(await retireOrphanedEffects(run, T0)).toBe(0);
+    expect(await statuses()).toContainEqual({ commandKey: "protected", status: "pending" });
+  });
+
+  it("claims and recovers protected effects through the same queue without crossing the local effect port", async () => {
+    await insertEffects(run, { roomRowId: "row-1", commandId: "protected", generation: null, now: T0,
+      effects: [{ kind: "launch-protected-session", payload: { sessionRef: "session-1", stageAttemptRef: "attempt-1" } }] });
+    const claimProtected = (now: Date) => claimProtectedLaunchEffects(run, { owner: "protected-worker", limit: 2, leaseMs: 60_000, now });
+    expect(await claimProtected(T0)).toEqual([expect.objectContaining({ kind: "launch-protected-session", attemptCount: 1 })]);
+    expect(await recoverExpiredLeases(run, later(61_000))).toBe(0);
+    expect(await recoverExpiredProtectedLaunchLeases(run, later(61_000))).toBe(1);
+    expect(await claimProtected(later(61_000))).toEqual([expect.objectContaining({ kind: "launch-protected-session", attemptCount: 2 })]);
+  });
 
   it("inserts a decision's effects once, however often the decision is replayed", async () => {
     const effects = [{ kind: "start-turn" as const, payload: { prompt: "a" } }, { kind: "revoke-token" as const, payload: { tokenId: "t" } }];

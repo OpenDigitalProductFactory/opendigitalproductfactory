@@ -1,0 +1,70 @@
+{
+  "version": "1",
+  "accountableOwner": "platform-architecture",
+  "summary": "BI-5A866218 adds a typed host registration and a WorkroomEffect launch kind. Workroom state records the exact pinned receiver and possible-start boundary. BI-AFF3F2BD owns approval, epoch, expiry and audit, and its future Qualification record points to the exact S6 registration (spec_review cmwweqkfh2d9h0ep1vg2vizrk).",
+  "affectedCopies": [
+    "ExecutionHost contains immutable installation, host and receiver references and the last observed opaque endpoint references. It contains no qualification data, address, path or credential.",
+    "Workroom.workspaceState.protectedExecution v1 stores a bounded set of exact immutable bindings, a possible-start digest and a matching observation or outcome receipt reference. RuntimeSession is untouched.",
+    "WorkroomEffect stores exact session and stage-attempt references for one pending protected launch, in the same transaction as its pin. Its settlement is delivery state only.",
+    "Existing owned Postgres JobEvent and JobRun carry the exact typed qualification revocation, without paths, credentials or room scans. The issuer retains the pending disposition and verified acknowledgement, not the job engine."
+  ],
+  "privacyAssessment": {
+    "personalData": false,
+    "sensitivity": "Internal operational references. No bearer credential, plaintext location, network address, projection body, transcript or new human identity is written.",
+    "dataSubjectRights": "Operational references follow their existing Workroom, job or registry retention owner. No new human profile is created.",
+    "reviewDisposition": "Reviewed S6 typed carrier DI-B595D17C7999 and coordinator evidence cmwwepvej2d8i0ep1md0clifn. No live host or qualification is changed."
+  },
+  "migration": {
+    "name": "20261125174000_execution_hosts_and_protected_launch_effect",
+    "backfill": "The first migration adds the host table and one effect kind. The forward lifecycle migration preserves each retirement timestamp as lifecycleAt, sets previously retired hosts to retired, and defaults other hosts to active. Existing rooms, local sessions and effects are not rewritten. Disposable migration application is not claimed by unit tests.",
+    "rollback": "Forward-only ADD VALUE and new empty table. Keep all protected producers disabled until every incompatible Workroom reader has drained. Before rolling back code, disable protected producers and preserve a compatible drainer or verify no unsettled protected effects remain. Keep the host registration, attempt pin and acknowledgement evidence; a prior reader must never claim an unknown effect, repair a protected session locally or convert a held state to an outcome. No in-place receiver identity update."
+  },
+  "tests": [
+    "apps/web/lib/agent-toolchain/execution-host-registry.server.test.ts",
+    "apps/web/lib/workroom-runtime/runtime-commit.server.test.ts",
+    "apps/web/lib/workroom-runtime/workroom-effect-store.pg.test.ts",
+    "apps/web/lib/workroom-runtime/protected-execution-dispatch.server.test.ts",
+    "apps/web/lib/workroom-runtime/protected-authority-control.server.test.ts",
+    "apps/web/lib/workroom-runtime/protected-execution-readback.server.test.ts"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:execution-host",
+      "prismaModel": "ExecutionHost",
+      "lifecycleDisposition": "Operational, domain-governed. Retire an old registration without rewriting its identity or erasing the row a Qualification or exact attempt may still reference.",
+      "fields": [
+        { "fieldId": "data:execution-host#id", "resolution": "not-applicable", "reason": "Stable registration identity for the future issuer's foreign key.", "provenance": "BI-AFF3F2BD review cmwweqkfh2d9h0ep1vg2vizrk" },
+        { "fieldId": "data:execution-host#installationRef", "resolution": "governed", "reason": "Exact same-install host partition.", "provenance": "BI-5A866218 AC-1 and AC-5" },
+        { "fieldId": "data:execution-host#hostRef", "resolution": "governed", "reason": "Opaque exact host identity, indexed in the installation partition.", "provenance": "BI-5A866218 AC-1" },
+        { "fieldId": "data:execution-host#receiverRef", "resolution": "governed", "reason": "Immutable local custody identity. Rotation cannot inherit prior approval.", "provenance": "BI-AFF3F2BD review cmwweqkfh2d9h0ep1vg2vizrk" },
+        { "fieldId": "data:execution-host#loopbackEndpointRef", "resolution": "governed", "reason": "Opaque loopback observation, never a URL or grant.", "provenance": "BI-5A866218 AC-3" },
+        { "fieldId": "data:execution-host#tailnetEndpointRef", "resolution": "governed", "reason": "Opaque tailnet observation, never a URL or grant.", "provenance": "BI-5A866218 AC-3" },
+        { "fieldId": "data:execution-host#httpsEndpointRef", "resolution": "governed", "reason": "Opaque HTTPS observation, never a URL or grant.", "provenance": "BI-5A866218 AC-3" },
+        { "fieldId": "data:execution-host#registeredAt", "resolution": "not-applicable", "reason": "Technical registration timestamp.", "provenance": "BI-5A866218 registry writer" },
+        { "fieldId": "data:execution-host#lastObservedAt", "resolution": "not-applicable", "reason": "Technical observation ordering time, not an authority revision or reachability proof.", "provenance": "BI-5A866218 registry writer" },
+        { "fieldId": "data:execution-host#lifecycle", "resolution": "not-applicable", "reason": "Canonical registration lifecycle state, not qualification revocation or attempt outcome.", "provenance": "BI-5A866218 registry writer" },
+        { "fieldId": "data:execution-host#lifecycleAt", "resolution": "not-applicable", "reason": "Timestamp when the registration left active, not qualification revocation or attempt outcome.", "provenance": "BI-5A866218 registry writer" }
+      ]
+    },
+    {
+      "kind": "model",
+      "assetId": "data:workroom-effect",
+      "prismaModel": "WorkroomEffect",
+      "lifecycleDisposition": "Existing 180-day settled history. Unsettled rows are work under the owning Workroom.",
+      "fields": [
+        { "fieldId": "data:workroom-effect#kind", "resolution": "inherited", "reason": "Adds launch-protected-session. Only the protected claim port can lease it after compatible rollout.", "provenance": "BI-5A866218 AC-2" },
+        { "fieldId": "data:workroom-effect#payload", "resolution": "inherited", "reason": "Opaque session and stage-attempt refs only.", "provenance": "BI-5A866218 AC-4" }
+      ]
+    },
+    {
+      "kind": "model",
+      "assetId": "data:workroom",
+      "prismaModel": "Workroom",
+      "lifecycleDisposition": "Same Workroom retention, with a bounded versioned per-attempt section independent of local runtime state.",
+      "fields": [
+        { "fieldId": "data:workroom#workspaceState", "resolution": "governed", "reason": "Contains exact opaque binding, projection digest and matching receipt reference for recovery. It does not store projection bytes or room operations.", "provenance": "BI-5A866218 AC-2 and AC-4, DI-513D9AD5714E" }
+      ]
+    }
+  ]
+}

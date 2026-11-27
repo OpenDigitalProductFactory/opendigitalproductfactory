@@ -1,0 +1,24 @@
+{
+  "version": "1",
+  "decidedOption": "preserve-two-step-picker-and-share-navigation",
+  "scope": {
+    "files": ["apps/web/components/ui/form/SearchableSelect.tsx"]
+  },
+  "evidence": {
+    "kind": "sweep-measurement",
+    "baselineComparison": "improved",
+    "measured": {
+      "/finance/settings/tax": {
+        "defaultVisibleWords": 678,
+        "leadBandWords": 0,
+        "primaryActions": 2,
+        "visibleFields": 16,
+        "maxChoicesPerControl": 6,
+        "subLegibleControls": 0,
+        "buriedPrimaryAction": 0,
+        "axeViolations": 2
+      }
+    }
+  },
+  "notes": "Measured on contributor preview source 98d0db73864e2e085522656ab6f123f3cbb89fb0. Numerical budget axes did not regress. Canonical CI run 45839114085 confirmed the only structural differences in existing routes were the intentional picker role changes in tax settings and operating hours. Their snapshots were refreshed without changing numerical budgets."
+}

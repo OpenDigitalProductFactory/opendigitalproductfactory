@@ -17,12 +17,17 @@ import { isProcessBound, type EffectIntent, type EffectKind, type EffectSettleme
 /** Prisma's client or transaction; the real-database test passes a pg adapter with the same shape. */
 export type EffectSqlDb = { $queryRaw<T = unknown>(strings: TemplateStringsArray, ...values: unknown[]): Promise<T> };
 
-export type ClaimedEffect = {
+// Protected execution never enters the local supervisor's effect port.
+export const PROTECTED_LAUNCH_EFFECT_KIND = "launch-protected-session" as const;
+type ProtectedEffectIntent = { kind: typeof PROTECTED_LAUNCH_EFFECT_KIND; payload: { sessionRef: string; stageAttemptRef: string } };
+export type PersistedEffectKind = EffectKind | typeof PROTECTED_LAUNCH_EFFECT_KIND;
+
+export type ClaimedEffect<Kind extends PersistedEffectKind = EffectKind> = {
   id: string;
   workCapsuleId: string;
   capsuleId: string;
   commandKey: string;
-  kind: EffectKind;
+  kind: Kind;
   processBound: boolean;
   sessionGeneration: string | null;
   payload: Record<string, unknown>;
@@ -32,19 +37,21 @@ export type ClaimedEffect = {
 
 /** Insert a decision's effects; a replayed decision inserts nothing twice. */
 export async function insertEffects(db: EffectSqlDb, input: {
-  roomRowId: string; commandId: string; generation: string | null; effects: EffectIntent[]; now: Date;
+  roomRowId: string; commandId: string; generation: string | null; effects: (EffectIntent | ProtectedEffectIntent)[]; now: Date;
 }): Promise<void> {
   let ordinal = 0;
   for (const effect of input.effects) {
-    const bound = isProcessBound(effect.kind);
+    const protectedLaunch = effect.kind === PROTECTED_LAUNCH_EFFECT_KIND;
+    const bound = !protectedLaunch && isProcessBound(effect.kind);
     const generation = bound ? input.generation : null;
-    await db.$queryRaw`
+    const inserted = await db.$queryRaw<{ id: string }[]>`
       INSERT INTO "WorkroomEffect" ("id","workCapsuleId","commandKey","ordinal","kind","processBound","sessionGeneration","payload","status","availableAt","createdAt","updatedAt")
       VALUES (${randomUUID()}, ${input.roomRowId}, ${input.commandId}, ${ordinal}, ${effect.kind}::"WorkroomEffectKind", ${bound}, ${generation},
         ${JSON.stringify(effect.payload)}::jsonb, 'pending'::"WorkroomEffectStatus",
         (${input.now}::timestamptz AT TIME ZONE 'UTC'), (${input.now}::timestamptz AT TIME ZONE 'UTC'), (${input.now}::timestamptz AT TIME ZONE 'UTC'))
       ON CONFLICT ("workCapsuleId","commandKey","ordinal") DO NOTHING
       RETURNING "id"`;
+    if (protectedLaunch && inserted.length !== 1) throw new Error("Protected launch effect already exists");
     ordinal += 1;
   }
 }
@@ -81,11 +88,22 @@ export async function settleEffect(db: EffectSqlDb, settlement: EffectSettlement
  * in the process that holds their generation, so another portal never answers
  * a provider process it does not own.
  */
-export async function claimEffects(db: EffectSqlDb, input: { owner: string; liveGenerations: string[]; limit: number; leaseMs: number; now: Date }): Promise<ClaimedEffect[]> {
-  const rows = await db.$queryRaw<Array<ClaimedEffect & { payload: unknown }>>`
+type ClaimEffectsInput = { owner: string; liveGenerations: string[]; limit: number; leaseMs: number; now: Date };
+
+export function claimEffects(db: EffectSqlDb, input: ClaimEffectsInput): Promise<ClaimedEffect[]> {
+  return claimEffectKind<EffectKind>(db, input, false);
+}
+
+export function claimProtectedLaunchEffects(db: EffectSqlDb, input: Omit<ClaimEffectsInput, "liveGenerations">): Promise<ClaimedEffect<typeof PROTECTED_LAUNCH_EFFECT_KIND>[]> {
+  return claimEffectKind<typeof PROTECTED_LAUNCH_EFFECT_KIND>(db, { ...input, liveGenerations: [] }, true);
+}
+
+async function claimEffectKind<Kind extends PersistedEffectKind>(db: EffectSqlDb, input: ClaimEffectsInput, protectedOnly: boolean): Promise<ClaimedEffect<Kind>[]> {
+  const rows = await db.$queryRaw<Array<ClaimedEffect<Kind> & { payload: unknown }>>`
     WITH candidate AS (
       SELECT e."id" FROM "WorkroomEffect" e
       WHERE e."status"='pending'::"WorkroomEffectStatus" AND e."availableAt" <= (${input.now}::timestamptz AT TIME ZONE 'UTC')
+        AND (e."kind"::text = 'launch-protected-session') = ${protectedOnly}::boolean
         AND (e."processBound"=false OR e."sessionGeneration" = ANY(${input.liveGenerations}::text[]))
         AND NOT EXISTS (SELECT 1 FROM "WorkroomEffect" p WHERE p."workCapsuleId"=e."workCapsuleId"
           AND p."sequence" < e."sequence" AND p."status"::text IN ('pending','running'))
@@ -101,10 +119,19 @@ export async function claimEffects(db: EffectSqlDb, input: { owner: string; live
 
 /** An effect whose worker died mid-run goes back to pending; its attempt was already counted. */
 export async function recoverExpiredLeases(db: EffectSqlDb, now: Date): Promise<number> {
+  return recoverEffectKindLeases(db, now, false);
+}
+
+export function recoverExpiredProtectedLaunchLeases(db: EffectSqlDb, now: Date): Promise<number> {
+  return recoverEffectKindLeases(db, now, true);
+}
+
+async function recoverEffectKindLeases(db: EffectSqlDb, now: Date, protectedOnly: boolean): Promise<number> {
   const rows = await db.$queryRaw<Array<{ id: string }>>`
     UPDATE "WorkroomEffect" SET "status"='pending'::"WorkroomEffectStatus", "leaseOwner"=NULL, "leaseExpiresAt"=NULL,
       "updatedAt"=(${now}::timestamptz AT TIME ZONE 'UTC')
     WHERE "status"='running'::"WorkroomEffectStatus" AND "leaseExpiresAt" < (${now}::timestamptz AT TIME ZONE 'UTC')
+      AND ("kind"::text = 'launch-protected-session') = ${protectedOnly}::boolean
     RETURNING "id"`;
   return rows.length;
 }

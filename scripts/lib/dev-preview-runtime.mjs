@@ -1,3 +1,4 @@
+import { PREVIEW_DATABASE_IDENTITY_SQL, previewLogicalRuntimeId } from "../../packages/integration-shared/src/preview-db-identity.cjs";
 import { DELIVERY_WORKFLOW_TOOLS, deliveryReadinessFromDiscovery } from '../../packages/integration-shared/src/delivery-readiness-contract.cjs';
 import { previewMountMatches } from '../../packages/integration-shared/src/preview-mount-identity.cjs';
 import { createPreviewDeclaration, assertPreviewDeclarationFile, previewDeclarationMount, assertPreviewDeclarationMount, reclaimPreviewDeclaration, stopDeclarationWriters } from './dev-preview-declaration.mjs';
@@ -429,6 +430,9 @@ async function runAdmittedPreview(env, cleanupState) {
         || admitted.branchName !== branch
         || !(Date.parse(admitted.expiresAt) > Date.now())
         || admitted.url !== 'http://localhost:3001' || !admitted.purpose?.includes(`(${sha})`)) throw new Error('preview_admission_binding_mismatch');
+    if (env.DPF_DEV_PORTAL_S5_REHEARSAL === "1" && admitted.environmentKey !== "active-candidate") {
+      throw new Error("preview_attestation_lease_lane_unverified");
+    }
     await assertAdmittedWorktreePath(admitted.worktreePath, worktree);
     cleanupState.binding = admitted;
     const config = JSON.parse(await compose(['config', '--format', 'json']));
@@ -459,6 +463,18 @@ async function runAdmittedPreview(env, cleanupState) {
       const initRunning = async () => {
         try { return (await runner.run(['inspect', '--format', '{{.State.Running}}', initName])) === 'true'; } catch { return false; }
       };
+      let readyForAttestation = false;
+      const attestAfterRenewal = createPreviewDatabaseAttestationTrigger({
+        enabled: env.DPF_DEV_PORTAL_S5_REHEARSAL === "1",
+        submit: () => submitPreviewDatabaseObservation({ enabled: true, call,
+          probe: () => probePreviewDatabase({ compose, runner,
+            projectName: state.composeProjectName || 'dpf', lease: admitted, sourceSha: sha }),
+        }).then(result => {
+          const type = result?.success ? 'preview-database-attested'
+            : result?.error === 'approval_required' ? 'preview-database-approval-pending' : 'preview-database-attestation-held';
+          console.error(JSON.stringify({ type }));
+        }).catch(() => console.error(JSON.stringify({ type: 'preview-database-attestation-held' }))),
+      });
       const outcome = await supervisePreviewRun({
         binding: admitted, call,
         ttlMs: admittedLeaseTtlMs(expiresAt, 120000), expiresAt,
@@ -479,6 +495,7 @@ async function runAdmittedPreview(env, cleanupState) {
               if (Date.now() >= deadline) throw new Error('preview_served_identity_unverified');
               await new Promise(resolveRetry => setTimeout(resolveRetry, 1000));
             }
+            readyForAttestation = true;
             console.log(`Contributor preview bound to ${branch} @ ${sha}; initialization complete.`);
           },
           wait: () => wait, active: { initName },
@@ -501,8 +518,10 @@ async function runAdmittedPreview(env, cleanupState) {
           const stalled = previewStartupLiveness({ ...startup, nowMs: Date.now(), budgetMs,
             initRunning: startup.phase === 'init' ? await initRunning() : false });
           if (stalled) return { success: false, error: stalled };
-          return call('renew_nonprod_environment_lease', { leaseId, ownerSessionId, ttlMinutes: 2,
+          const renewed = await call('renew_nonprod_environment_lease', { leaseId, ownerSessionId, ttlMinutes: 2,
             hostPressure: await sampleLocalCiHostPressure({ rootPath: worktree, evidenceIsolationHealthy: true }) });
+          void attestAfterRenewal(readyForAttestation, renewed);
+          return renewed;
         }, terminate,
         onEvent: event => { const summary = previewLeaseEventSummary(event); if (summary) console.error(JSON.stringify(summary)); },
       });
@@ -515,13 +534,57 @@ async function runAdmittedPreview(env, cleanupState) {
   }
 }
 
+export function createPreviewDatabaseAttestationTrigger({ enabled, submit }) {
+  let submitted = false;
+  return async (ready, renewed) => {
+    if (!enabled || !ready || submitted || renewed?.success !== true) return;
+    submitted = true;
+    return submit();
+  };
+}
+
+export async function probePreviewDatabase({ compose, runner, projectName, lease, sourceSha }) {
+  const candidate = (await compose(["ps", "-q", "dev-postgres"])).trim();
+  if (!/^[a-f0-9]{12,64}$/.test(candidate)) throw new Error("preview_database_container_unverified");
+  const readContainer = async () => {
+    const [c] = JSON.parse(await runner.run(["inspect", candidate], { timeoutMs: 5000 }));
+    const labels = c?.Config?.Labels;
+    const mounts = c?.Mounts?.filter(m => m.Type === "volume" && m.Destination === "/var/lib/postgresql/data");
+    if (!/^[a-f0-9]{64}$/.test(c?.Id ?? "") || !c.Id.startsWith(candidate) || !c.State?.Running
+      || labels?.["com.docker.compose.service"] !== "dev-postgres"
+      || labels?.["com.docker.compose.project"] !== projectName
+      || mounts?.length !== 1 || mounts[0].Name !== `${projectName}_dev_pgdata`) {
+      throw new Error("preview_database_binding_unverified");
+    }
+    return { id: c.Id, volumeName: mounts[0].Name };
+  };
+  const before = await readContainer();
+  const database = JSON.parse(await runner.run(["exec", before.id, "psql", "-X", "-h", "/var/run/postgresql",
+    "-U", "dpf", "-d", "dpf", "-Atqc", `SELECT pg_catalog.row_to_json(identity) FROM (${PREVIEW_DATABASE_IDENTITY_SQL}) AS identity`],
+  { timeoutMs: 5000 }));
+  const after = await readContainer();
+  if (before.id !== after.id || before.volumeName !== after.volumeName) throw new Error("preview_database_binding_changed");
+  return { schemaVersion: 1, leaseId: lease.leaseId, runtimeId: previewLogicalRuntimeId(lease),
+    sourceSha, containerId: before.id, volumeName: before.volumeName, database };
+}
+
+export async function submitPreviewDatabaseObservation({ enabled, call, probe }) {
+  if (!enabled) return;
+  const { schemaVersion, leaseId, runtimeId, sourceSha, containerId, volumeName, database } = await probe();
+  const { systemIdentifier, databaseOid, databaseName, postmasterStartEpoch } = database;
+  return call("attest_preview_database", {
+    previewDatabaseObservation: { schemaVersion, leaseId, runtimeId, sourceSha, containerId, volumeName,
+      database: { systemIdentifier, databaseOid, databaseName, postmasterStartEpoch } },
+  });
+}
+
 export function callPreviewMcp(tool, args, options) {
   // Renewal can succeed before the governed transport finishes responding.
   // Keep this request bounded inside the unchanged two-minute authority window;
   // the supervisor still terminates at its last acknowledged expiry.
   return mcpCall(tool, args, {
     ...options,
-    ...(tool === 'renew_nonprod_environment_lease' ? { timeoutMs: 30_000 } : {}),
+    ...(['renew_nonprod_environment_lease', 'attest_preview_database'].includes(tool) ? { timeoutMs: 30_000 } : {}),
   });
 }
 

@@ -1,4 +1,4 @@
-import type { GithubPrReadiness, GithubQueueFailure } from "@/lib/build/github-pr-readiness";
+import type { GithubPrConversationHold, GithubPrReadiness, GithubQueueFailure } from "@/lib/build/github-pr-readiness";
 import { createPrFollowThrough, readPrFollowThrough, type PrFollowThroughV1 } from "./pr-follow-through";
 
 /**
@@ -35,6 +35,13 @@ export type BuildPrQueueHold = {
   routeReportId: string | null;
 };
 
+export type BuildPrConversationHold = GithubPrConversationHold & {
+  headSha: string;
+  owner: "workroom-owner";
+  nextAction: string;
+  routeReportId: string | null;
+};
+
 export type BuildPrDeliveryStateV1 = {
   schemaVersion: 1;
   status: BuildPrDeliveryStatus;
@@ -59,6 +66,7 @@ export type BuildPrDeliveryStateV1 = {
   /** CI follow-through: classification, holds and the reused recovery budget. */
   followThrough: PrFollowThroughV1;
   queueHold?: BuildPrQueueHold | null;
+  conversationHold?: BuildPrConversationHold | null;
   /** Only a governed publication may write an intent for the commit it published. */
   queueIntentHeadSha?: string | null;
   pendingQueueUpdate?: { fromHeadSha: string; baseSha: string } | null;
@@ -117,6 +125,19 @@ function readQueueHold(input: unknown): BuildPrQueueHold | null {
   };
 }
 
+function readConversationHold(input: unknown): BuildPrConversationHold | null {
+  const value = asObject(input);
+  if (typeof value.headSha !== "string" || !value.headSha || value.reason !== "review-threads-unresolved"
+    || typeof value.count !== "number" || !Number.isSafeInteger(value.count) || value.count < 1
+    || value.owner !== "workroom-owner" || typeof value.nextAction !== "string") return null;
+  return {
+    headSha: value.headSha, reason: value.reason, count: value.count,
+    urls: Array.isArray(value.urls) ? value.urls.filter((url): url is string => typeof url === "string").slice(0, 12) : [],
+    owner: value.owner, nextAction: value.nextAction,
+    routeReportId: typeof value.routeReportId === "string" ? value.routeReportId : null,
+  };
+}
+
 export function readBuildPrDeliveryState(workspaceState: unknown): BuildPrDeliveryStateV1 | null {
   const root = asObject(workspaceState);
   const value = root.prDelivery !== undefined
@@ -167,6 +188,7 @@ export function readBuildPrDeliveryState(workspaceState: unknown): BuildPrDelive
     ...(typeof removal.eventId === "string" && typeof removal.headSha === "string"
       ? { lastQueueRemoval: { eventId: removal.eventId, headSha: removal.headSha } } : {}),
     ...(value.queueHold !== undefined ? { queueHold: readQueueHold(value.queueHold) } : {}),
+    ...(value.conversationHold !== undefined ? { conversationHold: readConversationHold(value.conversationHold) } : {}),
   };
 }
 

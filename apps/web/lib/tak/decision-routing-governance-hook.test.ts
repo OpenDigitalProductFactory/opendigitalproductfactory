@@ -6,6 +6,8 @@ import {
   decidePreTool,
   resolveDecisionGateMode,
   _resetConsultationLedgerForTests,
+  installConsequentialToolResolver,
+  _resetConsequentialToolResolverForTests,
 } from "./decision-routing-governance-hook";
 
 const BASE = {
@@ -172,4 +174,18 @@ describe("createDecisionRoutingGovernanceHook", () => {
     // @ts-expect-error deliberately malformed
     expect((await hook.onPreToolUse!(null))?.decision).toBe("allow");
   });
+});
+
+it("gates external attestation in enforce mode without gating ordinary renewal", async () => {
+  const { getConsequentialToolNames } = await import("./consequential-tool-coverage");
+  installConsequentialToolResolver(getConsequentialToolNames);
+  try {
+  const event = decisionEvent({ source: "external-jsonrpc", toolName: "attest_preview_database" });
+  expect(decidePreTool(event, { mode: "shadow", hasConsult: false })).toMatchObject({
+    decision: "allow", reason: expect.stringMatching(/shadow/),
+  });
+  expect(decidePreTool(event, { mode: "enforce", hasConsult: false }).decision).toBe("deny");
+  expect(decidePreTool({ ...event, toolName: "renew_nonprod_environment_lease" },
+    { mode: "enforce", hasConsult: false }).decision).toBe("allow");
+  } finally { _resetConsequentialToolResolverForTests(); }
 });

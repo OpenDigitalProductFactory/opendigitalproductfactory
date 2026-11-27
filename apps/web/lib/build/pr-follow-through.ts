@@ -63,6 +63,8 @@ export type PrFollowThroughV1 = {
 };
 
 export type PrRepairAuthority = "dispatch" | "propose" | "record";
+export type PrRepairDispatchResult =
+  | "dispatched" | "unavailable" | "repair-identity-unavailable" | "repair-identity-refused";
 
 export type PrRepairPacket = {
   headSha: string;
@@ -84,6 +86,8 @@ export const PR_REPAIR_CONSTRAINTS = [
 ] as const;
 
 export type PrAttentionReason =
+  | "repair-identity-unavailable"
+  | "repair-identity-refused"
   | "infrastructure-persists"
   | "infrastructure-not-rerunnable"
   | "repair-budget-exhausted"
@@ -160,7 +164,7 @@ export function resolvePrRepairAuthority(input: {
   return "propose";
 }
 
-function attentionKeyFor(reason: string, headSha: string): string {
+export function attentionKeyFor(reason: string, headSha: string): string {
   return `follow-through:${reason}:${headSha}`;
 }
 
@@ -186,7 +190,12 @@ export function decidePrFollowThrough(input: {
 
   // Only required checks hold the PR, so only they are repaired or re-run (BI-D081EDD0).
   const failing = classifyFailingChecks(input.checks.filter(checkBlocksMerge));
-  if (prior.judgedHeadSha === headSha) {
+  // Missing identity is a read-only eligibility check on the existing tick.
+  // An actual authorization refusal or any other settled hold stays held.
+  const recheckIdentity = input.authority === "dispatch"
+    && prior.attentionKey === attentionKeyFor("repair-identity-unavailable", headSha)
+    && failing.some((check) => check.class === "defect");
+  if (prior.judgedHeadSha === headSha && !recheckIdentity) {
     return { kind: "hold", headSha, followThrough: { ...prior, failing } };
   }
 

@@ -10,7 +10,7 @@ const recipient = z.strictObject({ authorityRef: ref, destinationRef: ref, reser
 const operationId = z.string().regex(/^room-operation:[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/u);
 const operation = "post_room_message";
 const exactInvocation = { ...receiver, workroomId: ref, sessionRef: ref, stageKey: ref, stageAttemptRef: ref, operationId };
-const proposalObservation = z.strictObject({ ...exactInvocation, operation: z.literal(operation) });
+export const s5ProposalObservationSchema = z.strictObject({ ...exactInvocation, operation: z.literal(operation) });
 // Internal effect input, after the transport's versioned broker envelope is
 // checked. Keep the no-addressing invariant even for future internal callers.
 const quietProposal = z.strictObject({
@@ -21,7 +21,7 @@ const quietProposal = z.strictObject({
 });
 
 export type S5ProposalCall = z.infer<typeof quietProposal>;
-export type S5ProposalObservation = z.infer<typeof proposalObservation>;
+export type S5ProposalObservation = z.infer<typeof s5ProposalObservationSchema>;
 type ControlIdentity = Pick<S5ProposalCall, keyof typeof receiver>;
 type ProposalActor = Readonly<{
   roomRowId: string;
@@ -155,7 +155,7 @@ export function createS5QuietProposalBroker(ports: S5ProposalPorts) {
 
   async function observe(actor: ProposalActor, input: unknown): Promise<ProposalObservationResult> {
     try {
-      const parsed = proposalObservation.safeParse(input);
+      const parsed = s5ProposalObservationSchema.safeParse(input);
       if (!parsed.success) return unknown();
       const command = identity(actor, parsed.data);
       if (!command) return unknown();

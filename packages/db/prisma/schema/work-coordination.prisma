@@ -537,6 +537,7 @@ enum WorkroomEffectKind {
   record_plan_limit         @map("record-plan-limit")
   ensure_workitem_anchor    @map("ensure-workitem-anchor")
   dispatch_build            @map("dispatch-build")
+  launch_protected_session  @map("launch-protected-session")
 }
 
 enum WorkroomEffectStatus {

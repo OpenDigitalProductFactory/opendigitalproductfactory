@@ -50,6 +50,12 @@ test("terminal keys are stopped instead of scanned or replaced", () => {
   assert.match(script, /terminal lease claim; stop/);
 });
 
+test("preview claim guards its dev-portal namespace and never sends a cleanup command", () => {
+  const claim = script.slice(script.indexOf("claim_lease()"), script.indexOf("claim_lease()") + 14000);
+  assert.match(claim, /case "\$claim_key" in[\s\S]*dev-portal:\?\*[\s\S]*die/);
+  assert.doesNotMatch(claim, /cleanupCommand:/);
+});
+
 import { protectedServiceIdentity, REQUIRED_PREVIEW_DELIVERY_TOOLS, assertToolReadiness, assertPreviewConfig, assertPreviewContainer, assertAdmittedWorktreePath, previewOverride, runPreviewLifecycle, stopOwnedPreviewContainers, commandRunner } from './dev-preview-runtime.mjs';
 
 test('preview diagnostics retain the failed exit code without child output or arguments', async () => {
@@ -508,6 +514,7 @@ test('the policy claim-key suite runs without installed workspace dependencies',
     mkdirSync(shared, { recursive: true });
     cpSync(join(source, '../../packages/integration-shared/src/delivery-readiness-contract.cjs'), join(shared, 'delivery-readiness-contract.cjs'));
     cpSync(join(source, '../../packages/integration-shared/src/preview-mount-identity.cjs'), join(shared, 'preview-mount-identity.cjs'));
+    cpSync(join(source, '../../packages/integration-shared/src/preview-db-identity.cjs'), join(shared, 'preview-db-identity.cjs'));
     // mcp-credential.mjs re-exports the client_credentials exchange from the skill pack (BI-84C1F526).
     const packLib = join(fixture, 'packages/dpf-skill-pack/scripts/lib');
     mkdirSync(packLib, { recursive: true });
@@ -1143,4 +1150,111 @@ test('preview prerequisite failure preserves the error without requesting immedi
     DPF_MCP_URL: 'http://127.0.0.1:' + server.address().port + '/api/mcp/v1',
   }), { code: 'ENOENT' });
   assert.deepEqual(calls, [], 'missing retained admission must not request release or broaden readback');
+});
+
+test("ordinary preview never gathers an attestation and an S5 observation omits task context", async () => {
+  const { submitPreviewDatabaseObservation } = await import("./dev-preview-runtime.mjs");
+  const calls = [];
+  const call = async (tool, args) => { calls.push([tool, args]); return { success: true }; };
+  const observation = { schemaVersion: 1, leaseId: "NPEL-FIXTURE", runtimeId: "fixture",
+    sourceSha: "a".repeat(40), containerId: "c".repeat(64), volumeName: "fixture_dev_pgdata",
+    database: { systemIdentifier: "7391584902012345678", databaseOid: "16384", databaseName: "dpf", postmasterStartEpoch: "1795679812.123456" } };
+  let probes = 0;
+  const probe = async () => { probes++; return { ...observation, taskRunId: "no", routeContext: "no", chainId: "no" }; };
+  await submitPreviewDatabaseObservation({ enabled: false, call, probe });
+  assert.equal(probes, 0);
+  assert.deepEqual(calls, []);
+  await submitPreviewDatabaseObservation({ enabled: true, call, probe });
+  assert.equal(probes, 1);
+  assert.deepEqual(calls, [["attest_preview_database", { previewDatabaseObservation: observation }]]);
+});
+
+test("the S5 opt-in survives the queued registration and child refresh as a pinned flag", async () => {
+  const { resumePreviewQueue } = await import("../dev-preview-queue-resume.mjs");
+  let registration, child;
+  const s5Pin = { ...pin, s5Rehearsal: true };
+  const queued = await resumePreviewQueue(s5Pin, { now, readSource: source, observerDirectory: "/observers",
+    env: { DPF_DEV_PORTAL_ENVIRONMENT_KEY: "active-candidate" },
+    spawnResumer: args => { registration = args; return { spawned: true, survivesSession: true }; },
+  });
+  assert.equal(queued.spawned, true);
+  assert.ok(registration.gateArgv.includes("--s5-rehearsal-preview"));
+  await resumePreviewQueue(s5Pin, { now, readSource: source,
+    env: { DPF_DURABLE_RESUME: "1", DPF_DEV_PORTAL_ENVIRONMENT_KEY: "active-candidate" },
+    runChild: args => { child = args; return 75; },
+  });
+  assert.ok(child.args.includes("--s5-rehearsal-preview"));
+  assert.equal(child.env.DPF_DEV_PORTAL_ENVIRONMENT_KEY, "active-candidate");
+});
+
+test("the preview PostgreSQL probe verifies project, volume and container before sending anything", async () => {
+  const { probePreviewDatabase } = await import("./dev-preview-runtime.mjs");
+  const id = "a".repeat(64), projectName = "fixture-project";
+  const valid = { Id: id, State: { Running: true }, Config: { Labels: {
+    "com.docker.compose.project": projectName, "com.docker.compose.service": "dev-postgres",
+  } }, Mounts: [{ Type: "volume", Destination: "/var/lib/postgresql/data", Name: `${projectName}_dev_pgdata` }] };
+  const database = { systemIdentifier: "7391584902012345678", databaseOid: "16384",
+    databaseName: "dpf", postmasterStartEpoch: "1795679812.123456" };
+  const probe = (snapshots, sqlOutput = JSON.stringify(database), trace = []) => probePreviewDatabase({
+    projectName, sourceSha: "b".repeat(40), lease: { leaseId: "NPEL-FIXTURE" },
+    compose: async args => { assert.deepEqual(args, ["ps", "-q", "dev-postgres"]); return id.slice(0, 12); },
+    runner: { run: async args => {
+      trace.push(args);
+      if (args[0] === "inspect") return JSON.stringify([snapshots.shift()]);
+      assert.deepEqual(args.slice(0, 4), ["exec", id, "psql", "-X"]);
+      return sqlOutput;
+    } },
+  });
+  assert.deepEqual((await probe([valid, valid])).database, database);
+  for (const bad of [
+    { ...valid, Config: { Labels: { ...valid.Config.Labels, "com.docker.compose.service": "postgres" } } },
+    { ...valid, Config: { Labels: { ...valid.Config.Labels, "com.docker.compose.project": "dpf" } } },
+    { ...valid, Mounts: [{ ...valid.Mounts[0], Name: "dpf_dev_pgdata" }] },
+  ]) {
+    const trace = [];
+    await assert.rejects(probe([bad], undefined, trace), /preview_database_binding_unverified/);
+    assert.equal(trace.some(args => args[0] === "exec"), false);
+  }
+  await assert.rejects(probe([valid, { ...valid, Id: id.slice(0, 12) + "c".repeat(52) }]),
+    /preview_database_binding_changed/);
+  await assert.rejects(probe([valid], "not JSON"), SyntaxError);
+});
+
+test("the S5 observation trigger fires once only after ready and a successful renewal", async () => {
+  const { createPreviewDatabaseAttestationTrigger } = await import("./dev-preview-runtime.mjs");
+  let calls = 0;
+  const afterRenewal = createPreviewDatabaseAttestationTrigger({ enabled: true, submit: async () => { calls++; } });
+  await afterRenewal(false, { success: true });
+  await afterRenewal(true, { success: false });
+  assert.equal(calls, 0);
+  await Promise.all([afterRenewal(true, { success: true }), afterRenewal(true, { success: true })]);
+  assert.equal(calls, 1);
+  const ordinary = createPreviewDatabaseAttestationTrigger({ enabled: false, submit: async () => { calls++; } });
+  await ordinary(true, { success: true });
+  assert.equal(calls, 1);
+});
+
+test("mixed-mode resumers do not deduplicate observer registration by source or lease owner", async () => {
+  const { registerLocalQueueObserver, createGateObserverIdentity } = await import("./local-queue-observer.mjs");
+  const { buildResumerInvocation } = await import("./durable-wait-resumer.mjs");
+  const { resumePreviewQueue } = await import("../dev-preview-queue-resume.mjs");
+  const directory = mkdtempSync(join(tmpdir(), "dpf-preview-mode-observers-"));
+  try {
+    const contexts = [];
+    for (const s5Rehearsal of [false, true]) {
+      const request = { ...pin, s5Rehearsal };
+      await resumePreviewQueue(request, { now, readSource: source, observerDirectory: directory,
+        spawnResumer: args => { contexts.push(args); return { spawned: true, survivesSession: true }; },
+      });
+    }
+    assert.equal(contexts.length, 2);
+    const observerPaths = contexts.map((context, i) => {
+      const invocation = buildResumerInvocation(context);
+      assert.equal(invocation.args.includes("--s5-rehearsal-preview"), i === 1);
+      return registerLocalQueueObserver({ directory, identity: createGateObserverIdentity(),
+        branch: pin.branch, sha: pin.sha, ownerSessionId: pin.ownerSessionId }).path;
+    });
+    assert.notEqual(observerPaths[0], observerPaths[1]);
+    assert.ok(observerPaths.every(path => fs.existsSync(path)));
+  } finally { rmSync(directory, { recursive: true, force: true }); }
 });

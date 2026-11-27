@@ -316,7 +316,7 @@ Phases 1 to 10 are implemented on `t3/preview-owner-enrollment` and are not yet 
 
 **Docs-impact dispositions.**
 - `docs/architecture/ai-agent-meta-model.md`: not affected. The `syncEmployeePrincipal` guard refuses one governed class; the Principal and alias convergence model it documents is unchanged.
-- `docs/architecture/data-model-stewardship-runbook.md`: not affected. It documents the ratchet procedure. This change followed it, raising `prismaModelCount` 649 to 650 through the generator with owner, expiry and contraction (BI-A21DB89E).
+- `docs/architecture/data-model-stewardship-runbook.md`: not affected. It documents the ratchet procedure, and this change followed it. The approved raise for this model was 649 to 650 (contraction BI-A21DB89E). Main's #7247 independently took 649 to 650 for `ExecutionHost`. The merge-forward of `1132c5e9` therefore reconciled the baseline to 651 through the generator, with owner portfolio-management, the stricter expiry 2027-03-31, and both contraction sets: BI-911840CB, BI-26ADC660, BI-7F47B63C and BI-A21DB89E.
 - `docs/architecture/platform-substrate-boundaries.md`: not affected. It points to the committed baseline for values; the policy is unchanged.
 - `docs/maintenance/staleness-report.md`: not affected. It is a generated maintenance report.
 - The parent provisioner spec and plan are not edited here (ruling (b)). Their reconciliation belongs to WC-14E7E2F3's F1 amendment.

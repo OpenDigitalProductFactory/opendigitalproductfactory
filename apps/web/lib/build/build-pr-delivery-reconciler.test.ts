@@ -109,6 +109,7 @@ async function run(input: {
   dispatchRepair?: Parameters<typeof executeBuildPrDeliveryAction>[0]["dispatchRepair"];
   from?: typeof state;
   routeQueueHold?: Parameters<typeof executeBuildPrDeliveryAction>[0]["routeQueueHold"];
+  routeConversationHold?: Parameters<typeof executeBuildPrDeliveryAction>[0]["routeConversationHold"];
 }) {
   const github = githubFake();
   const outcome = await executeBuildPrDeliveryAction({
@@ -124,6 +125,7 @@ async function run(input: {
     repairAuthority: input.repairAuthority,
     dispatchRepair: input.dispatchRepair,
     routeQueueHold: input.routeQueueHold,
+    routeConversationHold: input.routeConversationHold,
   });
   return { ...outcome, calls: github.calls };
 }
@@ -153,6 +155,46 @@ describe("executeBuildPrDeliveryAction — PR follow-through (BI-88341B5D)", () 
       }),
     ).toBe(false);
   });
+
+  it("records one exact-head conversation hold, rechecks it, then observes the same request into the queue", async () => {
+    const route = vi.fn(async () => "PIR-review");
+    const url = "https://github.com/o/r/pull/42#discussion_r1";
+    const seen = observation({
+      autoMergeEnabled: true, mergeStateStatus: "BLOCKED", unresolvedReviewThreads: 1,
+      unresolvedReviewThreadUrls: [url],
+    });
+    const first = await run({ observed: seen, routeConversationHold: route });
+    expect(first.state.status).toBe("armed");
+    expect(first.action).toMatchObject({ kind: "wait", headSha: "sha1", reason: "review-threads-unresolved" });
+    expect(first.state.conversationHold).toMatchObject({
+      headSha: "sha1", reason: "review-threads-unresolved", count: 1, urls: [url], routeReportId: "PIR-review",
+    });
+    const persisted = readBuildPrDeliveryState(writeBuildPrDeliveryState({}, first.state))!;
+    const unread = await run({ observed: { ...seen, reviewThreadsComplete: false }, from: persisted, routeConversationHold: route });
+    expect(unread.state.conversationHold).toEqual(persisted.conversationHold);
+    const again = await run({ observed: seen, from: unread.state, routeConversationHold: route });
+    expect(route).toHaveBeenCalledTimes(1);
+    const resolved = await run({ observed: { ...seen, unresolvedReviewThreads: 0 }, from: again.state, routeConversationHold: route });
+    expect(resolved.state.conversationHold).toBeNull();
+    expect(resolved.state.status).toBe("armed");
+    const queued = await run({ observed: { ...seen, mergeQueueEntry: true }, from: resolved.state, routeConversationHold: route });
+    expect(queued.state.status).toBe("queued");
+    for (const result of [first, unread, again, resolved, queued]) expect(result.calls).toEqual([]);
+  });
+
+  it.each([{ mode: "shadow" }, { actuationAllowed: false }, { repairAuthority: "record" }] as const)(
+    "records the armed conversation hold without routing in a restricted room (%o)",
+    async (posture) => {
+      const route = vi.fn(async () => "PIR-should-not-exist");
+      const outcome = await run({
+        ...posture, observed: observation({ autoMergeEnabled: true, unresolvedReviewThreads: 1 }),
+        routeConversationHold: route,
+      });
+      expect(outcome.state.conversationHold).toMatchObject({ headSha: "sha1", routeReportId: null });
+      expect(route).not.toHaveBeenCalled();
+      expect(outcome.calls).toEqual([]);
+    },
+  );
 
   it("does not arm a green external PR on readiness alone", async () => {
     const outcome = await run({ observed: observation(), from: state });
@@ -295,6 +337,38 @@ describe("executeBuildPrDeliveryAction — PR follow-through (BI-88341B5D)", () 
     expect(outcome.state.followThrough.attempts.attempts["post-push-ci-failure"]).toBeUndefined();
     expect(outcome.state.lastError).toBe("repair-worker-unavailable");
     expect(outcome.state.followThrough.attentionKey).toBe("follow-through:repair-propose:sha1");
+  });
+
+  it("names a missing custody identity once and rechecks it on the same failing head without spending the attempt", async () => {
+    const dispatchRepair = vi.fn()
+      .mockResolvedValueOnce("repair-identity-unavailable")
+      .mockResolvedValueOnce("repair-identity-unavailable")
+      .mockResolvedValueOnce("dispatched");
+    const tick = (from?: typeof state) => run({ from, observed: redDefect, repairAuthority: "dispatch", dispatchRepair });
+    const first = await tick();
+    expect(first.followThrough).toMatchObject({ kind: "attention", target: "process-overseer", reason: "repair-identity-unavailable" });
+    expect(first.state.status).toBe("checking");
+    expect(first.state.followThrough.attempts.attempts["post-push-ci-failure"]).toBeUndefined();
+    const second = await tick(first.state);
+    expect(second.state.followThrough.attentionKey).toBe(first.state.followThrough.attentionKey);
+    expect(second.state.followThrough.attempts.attempts["post-push-ci-failure"]).toBeUndefined();
+    const recovered = await tick(second.state);
+    expect(recovered.state.followThrough.hold).toBe("repairing");
+    expect(recovered.state.followThrough.attentionKey).toBeNull();
+    expect(recovered.state.followThrough.attempts.attempts["post-push-ci-failure"]).toBe(1);
+    expect(dispatchRepair).toHaveBeenCalledTimes(3);
+    expect(recovered.calls).toHaveLength(0);
+  });
+
+  it("keeps an explicit custody authority refusal held without restarting the runtime on recheck", async () => {
+    const dispatchRepair = vi.fn().mockResolvedValue("repair-identity-refused");
+    const first = await run({ observed: redDefect, repairAuthority: "dispatch", dispatchRepair });
+    expect(first.followThrough).toMatchObject({ kind: "attention", target: "process-overseer", reason: "repair-identity-refused" });
+    const second = await run({ from: first.state, observed: redDefect, repairAuthority: "dispatch", dispatchRepair });
+    expect(second.followThrough).toMatchObject({ kind: "hold" });
+    expect(second.state.followThrough.attempts.attempts["post-push-ci-failure"]).toBeUndefined();
+    expect(second.state.followThrough.attentionKey).toBe(first.state.followThrough.attentionKey);
+    expect(dispatchRepair).toHaveBeenCalledTimes(1);
   });
 
   it("decides the same way whichever client opened the PR: the inputs carry no client identity", async () => {
