@@ -13,10 +13,11 @@ import {
 import { parseVerifiedPullRequestObservation, type PullRequestObservation } from "@/lib/contributor-change-lanes/pull-request-observation";
 import { isRecord } from "@/lib/shared/coerce";
 import { readOrganizationTopAccountablePrincipalId } from "@/lib/work-management/organization-accountable.server";
-import { withWorkroomPostureClaim } from "@/lib/work-management/workroom-posture-claim";
+import { readWorkroomPostureClaim, withWorkroomPostureClaim } from "@/lib/work-management/workroom-posture-claim";
 import { WORK_CAPSULE_OPEN_PR_FRESHNESS_MS } from "./liveness";
 import { authoredHeadSha } from "./authored-head";
 import { resolvePullRequestBindings } from "./pull-request-binding";
+import { establishRoomOwnership } from "./room-ownership";
 
 const BATCH_LIMIT = 100;
 const SNAPSHOT_LIMIT = 1000;
@@ -79,7 +80,9 @@ type CustodyRecoveryReason =
   | "unverified-head-repository"
   | "fork-pull-request"
   | "draft-pull-request"
-  | "accountable-owner-missing";
+  | "accountable-owner-missing"
+  | "accountable-owner-not-admitted"
+  | "custody-posture-advisory";
 
 function classifyCustodyRecoveryReason(input: {
   observation: PullRequestObservation;
@@ -99,6 +102,7 @@ function buildPrCustodyMetadata(input: {
   accountableOwnerPrincipalId: string | null;
   standingRoomCapsuleId: string | null;
   recoveryReason: CustodyRecoveryReason | null;
+  recoveryOwnerPrincipalId?: string | null;
   now: Date;
 }) {
   return {
@@ -116,7 +120,33 @@ function buildPrCustodyMetadata(input: {
     authorType: input.source?.authorType ?? null,
     accountableOwnerPrincipalId: input.accountableOwnerPrincipalId,
     standingRoomCapsuleId: input.standingRoomCapsuleId,
+    ...(input.recoveryReason ? { hold: custodyHold(input.recoveryOwnerPrincipalId ?? input.accountableOwnerPrincipalId) } : {}),
     reconciledAt: input.now.toISOString(),
+  };
+}
+
+function custodyHold(principalId: string | null) {
+  return { principalId, role: "pull-request-flow coordinator", nextCheck: "next-complete-pr-inventory-sweep" };
+}
+
+function custodyActorLookup(prisma: typeof import("@dpf/db").prisma) {
+  const cache = new Map<string, Promise<boolean>>();
+  return async (principalId: string | null): Promise<boolean> => {
+    if (!principalId) return false;
+    let valid = cache.get(principalId);
+    if (!valid) {
+      valid = (async () => {
+        const alias = await prisma.principalAlias.findFirst({
+          where: { principalId, aliasType: "user", principal: { kind: "human", status: "active" } },
+          select: { aliasValue: true },
+        });
+        return Boolean(alias && await prisma.user.findFirst({
+          where: { id: alias.aliasValue, isActive: true, workHandedOverAt: null }, select: { id: true },
+        }));
+      })();
+      cache.set(principalId, valid);
+    }
+    return valid;
   };
 }
 
@@ -135,7 +165,10 @@ function mergeCustodyWorkspaceState(
   return writeBuildPrDeliveryState(base, delivery) as unknown as import("@dpf/db").Prisma.InputJsonValue;
 }
 
-async function resolveAccountableStandingDuty(prisma: typeof import("@dpf/db").prisma) {
+async function resolveAccountableStandingDuty(
+  prisma: typeof import("@dpf/db").prisma,
+  canRecover: ReturnType<typeof custodyActorLookup>,
+) {
   const standingRoom = await prisma.workroom.findFirst({
     where: {
       idempotencyKey: { startsWith: "standing-room:pull-request-flow" },
@@ -155,13 +188,15 @@ async function resolveAccountableStandingDuty(prisma: typeof import("@dpf/db").p
     },
     orderBy: { updatedAt: "desc" },
   });
-  const standingOwner =
-    standingRoom?.participants.find((p) => p.roles.includes("accountable"))?.principalId
-    ?? standingRoom?.participants.find((p) => p.roles.includes("coordinator"))?.principalId
-    ?? null;
-  const accountableOwnerPrincipalId = standingOwner
-    ?? (await readOrganizationTopAccountablePrincipalId(prisma as never));
-  return { standingRoom, accountableOwnerPrincipalId };
+  for (const role of ["accountable", "coordinator"] as const) {
+    const eligible: string[] = [];
+    for (const participant of standingRoom?.participants ?? []) {
+      if (participant.roles.includes(role) && await canRecover(participant.principalId)) eligible.push(participant.principalId);
+    }
+    if (eligible.length > 0) return { standingRoom, accountableOwnerPrincipalId: eligible.length === 1 ? eligible[0]! : null };
+  }
+  const owner = await readOrganizationTopAccountablePrincipalId(prisma);
+  return { standingRoom, accountableOwnerPrincipalId: await canRecover(owner) ? owner : null };
 }
 
 async function reconcileOpenPullRequestCustody(input: {
@@ -187,7 +222,8 @@ async function reconcileOpenPullRequestCustody(input: {
 
   const managedRepo = await resolveRepoIdentity(prisma as never);
   const managedRepoFullName = `${managedRepo.owner}/${managedRepo.name}`.toLowerCase();
-  const { standingRoom, accountableOwnerPrincipalId } = await resolveAccountableStandingDuty(prisma);
+  const canRecover = custodyActorLookup(prisma);
+  const { standingRoom, accountableOwnerPrincipalId } = await resolveAccountableStandingDuty(prisma, canRecover);
   const standingRoomRef = standingRoom ? `standing-room:${standingRoom.capsuleId}` : "standing-duty:pull-request-flow";
 
   const openEntries: Array<{ key: string; observation: PullRequestObservation; source?: PullRequestCustodySource | null }> = [];
@@ -224,13 +260,19 @@ async function reconcileOpenPullRequestCustody(input: {
       executorKind: true,
       executorRef: true,
       featureBuildId: true,
+      worktreePath: true,
       leaseHolderPrincipalId: true,
       leaseExpiresAt: true,
       createdByPrincipalId: true,
       requestedByPrincipalId: true,
       lastSyncedAt: true,
       workspaceState: true,
+      scopeClaims: true,
       updatedAt: true,
+      participants: {
+        where: { roles: { has: "coordinator" } },
+        select: { principalId: true, lifecycle: true },
+      },
     },
   });
 
@@ -264,16 +306,105 @@ async function reconcileOpenPullRequestCustody(input: {
         continue;
       }
       const liveLease = existing.leaseExpiresAt != null && existing.leaseExpiresAt.getTime() > now.getTime();
-      if (existing.featureBuildId != null || existing.executorKind === "build-studio" || liveLease) {
+      if (existing.featureBuildId != null || liveLease) {
         summary.alreadyOwned += 1;
         continue;
       }
-      if (existing.leaseExpiresAt != null && existing.leaseExpiresAt.getTime() <= now.getTime()) {
+      const state = isRecord(existing.workspaceState) ? existing.workspaceState : {};
+      const recordedCustody = isRecord(state.prCustody) ? state.prCustody : null;
+      const roomOwner = existing.leaseHolderPrincipalId ?? existing.requestedByPrincipalId ?? existing.createdByPrincipalId;
+      const exact = Boolean(matchedByPr) && existing.headSha?.toLowerCase() === observation.headSha.toLowerCase()
+        && (recordedCustody !== null && !sameRepo || (sameRepo && existing.headBranch === observation.headBranch))
+        && existing.baseBranch === (source?.baseBranch ?? null);
+      if (recordedCustody && !existing.worktreePath && existing.executorRef === standingRoomRef) {
+        if (!exact) {
+          summary.staleSkipped += 1;
+          continue;
+        }
+        const roster = existing.participants ?? [];
+        const coordinators = roster.filter((row) => row.lifecycle === "active");
+        const admitted = coordinators.length === 1 ? coordinators[0]!.principalId : null;
+        const owner = typeof recordedCustody.accountableOwnerPrincipalId === "string" ? recordedCustody.accountableOwnerPrincipalId : null;
+        const removed = roster.some((row) => row.principalId === owner && row.lifecycle !== "active");
+        const actor = !removed && owner === roomOwner && await canRecover(owner) ? owner
+          : await canRecover(admitted) ? admitted : null;
+        const reason = classifyCustodyRecoveryReason({ observation, source, accountableOwnerPrincipalId: actor });
+        const recoveryReason = reason === "accountable-owner-missing" ? "accountable-owner-not-admitted" : reason
+          ?? (readWorkroomPostureClaim(existing.scopeClaims)?.actionBoundary === "advise" ? "custody-posture-advisory" : null);
+        const recoveryOwner = actor ?? accountableOwnerPrincipalId;
+        const metadata = buildPrCustodyMetadata({ observation, source, accountableOwnerPrincipalId: actor,
+          standingRoomCapsuleId: standingRoom?.capsuleId ?? null, recoveryReason, recoveryOwnerPrincipalId: recoveryOwner, now });
+        const oldHold = isRecord(recordedCustody.hold) ? recordedCustody.hold : null;
+        if (recordedCustody.mode === metadata.mode && recordedCustody.recoveryReason === recoveryReason
+          && owner === actor && recordedCustody.headSha === metadata.headSha
+          && (!recoveryReason || (oldHold?.principalId === recoveryOwner && oldHold.nextCheck === "next-complete-pr-inventory-sweep"))) {
+          if (recoveryReason) summary.awaitingAuthorization += 1;
+          else summary.alreadyOwned += 1;
+          continue;
+        }
+        const recorded = await prisma.$transaction(async (tx) => {
+          const update = await tx.workroom.updateMany({
+            where: {
+              id: existing.id, updatedAt: existing.updatedAt, archivedAt: null, status: { notIn: [...TERMINAL_STATUSES] },
+              headSha: existing.headSha, executorKind: existing.executorKind, executorRef: existing.executorRef,
+              leaseHolderPrincipalId: existing.leaseHolderPrincipalId, leaseExpiresAt: existing.leaseExpiresAt,
+              ...(!recoveryReason && actor === admitted && actor !== roomOwner
+                ? { participants: { some: { principalId: actor!, lifecycle: "active" as const, roles: { has: "coordinator" as const } } } }
+                : {}),
+            },
+            data: {
+              ...(!recoveryReason ? { executorKind: "build-studio" as const } : {}),
+              workspaceState: mergeCustodyWorkspaceState(state, observation, metadata),
+            },
+          });
+          if (update.count !== 1) return false;
+          await tx.workroomActivity.create({ data: {
+            workCapsuleId: existing.id, kind: recoveryReason ? "pull-request-custody-hold" : "pull-request-custody-resumed",
+            summary: recoveryReason ? `PR #${observation.number} waits for the pull-request-flow coordinator (${recoveryReason}).`
+              : `PR #${observation.number} custody resumed with an admitted accountable actor.`,
+            payload: { syncRunId, ...metadata },
+          } });
+          return true;
+        });
+        if (!recorded) summary.compareAndSwapLost += 1;
+        else if (recoveryReason) summary.awaitingAuthorization += 1;
+        else summary.handedOff += 1;
+        continue;
+      }
+      if (existing.executorKind === "build-studio") {
+        summary.alreadyOwned += 1;
+        continue;
+      }
+      if (existing.leaseExpiresAt != null || (exact && !roomOwner && !existing.worktreePath)) {
         const recoveryReason = classifyCustodyRecoveryReason({ observation, source, accountableOwnerPrincipalId });
-        const roomOwner = existing.leaseHolderPrincipalId ?? existing.requestedByPrincipalId ?? existing.createdByPrincipalId;
         const sameOwnerEligible = recoveryReason === null
-          && (roomOwner === null || roomOwner === accountableOwnerPrincipalId);
+          && (roomOwner === null || roomOwner === accountableOwnerPrincipalId)
+          && (existing.participants ?? []).every((row) => row.lifecycle !== "active" || row.principalId === accountableOwnerPrincipalId)
+          && (existing.participants ?? []).every((row) => row.principalId !== accountableOwnerPrincipalId || row.lifecycle === "active");
         if (!sameOwnerEligible) {
+          const hold = custodyHold(roomOwner ?? accountableOwnerPrincipalId);
+          const reason = recoveryReason ?? "existing-owner-handoff-required";
+          const current = isRecord(state.prCustodyHold) ? state.prCustodyHold : null;
+          if (exact && (current?.headSha !== observation.headSha || current.reason !== reason || current.principalId !== hold.principalId)) {
+            const newHold = { ...hold, reason, headSha: observation.headSha };
+            const saved = await prisma.$transaction(async (tx) => {
+              const update = await tx.workroom.updateMany({
+                where: { id: existing.id, updatedAt: existing.updatedAt, archivedAt: null, status: { notIn: [...TERMINAL_STATUSES] },
+                  headSha: existing.headSha, executorKind: existing.executorKind, leaseHolderPrincipalId: existing.leaseHolderPrincipalId,
+                  leaseExpiresAt: existing.leaseExpiresAt },
+                data: { workspaceState: { ...state, prCustodyHold: newHold } as import("@dpf/db").Prisma.InputJsonValue },
+              });
+              if (update.count !== 1) return false;
+              await tx.workroomActivity.create({ data: { workCapsuleId: existing.id, kind: "pull-request-custody-hold",
+                summary: `PR #${observation.number} waits for its existing owner or the pull-request-flow coordinator (${reason}).`,
+                payload: { syncRunId, pullRequestNumber: observation.number, ...newHold } } });
+              return true;
+            });
+            if (!saved) {
+              summary.compareAndSwapLost += 1;
+              continue;
+            }
+          }
           summary.awaitingAuthorization += 1;
           continue;
         }
@@ -285,6 +416,7 @@ async function reconcileOpenPullRequestCustody(input: {
           recoveryReason: null,
           now,
         });
+        const { prCustodyHold: _priorHold, ...resumedState } = state;
         const handedOff = await prisma.$transaction(async (tx) => {
           const update = await tx.workroom.updateMany({
             where: {
@@ -303,10 +435,11 @@ async function reconcileOpenPullRequestCustody(input: {
               leaseExpiresAt: null,
               headSha: observation.headSha,
               lastSyncedAt: now,
-              workspaceState: mergeCustodyWorkspaceState(existing.workspaceState, observation, prCustody),
+              workspaceState: mergeCustodyWorkspaceState(resumedState, observation, prCustody),
             },
           });
           if (update.count !== 1) return false;
+          await establishRoomOwnership(tx, { workroomId: existing.id, ownerPrincipalId: accountableOwnerPrincipalId, assistantPrincipalId: null });
           await tx.workroomActivity.create({
             data: {
               workCapsuleId: existing.id,
@@ -334,9 +467,6 @@ async function reconcileOpenPullRequestCustody(input: {
         continue;
       }
       summary.alreadyOwned += 1;
-      const recordedCustody = isRecord(existing.workspaceState) && isRecord(existing.workspaceState.prCustody)
-        ? existing.workspaceState.prCustody
-        : null;
       if (recordedCustody?.mode === "observe-only") summary.awaitingAuthorization += 1;
       continue;
     }
@@ -412,6 +542,9 @@ async function reconcileOpenPullRequestCustody(input: {
             lastSyncedAt: now,
           },
         });
+        if (actionable) {
+          await establishRoomOwnership(tx, { workroomId: created.id, ownerPrincipalId: accountableOwnerPrincipalId, assistantPrincipalId: null });
+        }
         await tx.workroomActivity.create({
           data: {
             workCapsuleId: created.id,
@@ -430,6 +563,7 @@ async function reconcileOpenPullRequestCustody(input: {
               headSha: observation.headSha,
               custodyMode: prCustody.mode,
               recoveryReason,
+              ...(recoveryReason ? { hold: prCustody.hold } : {}),
               accountableOwnerPrincipalId,
               standingRoomCapsuleId: standingRoom?.capsuleId ?? null,
             },
