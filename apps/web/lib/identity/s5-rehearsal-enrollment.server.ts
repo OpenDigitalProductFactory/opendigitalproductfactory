@@ -360,27 +360,38 @@ function replayOutcome(
   return held(409, "requester_state_unverified");
 }
 
-/** Read at most 4 KiB + 1 byte, so an oversized body is rejected without buffering it. */
+/**
+ * A fixed `limit + 1`-byte accumulator. Each chunk is copied in, never kept, so
+ * the request's own (possibly huge) backing buffers are not retained.
+ */
+export function createBoundedAccumulator(limit: number) {
+  const storage = new Uint8Array(limit + 1);
+  let size = 0;
+  return {
+    /** Copy what fits; true once more than `limit` bytes have been offered. */
+    absorb(chunk: Uint8Array): boolean {
+      const take = Math.min(chunk.byteLength, storage.length - size);
+      storage.set(chunk.subarray(0, take), size);
+      size += take;
+      return size > limit || chunk.byteLength > take;
+    },
+    bytes(): Uint8Array { return storage.subarray(0, size); },
+  };
+}
+
+/** Read at most 4 KiB + 1 byte into fixed storage, so an oversized body is rejected without buffering it. */
 export async function readBoundedRequestBody(request: Request): Promise<string> {
   const reader = request.body?.getReader();
   if (!reader) return "";
-  const chunks: Uint8Array[] = [];
-  let total = 0;
+  const accumulator = createBoundedAccumulator(MAX_BODY_BYTES);
   for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    const room = MAX_BODY_BYTES + 1 - total;
-    if (value.byteLength >= room) {
-      // Keep only enough to prove the overflow (4 KiB + 1 in all); never retain or decode the rest.
-      chunks.push(value.subarray(0, room));
-      total += room;
-      await reader.cancel();
-      break;
-    }
-    total += value.byteLength;
-    chunks.push(value);
+    const next = await reader.read();
+    if (next.done) break;
+    const overflow = accumulator.absorb(next.value);
+    (next as { value?: Uint8Array }).value = undefined; // drop the only reference to the chunk before awaiting
+    if (overflow) { await reader.cancel(); break; }
   }
-  return Buffer.concat(chunks.map((chunk) => Buffer.from(chunk.buffer, chunk.byteOffset, chunk.byteLength))).toString("utf8");
+  return new TextDecoder().decode(accumulator.bytes());
 }
 
 /**

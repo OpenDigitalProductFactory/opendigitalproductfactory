@@ -17,6 +17,7 @@ import { canonicalJson } from "@dpf/integration-shared/canonical-json";
 import {
   deriveRequesterSetupDigest,
   encodeRequesterSetupContext,
+  createBoundedAccumulator,
   handleRequesterCommand,
   readBoundedRequestBody,
   type RequesterBoundaryPorts,
@@ -288,6 +289,21 @@ describe("bounded body reader (the served reader, not a substitute)", () => {
     expect(Buffer.byteLength(text, "utf8")).toBe(4097);
     expect(wasCancelled()).toBe(true);
     expect(pulls()).toBeLessThanOrEqual(2);
+  });
+
+  it("copies into fixed 4 KiB + 1 storage and never aliases the request's chunk buffers", () => {
+    const accumulator = createBoundedAccumulator(4096);
+    const huge = new Uint8Array(1024 * 1024).fill(0x61);
+    expect(accumulator.absorb(huge)).toBe(true);
+    const kept = accumulator.bytes();
+    expect(kept.byteLength).toBe(4097);
+    expect(kept.buffer.byteLength).toBe(4097); // backed by the fixed accumulator, not the 1 MiB chunk
+    expect(kept.buffer).not.toBe(huge.buffer);
+    huge.fill(0x7a);
+    expect(kept.every((byte) => byte === 0x61)).toBe(true);
+    const small = createBoundedAccumulator(4096);
+    expect(small.absorb(new Uint8Array(4096))).toBe(false);
+    expect(small.absorb(new Uint8Array(1))).toBe(true);
   });
 
   it("returns a body at the limit whole, across chunks", async () => {

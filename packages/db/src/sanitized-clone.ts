@@ -6,8 +6,6 @@
 // clone step was removed in BI-B1977CEE.
 
 import { getTableSensitivity } from "./table-classification";
-import { spawn, type ChildProcess } from "node:child_process";
-import { pipeline } from "node:stream/promises";
 import { Client } from "pg";
 import { withSanitizedCursorBatches, type CloneFetchMetrics, type CloneBatchReader } from "./sanitized-clone-batches";
 import { buildSanitizedInsertStatements, quoteIdentifier, type ColumnTypeInfo } from "./sanitized-clone-sql";
@@ -98,7 +96,8 @@ export function shouldSkipTable(tableName: string): boolean {
 
 import { PrismaClient, type Prisma } from "../generated/client/client";
 import { PrismaPg } from "@prisma/adapter-pg";
-import { assertSourceHasNoRequester, cloneWriterName, discardRetiredEvidenceFromArgv, newCloneWriterTag, runRegisteredFinalizers } from "./sanitized-clone-cleanup";
+import { assertSourceHasNoRequester, cloneWriterName, discardRetiredEvidenceFromArgv, newCloneWriterTag } from "./sanitized-clone-cleanup";
+import { runAdmittedPsqlCopy } from "./sanitized-clone-copy-process";
 import { runSourceCheckedClone, withApplicationName, withRequesterDestinationFence } from "./sanitized-clone-cleanup";
 import { assertSanitizedCloneSourceIntegrity } from "./sanitized-clone-source-integrity";
 import { resetCloneInstallationIdentity } from "./sanitized-clone-identity-reset";
@@ -390,8 +389,8 @@ export async function runSanitizedClone(
           }
         }
 
-        const previewHash = await hashBcryptPassword(previewPassword, 12); // final writes: one registered, fenced session
-        await runRegisteredFinalizers<Prisma.TransactionClient>(fence, (run) => dev.$transaction(run, { timeout: 60_000 }), async (tx) => {
+        const previewHash = await hashBcryptPassword(previewPassword, 12); // final writes commit on the fence session itself
+        await fence.finalizeOnFenceSession(async (tx) => {
           await resetCloneInstallationIdentity(tx); await provisionContributorPreviewAdmin(tx, previewPassword, async () => previewHash);
         });
       },
@@ -538,61 +537,14 @@ async function copyTableCompatible(
   ]);
   const columns = resolveCompatibleCopyColumns(sourceColumns, destinationColumns, tableName);
 
-  // The destination writer connects and is admitted (registered, fence proven) before any data flows.
-  const destinationPsql = spawn("psql", buildDestinationCopyArgs(devUrl, tableName, columns), {
-    stdio: ["pipe", "ignore", "pipe"],
-    env: { ...buildPsqlEnvironment(), PGAPPNAME: writerName },
-  });
-  const destinationError = collectBoundedStderr(destinationPsql);
-  try { await admitWriter(writerName); } catch (error) { destinationPsql.kill(); throw error; }
-  const sourcePsql = spawn("psql", buildSourceCopyArgs(prodUrl, tableName, columns), {
-    stdio: ["ignore", "pipe", "pipe"],
-  });
-  const sourceError = collectBoundedStderr(sourcePsql);
-
-  try {
-    await Promise.all([
-      pipeline(sourcePsql.stdout!, destinationPsql.stdin!),
-      waitForChild(sourcePsql, "source psql", sourceError),
-      waitForChild(destinationPsql, "destination psql", destinationError),
-    ]);
-  } catch (error) {
-    sourcePsql.kill();
-    destinationPsql.kill();
-    throw error;
-  }
-}
-
-function collectBoundedStderr(child: ChildProcess): () => string {
-  const chunks: Buffer[] = [];
-  let size = 0;
-  child.stderr?.on("data", (chunk: Buffer | string) => {
-    if (size >= 8_192) return;
-    const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
-    const remaining = 8_192 - size;
-    chunks.push(buffer.subarray(0, remaining));
-    size += Math.min(buffer.length, remaining);
-  });
-  return () => Buffer.concat(chunks).toString("utf8").trim();
-}
-
-function waitForChild(
-  child: ChildProcess,
-  label: string,
-  stderr: () => string,
-): Promise<void> {
-  return new Promise((resolve, reject) => {
-    child.once("error", reject);
-    child.once("close", (code, signal) => {
-      if (code === 0) {
-        resolve();
-        return;
-      }
-      const detail = stderr();
-      reject(new Error(
-        `${label} failed (${signal ? `signal ${signal}` : `exit ${String(code)}`})${detail ? `: ${detail}` : ""}`,
-      ));
-    });
+  // The destination writer is admitted (registered, fence proven) before any data flows. The writer name is set
+  // in the URL as well as PGAPPNAME, because a URL application_name would otherwise override PGAPPNAME.
+  await runAdmittedPsqlCopy({
+    destinationArgs: buildDestinationCopyArgs(withApplicationName(devUrl, writerName), tableName, columns),
+    sourceArgs: buildSourceCopyArgs(prodUrl, tableName, columns),
+    writerName,
+    admitWriter,
+    destinationEnv: buildPsqlEnvironment(),
   });
 }
 

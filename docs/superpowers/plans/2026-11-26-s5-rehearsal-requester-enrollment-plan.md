@@ -271,6 +271,7 @@ Already released through `release_workroom_scope`:
 
 **New in revision 6, needs an overlap check:**
 - `packages/db/src/sanitized-clone.ts`, `packages/db/src/sanitized-clone-cleanup.ts` and their tests (clone preflight before reset)
+- `packages/db/src/sanitized-clone-copy-process{,.test}.ts` (the admitted psql COPY child processes, split out to keep `sanitized-clone.ts` under the 800-line cap)
 - `docs/superpowers/plans/2026-11-25-s5-rehearsal-draft-provisioner-plan.md` (parent plan reconciliation)
 - `docs/architecture/ai-agent-meta-model.md`, only if the disposition is "updated"
 - `docs/architecture/architecture-counts.generated.md`, if its inputs change
@@ -318,9 +319,23 @@ Phases 1 to 10 are implemented on `t3/preview-owner-enrollment` and are not yet 
   - every commit from `ed9194b7` on, and the final squash commit, carries both `Design-Grounding-Decision:` and `Signed-off-by:`.
 - **Review fixes.**
   - The clone writer names are now bounded: a 22-byte tag, with every derived name checked against PostgreSQL's 63 bytes.
-  - The clone's final writes (identity reset and preview admin) run on one registered, fenced transaction.
+  - The clone's final writes (identity reset and preview admin) run on one registered, fenced transaction. The second review superseded this; see below.
   - An enroll replay of a retired record holds unless its retained facts match.
   - The served body reader never retains more than 4 KiB + 1.
+
+**Fixes after the second independent review of `4fbf207b` (VERDICT BLOCK; Option A by coordinator GO).**
+- **Option A.** `RequesterFence.finalizeOnFenceSession` runs the identity reset, the preview admin and their COMMIT in one transaction on the pinned session that holds the fence lock. Inside that transaction it re-checks `OWNS_FENCE_PREDICATE` first. On any failure it rolls back. If ownership can no longer be proven, the clone fails with `fence_lost`, because the commit is unproven. The bcrypt hash is computed before the transaction opens. Reset and preview-admin semantics are unchanged.
+  - Real-PostgreSQL tests: the happy commit, plus a loss between the two writes and a loss at the commit boundary (after the last write, before COMMIT). Each loss shows `fence_lost`, no row changed, the registered own writer terminated, a bystander session left alive, and a fresh fenced run recovering.
+  - The unregistered-finalizer path (`runRegisteredFinalizers`) is removed.
+- **psql early failure.** `runAdmittedPsqlCopy` attaches the `error` and `close` handlers when each child spawns. It races admission against the destination exiting, and spawns the source only after admission. On any failure it drains both children (kill, then a bounded wait) and rethrows the original cause.
+  - Real child-process tests cover: ENOENT on the third COPY's destination while its admission hangs; the destination exiting before admission; an admission refusal; and a source failure. No source is spawned for a failed admission, and no child is left running.
+- **URL `application_name`.** A real-psql test shows that a destination URL that already names an application overrides `PGAPPNAME`. With that URL, admission waits for a name that never appears. `withApplicationName` rewrites the URL so admission succeeds.
+- **Fixed reader storage.** `createBoundedAccumulator` keeps the body in one fixed `Uint8Array(4097)` and copies each chunk into it. It never retains a chunk's buffer. The test checks the backing `byteLength`, non-aliasing, immutability after the chunk is mutated, and the overflow flags.
+
+**Remaining risk, explicit and separate from activation.**
+- Option A covers only the two final writes. It does not make every registered writer's commit atomic with fence ownership. The per-table COPY writers are admitted after a fence check but commit on their own sessions. A loss between admission and their commit can still leave a commit that no owner backs. The supervisor drain terminates surviving own writers but cannot undo a commit that has already landed.
+- The clone's pre-existing copy-consistency window stays out of scope, as phase 2 states.
+- Both are tracked in BI-FD9E15FC. That item neither gates nor grants activation; activation stays behind its own ports.
 
 **Other notes.**
 - `verifyRequesterState` is implemented as `readRequesterState` (one statement) plus the pure `evaluateRequesterState`.

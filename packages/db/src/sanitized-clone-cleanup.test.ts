@@ -21,7 +21,6 @@ import {
   discardRetiredEvidenceFromArgv,
   newCloneWriterTag,
   preflightRequesterDestination,
-  runRegisteredFinalizers,
   runWithDestinationCleanup,
   terminateRegisteredWriters,
   tryEnterRequesterFenceShared,
@@ -363,47 +362,78 @@ describe.skipIf(!DATABASE_URL)("requester destination fence (real database)", ()
     expect(Number((await admin.query(`SELECT count(*)::int AS n FROM "${schema}"."CopyTarget"`)).rows[0].n)).toBe(12);
   }, 120_000);
 
-  it("runs the final writes on one registered session: a loss during finalization commits nothing", async () => {
-    await resetRequesters([]);
-    await admin.query(`CREATE TABLE IF NOT EXISTS "${schema}"."Final" (id text PRIMARY KEY)`);
-    await admin.query(`DELETE FROM "${schema}"."Final"`);
-    await admin.query(`INSERT INTO "${schema}"."Final" VALUES ('production-identity')`);
+  it.skipIf(!psqlAvailable)("admits a COPY writer whose destination URL already names another application", async () => {
+    const options = await fenceOptions();
+    const tag = newCloneWriterTag();
+    const name = cloneWriterName(tag, "copy:1");
+    const preset = `${psqlUrl}${psqlUrl.includes("?") ? "&" : "?"}application_name=preexisting-${tag.slice(6)}`;
+    const run = (url: string) => {
+      const child = spawn(psql, [url, "-c", "SELECT pg_sleep(1)"], { stdio: ["ignore", "ignore", "pipe"], env: { ...process.env, PGAPPNAME: name } });
+      return new Promise<number | null>((resolve) => child.on("close", resolve));
+    };
+    // PostgreSQL gives the URL's application_name priority over PGAPPNAME.
+    const control = run(preset);
+    let seen = "";
+    for (let i = 0; i < 80 && !seen; i++) {
+      seen = (await admin.query(`SELECT application_name FROM pg_stat_activity WHERE application_name = $1`, [`preexisting-${tag.slice(6)}`])).rows[0]?.application_name ?? "";
+      if (!seen) await new Promise((r) => setTimeout(r, 50));
+    }
+    expect(seen).toBe(`preexisting-${tag.slice(6)}`);
+    await control;
+    // The clone rewrites the URL with withApplicationName, so admission finds the writer by its own name.
+    await withRequesterDestinationFence(options, async (fence) => {
+      const exited = run(withApplicationName(preset, name));
+      await fence.admitCopy(name);
+      expect(await exited).toBe(0);
+    });
+  }, 60_000);
+
+  describe("final writes commit on the fence session itself (Option A)", () => {
     const finalRows = async () => (await admin.query(`SELECT id FROM "${schema}"."Final" ORDER BY id`)).rows.map((r) => r.id);
-    const sessionTransaction = (session: Client) => async (run: (tx: { $queryRawUnsafe(sql: string, ...v: unknown[]): Promise<unknown>; $executeRawUnsafe(sql: string, ...v: unknown[]): Promise<number> }) => Promise<void>) => {
-      await session.query("BEGIN");
-      try {
-        await run({
-          $queryRawUnsafe: async (sql, ...v) => (await session.query(sql, v)).rows,
-          $executeRawUnsafe: async (sql, ...v) => (await session.query(sql, v)).rowCount ?? 0,
-        });
-        await session.query("COMMIT");
-      } catch (error) {
-        await session.query("ROLLBACK").catch(() => {});
-        throw error;
-      }
+    const seedFinal = async () => {
+      await resetRequesters([]);
+      await admin.query(`CREATE TABLE IF NOT EXISTS "${schema}"."Final" (id text PRIMARY KEY)`);
+      await admin.query(`DELETE FROM "${schema}"."Final"`);
+      await admin.query(`INSERT INTO "${schema}"."Final" VALUES ('production-identity')`);
     };
 
-    // Without a loss the final writes commit, on a session the fence registered first.
-    const ok = await fenceOptions();
-    const okSession = await connect(`${ok.tag}:final`);
-    await withRequesterDestinationFence(ok, (fence) => runRegisteredFinalizers(fence, sessionTransaction(okSession), async (tx) => {
-      await tx.$executeRawUnsafe(`DELETE FROM "${schema}"."Final"`);
-      await tx.$executeRawUnsafe(`INSERT INTO "${schema}"."Final" VALUES ('preview-admin')`);
-    }));
-    expect(await finalRows()).toEqual(["preview-admin"]);
+    it("commits both final writes in one transaction on the lock-owning session", async () => {
+      await seedFinal();
+      await withRequesterDestinationFence(await fenceOptions(), (fence) => fence.finalizeOnFenceSession(async (tx) => {
+        await tx.$executeRawUnsafe(`DELETE FROM "${schema}"."Final"`);
+        await tx.$executeRawUnsafe(`INSERT INTO "${schema}"."Final" VALUES ($1)`, "preview-admin");
+        expect(await tx.$queryRawUnsafe(`SELECT id FROM "${schema}"."Final"`)).toEqual([{ id: "preview-admin" }]);
+      }));
+      expect(await finalRows()).toEqual(["preview-admin"]);
+    }, 30_000);
 
-    // A loss mid-finalization (for example while a password hashes) leaves the destination as it was.
-    const lossy = await fenceOptions();
-    const fencePid = await pidOf(lossy.fenceClient);
-    const lossySession = await connect(`${lossy.tag}:final`);
-    const lossyPid = await pidOf(lossySession);
-    const error = await withRequesterDestinationFence(lossy, (fence) => runRegisteredFinalizers(fence, sessionTransaction(lossySession), async (tx) => {
-      await tx.$executeRawUnsafe(`DELETE FROM "${schema}"."Final"`);
-      await admin.query("SELECT pg_terminate_backend($1)", [fencePid]);
-      await tx.$executeRawUnsafe(`INSERT INTO "${schema}"."Final" VALUES ('after-loss')`).catch(() => 0);
-    })).catch((e: unknown) => e);
-    expect((error as CloneFenceError).code).toBe("fence_lost");
-    expect(await finalRows()).toEqual(["preview-admin"]);
-    expect(await alive(lossyPid)).toBe(false);
-  }, 30_000);
+    it.each([
+      ["between the two writes", false],
+      ["at the commit boundary, after the last write and before COMMIT", true],
+    ])("a fence loss %s commits nothing, drains own writers only, and a fresh run recovers", async (_label, afterLastWrite) => {
+      await seedFinal();
+      const options = await fenceOptions();
+      const fencePid = await pidOf(options.fenceClient);
+      const ownWriter = await connect(`${options.tag}:prisma`);
+      const bystander = await connect(`dpf-test:${randomUUID()}:bystander`);
+      const [ownPid, bystanderPid] = await Promise.all([pidOf(ownWriter), pidOf(bystander)]);
+      const error = await withRequesterDestinationFence(options, async (fence) => {
+        await fence.registerWriter(ownWriter);
+        await fence.finalizeOnFenceSession(async (tx) => {
+          await tx.$executeRawUnsafe(`DELETE FROM "${schema}"."Final"`);
+          if (!afterLastWrite) await admin.query("SELECT pg_terminate_backend($1)", [fencePid]);
+          await tx.$executeRawUnsafe(`INSERT INTO "${schema}"."Final" VALUES ('preview-admin')`).catch(() => 0);
+          if (afterLastWrite) await admin.query("SELECT pg_terminate_backend($1)", [fencePid]);
+        });
+      }).catch((e: unknown) => e);
+      expect((error as CloneFenceError).code).toBe("fence_lost");
+      expect(await finalRows()).toEqual(["production-identity"]);
+      expect(await alive(ownPid)).toBe(false);
+      expect(await alive(bystanderPid)).toBe(true);
+      await expect(withRequesterDestinationFence(await fenceOptions(), async (fence) => {
+        await truncateDestination(fence);
+        return "recovered";
+      })).resolves.toBe("recovered");
+    }, 30_000);
+  });
 });

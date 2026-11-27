@@ -213,6 +213,18 @@ export type RequesterFence = {
   registerWriter(writer: SqlClient): Promise<void>;
   /** Admit a COPY writer by its unique application name once connected, before any data flows. */
   admitCopy(applicationName: string): Promise<void>;
+  /**
+   * Run the clone's final writes and their COMMIT in one transaction on the
+   * pinned fence session itself, so the commit and lock ownership cannot
+   * separate. A loss, or a COMMIT whose outcome is unproven, fails as fence_lost.
+   */
+  finalizeOnFenceSession(run: (tx: FenceSessionTransaction) => Promise<void>): Promise<void>;
+};
+
+/** The minimal raw-SQL surface the final writes need, bound to the fence session's open transaction. */
+export type FenceSessionTransaction = {
+  $queryRawUnsafe(sql: string, ...values: unknown[]): Promise<Array<{ id: string }>>;
+  $executeRawUnsafe(sql: string, ...values: unknown[]): Promise<number>;
 };
 
 function isFenceLost(error: unknown): boolean {
@@ -294,6 +306,32 @@ export async function withRequesterDestinationFence<T>(
       }
       await ensureHeld();
     },
+    async finalizeOnFenceSession(run) {
+      if (lost) throw lostError("the destination fence was lost; no final write runs");
+      const query = async (sql: string, values: unknown[]) =>
+        (await fenceClient.query(sql, values)) as { rows: Array<Record<string, unknown>>; rowCount?: number | null };
+      let open = false;
+      try {
+        await fenceClient.query("BEGIN");
+        open = true;
+        // The session that holds the session-level lock proves it inside the same transaction that commits.
+        if ((await fenceClient.query(`SELECT ${OWNS_FENCE_PREDICATE} AS held`)).rows[0]?.held !== true) {
+          markLost();
+          throw lostError("the fence session no longer owns the destination fence; no final write runs");
+        }
+        await run({
+          $queryRawUnsafe: async (sql, ...values) => (await query(sql, values)).rows as Array<{ id: string }>,
+          $executeRawUnsafe: async (sql, ...values) => (await query(sql, values)).rowCount ?? 0,
+        });
+        open = false; // once COMMIT is sent, its outcome is either proven below or treated as lost
+        await fenceClient.query("COMMIT");
+      } catch (error) {
+        if (open) await fenceClient.query("ROLLBACK").catch(() => {});
+        if (error instanceof CloneFenceError) throw error;
+        if (await probeHeld()) throw error;
+        throw lostError("the destination fence was lost during the final writes; their commit is unproven and the clone fails");
+      }
+    },
   };
 
   const drain = async (settled: Promise<unknown>) => {
@@ -332,22 +370,4 @@ export async function withRequesterDestinationFence<T>(
       await fenceClient.query("SELECT pg_advisory_unlock(hashtextextended($1, 0))", [REQUESTER_DESTINATION_FENCE_KEY]);
     }
   }
-}
-
-/**
- * Run the clone's final destination writes (identity reset, preview admin) in
- * one pinned transaction whose backend is registered with the fence before any
- * write, and re-prove the fence before commit. A fence loss terminates the
- * registered backend, so nothing commits.
- */
-export async function runRegisteredFinalizers<Tx extends { $queryRawUnsafe(sql: string, ...values: unknown[]): Promise<unknown> }>(
-  fence: RequesterFence,
-  transaction: (run: (tx: Tx) => Promise<void>) => Promise<void>,
-  finalize: (tx: Tx) => Promise<void>,
-): Promise<void> {
-  await transaction(async (tx) => {
-    await fence.registerWriter({ query: async (sql) => ({ rows: (await tx.$queryRawUnsafe(sql)) as Array<Record<string, unknown>> }) });
-    await finalize(tx);
-    await fence.ensureHeld();
-  });
 }
