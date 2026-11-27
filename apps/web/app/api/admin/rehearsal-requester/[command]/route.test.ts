@@ -151,7 +151,7 @@ describe("S5 rehearsal requester boundary (BI-9F7192F9 phase 4, AC-E1)", () => {
       .resolves.toMatchObject({ status: 409, body: { code: "preview_enrollment_fence_unavailable" } });
     expect(notReady.preBodyOwnerAndDb).not.toHaveBeenCalled();
     expectNoBodyOrEffects(notReady);
-    const notOwner = ports({ preBodyOwnerAndDb: vi.fn(async () => ({ ok: false as const, code: "owner_binding_unavailable" })) });
+    const notOwner = ports({ preBodyOwnerAndDb: vi.fn(async () => ({ ok: false as const, error: "owner_binding_unavailable" })) });
     await expect(handleRequesterCommand(request("enroll"), "enroll", notOwner))
       .resolves.toMatchObject({ status: 409, body: { code: "owner_binding_unavailable" } });
     expectNoBodyOrEffects(notOwner);

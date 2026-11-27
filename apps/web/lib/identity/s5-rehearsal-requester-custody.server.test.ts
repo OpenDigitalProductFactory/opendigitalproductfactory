@@ -126,7 +126,7 @@ describe.skipIf(!process.env.DPF_S5_REQUESTER_TEST_DATABASE_URL)("retirement aga
   function wire(opts: { owner?: RetirementDeps["ownerBinding"]; beforeReadback?: () => Promise<void>; loseAck?: boolean;
     dbIdentity?: string; installation?: string } = {}) {
     const deps: RetirementDeps = {
-      ownerBinding: opts.owner ?? (async () => ({ ok: true, ownerPrincipalId: "p-owner" })),
+      ownerBinding: opts.owner ?? (async () => ({ ok: true, data: { ownerPrincipalId: "p-owner" } })),
       dbIdentity: async () => opts.dbIdentity ?? "db-1",
       installationAttestation: async () => opts.installation ?? "install-1",
       revokeTokensAndClients: async (scope, input) => {
@@ -232,7 +232,7 @@ describe.skipIf(!process.env.DPF_S5_REQUESTER_TEST_DATABASE_URL)("retirement aga
     const r = await enrolled();
     await expect(retire(r.digest, wire({ dbIdentity: "db-2" }))).resolves.toMatchObject({ status: 409, body: { code: "db_identity_mismatch" } });
     await expect(retire(r.digest, wire({ installation: "install-2" }))).resolves.toMatchObject({ status: 409, body: { code: "installation_mismatch" } });
-    await expect(retire(r.digest, wire({ owner: async () => ({ ok: false, code: "not_owner" }) }))).resolves.toMatchObject({ status: 403, body: { outcome: "refused" } });
+    await expect(retire(r.digest, wire({ owner: async () => ({ ok: false, error: "not_owner" }) }))).resolves.toMatchObject({ status: 403, body: { outcome: "refused" } });
     await pool.query(`INSERT INTO "PrincipalAlias" VALUES ($1, 'email', $2, '')`, [r.principalId, `drift-${r.userId}@example.invalid`]);
     await expect(retire(r.digest, wire())).resolves.toMatchObject({ status: 409, body: { code: "requester_alias_drift" } });
     expect(await one(`SELECT lifecycle FROM "S5RehearsalRequesterEnrollment" WHERE "setupDigest" = $1`, [r.digest])).toEqual({ lifecycle: "active" });
@@ -245,7 +245,7 @@ describe.skipIf(!process.env.DPF_S5_REQUESTER_TEST_DATABASE_URL)("retirement aga
     await expect(retire(r.digest, wire({ beforeReadback: drift }))).resolves.toEqual({
       status: 202, body: { outcome: "committed_unverified", reason: "requester_state_unverified", setupDigest: r.digest },
     });
-    await expect(retire(r.digest, wire({ owner: async () => ({ ok: false, code: "owner_capability_missing" }) })))
+    await expect(retire(r.digest, wire({ owner: async () => ({ ok: false, error: "owner_capability_missing" }) })))
       .resolves.toMatchObject({ status: 403, body: { outcome: "refused" } });
     await expect(retire(r.digest, wire())).resolves.toMatchObject({ status: 409, body: { code: "requester_alias_drift" } });
     expect(await audits(r.digest)).toBe(1);
@@ -257,5 +257,18 @@ describe.skipIf(!process.env.DPF_S5_REQUESTER_TEST_DATABASE_URL)("retirement aga
     await expect(retire(r.digest, wire())).resolves.toMatchObject({ status: 200, body: { outcome: "retired" } });
     expect(await audits(r.digest)).toBe(1);
     expect(evaluateRequesterState(await readRequesterState(poolSql, r.digest), { setupDigest: r.digest })).toMatchObject({ verified: true, lifecycle: "retired" });
+  });
+});
+
+describe("served SQL registry (static statement dispatch)", async () => {
+  const { prismaRequesterSql, OWNER_SNAPSHOT_SQL, RETIRE_TERMINAL_SQL } = await import("./s5-rehearsal-requester-sql.server");
+  it("runs a registered statement as a static raw call and refuses anything else", async () => {
+    const $queryRawUnsafe = vi.fn(async () => [{ ok: 1 }]);
+    const sql = prismaRequesterSql({ $queryRawUnsafe } as never);
+    await expect(sql.query(RETIRE_TERMINAL_SQL, ["d", "rehearsal_complete", "p"])).resolves.toEqual([{ ok: 1 }]);
+    expect($queryRawUnsafe).toHaveBeenCalledWith(RETIRE_TERMINAL_SQL, "d", "rehearsal_complete", "p");
+    await expect(sql.query(OWNER_SNAPSHOT_SQL, ["u", ["HR-000"]])).resolves.toEqual([{ ok: 1 }]);
+    await expect(sql.query(`DELETE FROM "IntegrationCredential"`)).rejects.toThrow("unregistered S5 requester statement");
+    expect($queryRawUnsafe).toHaveBeenCalledTimes(2);
   });
 });

@@ -120,7 +120,7 @@ describe("owner binding (BI-9F7192F9 phase 5, AC-E2)", async () => {
   });
 
   it("accepts the mapped owner acting through its exact alias with live manage_users and manage_platform", () => {
-    expect(evaluateOwnerSnapshot(snapshot())).toEqual({ ok: true, ownerPrincipalId: owner });
+    expect(evaluateOwnerSnapshot(snapshot())).toEqual({ ok: true, data: { ownerPrincipalId: owner } });
   });
 
   it.each([
@@ -131,14 +131,14 @@ describe("owner binding (BI-9F7192F9 phase 5, AC-E2)", async () => {
     ["a mapping with no local user", snapshot({ top: { kind: "human", status: "active", userAliasCount: 0, localUserActive: null } }), "owner_mapping_invalid"],
     ["a mapping to a missing Principal", snapshot({ top: null }), "owner_mapping_invalid"],
   ])("holds on %s", (_label, input, code) => {
-    expect(evaluateOwnerSnapshot(input)).toEqual({ ok: false, code });
+    expect(evaluateOwnerSnapshot(input)).toEqual({ ok: false, error: code });
   });
 
   it("R-OWNER-COHERENT: the unset-owner fallback decides 0, 1 and 2 candidates from the one row set", () => {
     const unset = { topPrincipalId: null, top: null };
-    expect(evaluateOwnerSnapshot(snapshot({ ...unset, fallback: [] }))).toEqual({ ok: false, code: "owner_candidate_ambiguous" });
-    expect(evaluateOwnerSnapshot(snapshot({ ...unset, fallback: [owner] }))).toEqual({ ok: true, ownerPrincipalId: owner });
-    expect(evaluateOwnerSnapshot(snapshot({ ...unset, fallback: [owner, "PRN-other"] }))).toEqual({ ok: false, code: "owner_candidate_ambiguous" });
+    expect(evaluateOwnerSnapshot(snapshot({ ...unset, fallback: [] }))).toEqual({ ok: false, error: "owner_candidate_ambiguous" });
+    expect(evaluateOwnerSnapshot(snapshot({ ...unset, fallback: [owner] }))).toEqual({ ok: true, data: { ownerPrincipalId: owner } });
+    expect(evaluateOwnerSnapshot(snapshot({ ...unset, fallback: [owner, "PRN-other"] }))).toEqual({ ok: false, error: "owner_candidate_ambiguous" });
   });
 
   it.each([
@@ -150,14 +150,14 @@ describe("owner binding (BI-9F7192F9 phase 5, AC-E2)", async () => {
     ["an owner lacking manage_platform", { roleKeys: ["HR-500"] }, "owner_capability_missing"],
     ["an inactive actor", { isActive: false }, "actor_inactive"],
   ])("refuses %s", (_label, actor, code) => {
-    expect(evaluateOwnerSnapshot(snapshot({}, actor))).toEqual({ ok: false, code });
+    expect(evaluateOwnerSnapshot(snapshot({}, actor))).toEqual({ ok: false, error: code });
   });
 
   it("reads every fact in exactly one SQL statement, then binds the owner-confirmed receipt", async () => {
-    const queryRawUnsafe = vi.fn(async (_sql: string, ..._values: unknown[]) => [{ snapshot: snapshot() }]);
+    const queryRawUnsafe = vi.fn(async (_sql: string, _values?: unknown[]) => [{ snapshot: snapshot() as unknown as Record<string, unknown> }]);
     const receipt = vi.fn(async () => ({ ownerPrincipalId: owner, installationRef: "install-1" }));
-    await expect(decideOwnerBinding({ $queryRawUnsafe: queryRawUnsafe }, "owner-user", { readOwnerReceipt: receipt, installationRef: "install-1" }))
-      .resolves.toEqual({ ok: true, ownerPrincipalId: owner });
+    await expect(decideOwnerBinding({ query: queryRawUnsafe }, "owner-user", { readOwnerReceipt: receipt, installationRef: "install-1" }))
+      .resolves.toEqual({ ok: true, data: { ownerPrincipalId: owner } });
     expect(queryRawUnsafe).toHaveBeenCalledTimes(1);
     expect(queryRawUnsafe.mock.calls[0]?.[0]).toBe(OWNER_SNAPSHOT_SQL);
   });
@@ -167,9 +167,9 @@ describe("owner binding (BI-9F7192F9 phase 5, AC-E2)", async () => {
     ["naming the wrong Principal", { ownerPrincipalId: "PRN-other", installationRef: "install-1" }, "owner_receipt_mismatch"],
     ["for the wrong install", { ownerPrincipalId: owner, installationRef: "install-2" }, "owner_receipt_mismatch"],
   ])("holds on an owner receipt %s", async (_label, receiptValue, code) => {
-    const result = await decideOwnerBinding({ $queryRawUnsafe: vi.fn(async () => [{ snapshot: snapshot() }]) }, "owner-user",
+    const result = await decideOwnerBinding({ query: vi.fn(async () => [{ snapshot: snapshot() }]) }, "owner-user",
       { readOwnerReceipt: vi.fn(async () => receiptValue), installationRef: "install-1" });
-    expect(result).toEqual({ ok: false, code });
+    expect(result).toEqual({ ok: false, error: code });
   });
 });
 
@@ -211,26 +211,26 @@ describe.skipIf(!process.env.DPF_S5_REQUESTER_TEST_DATABASE_URL)("owner snapshot
   });
 
   it("decides the unset-owner fallback with one, then two candidates, and ignores a role-less superuser", async () => {
-    expect(evaluateOwnerSnapshot(await run("u-a"))).toEqual({ ok: true, ownerPrincipalId: "p-a" });
-    expect(evaluateOwnerSnapshot(await run("u-root"))).toEqual({ ok: false, code: "not_owner" });
+    expect(evaluateOwnerSnapshot(await run("u-a"))).toEqual({ ok: true, data: { ownerPrincipalId: "p-a" } });
+    expect(evaluateOwnerSnapshot(await run("u-root"))).toEqual({ ok: false, error: "not_owner" });
     await human("c", "role-admin");
-    expect(evaluateOwnerSnapshot(await run("u-a"))).toEqual({ ok: false, code: "owner_candidate_ambiguous" });
+    expect(evaluateOwnerSnapshot(await run("u-a"))).toEqual({ ok: false, error: "owner_candidate_ambiguous" });
   });
 
   it("uses the mapping when set, refuses a non-owner administrator, and holds a mapping to an inactive Principal", async () => {
     await db.query(`UPDATE "Organization" SET "topAccountablePrincipalId" = 'p-a'`);
-    expect(evaluateOwnerSnapshot(await run("u-a"))).toEqual({ ok: true, ownerPrincipalId: "p-a" });
-    expect(evaluateOwnerSnapshot(await run("u-c"))).toEqual({ ok: false, code: "not_owner" });
+    expect(evaluateOwnerSnapshot(await run("u-a"))).toEqual({ ok: true, data: { ownerPrincipalId: "p-a" } });
+    expect(evaluateOwnerSnapshot(await run("u-c"))).toEqual({ ok: false, error: "not_owner" });
     await db.query(`UPDATE "Principal" SET status = 'inactive' WHERE id = 'p-a'`);
-    expect(evaluateOwnerSnapshot(await run("u-a"))).toEqual({ ok: false, code: "owner_mapping_invalid" });
+    expect(evaluateOwnerSnapshot(await run("u-a"))).toEqual({ ok: false, error: "owner_mapping_invalid" });
   });
 
   it("refuses the governed requester and an ambiguous organization", async () => {
     await db.query(`UPDATE "Principal" SET status = 'active' WHERE id = 'p-a'`);
     await db.query(`INSERT INTO "S5RehearsalRequesterEnrollment" VALUES ('u-a')`);
-    expect(evaluateOwnerSnapshot(await run("u-a"))).toEqual({ ok: false, code: "requester_actor" });
+    expect(evaluateOwnerSnapshot(await run("u-a"))).toEqual({ ok: false, error: "requester_actor" });
     await db.query(`INSERT INTO "Organization"(id) VALUES ('org-2')`);
-    expect(evaluateOwnerSnapshot(await run("u-a"))).toEqual({ ok: false, code: "org_ambiguous" });
+    expect(evaluateOwnerSnapshot(await run("u-a"))).toEqual({ ok: false, error: "org_ambiguous" });
   });
 });
 
@@ -323,12 +323,12 @@ describe.skipIf(!process.env.DPF_S5_REQUESTER_TEST_DATABASE_URL)("enrollment aga
     const hasher = vi.fn(async (password: string) => { await opts.hashGate?.(); return `$2a$12$${password.length}`; });
     const logs: string[] = [];
     const deps: Deps = {
-      ownerBinding: async () => ({ ok: true, ownerPrincipalId: "p-owner" }),
+      ownerBinding: async () => ({ ok: true, data: { ownerPrincipalId: "p-owner" } }),
       currentReservation: (ctx, scope) => reservation(scope.sql, ctx),
       commitFences: async (ctx, scope) => {
         await opts.beforeFence?.(ctx);
         const held = await scope.sql.query(`SELECT 1 AS present FROM "Reservation" WHERE ref = $1 AND revision = $2 FOR SHARE`, [ctx.reservationRef, ctx.reservationRevision]);
-        return held.length ? { ok: true, refs } : { ok: false, code: "reservation_fence_lost" };
+        return held.length ? { ok: true, data: { refs } } : { ok: false, error: "reservation_fence_lost" };
       },
       verify: async (digest, ctx, scope) => evaluateRequesterState(await readRequesterState(scope.sql, digest), { setupDigest: digest, facts: ctx }),
       hashPassword: hasher,

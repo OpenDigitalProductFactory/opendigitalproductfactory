@@ -3,6 +3,7 @@ import "server-only";
 import { prisma, type Prisma } from "@dpf/db";
 
 import { revokeAccountAgentAccessInTransaction } from "@/lib/auth/account-agent-access";
+import { err, type ActionResult } from "@/lib/shared/action-result";
 import {
   SETUP_LOCK_PREFIX,
   decideOwnerBinding,
@@ -23,6 +24,21 @@ import {
   type RequesterStateRow,
   type RequesterTxResult,
 } from "./s5-rehearsal-enrollment.server";
+import {
+  ALIAS_COUNT_SQL,
+  BEGIN_READ_ONLY_SNAPSHOT_SQL,
+  COMMIT_SQL,
+  DEACTIVATE_PRINCIPAL_SQL,
+  DEACTIVATE_USER_SQL,
+  RECORD_PRESENT_SQL,
+  RETIRE_LOCK_RECORD_SQL,
+  RETIRE_TERMINAL_SQL,
+  REVOKE_BINDINGS_SQL,
+  ROLLBACK_SQL,
+  SETUP_SESSION_LOCK_SQL,
+  SETUP_SESSION_UNLOCK_SQL,
+  prismaRequesterSql,
+} from "./s5-rehearsal-requester-sql.server";
 
 /**
  * BI-9F7192F9 custody of the S5 rehearsal requester after enrollment: the
@@ -38,23 +54,23 @@ import {
  */
 export async function readRequesterStatus(conn: RequesterSql, setupDigest: string): Promise<RequesterBoundaryResult> {
   const key = SETUP_LOCK_PREFIX + setupDigest;
-  await conn.query("SELECT true AS locked FROM pg_advisory_lock(hashtextextended($1, 0))", [key]);
+  await conn.query(SETUP_SESSION_LOCK_SQL, [key]);
   try {
-    await conn.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
+    await conn.query(BEGIN_READ_ONLY_SNAPSHOT_SQL);
     let row: RequesterStateRow | null;
     let present: boolean;
     try {
-      present = (await conn.query(`SELECT 1 AS present FROM "S5RehearsalRequesterEnrollment" WHERE "setupDigest" = $1`, [setupDigest])).length > 0;
+      present = (await conn.query(RECORD_PRESENT_SQL, [setupDigest])).length > 0;
       row = await readRequesterState(conn, setupDigest);
-      await conn.query("COMMIT");
+      await conn.query(COMMIT_SQL);
     } catch (error) {
-      await conn.query("ROLLBACK").catch(() => undefined);
+      await conn.query(ROLLBACK_SQL).catch(() => undefined);
       throw error;
     }
     if (!present) return { status: 200, body: { outcome: "not_committed", setupDigest } };
     return { status: 200, body: { outcome: "committed", setupDigest, verification: evaluateRequesterState(row, { setupDigest }) } };
   } finally {
-    await conn.query("SELECT pg_advisory_unlock(hashtextextended($1, 0)) AS unlocked", [key]);
+    await conn.query(SETUP_SESSION_UNLOCK_SQL, [key]);
   }
 }
 
@@ -63,7 +79,7 @@ export type RequesterStatusPorts = {
   canonicalOrigin(request: Request): string | null;
   sessionUserId(): Promise<string | null>;
   /** Owner binding plus the lease-independent installation and DB proofs; denies until served. */
-  statusProofs(userId: string): Promise<{ ok: true } | { ok: false; code: string }>;
+  statusProofs(userId: string): Promise<ActionResult>;
   pinnedConnection<T>(run: (conn: RequesterSql) => Promise<T>): Promise<T>;
 };
 
@@ -77,7 +93,7 @@ export async function handleRequesterStatus(request: Request, rawCommand: string
   const setupDigest = new URL(request.url).searchParams.get("setupDigest");
   if (!setupDigest || !/^[a-f0-9]{64}$/u.test(setupDigest)) return held(400, "setup_digest_invalid");
   const proofs = await ports.statusProofs(userId);
-  if (!proofs.ok) return held(409, proofs.code);
+  if (!proofs.ok) return held(409, proofs.error);
   return ports.pinnedConnection((conn) => readRequesterStatus(conn, setupDigest));
 }
 
@@ -85,7 +101,7 @@ export async function handleRequesterStatus(request: Request, rawCommand: string
 export function servedRequesterStatusPorts(deps: Pick<RequesterStatusPorts, "environmentClass" | "canonicalOrigin" | "sessionUserId">): RequesterStatusPorts {
   return {
     ...deps,
-    statusProofs: async () => ({ ok: false, code: "owner_binding_unavailable" }),
+    statusProofs: async () => err("owner_binding_unavailable"),
     pinnedConnection: async () => { throw new Error("status connection is not served"); },
   };
 }
@@ -146,20 +162,14 @@ export async function executeRetirement(
   deps: RetirementDeps,
 ): Promise<RequesterTxResult> {
   const { setupDigest } = input;
-  const record = (await scope.sql.query(
-    `SELECT "userId", "principalId", lifecycle::text AS lifecycle, "rulingRef", "reservationRef", "attemptRef", "fixtureRef",
-       "installationRef", "leaseRef", "dbIdentityRef"
-     FROM "S5RehearsalRequesterEnrollment" WHERE "setupDigest" = $1 FOR UPDATE`, [setupDigest]))[0] as LockedRecord | undefined;
+  const record = (await scope.sql.query(RETIRE_LOCK_RECORD_SQL, [setupDigest]))[0] as LockedRecord | undefined;
   if (!record) return held(409, "requester_record_missing");
 
   const owner = await deps.ownerBinding(scope, input.userId);
-  if (!owner.ok) return ACTOR_REFUSALS.has(owner.code) ? refused(403, owner.code) : held(409, owner.code);
+  if (!owner.ok) return ACTOR_REFUSALS.has(owner.error) ? refused(403, owner.error) : held(409, owner.error);
   if ((await deps.dbIdentity(scope)) !== record.dbIdentityRef) return held(409, "db_identity_mismatch");
   if ((await deps.installationAttestation(scope)) !== record.installationRef) return held(409, "installation_mismatch");
-  const alias = (await scope.sql.query(
-    `SELECT count(*)::int AS total,
-       count(*) FILTER (WHERE "aliasType" = 'user' AND "aliasValue" = $2 AND issuer = '')::int AS exact
-     FROM "PrincipalAlias" WHERE "principalId" = $1`, [record.principalId, record.userId]))[0];
+  const alias = (await scope.sql.query(ALIAS_COUNT_SQL, [record.principalId, record.userId]))[0];
   if (alias?.total !== 1 || alias?.exact !== 1) return held(409, "requester_alias_drift");
 
   const target = { setupDigest, userId: record.userId, principalId: record.principalId };
@@ -167,25 +177,18 @@ export async function executeRetirement(
     return { ...held(409, "requester_state_unverified"), after: () => retirementReadback(deps, target, "repeat") };
   }
 
-  await scope.sql.query(
-    `UPDATE "AuthorityBinding" SET status = 'revoked', "updatedAt" = now()
-     WHERE "oauthUserId" = $1 AND status <> 'revoked' RETURNING 1 AS revoked`, [record.userId]);
+  await scope.sql.query(REVOKE_BINDINGS_SQL, [record.userId]);
   await deps.revokeTokensAndClients(scope, {
     userId: record.userId, revokedAt: new Date(),
-    revokedReason: `s5_rehearsal_requester_retired: ${input.retirementReason} (by ${owner.ownerPrincipalId})`,
+    revokedReason: `s5_rehearsal_requester_retired: ${input.retirementReason} (by ${owner.data.ownerPrincipalId})`,
   });
-  await scope.sql.query(`UPDATE "User" SET "isActive" = false WHERE id = $1 RETURNING 1 AS updated`, [record.userId]);
-  await scope.sql.query(`UPDATE "Principal" SET status = 'inactive', "updatedAt" = now() WHERE id = $1 RETURNING 1 AS updated`, [record.principalId]);
-  const terminal = await scope.sql.query(
-    `UPDATE "S5RehearsalRequesterEnrollment"
-     SET lifecycle = 'retired', "lifecycleAt" = now(),
-         "retirementReason" = $2::"S5RehearsalRequesterRetirementReason", "retiredByPrincipalId" = $3
-     WHERE "setupDigest" = $1 AND lifecycle = 'active' RETURNING 1 AS retired`,
-    [setupDigest, input.retirementReason, owner.ownerPrincipalId]);
+  await scope.sql.query(DEACTIVATE_USER_SQL, [record.userId]);
+  await scope.sql.query(DEACTIVATE_PRINCIPAL_SQL, [record.principalId]);
+  const terminal = await scope.sql.query(RETIRE_TERMINAL_SQL, [setupDigest, input.retirementReason, owner.data.ownerPrincipalId]);
   if (terminal.length !== 1) throw new Error("terminal write did not apply");
   const { rulingRef, reservationRef, attemptRef, fixtureRef, installationRef, leaseRef, dbIdentityRef } = record;
   await deps.writeAudit(scope, {
-    command: "retire", setupDigest, ownerUserId: input.userId, ownerPrincipalId: owner.ownerPrincipalId,
+    command: "retire", setupDigest, ownerUserId: input.userId, ownerPrincipalId: owner.data.ownerPrincipalId,
     requesterUserId: record.userId, retirementReason: input.retirementReason,
     refs: { rulingRef, reservationRef, attemptRef, fixtureRef, installationRef, leaseRef, dbIdentityRef },
   });
@@ -200,8 +203,7 @@ export async function executeRetirement(
 /** Served retirement effects: the owner receipt, DB identity and installation proofs deny until served. */
 export function servedRetirementDeps(installationRef: string): RetirementDeps {
   return {
-    ownerBinding: (scope, userId) => decideOwnerBinding(
-      { $queryRawUnsafe: (q, ...values) => scope.sql.query(q, values) }, userId, servedOwnerReceiptPort(installationRef)),
+    ownerBinding: (scope, userId) => decideOwnerBinding(scope.sql, userId, servedOwnerReceiptPort(installationRef)),
     dbIdentity: async () => null,
     installationAttestation: async () => null,
     revokeTokensAndClients: async (scope, input) => {
@@ -210,7 +212,7 @@ export function servedRetirementDeps(installationRef: string): RetirementDeps {
     writeAudit: (scope, input) => writeRequesterAudit(scope.client as Prisma.TransactionClient, input),
     readback: (setupDigest) => prisma.$transaction(async (tx) => {
       await tx.$executeRawUnsafe("SET TRANSACTION READ ONLY");
-      return readRequesterState({ query: (q, values = []) => tx.$queryRawUnsafe(q, ...values) }, setupDigest);
+      return readRequesterState(prismaRequesterSql(tx), setupDigest);
     }, { isolationLevel: "RepeatableRead" }),
   };
 }

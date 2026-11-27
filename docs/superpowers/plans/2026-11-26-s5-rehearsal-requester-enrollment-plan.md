@@ -219,6 +219,7 @@ Activation, sessions, delegation and issuance belong to BI-9F5D1052.
 - `apps/web/lib/identity/s5-rehearsal-enrollment.server{,.test}.ts`
 - `apps/web/lib/identity/s5-rehearsal-requester-custody.server{,.test}.ts` (status, retirement and the read seam; split out to stay under the 800-line module cap)
 - `apps/web/lib/identity/s5-rehearsal-requester-never-active.test.ts` (phase 7 issuer regressions)
+- `apps/web/lib/identity/s5-rehearsal-requester-sql.server.ts` (every requester SQL statement and the served Prisma adapter, which dispatches each registered statement to a static raw call and refuses the rest)
 - `apps/web/app/api/admin/rehearsal-requester/[command]/route{,.test}.ts`
 - `apps/web/lib/identity/password-policy.ts`
 
@@ -301,6 +302,7 @@ Phases 1 to 10 are implemented on `t3/preview-owner-enrollment` and are not yet 
 - Focused Vitest only: 290 tests across the 22 touched suites, plus web typecheck. No full gate has run.
 - The PostgreSQL proofs (R-FENCE-LOSS, R-ONE-FENCE, R-STATUS-WAIT, R-OWNER-COHERENT, the enrollment and retirement suites) ran against throwaway containers with stub tables. They drive the real boundary, runner, enrollment, retirement and status code. The create, audit and revocation writes in those tests are SQL stand-ins for the served Prisma adapters, which only typecheck and helper unit tests cover.
 - Nothing ran against a live, shared or preview database.
+- Preflight conformance after the merge-forward of `1132c5e9`: owner and proof results use the canonical `ActionResult` (`ok()`/`err()`), and the served SQL adapter is a closed static-statement registry. No guard baseline grew.
 
 **What is served: nothing that writes.**
 - Readiness denies (`preview_enrollment_fence_unavailable`), so every served request holds before any transaction opens.

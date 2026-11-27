@@ -394,7 +394,7 @@ describe("governed rehearsal requester guards (BI-9F7192F9 phase 8, AC-E7)", () 
 
     it("refuses to complete a reset, even with a token issued before enrollment", async () => {
       mockPrisma.passwordResetToken.findUnique.mockResolvedValue({
-        id: "old-token", expiresAt: new Date("2099-01-01T00:00:00Z"), consumedAt: null,
+        id: "old-token", expiresAt: new Date(Date.now() + 86_400_000), consumedAt: null,
         user: { id: "requester", email: "rehearsal-0123456789abcdef@s5-rehearsal.invalid", isActive: true },
       });
       await expect(completePasswordReset({ token: "raw", newPassword: "ValidPassword1!", confirmPassword: "ValidPassword1!" }))
