@@ -203,7 +203,7 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   update_epic: ["backlog_write"],
   list_epics: ["backlog_read"],
   list_backlog_items: ["backlog_read"],
-  get_backlog_item: ["backlog_read"],
+  get_backlog_item: ["backlog_read"], read_task_result: ["backlog_read"], // BI-B1A6A2BE: tools/call parity for MCP tasks/result
   update_backlog_item_status: ["backlog_write"],
   retire_backlog_item: ["backlog_write"],
   retire_peer_demand_intake_copies: ["backlog_write"],

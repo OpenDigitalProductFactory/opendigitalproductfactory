@@ -3,14 +3,14 @@
   "selectionCliff": null,
   "entries": {
     "registry.toolDefinitions": {
-      "value": 467,
-      "reason": "BI-5C193A3F adds attest_preview_database as a narrow authority-classified publication tool for explicit S5 rehearsal previews. Separating it from ordinary lease renewal avoids adding approval, receipts or decision routing to every heartbeat. Reuses work_capsule_write and the nonprod lease pack; adds no core or delivery-readiness entry.",
-      "recordedAt": "2026-11-26"
+      "value": 468,
+      "reason": "BI-B1A6A2BE adds read_task_result, the tools/call twin of the MCP tasks/result method. Codex and Claude Code cannot send protocol methods, so the documented original-review recovery read was unreachable from every available client, which breaks platform-function-never-depends-on-a-client. It delegates to handleTasksResult unchanged, is read-only, uses the existing backlog_read grant, and adds no core-tier or delivery-readiness entry.",
+      "recordedAt": "2026-11-27"
     },
     "registry.packFiles": {
-      "value": 111,
-      "reason": "BI-5A17505E: work-pattern-experiment-pack.ts holds the single propose_work_pattern_experiment_candidate definition and handler. It is its own pack because coworker-capability-pack.ts serves caller-scoped view_platform self-assessment tools whereas experiment candidate origination is a manage_platform, consequence:'authority' Living Playbook governance seam; it registers once in pack-registry.ts with grants matching coworker-capability-tool-grants.ts spread into agent-grants.ts. The prior 110-file justification remains in the parent version.",
-      "recordedAt": "2026-11-23"
+      "value": 112,
+      "reason": "BI-B1A6A2BE: mcp-task-result-pack.ts holds the single read_task_result definition and handler. It is its own pack because it fronts the MCP Tasks lifecycle module (apps/web/lib/mcp/tasks-lifecycle.ts), which no existing domain pack owns. Backlog and work-capsule packs serve their own entities, while this tool reads TaskRun results across gates under the Tasks authority contract. It registers once in pack-registry.ts with grants matching agent-grants.ts.",
+      "recordedAt": "2026-11-27"
     },
     "tier.coreToolNames": {
       "value": 35,
