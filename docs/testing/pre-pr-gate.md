@@ -318,6 +318,17 @@ source-control, concerns).
 Rough timing on a modern laptop: the `apps/web` suite alone is ~2–4 minutes; the
 full root `pnpm test` adds ~1–2 minutes for `@dpf/db` and the mobile jest suite.
 
+### Clean up disposable Postgres test volumes
+
+For disposable Postgres test containers (such as ad-hoc `bi-*-pgtest` runs),
+use graceful `docker stop` when the container was started with `--rm`. Docker
+then removes the container and its anonymous volumes. If forced teardown is
+needed, use `docker rm -fv` only on the disposable container you created, or
+start it with `--tmpfs /var/lib/postgresql/data` to avoid creating a data volume.
+Never use bare `docker rm -f` for teardown: it can strand the anonymous volume
+even with `--rm`. Never use `-v` against live or persistent containers or to
+remove named volumes.
+
 ## The pre-push gate (`pregate`) — default-on
 
 BI-166C59F3 Phase 1 added the shared local-CI convergence sandbox workflow;

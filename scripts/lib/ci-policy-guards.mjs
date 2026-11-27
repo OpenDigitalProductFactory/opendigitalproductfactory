@@ -425,6 +425,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "scripts/ci-policy-guards.test.mjs",
         "scripts/daily-checkpoint-tag.test.mjs",
       ),
+      node("--test", "scripts/convergence/build-synthetic-restore-artifact.test.mjs"),
       node(
         "--test",
         "scripts/pr-health.test.mjs",
