@@ -98,16 +98,8 @@ export function shouldSkipTable(tableName: string): boolean {
 
 import { PrismaClient, type Prisma } from "../generated/client/client";
 import { PrismaPg } from "@prisma/adapter-pg";
-import {
-  assertSourceHasNoRequester,
-  cloneWriterName,
-  discardRetiredEvidenceFromArgv,
-  newCloneWriterTag,
-  runRegisteredFinalizers,
-  runSourceCheckedClone,
-  withApplicationName,
-  withRequesterDestinationFence,
-} from "./sanitized-clone-cleanup";
+import { assertSourceHasNoRequester, cloneWriterName, discardRetiredEvidenceFromArgv, newCloneWriterTag, runRegisteredFinalizers } from "./sanitized-clone-cleanup";
+import { runSourceCheckedClone, withApplicationName, withRequesterDestinationFence } from "./sanitized-clone-cleanup";
 import { assertSanitizedCloneSourceIntegrity } from "./sanitized-clone-source-integrity";
 import { resetCloneInstallationIdentity } from "./sanitized-clone-identity-reset";
 
@@ -398,11 +390,9 @@ export async function runSanitizedClone(
           }
         }
 
-        // Hash outside the transaction; both final writes run on one registered, fenced session.
-        const previewPasswordHash = await hashBcryptPassword(previewPassword, 12);
+        const previewHash = await hashBcryptPassword(previewPassword, 12); // final writes: one registered, fenced session
         await runRegisteredFinalizers<Prisma.TransactionClient>(fence, (run) => dev.$transaction(run, { timeout: 60_000 }), async (tx) => {
-          await resetCloneInstallationIdentity(tx);
-          await provisionContributorPreviewAdmin(tx, previewPassword, async () => previewPasswordHash);
+          await resetCloneInstallationIdentity(tx); await provisionContributorPreviewAdmin(tx, previewPassword, async () => previewHash);
         });
       },
     ));
