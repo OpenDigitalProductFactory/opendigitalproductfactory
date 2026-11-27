@@ -674,6 +674,39 @@ That is the autonomy flywheel: coworker encounters ambiguity → gate consults t
 
 ---
 
+## Precedent, adjacent approaches, and what makes DPF distinct
+
+Good architecture builds on real precedent rather than pretending nothing came before it. DPF's decision and autonomy model composes established governance and decision-science foundations — and addresses a concrete gap that current 2025–2026 agent platforms leave split across silos. (Full dated citations, incident records, and verification limits live in the [2026 Market and Thought-Leadership Landscape brief](agent-governance-market-landscape-2026.md).)
+
+### Precedent and adjacent approaches
+
+| Category | Nearest peers & ancestors | What they solve well | What they leave unsolved |
+|---|---|---|---|
+| **Deterministic tool policy engines** | **AWS Bedrock AgentCore Policy (Cedar)**, **OPA / Rego**, **Permit.io**, **OpenFGA** | Default-deny, parameter-aware `permit` / `forbid` checks at the tool gateway (`principal × action × resource × context`). Closest technical peers on enforcement — and substrates GPP bindings can compile onto. | Model *who may invoke a tool*, not *how an ambiguous decision was weighed*, *whose doctrine owned it*, or *which recorded judgment admitted a work stage's capability envelope*. |
+| **Approval-fatigue classifiers** | **Anthropic Claude Code Auto Mode** | Secondary reasoning-blind AI classifier that approves or blocks tool calls in real time instead of interrupting humans on every step. | **Probabilistic** — vendor-reported 17% false-negative rate on real overeager actions and published prompt-injection bypasses — with no organization doctrine, no principle traceability, and no named owning authority. |
+| **Prompt-injection containment** | **Google DeepMind CaMeL**, **Meta's *Agents Rule of Two***, Simon Willison's *Lethal Trifecta* | Architectural control/data-flow separation and co-occurrence constraints preventing untrusted input + private data + outbound action from chaining silently. | Complementary runtime safety rather than decision governance; GPP adopts Meta's Rule of Two directly ([GPP §8](gated-permissions-process.md#8-capability-co-occurrence)). |
+| **Enterprise agent governance suites** | **Microsoft Entra Agent ID / Copilot Studio**, **Salesforce Agentforce Trust Layer**, **ServiceNow AI Control Tower**, **Auth0 for AI Agents**, **Credo AI**, **IBM watsonx.governance** | Agent identity and sponsors, CRM/M365 permission inheritance, DLP, out-of-band human approvals, and governance catalogs. | Fractured across silos: identity vendors own identity, cloud gateways own ACLs, governance suites catalog policies without inline tool binding. All assume dedicated enterprise IAM/security teams. |
+| **Organizational & formal ancestors** | **ITIL Change Enablement** (pre-authorized *standard changes* vs. *normal changes*), **subsidiarity** (TEU Art. 5(3)), **SAW/MCDA** (1954/1981), **GRADE** evidence discounting (2008), **Ibrahim & Li** (*Overlaying Governance*, arXiv 2606.03518, 2026) | Pre-authorizing a *class* of change rather than each execution; local-scope authority; transparent multi-criteria scoring; formal scope-attenuated delegation. | Organizational norms are not machine-enforced at tool-call time; formal delegation models do not pair three non-inheriting doctrine scopes with vector scoring and versioned work-shape stages. |
+
+### What is genuinely distinct in DPF
+
+No commercial platform or open-source stack reviewed puts these five elements together into one operating substrate:
+
+1. **Three non-inheriting decision scopes enforced by subsidiarity (WWMD · WWWD · WSID).** Platform/founder doctrine, an organization's own business stance, and 27 source-traced professional craft corpora remain strictly separate — refusing to let platform preferences silently dictate a customer's business decisions.
+2. **Inspectable multi-vector MCDA judgment (35 axes + single-hop craft projection + contribution ledger).** Rather than opaque RAG prose or a black-box classifier, every recommendation exposes which principles voted, by how much, whether the outcome survives ±10% weight swings, and whether a commandment tripped.
+3. **Binding decision rights directly to tool reach (GPP).** Connects *who decided a class of work is admissible* directly to *which exact tools and subjects become reachable* for one Workroom stage, with HMAC/`paramHash`-bound permits enforced by TAK and receipted by GAID.
+4. **Confidence as a governed operating state plus revealed-preference learning.** Human overrules drop confidence immediately, coverage gaps stay honest (`defer` / `New proposition` / `decidability` ceilings), and human rulings climb back into doctrine and ratifiable weight proposals.
+5. **One cohesive operating platform rather than bolted-on security middleware** — running on one canonical relational spine so context, decisions, Workrooms, and audit trails share one source of truth.
+
+### Why this matters for real companies — from small businesses to enterprise scale
+
+- **Small and mid-sized businesses (the most underserved market):** Every major 2026 governance product assumes a cloud security team, IAM engineers, and a sprawling enterprise SaaS estate. A trades firm, clinic, retailer, or professional-services practice will never write Cedar policies or staff an AI governance committee — yet they still need AI coworkers they can trust without babysitting every click. DPF keeps the 35-axis vector math and standards plumbing under the hood while giving owners **8 plain-language stance cards with explicit dollar ceilings (WWWD)**, **27 pre-built professional craft corpora (WSID)** so coworkers act like qualified practitioners on day one, and **hard floors** where money leaving the business and public-facing actions always come to a person.
+- **Enterprises at scale:** Large organizations already experimenting with agents face a wide governance gap — Gartner projects over 40% of agentic AI projects cancelled by end of 2027 largely over inadequate risk controls. Enterprises do not have to discard AWS, Microsoft, ServiceNow, Cedar, or OPA to use these ideas: DPF's open working-draft standards (`TAK`, `GAID`, `TAK-JSI`, `GPP`) and portable `scoped-judgment` / GPP architecture define the missing **decision-rights-to-permissions layer** that composes cleanly above existing identity and gateway substrates.
+
+*Claim discipline:* DPF claims the architecture, the shipped three-scope corpora, the 35-axis scoring engine, and the observed 6,098-decision reference ledger. It does not claim measured GPP enforcement efficacy or standards certification while focus-area bindings remain in transition from shadow mode to enforcement (see [Current boundaries](#current-boundaries) and [Market brief §7](agent-governance-market-landscape-2026.md#7-implications-for-dpfs-public-claims)).
+
+---
+
 ## Current boundaries
 
 Stated plainly, because trust requires knowing what is *not* built yet:
