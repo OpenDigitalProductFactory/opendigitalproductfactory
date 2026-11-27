@@ -2129,7 +2129,8 @@
       "docs/architecture/operational-precedent-corpus.md"
     ],
     "packages/db/src/profession-local-axes.ts": [
-      "docs/architecture/decision-vectors.md"
+      "docs/architecture/decision-vectors.md",
+      "docs/architecture/vector-decisioning-and-jsi.md"
     ],
     "packages/db/src/profession-material-promotion.ts": [
       "docs/architecture/decision-vectors.md"
@@ -4095,7 +4096,8 @@
       "apps/web/lib/decision-perspective/material.ts",
       "apps/web/lib/decision-perspective/stance-promotion.ts",
       "apps/web/lib/decision-perspective/weight-inference.ts",
-      "docs/professions/registry.json"
+      "docs/professions/registry.json",
+      "packages/db/src/profession-local-axes.ts"
     ],
     "docs/architecture/work-shapes-and-the-decision-gate.md": [
       "apps/web/lib/actions/workroom-stage-decision.ts",
