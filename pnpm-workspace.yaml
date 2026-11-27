@@ -55,14 +55,14 @@ overrides:
   # Preserve the existing module-lexer generation within instrumentation's
   # ^3 import-hook range; 3.5 adds a second lexer major without a consumer need.
   '@opentelemetry/instrumentation@0.223.0>import-in-the-middle': '3.4.0'
-  # One React for the platform tree. apps/web declares ^19.2.8; the Prisma CLI's
+  # One React for the platform tree. apps/web declares ^19.2.9; the Prisma CLI's
   # studio-core would otherwise pull a second copy (19.3.0), a dual-package
   # hazard for anything that shares a React context. Not a CVE floor. The mobile
   # renderer pin that used to hold this at 19.2.3 moved to
   # apps/mobile/pnpm-workspace.yaml with the workspace split (plan 2026-09-08 M6).
   # Move to 19.3 as its own change, with the web build and UX sweep as proof.
-  react: 19.2.8
-  react-dom: 19.2.8
+  react: 19.2.9
+  react-dom: 19.2.9
   # c12@3.3.4 (transitive) still declares dotenv ^17.3.1. The catalog is 18.
   # dotenv 18 keeps config() and parse(); it removed preload and .env.vault,
   # which this repo does not use. c12 only calls dotenv.parse(). The selector
