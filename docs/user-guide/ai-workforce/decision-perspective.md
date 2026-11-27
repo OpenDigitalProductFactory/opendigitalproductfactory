@@ -30,7 +30,7 @@ The full design lives in three specs:
 
 When a coworker or external MCP client hits a decision point that doesn't have a deterministic answer in code, it calls the Decision Perspective Gate. The gate selects the active profile, retrieves the principles and prior decisions that bear on the question, aggregates them as a weighted vector across decision dimensions, and returns one of four outcomes:
 
-> **What are the decision dimensions?** There are 20 of them, and the set is closed. Each one — what it means, whether it is a benefit or a cost, whether it is shared across every profession or owned by one, and where its weight comes from — is defined in the [Decision Vectors reference](../../architecture/decision-vectors.md). How the emphasis shifts by line of business is in [Decision Vectors by Business Type](../../architecture/decision-vectors-by-archetype.md).
+> **What are the decision dimensions?** There are **24 closed core axes** (16 shared spine axes and 8 profession-local axes) plus **11 namespaced craft axes** — **35 decision axes** in total. Each one — what it means, whether it is a benefit or a cost, whether it is shared across every profession or owned by one, and where its weight comes from — is defined in the [Decision Vectors reference](../../architecture/decision-vectors.md). How the emphasis shifts by line of business is in [Decision Vectors by Business Type](../../architecture/decision-vectors-by-archetype.md).
 
 | Outcome | Meaning | What happens next |
 |---------|---------|-------------------|
@@ -122,7 +122,7 @@ The `DecisionPerspectiveProfile` model supports several profile kinds today. Eac
 |------|-------------|---------|--------|
 | `platform` | DPF platform doctrine (Mark / DPF Platform). The first profile, seeded with the founder's writings and approved decisions. | Mark / DPF Platform | **Shipped** — the WWMD kernel for this portal instance |
 | `organization` | Customer organization's operating principles (the WWWD profile). | Acme Corp Operating Principles | **Shipped surface, deferred content** — points at the platform profile in this instance because product and business are the same |
-| `profession` | A coworker role family's professional doctrine (the WSID profile), backed by a source-traced corpus distilled from professional bodies of knowledge. | `WSID-DATA-ARCHITECT`, `WSID-FINANCE`, `WSID-MARKETING` | **Early access** — profile kind, source registry, and 23 family profiles seeded; data-architect corpus shipped; finance and marketing are the pilot completion work |
+| `profession` | A coworker role family's professional doctrine (the WSID profile), backed by a source-traced corpus distilled from professional bodies of knowledge. | `WSID-DATA-ARCHITECT`, `WSID-FINANCE`, `WSID-MARKETING` | **Shipped (27 families, 228 pages)** — profile kind, source registry, 27 profession families, and 228 source-traced craft pages seeded with variant axes (jurisdiction, competency, archetype) |
 | `customer` | Future customer-instance profile, isolated from the platform's product-origin guidance. | Customer org doctrine | **Deferred** — not in V1 |
 | `persona-real` | A real person who has given explicit documented consent. The voice layer can use their voice clone. | An executive at a customer org | **Shipped surface, consent-gated** |
 | `persona-fictional` | A persona not derived from any real person — useful as an archetype profile. | "The Pragmatic Founder" | **Shipped** |
@@ -340,7 +340,7 @@ Three constraints are non-negotiable:
 
 Tracked under EP-WWMD, EP-VOICE-LAYER, and EP-WSID:
 
-- **WSID pilot completion** — the profession profile kind, Profession Source Registry, 23 family profiles, role resolver, and the data-architect corpus (with provenance lint) are merged; the finance and marketing corpora and deeper gate-resolution wiring complete the pilot three before the full-roster rollout
+- **WSID craft corpora** — the profession profile kind, Profession Source Registry, 27 profession families, role resolver, and 228 source-traced craft pages (with provenance lint and variant axes) are shipped; ongoing work wires focus-area GPP bindings and expands vector coverage across professions
 - **Customer WWWD profiles** — the surface exists; the data and onboarding flow that lets a customer organization seed its own profile is the next deliverable
 - **Real-time voice conversation** — live back-and-forth using streaming TTS in a sub-400ms loop fed by the existing STT pipeline. V2 target
 - **Voice in coworker thread messages** — narrating coworker replies beyond gate rationale audio. V2

@@ -32,7 +32,7 @@ they have different authors, different lifetimes, and different authority to cha
 
 | Term | What it is | Who authors it |
 |---|---|---|
-| **Axis** (dimension) | One named thing a decision can be weighed on — e.g. `reversibility`. There are exactly 20, and the set is closed. | Platform, by PR, compile-enforced |
+| **Axis** (dimension) | One named thing a decision can be weighed on — e.g. `reversibility`. The core registry (`PRINCIPLE_DIMENSIONS`) holds exactly **24** closed axes (16 spine + 8 profession-local), complemented by **11** namespaced profession-declared craft axes (`PROFESSION_LOCAL_AXES`) — **35 axes** in total. | Platform, by PR, compile-enforced |
 | **Option features** | For one option under consideration, how much it exhibits each axis, scored `0..1`. "This option has high blast radius" is a feature, not a weight. | The caller framing the decision |
 | **Principle weight vector** | For one principle, a *signed* weight per axis it cares about, plus a written rationale. This is what encodes judgement. | Whoever owns that principle's scope |
 
@@ -67,12 +67,10 @@ score means** so a benefit-shaped name cannot re-import the inversion.
 
 ### 1.2 Spine vs profession-local
 
-The 20 axes are split into two scopes.
+The 24 core axes in `PRINCIPLE_DIMENSIONS` are split into two scopes (alongside 11 net-new namespaced profession-declared axes in §4.1):
 
-- **Spine (12 axes)** — the *commensurability layer*. These are the axes that let a security
-  objection and a design objection be weighed in one ledger. Kept deliberately small.
-- **Profession-local (8 axes)** — one profession's craft vocabulary, scored at full resolution
-  inside that profession, and **projected** onto one or more spine axes when the decision leaves it.
+- **Spine (16 axes)** — the *commensurability layer*: 12 universal trade-off and obligation axes plus 4 constitutional business-alignment axes (`mission_fit`, `market_fit`, `product_fit`, `gtm_fit`). These are the axes that let a security objection, a design objection, and a business-direction objection be weighed in one ledger. Kept deliberately small.
+- **Profession-local (8 core axes + 11 namespaced craft axes)** — one profession's craft vocabulary, scored at full resolution inside that profession, and **projected** onto one or more spine axes when the decision leaves it.
 
 Reduction was by **demotion, not deletion**: nothing left the registry, and every profession-local
 axis carries a mandatory non-empty `projectsOnto`, because a demotion without a projection silently
@@ -112,7 +110,7 @@ Each entry below states:
 
 ---
 
-## 3. The spine — 12 axes every profession shares
+## 3. The spine — 16 axes every profession shares
 
 ### `long_term_maintainability`
 - **Question:** how expensive will this be to keep correct over time?
@@ -218,6 +216,38 @@ Each entry below states:
 - **Why:** foreseeing the consequence is a **precondition of informed authorisation everywhere**,
   not a design-profession concern. Authored entirely by non-specialist principles.
 
+### `mission_fit`
+- **Question:** does this action align with the organization's declared mission?
+- **A high score means:** the option directly advances the stated mission rather than drifting outside it.
+- **Kind:** benefit.
+- **Scope:** spine (constitutional business alignment).
+- **Why:** fit with the organization's declared mission is shared constitutional currency across every
+  profession — never permission to execute on its own, and independently vetoable.
+
+### `market_fit`
+- **Question:** does this serve the people and market the organization has chosen to serve?
+- **A high score means:** the option targets the organization's chosen audience and segment.
+- **Kind:** benefit.
+- **Scope:** spine (constitutional business alignment).
+- **Why:** chosen market boundaries constrain work in every profession and must remain independently
+  vetoable rather than traded away inside one craft.
+
+### `product_fit`
+- **Question:** does this fit the organization's declared offer and portfolio?
+- **A high score means:** the option aligns with the products and offers the organization commits to deliver.
+- **Kind:** benefit.
+- **Scope:** spine (constitutional business alignment).
+- **Why:** fit with the declared offer and portfolio crosses profession boundaries even when a portfolio
+  specialist supplies the supporting evidence.
+
+### `gtm_fit`
+- **Question:** does this fit the organization's chosen route to market?
+- **A high score means:** the option conforms to how the organization sells, distributes, and engages customers.
+- **Kind:** benefit.
+- **Scope:** spine (constitutional business alignment).
+- **Why:** route to market is shared business direction; specialist qualification supplies evidence but
+  cannot widen authority.
+
 ---
 
 ## 4. Profession-local — 8 axes, each projecting back onto the spine
@@ -291,10 +321,12 @@ rather than describing the design as though it were the system.
 | **revealed** | A weight *inferred from rulings* — what the organisation's accumulated overrides reveal about a trade-off it actually makes. Never the axis *selection*, only the magnitude. | Statistical inference over past decisions, then a human ruling. | **Engine shipped and fed;** it proposes, it never applies. |
 | **external** | A live looked-up signal (a season, a market condition) that modulates a decision at inference time. | Validated against recorded outcome before it may score anything. | **Not built.** One pilot scoped. |
 
-The label itself — making sourcing a declared property of each axis rather than prose in a design
-document — is **designed, not yet implemented** (tracked as Phase 0 of the per-job vector
-inventory). Today every weight is hand-authored regardless of which class it conceptually belongs
-to, and that is precisely the gap the classification exists to close.
+The label itself — making sourcing a declared, compile-enforced property of each axis — is now
+**shipped** as `PRINCIPLE_DIMENSION_SOURCING` in `packages/db/src/dimension-scope.ts`. Honestly,
+every core axis still stands at `basic` today until its weight is actually derived from another
+source (never reclassified on intent alone), while the 11 namespaced craft axes in §4.1 are
+actively `corpus-derived`. Closing that uniformity gap — wiring revealed-preference inference and
+external correlates to real axes — is what the per-job vector inventory work exists to finish.
 
 ### 5.1 The revealed class in detail
 
@@ -387,21 +419,26 @@ indistinguishable from a silent drop, which is the failure this section exists t
 
 ## 6. What the registry currently gets wrong
 
-A document that only described the design would be marketing. The measured state of the corpus, from
-the decision-tier rebalance analysis (measured over a 19-axis registry, before the most recent axis
-landed):
+A document that only described the design would be marketing. Comparing the pre-rebalance baseline
+(July 2026, over 95 principles and 19 axes) against the current repository snapshot (2026-11-27,
+over 115 founder-kernel principles and 24 core axes) shows real progress alongside what is still
+uneven:
 
-- 95 principles use an average of **3.6 of 19** available axes.
-- `long_term_maintainability` is loaded by **68%** of them; `cost_efficiency` by
-  **none**.
-- The effective rank of the decision space is roughly **6** — meaning that although 20 axes exist,
-  the corpus only genuinely discriminates along about six directions.
-- Around **41%** of principle vectors were authored by a single persona, which concentrates the
-  blind spots.
+- **What improved:** average axis density in the founder kernel rose from **3.6** to **4.5** axes
+  per principle (all 115 principles vectorized); `cost_efficiency` moved from **0** to **7**
+  principles; and **0 `route-domain-specific` principles** remain in the founder kernel (down from
+  ~41% specialist-authored), with craft doctrine now housed across **27 WSID profession families
+  (228 pages, 109 vectorized)**.
+- **What is still concentrated:** the top six axes still carry the heaviest share of the founder
+  kernel (`long_term_maintainability` 80/115 = 70%, `governance_compliance` 67, `evidence_density`
+  65, `speed_to_value` 51, `blast_radius` 48, `human_cognitive_load` 47), while the four newest
+  constitutional-alignment axes are barely populated yet (`mission_fit` 2, `product_fit` 1,
+  `market_fit` 0, `gtm_fit` 0).
 
-This is the open problem the per-job inventory work exists to fix, and it is the honest answer to
-"how good is this really": the *mechanism* is sound and inspectable; the *corpus filling it* is
-under-determined and over-concentrated, and repairing that is ongoing rather than done.
+This is the honest answer to "how good is this really": the *mechanism* is sound, compile-enforced,
+and inspectable; the *corpus migration* out of one monolithic WWMD tier into WSID has landed; and
+filling out under-populated axes and wiring live revealed-preference weights remain ongoing work
+rather than finished.
 
 ---
 
@@ -460,10 +497,10 @@ small and shared.
 
 ### 8.1 The layer an owner actually touches — business stance vectors
 
-The 20 axes above are the scoring substrate. They are not what a business owner is asked to fill
-in. The owner-facing layer is a separate, deliberately small set of **five business stance
-vectors**, each phrased as a question the owner recognises, each pre-answered from their business
-type, and each editable in plain English:
+The 24 core axes (and 11 namespaced craft axes) above are the scoring substrate. They are not what
+a business owner is asked to fill in. The owner-facing layer is a separate, deliberately small set
+of **eight business stance vectors**, each phrased as a question the owner recognises, each
+pre-answered from their business type, and each editable in plain English:
 
 | Stance vector | The question it answers | Carries a spend ceiling |
 |---|---|---|
@@ -472,8 +509,11 @@ type, and each editable in plain English:
 | `growth-vs-stability` | When new opportunities compete with existing commitments, which wins? | No |
 | `quality-bar` | What standard does work have to meet before it leaves our hands? | No |
 | `spend-authority` | What may be bought without asking the owner? | Yes |
+| `data-handling` | How do we handle personal information we hold? | No |
+| `routine-operations` | What should the team just get on with without asking? | No |
+| `decision-scope` | Which decisions belong to the business versus craft or suppliers? | No |
 
-Three of the five carry an explicit **authority ceiling in money**, which is what converts a stated
+Three of the eight carry an explicit **authority ceiling in money**, which is what converts a stated
 value into an actual delegation: "resolve it on the spot up to the ceiling; above it, the owner
 decides."
 
@@ -498,7 +538,7 @@ An org's stance pages are **corpus material, not weight vectors.** They are seed
 organisation pages and retrieved by the decision gate as the org's own policy, where they carry
 evidence grading and the confidence discounting of §5.2. They do **not** currently carry a
 `principleDimensionVector`, which means they steer a decision through retrieval and semantic
-alignment rather than through structured scoring on the 20 axes.
+alignment rather than through structured scoring on the 24 core axes.
 
 That is a real seam, and it is worth stating rather than glossing: today an organisation edits its
 judgement in plain English, and separately the platform scores options on named axes. Connecting
@@ -534,16 +574,16 @@ human, not to quietly inherit someone else's judgement.
 
 | Capability | Status |
 |---|---|
-| Closed 20-axis registry, compile-enforced | Shipped |
-| Spine / profession-local classification with mandatory projection | Shipped |
+| Closed 24-axis core registry (`PRINCIPLE_DIMENSIONS`), compile-enforced | Shipped |
+| Spine (16) / profession-local (8) classification with mandatory single-hop projection | Shipped |
 | Signed weight vectors with written rationales + sign-convention guard | Shipped |
-| Structured alignment scoring + inspectable contribution ledger | Shipped |
-| Evidence-graded confidence discounting | Shipped |
+| Structured alignment scoring + inspectable contribution ledger + 5-part `autonomyEligible` gate | Shipped |
+| Evidence-graded confidence discounting + `decidability` ceiling diagnostics | Shipped |
 | Weight inference from rulings (proposes only, never applies) | Shipped |
-| Profession-local axis registry | Shipped, populated (§4.1) |
-| `dimensionSourcing` label on each axis | Designed, not built |
-| Five owner-facing business stance vectors, archetype-defaulted, with spend ceilings | Shipped |
-| Stance answers expressed as weights on the 20 axes | Not built (§8.2) |
+| Profession-local namespaced axis registry (`PROFESSION_LOCAL_AXES`, 11 axes) | Shipped, populated (§4.1) |
+| `PRINCIPLE_DIMENSION_SOURCING` label on each core axis (`dimension-scope.ts`) | Shipped (all core axes honestly `basic` pending evidence reclassification) |
+| Eight owner-facing business stance vectors, archetype-defaulted, with spend ceilings | Shipped |
+| Stance answers expressed as weights on the core axes | Not built (§8.2) |
 | Per-job vector inventory across all professions | Designed, in progress |
 | External / situational signals | Not built, one pilot scoped |
 | Cold-start pairwise elicitation | Candidate |

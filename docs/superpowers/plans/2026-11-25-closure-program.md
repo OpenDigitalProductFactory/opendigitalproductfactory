@@ -62,6 +62,8 @@ Each slice is judged by the scorecard line it should move:
 
 T3 absorption S4–S8 (launch contract, workroom-bound toolset, execution-host routing, device cutover) and the DPF2 OS-layer cutover stay in the DPF2 coordination lane. This program does not touch them.
 
+**Superseded in priority on 2026-11-27 (DI-9616AA03972A).** The owner ranked the absorption slices ahead of this program for client-dependent recovery and executor work. This program still closes items, but it does not repair a legacy client-dependent recovery path; that defect routes into the replacing absorption slice. See the [absorption design](../specs/2026-11-13-t3-code-absorption-design.md#current-convergence-ruling).
+
 The meeting point is S9. Its measure (AC-5) is delivered early by slice 1, and its loop by slice 8 on today's dispatch. When S6 lands, only the dispatch step changes route.
 
 ## Slice 3a design (BI-1B868C6D)
