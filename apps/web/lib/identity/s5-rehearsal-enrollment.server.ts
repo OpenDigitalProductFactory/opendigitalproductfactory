@@ -346,12 +346,16 @@ export async function handleRequesterCommand(
   });
 }
 
-/** Replay or hold for an existing record; `retired` and `replay` only after the shared verification. */
+/**
+ * Replay or hold for an existing record; `retired` and `replay` only after the
+ * shared verification, and only when the retained facts equal the reviewed
+ * setup. The digest omits attempt and fixture, so a mismatch must hold.
+ */
 function replayOutcome(
   state: Awaited<ReturnType<RequesterBoundaryPorts["verifyRequesterState"]>>,
   setupDigest: string,
 ): RequesterBoundaryResult {
-  if (state.verified && state.lifecycle === "retired") return { status: 200, body: { outcome: "retired", setupDigest } };
+  if (state.verified && state.lifecycle === "retired" && state.factsMatch) return { status: 200, body: { outcome: "retired", setupDigest } };
   if (state.verified && state.lifecycle === "active" && state.factsMatch) return { status: 200, body: { outcome: "replay", setupDigest } };
   return held(409, "requester_state_unverified");
 }
@@ -365,11 +369,18 @@ export async function readBoundedRequestBody(request: Request): Promise<string> 
   for (;;) {
     const { done, value } = await reader.read();
     if (done) break;
+    const room = MAX_BODY_BYTES + 1 - total;
+    if (value.byteLength >= room) {
+      // Keep only enough to prove the overflow (4 KiB + 1 in all); never retain or decode the rest.
+      chunks.push(value.subarray(0, room));
+      total += room;
+      await reader.cancel();
+      break;
+    }
     total += value.byteLength;
     chunks.push(value);
-    if (total > MAX_BODY_BYTES) { await reader.cancel(); break; }
   }
-  return Buffer.concat(chunks.map((chunk) => Buffer.from(chunk))).toString("utf8");
+  return Buffer.concat(chunks.map((chunk) => Buffer.from(chunk.buffer, chunk.byteOffset, chunk.byteLength))).toString("utf8");
 }
 
 /**

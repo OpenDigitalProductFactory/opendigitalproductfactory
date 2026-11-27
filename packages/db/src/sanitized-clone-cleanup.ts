@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+
 /**
  * A clone cannot share one transaction with pg_dump/psql child processes.
  * Clear the disposable destination before publication and again on failure.
@@ -58,7 +60,29 @@ export class CloneFenceError extends Error {
 }
 
 /** Correlate one clone run's destination sessions; never used as termination authority. */
+/** PostgreSQL keeps at most NAMEDATALEN - 1 bytes of application_name; a longer name is silently truncated. */
+export const MAX_APPLICATION_NAME_BYTES = 63;
+
+function assertApplicationNameFits(applicationName: string): void {
+  if (Buffer.byteLength(applicationName, "utf8") > MAX_APPLICATION_NAME_BYTES) {
+    throw new Error(`application_name "${applicationName}" exceeds ${MAX_APPLICATION_NAME_BYTES} bytes and would be truncated`);
+  }
+}
+
+/** A short per-run correlation tag: 22 bytes, so every derived writer name stays far under the limit. */
+export function newCloneWriterTag(): string {
+  return `dpfsc:${randomUUID().replace(/-/g, "").slice(0, 16)}`;
+}
+
+/** The exact application name of one of this run's sessions; refuses a name PostgreSQL would truncate. */
+export function cloneWriterName(tag: string, role: string): string {
+  const name = role ? `${tag}:${role}` : tag;
+  assertApplicationNameFits(name);
+  return name;
+}
+
 export function withApplicationName(connectionString: string, applicationName: string): string {
+  assertApplicationNameFits(applicationName);
   const url = new URL(connectionString);
   url.searchParams.set("application_name", applicationName);
   return url.toString();
@@ -308,4 +332,22 @@ export async function withRequesterDestinationFence<T>(
       await fenceClient.query("SELECT pg_advisory_unlock(hashtextextended($1, 0))", [REQUESTER_DESTINATION_FENCE_KEY]);
     }
   }
+}
+
+/**
+ * Run the clone's final destination writes (identity reset, preview admin) in
+ * one pinned transaction whose backend is registered with the fence before any
+ * write, and re-prove the fence before commit. A fence loss terminates the
+ * registered backend, so nothing commits.
+ */
+export async function runRegisteredFinalizers<Tx extends { $queryRawUnsafe(sql: string, ...values: unknown[]): Promise<unknown> }>(
+  fence: RequesterFence,
+  transaction: (run: (tx: Tx) => Promise<void>) => Promise<void>,
+  finalize: (tx: Tx) => Promise<void>,
+): Promise<void> {
+  await transaction(async (tx) => {
+    await fence.registerWriter({ query: async (sql) => ({ rows: (await tx.$queryRawUnsafe(sql)) as Array<Record<string, unknown>> }) });
+    await finalize(tx);
+    await fence.ensureHeld();
+  });
 }

@@ -57,8 +57,11 @@ describe("resetCloneInstallationIdentity", () => {
 
   it("is applied by the clone after every table is copied", () => {
     const source = readFileSync(new URL("./sanitized-clone.ts", import.meta.url), "utf8");
-    const resetAt = source.indexOf("await resetCloneInstallationIdentity(dev)");
-    expect(resetAt).toBeGreaterThan(source.indexOf("for (const { tablename } of tables)"));
-    expect(resetAt).toBeLessThan(source.indexOf("await provisionContributorPreviewAdmin(dev"));
+    // Both final writes run on one registered, fenced transaction (BI-9F7192F9): reset first, then the preview admin.
+    const finalizeAt = source.indexOf("await runRegisteredFinalizers<");
+    const resetAt = source.indexOf("await resetCloneInstallationIdentity(tx)");
+    expect(finalizeAt).toBeGreaterThan(source.indexOf("for (const { tablename } of tables)"));
+    expect(resetAt).toBeGreaterThan(finalizeAt);
+    expect(resetAt).toBeLessThan(source.indexOf("await provisionContributorPreviewAdmin(tx"));
   });
 });

@@ -12,6 +12,7 @@ import { Client } from "pg";
 import { withSanitizedCursorBatches, type CloneFetchMetrics, type CloneBatchReader } from "./sanitized-clone-batches";
 import { buildSanitizedInsertStatements, quoteIdentifier, type ColumnTypeInfo } from "./sanitized-clone-sql";
 export { prepareInsertParameter, quoteIdentifier, type ColumnTypeInfo } from "./sanitized-clone-sql";
+import { hash as hashBcryptPassword } from "bcryptjs";
 import { provisionContributorPreviewAdmin, requireContributorPreviewPassword } from "./contributor-preview-auth";
 
 // -- Obfuscation Helpers --
@@ -97,8 +98,16 @@ export function shouldSkipTable(tableName: string): boolean {
 
 import { PrismaClient, type Prisma } from "../generated/client/client";
 import { PrismaPg } from "@prisma/adapter-pg";
-import { randomUUID } from "node:crypto";
-import { assertSourceHasNoRequester, discardRetiredEvidenceFromArgv, runSourceCheckedClone, withApplicationName, withRequesterDestinationFence } from "./sanitized-clone-cleanup";
+import {
+  assertSourceHasNoRequester,
+  cloneWriterName,
+  discardRetiredEvidenceFromArgv,
+  newCloneWriterTag,
+  runRegisteredFinalizers,
+  runSourceCheckedClone,
+  withApplicationName,
+  withRequesterDestinationFence,
+} from "./sanitized-clone-cleanup";
 import { assertSanitizedCloneSourceIntegrity } from "./sanitized-clone-source-integrity";
 import { resetCloneInstallationIdentity } from "./sanitized-clone-identity-reset";
 
@@ -285,9 +294,9 @@ export async function runSanitizedClone(
 
   // BI-9F7192F9: every destination connection of this run carries one tag, so a
   // lost requester fence stops exactly this run's writers (Prisma pool and COPY psql).
-  const writerTag = `dpf-sanitized-clone:${randomUUID()}`;
-  const fenceClient = new Client({ connectionString: withApplicationName(devUrl, `${writerTag}:fence`) });
-  const supervisorClient = new Client({ connectionString: withApplicationName(devUrl, `${writerTag}:supervisor`) });
+  const writerTag = newCloneWriterTag();
+  const fenceClient = new Client({ connectionString: withApplicationName(devUrl, cloneWriterName(writerTag, "fence")) });
+  const supervisorClient = new Client({ connectionString: withApplicationName(devUrl, cloneWriterName(writerTag, "supervisor")) });
   fenceClient.on("error", () => {}); // a lost fence is handled by withRequesterDestinationFence
   const prodAdapter = new PrismaPg({ connectionString: prodUrl });
   const devAdapter = new PrismaPg({ connectionString: withApplicationName(devUrl, writerTag) });
@@ -382,15 +391,19 @@ export async function runSanitizedClone(
 
           if (sensitivity === "public" || sensitivity === "internal") {
             console.log(`  COPY (${sensitivity}): ${tablename} (${rowCount} rows)`);
-            await copyTableCompatible(tablename, prodUrl, devUrl, prod, dev, `${writerTag}:copy:${++copySeq}`, fence.admitCopy);
+            await copyTableCompatible(tablename, prodUrl, devUrl, prod, dev, cloneWriterName(writerTag, `copy:${++copySeq}`), fence.admitCopy);
           } else if (sensitivity === "confidential") {
             console.log(`  OBFUSCATE (confidential): ${tablename} (${rowCount} rows)`);
             await copySanitizedTable(tablename);
           }
         }
 
-        await resetCloneInstallationIdentity(dev);
-        await provisionContributorPreviewAdmin(dev, previewPassword);
+        // Hash outside the transaction; both final writes run on one registered, fenced session.
+        const previewPasswordHash = await hashBcryptPassword(previewPassword, 12);
+        await runRegisteredFinalizers<Prisma.TransactionClient>(fence, (run) => dev.$transaction(run, { timeout: 60_000 }), async (tx) => {
+          await resetCloneInstallationIdentity(tx);
+          await provisionContributorPreviewAdmin(tx, previewPassword, async () => previewPasswordHash);
+        });
       },
     ));
 

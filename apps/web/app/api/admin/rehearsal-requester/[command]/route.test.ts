@@ -18,6 +18,7 @@ import {
   deriveRequesterSetupDigest,
   encodeRequesterSetupContext,
   handleRequesterCommand,
+  readBoundedRequestBody,
   type RequesterBoundaryPorts,
 } from "@/lib/identity/s5-rehearsal-enrollment.server";
 import { GET, POST } from "./route";
@@ -177,6 +178,7 @@ describe("S5 rehearsal requester boundary (BI-9F7192F9 phase 4, AC-E1)", () => {
   it.each([
     ["an alias-drifted retired record", { verified: false as const }],
     ["an active record whose facts differ", { verified: true as const, lifecycle: "active" as const, factsMatch: false }],
+    ["a verified retired record whose attempt or fixture differs", { verified: true as const, lifecycle: "retired" as const, factsMatch: false }],
   ])("holds %s as requester_state_unverified, never retired", async (_label, verification) => {
     const p = ports({
       retainedRecord: vi.fn(async () => ({ lifecycle: "retired" as const })),
@@ -260,5 +262,47 @@ describe("served route is inert until its proofs are served", () => {
     expect(await held.json()).toMatchObject({ code: "owner_binding_unavailable" });
     expect((await GET(status("not-a-digest"), { params: Promise.resolve({ command: "status" }) })).status).toBe(400);
     expect((await GET(status(), { params: Promise.resolve({ command: "enroll" }) })).status).toBe(404);
+  });
+});
+
+describe("bounded body reader (the served reader, not a substitute)", () => {
+  function streamed(chunks: Uint8Array[], url = `${ORIGIN}/api/admin/rehearsal-requester/enroll`) {
+    let cancelled = false;
+    let pulled = 0;
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        const next = chunks[pulled++];
+        if (next) controller.enqueue(next); else controller.close();
+      },
+      cancel() { cancelled = true; },
+    });
+    const req = new Request(url, {
+      method: "POST", body, headers: { origin: ORIGIN, "content-type": "application/x-www-form-urlencoded" }, duplex: "half",
+    } as RequestInit);
+    return { req, wasCancelled: () => cancelled, pulls: () => pulled };
+  }
+
+  it("retains at most 4 KiB + 1 of one oversized chunk and cancels the stream", async () => {
+    const { req, wasCancelled, pulls } = streamed([new Uint8Array(1024 * 1024).fill(0x61), new Uint8Array(10)]);
+    const text = await readBoundedRequestBody(req);
+    expect(Buffer.byteLength(text, "utf8")).toBe(4097);
+    expect(wasCancelled()).toBe(true);
+    expect(pulls()).toBeLessThanOrEqual(2);
+  });
+
+  it("returns a body at the limit whole, across chunks", async () => {
+    const head = new TextEncoder().encode(`password=${"a".repeat(2039)}`);
+    const { req } = streamed([head, new Uint8Array(4096 - head.byteLength).fill(0x62)]);
+    expect(Buffer.byteLength(await readBoundedRequestBody(req), "utf8")).toBe(4096);
+  });
+
+  it("rejects an oversized body through the served reader with zero hasher or mutator calls", async () => {
+    const url = new URL(`${ORIGIN}/api/admin/rehearsal-requester/enroll`);
+    url.searchParams.set("setupContext", encodeRequesterSetupContext(enrollContext));
+    const p = ports({ readBody: vi.fn(readBoundedRequestBody) });
+    const { req } = streamed([new Uint8Array(64 * 1024).fill(0x61)], url.toString());
+    await expect(handleRequesterCommand(req, "enroll", p)).resolves.toMatchObject({ status: 400, body: { code: "body_invalid" } });
+    expect(p.readBody).toHaveBeenCalledTimes(1);
+    expect(p.execute).not.toHaveBeenCalled();
   });
 });

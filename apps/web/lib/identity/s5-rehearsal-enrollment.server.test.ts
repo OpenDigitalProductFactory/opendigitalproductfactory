@@ -232,6 +232,29 @@ describe.skipIf(!process.env.DPF_S5_REQUESTER_TEST_DATABASE_URL)("owner snapshot
     await db.query(`INSERT INTO "Organization"(id) VALUES ('org-2')`);
     expect(evaluateOwnerSnapshot(await run("u-a"))).toEqual({ ok: false, error: "org_ambiguous" });
   });
+  it("AC-E2 parity: the snapshot's organization reading agrees with findInstallOrganization for 0, 1, 2 and 3 rows", async () => {
+    const { findInstallOrganization } = await import("../../../../packages/db/src/install-organization");
+    const reader = {
+      organization: {
+        findMany: async (args: { take: number }) =>
+          (await db.query(`SELECT "topAccountablePrincipalId" FROM "Organization" ORDER BY "createdAt" ASC, id ASC LIMIT $1`, [args.take])).rows,
+      },
+    };
+    for (const n of [0, 1, 2, 3]) {
+      await db.query(`DELETE FROM "Organization"`);
+      for (let k = 0; k < n; k++) {
+        await db.query(`INSERT INTO "Organization"(id, "topAccountablePrincipalId", "createdAt") VALUES ($1, $2, now() + ($3 || ' seconds')::interval)`,
+          [`org-p${k}`, `p-top-${k}`, String(k)]);
+      }
+      const snap = await run("u-a");
+      const canonical = await findInstallOrganization(reader as never, { topAccountablePrincipalId: true }).then(
+        (row) => (row ? { kind: "one", top: (row as { topAccountablePrincipalId: string | null }).topAccountablePrincipalId } : { kind: "missing" }),
+        (error: { code?: string }) => ({ kind: error.code === "install_organization_ambiguous" ? "ambiguous" : "error" }),
+      );
+      const fromSnapshot = snap.orgCount === 0 ? { kind: "missing" } : snap.orgCount === 1 ? { kind: "one", top: snap.topPrincipalId } : { kind: "ambiguous" };
+      expect(fromSnapshot).toEqual(canonical);
+    }
+  });
 });
 
 describe("fenced request transaction (BI-9F7192F9 phase 6, AC-E4)", async () => {
@@ -514,6 +537,42 @@ describe.skipIf(!process.env.DPF_S5_REQUESTER_TEST_DATABASE_URL)("enrollment aga
     const o = wire();
     await expect(handleRequesterCommand(post(orphanCtx), "enroll", o.ports)).resolves.toMatchObject({ status: 409, body: { code: "requester_email_orphan" } });
     expect([m, d, o].every((w) => w.hasher.mock.calls.length === 0)).toBe(true);
+  });
+
+  it("holds, never `retired`, when a retired record's attempt or fixture differs from the reviewed setup", async () => {
+    const ctx = await setup();
+    const digest = deriveRequesterSetupDigest(ctx);
+    await handleRequesterCommand(post(ctx), "enroll", wire().ports);
+    await pool.query(`UPDATE "S5RehearsalRequesterEnrollment" SET lifecycle = 'retired', "lifecycleAt" = now(), "retirementReason" = 'rehearsal_complete',
+      "retiredByPrincipalId" = 'p-owner' WHERE "setupDigest" = $1`, [digest]);
+    const same = wire();
+    await expect(handleRequesterCommand(post(ctx), "enroll", same.ports)).resolves.toMatchObject({ status: 200, body: { outcome: "retired" } });
+    await pool.query(`UPDATE "Reservation" SET "fixtureRef" = 'fixture:2' WHERE ref = $1`, [ctx.reservationRef]);
+    const drifted = wire();
+    await expect(handleRequesterCommand(post({ ...ctx, fixtureRef: "fixture:2" }), "enroll", drifted.ports))
+      .resolves.toMatchObject({ status: 409, body: { code: "requester_state_unverified" } });
+    expect(drifted.ports.readBody).not.toHaveBeenCalled();
+    expect(drifted.hasher).not.toHaveBeenCalled();
+  });
+
+  it("fences the reservation through commit: a release attempted while the hasher is paused waits, and the create commits first", async () => {
+    const ctx = await setup();
+    let releaseHash!: () => void;
+    let hashing!: () => void;
+    const hashStarted = new Promise<void>((resolve) => { hashing = resolve; });
+    const w = wire({ hashGate: () => { hashing(); return new Promise<void>((resolve) => { releaseHash = resolve; }); } });
+    const enroll = handleRequesterCommand(post(ctx), "enroll", w.ports);
+    await hashStarted;
+    const releaser = await pool.connect();
+    try {
+      await releaser.query("BEGIN");
+      await releaser.query("SET LOCAL lock_timeout = '300ms'");
+      await expect(releaser.query(`DELETE FROM "Reservation" WHERE ref = $1`, [ctx.reservationRef])).rejects.toMatchObject({ code: "55P03" });
+      await releaser.query("ROLLBACK");
+      releaseHash();
+      await expect(enroll).resolves.toMatchObject({ status: 201, body: { outcome: "created" } });
+      expect((await releaser.query(`DELETE FROM "Reservation" WHERE ref = $1`, [ctx.reservationRef])).rowCount).toBe(1);
+    } finally { releaser.release(); }
   });
 
   it("still replays after the audit rows are purged", async () => {

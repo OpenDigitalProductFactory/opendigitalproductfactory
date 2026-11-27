@@ -7,16 +7,21 @@
  * container, never the live install or any shared database); each builds its
  * own schema with minimal tables and drops it at the end.
  */
+import { spawn, spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { Client } from "pg";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import {
   CloneFenceError,
+  MAX_APPLICATION_NAME_BYTES,
   REQUESTER_DESTINATION_FENCE_KEY,
   assertSourceHasNoRequester,
+  cloneWriterName,
   discardRetiredEvidenceFromArgv,
+  newCloneWriterTag,
   preflightRequesterDestination,
+  runRegisteredFinalizers,
   runWithDestinationCleanup,
   terminateRegisteredWriters,
   tryEnterRequesterFenceShared,
@@ -36,6 +41,18 @@ describe("requester destination fence (unit)", () => {
     const tagged = new URL(withApplicationName("postgresql://u:p@h:5432/db?sslmode=disable", "dpf-clone:run-1"));
     expect(tagged.searchParams.get("application_name")).toBe("dpf-clone:run-1");
     expect(tagged.searchParams.get("sslmode")).toBe("disable");
+  });
+
+  it("keeps every writer name PostgreSQL would see whole: fence, supervisor and COPY up to a million", () => {
+    const tag = newCloneWriterTag();
+    expect(Buffer.byteLength(tag)).toBe(22);
+    for (const role of ["", "fence", "supervisor", "copy:1", "copy:10", "copy:1000000"]) {
+      expect(Buffer.byteLength(cloneWriterName(tag, role))).toBeLessThanOrEqual(MAX_APPLICATION_NAME_BYTES);
+    }
+    // The old tag shape put copy:10 at 64 bytes, which PostgreSQL truncates; it is refused, never silently cut.
+    const oldShape = `dpf-sanitized-clone:${randomUUID()}`;
+    expect(() => cloneWriterName(oldShape, "copy:10")).toThrow(/exceeds 63 bytes/);
+    expect(() => withApplicationName("postgresql://u:p@h:5432/db", `${oldShape}:copy:10`)).toThrow(/exceeds 63 bytes/);
   });
 
   it("keeps the generic cleanup wrapper unchanged: a failed clone resets again", async () => {
@@ -319,5 +336,74 @@ describe.skipIf(!DATABASE_URL)("requester destination fence (real database)", ()
     expect((error as CloneFenceError).code).toBe("fence_lost");
     expect(writerAliveAtSettlement).toBe(false);
     expect(Date.now() - started).toBeLessThan(15_000);
+  }, 30_000);
+
+  const psql = process.env.DPF_S5_TEST_PSQL ?? "psql";
+  const psqlUrl = process.env.DPF_S5_TEST_PSQL_URL ?? DATABASE_URL;
+  const psqlAvailable = spawnSync(psql, ["--version"]).status === 0;
+
+  // Skipped, and reported as skipped, where no psql binary is available.
+  it.skipIf(!psqlAvailable)("admits twelve real psql COPY writers by their full application names (the tenth and beyond included)", async () => {
+    await resetRequesters([]);
+    await admin.query(`CREATE TABLE IF NOT EXISTS "${schema}"."CopyTarget" (id text PRIMARY KEY)`);
+    const options = await fenceOptions();
+    const tag = newCloneWriterTag();
+    await withRequesterDestinationFence(options, async (fence) => {
+      for (let n = 1; n <= 12; n++) {
+        const name = cloneWriterName(tag, `copy:${n}`);
+        const child = spawn(psql, [psqlUrl, "-v", "ON_ERROR_STOP=1", "-c", `COPY "${schema}"."CopyTarget" (id) FROM STDIN`], {
+          stdio: ["pipe", "ignore", "pipe"], env: { ...process.env, PGAPPNAME: name },
+        });
+        const exited = new Promise<number | null>((resolve) => child.on("close", resolve));
+        await fence.admitCopy(name); // matches pg_stat_activity.application_name exactly
+        child.stdin!.end(`row-${n}\n`);
+        expect(await exited).toBe(0);
+      }
+    });
+    expect(Number((await admin.query(`SELECT count(*)::int AS n FROM "${schema}"."CopyTarget"`)).rows[0].n)).toBe(12);
+  }, 120_000);
+
+  it("runs the final writes on one registered session: a loss during finalization commits nothing", async () => {
+    await resetRequesters([]);
+    await admin.query(`CREATE TABLE IF NOT EXISTS "${schema}"."Final" (id text PRIMARY KEY)`);
+    await admin.query(`DELETE FROM "${schema}"."Final"`);
+    await admin.query(`INSERT INTO "${schema}"."Final" VALUES ('production-identity')`);
+    const finalRows = async () => (await admin.query(`SELECT id FROM "${schema}"."Final" ORDER BY id`)).rows.map((r) => r.id);
+    const sessionTransaction = (session: Client) => async (run: (tx: { $queryRawUnsafe(sql: string, ...v: unknown[]): Promise<unknown>; $executeRawUnsafe(sql: string, ...v: unknown[]): Promise<number> }) => Promise<void>) => {
+      await session.query("BEGIN");
+      try {
+        await run({
+          $queryRawUnsafe: async (sql, ...v) => (await session.query(sql, v)).rows,
+          $executeRawUnsafe: async (sql, ...v) => (await session.query(sql, v)).rowCount ?? 0,
+        });
+        await session.query("COMMIT");
+      } catch (error) {
+        await session.query("ROLLBACK").catch(() => {});
+        throw error;
+      }
+    };
+
+    // Without a loss the final writes commit, on a session the fence registered first.
+    const ok = await fenceOptions();
+    const okSession = await connect(`${ok.tag}:final`);
+    await withRequesterDestinationFence(ok, (fence) => runRegisteredFinalizers(fence, sessionTransaction(okSession), async (tx) => {
+      await tx.$executeRawUnsafe(`DELETE FROM "${schema}"."Final"`);
+      await tx.$executeRawUnsafe(`INSERT INTO "${schema}"."Final" VALUES ('preview-admin')`);
+    }));
+    expect(await finalRows()).toEqual(["preview-admin"]);
+
+    // A loss mid-finalization (for example while a password hashes) leaves the destination as it was.
+    const lossy = await fenceOptions();
+    const fencePid = await pidOf(lossy.fenceClient);
+    const lossySession = await connect(`${lossy.tag}:final`);
+    const lossyPid = await pidOf(lossySession);
+    const error = await withRequesterDestinationFence(lossy, (fence) => runRegisteredFinalizers(fence, sessionTransaction(lossySession), async (tx) => {
+      await tx.$executeRawUnsafe(`DELETE FROM "${schema}"."Final"`);
+      await admin.query("SELECT pg_terminate_backend($1)", [fencePid]);
+      await tx.$executeRawUnsafe(`INSERT INTO "${schema}"."Final" VALUES ('after-loss')`).catch(() => 0);
+    })).catch((e: unknown) => e);
+    expect((error as CloneFenceError).code).toBe("fence_lost");
+    expect(await finalRows()).toEqual(["preview-admin"]);
+    expect(await alive(lossyPid)).toBe(false);
   }, 30_000);
 });

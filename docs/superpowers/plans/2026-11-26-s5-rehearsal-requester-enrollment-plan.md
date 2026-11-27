@@ -310,11 +310,21 @@ Phases 1 to 10 are implemented on `t3/preview-owner-enrollment` and are not yet 
 - The served `execute` still answers `command_not_served`. The Prisma create, retirement and readback adapters exist but are not wired into it.
 - The status GET holds on `owner_binding_unavailable` before any connection opens.
 
-**Deviations a reviewer should judge.**
-- The owner snapshot reads `Organization` directly in the one coherent statement (the first two rows by `createdAt`, as `findInstallOrganization` does) instead of calling `findInstallOrganization`. Calling it would be a second read and break the one-snapshot rule. AC-E2 names the canonical reader, so this needs a ruling.
+**Rulings recorded after the independent review of `0f436f59` (VERDICT BLOCK, Codex gpt-6.2-sol).**
+- **AC-E2 equivalence (accepted).** The owner snapshot reads `Organization` inside its one coherent statement: the first two rows by `createdAt`, as `findInstallOrganization` reads them. Calling `findInstallOrganization` separately under Read Committed would lose R-OWNER-COHERENT. The reviewer and the coordinator accepted this as equivalent. A parity test runs both readers on the same rows (0, 1, 2 and 3 organizations) and requires the same missing, single or ambiguous answer.
+- **Plan-line trailer exception (coordinator).** The per-commit `Design-Grounding-Decision:` trailer in "Gates and evidence" is missing from the historical commits `add7f091..316744c5`. The coordinator granted an explicit exception without rewriting history:
+  - the UI and UX files were deferred and released from WC-4EBA473D;
+  - `check-design-grounding-decision.mjs` finds no design-sensitive files on the branch;
+  - every commit from `ed9194b7` on, and the final squash commit, carries both `Design-Grounding-Decision:` and `Signed-off-by:`.
+- **Review fixes.**
+  - The clone writer names are now bounded: a 22-byte tag, with every derived name checked against PostgreSQL's 63 bytes.
+  - The clone's final writes (identity reset and preview admin) run on one registered, fenced transaction.
+  - An enroll replay of a retired record holds unless its retained facts match.
+  - The served body reader never retains more than 4 KiB + 1.
+
+**Other notes.**
 - `verifyRequesterState` is implemented as `readRequesterState` (one statement) plus the pure `evaluateRequesterState`.
 - Phases 9 and 10 share one commit because they share a module.
-- The plan's per-commit `Design-Grounding-Decision:` trailer (Gates and evidence) is missing from `add7f091..316744c5`. History was not rewritten. `check-design-grounding-decision.mjs` reports no design-sensitive files in this change. The trailer is carried from the phase 11 commit on.
 
 **Docs-impact dispositions.**
 - `docs/architecture/ai-agent-meta-model.md`: not affected. The `syncEmployeePrincipal` guard refuses one governed class; the Principal and alias convergence model it documents is unchanged.
