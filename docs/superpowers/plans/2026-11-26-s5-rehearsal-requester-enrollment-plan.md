@@ -20,7 +20,7 @@ Activation, sessions, delegation and issuance belong to BI-9F5D1052.
 
 - Decision: atomic
 - Parent: `BI-9F7192F9`
-- Receipt: `cmwxmao5r1j1f0ese1e9a0ubx`
+- Receipt: `cmwya9gbt2bnh0embftx9f0rr`
 - Rationale: The 11 phases deliver one inert, fail-closed capability. Every phase depends on the phase 1 retained record and migration. The never-active invariant (AC-E5, AC-E7) only holds when the record, guards, enrollment, retirement and read seam ship together. Shipping one phase alone would leave either an enrollable identity without its guards, or guards with nothing to guard. The deferred UI and activation are already split to BI-9F5D1052, and the served proofs belong to BI-8EA98961, BI-5C193A3F, BI-60FC9291, BI-588688A7 and BI-C7100183.
 - Dependencies: BI-8EA98961, BI-5C193A3F, BI-60FC9291, BI-588688A7, BI-C7100183 (served proofs; the code holds until they land). Deferred UI and activation: BI-9F5D1052.
 
