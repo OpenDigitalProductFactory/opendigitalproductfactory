@@ -1,3 +1,7 @@
+---
+status: draft
+---
+
 # S5 single-assessment compatibility implementation plan
 
 **Status:** draft sequencing, no live coverage receipt or implementation admission yet.

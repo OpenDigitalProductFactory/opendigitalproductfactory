@@ -1,3 +1,7 @@
+---
+status: draft
+---
+
 # Exact S5 single-assessment compatibility
 
 **Status:** proposed design, not independently approved or implementation-admitted.
