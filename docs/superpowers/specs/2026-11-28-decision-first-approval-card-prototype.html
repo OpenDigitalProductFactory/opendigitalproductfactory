@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Decision-first approval card — inert prototype (BI-CF03AA73)</title>
+<style>
+:root{color-scheme:light dark;--dpf-bg:Canvas;--dpf-surface-1:Canvas;--dpf-surface-2:Field;--dpf-text:CanvasText;--dpf-muted:GrayText;--dpf-border:GrayText;--dpf-accent:Highlight;--dpf-on-accent:HighlightText;--dpf-success:ForestGreen;--dpf-warning:DarkOrange;--dpf-error:Crimson}
+*{box-sizing:border-box}
+body{margin:0;padding:16px;background:var(--dpf-bg);color:var(--dpf-text);font:15px/1.5 system-ui,-apple-system,sans-serif}
+main{max-width:640px;margin:auto}
+article{padding:16px;border:1px solid var(--dpf-border);border-radius:10px;background:var(--dpf-surface-1);margin:16px 0}
+.head{display:flex;flex-wrap:wrap;align-items:flex-start;justify-content:space-between;gap:8px}
+h1{font-size:22px;margin:0 0 6px}h2{font-size:17px;margin:0}
+.badges{display:flex;flex-wrap:wrap;gap:6px}
+.badge{display:inline-flex;align-items:center;padding:2px 8px;border-radius:6px;font-size:12px;font-weight:500;border:1px solid var(--dpf-border)}
+.badge.safe{border-color:var(--dpf-success)}.badge.warn{border-color:var(--dpf-warning)}.badge.danger{border-color:var(--dpf-error)}
+.meta{margin:6px 0 0;font-size:12px;color:var(--dpf-muted)}
+dl.summary{margin:12px 0;padding:10px 0;border-top:1px solid var(--dpf-border);border-bottom:1px solid var(--dpf-border);display:grid;gap:8px}
+.row{display:grid;grid-template-columns:5.25rem minmax(0,1fr);gap:8px;align-items:baseline}
+.row dt{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--dpf-muted)}
+.row dd{margin:0;overflow-wrap:anywhere}
+.hold{padding:8px 10px;border:1px solid var(--dpf-warning);border-radius:6px;font-size:13px;margin:0 0 12px}
+.buttons{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0}
+button,select{font:inherit;min-height:40px;padding:6px 12px;background:var(--dpf-surface-1);color:var(--dpf-text);border:1px solid var(--dpf-border);border-radius:6px;cursor:pointer}
+button.primary{background:var(--dpf-accent);color:var(--dpf-on-accent);border-color:var(--dpf-accent)}
+details{border-top:1px solid var(--dpf-border);padding-top:10px;margin-top:10px}
+summary{cursor:pointer;font-size:13px;color:var(--dpf-muted)}
+.drawer-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin:10px 0;padding:10px;border-radius:6px;border:1px solid var(--dpf-border)}
+.drawer-grid dt{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--dpf-muted)}
+.drawer-grid dd{margin:2px 0 0;font-size:12px;overflow-wrap:anywhere}
+pre{margin:8px 0 0;padding:10px;border:1px solid var(--dpf-border);border-radius:6px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px}
+[role=status]:empty{display:none}
+@media(max-width:360px){body{padding:8px}.row{grid-template-columns:1fr;gap:2px}}
+</style>
+</head>
+<body>
+<main>
+  <h1>Decision-first approval card</h1>
+  <p class="meta">Inert design preview for BI-CF03AA73 (DI-CC33A7978BBB). Buttons send no network requests and authorize nothing.</p>
+  <label>Scenario
+    <select id="scenario">
+      <option value="triage">Registered internal tool (run_discovery_triage)</option>
+      <option value="merge">Irreversible duplicate merge (merge_backlog_items)</option>
+      <option value="unknown">Unregistered / unverified tool (fail-closed)</option>
+    </select>
+  </label>
+  <article aria-label="Approval card preview">
+    <div class="head">
+      <h2 id="title"></h2>
+      <div class="badges"><span id="posture" class="badge"></span><span id="due" class="badge"></span></div>
+    </div>
+    <p id="byline" class="meta"></p>
+    <dl class="summary">
+      <div class="row"><dt>What</dt><dd id="what"></dd></div>
+      <div class="row"><dt>Why now</dt><dd id="why"></dd></div>
+      <div class="row"><dt>Impact</dt><dd id="impact"></dd></div>
+    </dl>
+    <p id="hold" class="hold" hidden></p>
+    <div id="facts" class="meta"></div>
+    <div class="buttons"><button class="primary" type="button">Authorize</button><button type="button">Decline</button></div>
+    <p id="status" role="status" aria-live="polite" class="meta"></p>
+    <details id="tech">
+      <summary>Technical evidence</summary>
+      <dl id="params" class="drawer-grid"></dl>
+      <dl id="audit" class="drawer-grid"></dl>
+      <details id="raw-details">
+        <summary>Complete proposed content</summary>
+        <pre id="raw" tabindex="0"></pre>
+      </details>
+    </details>
+  </article>
+</main>
+<script>
+(() => {
+  const cases = {
+    triage: {
+      title: "Run daily inventory triage?",
+      posture: "Internal · Reversible", postureClass: "safe", due: "Due in 7 days",
+      byline: "AI · your Inventory · needs your approval",
+      what: "Reviews unmatched inventory items and applies safe high-confidence catalog matches.",
+      why: "Scheduled inventory check. Your coworker needs sign-off before updating catalog records.",
+      impact: "Stays inside DPF and reaches no external systems. Matches can be reassigned or dismissed later.",
+      hold: "", facts: "",
+      params: [["Trigger","Scheduled daily cadence"],["Full decisions inline","Off (compact summary)"],["Valid until","Dec 5, 2026, 3:00 AM"],["Scope","This single request only"]],
+      audit: [["Tool","run_discovery_triage"],["Coworker","AGT-INVENTORY"],["Request","env-demo-1"],["Accountable authorizer","You"]],
+      raw: { trigger: "cadence", includeDecisions: false }
+    },
+    merge: {
+      title: "Combine these duplicate work requests?",
+      posture: "Cannot be undone", postureClass: "danger", due: "Due in 7 days",
+      byline: "AI · your Product Manager · needs your approval",
+      what: "Retire Fix mobile nav overlap as a duplicate of Mobile header layout cleanup and add its recorded demand to the item that stays.",
+      why: "Authorize only if both records describe the same work and the item named to stay is the right one.",
+      impact: "The duplicate stays in history. Declining leaves both records unchanged. Cannot be undone once it runs.",
+      hold: "", facts: "",
+      params: [["Retires","BI-4412"],["Keeps","BI-4309"],["Valid until","Dec 5, 2026, 3:00 AM"],["Scope","This single request only"]],
+      audit: [["Tool","merge_backlog_items"],["Coworker","AGT-PM"],["Request","env-demo-2"],["Accountable authorizer","You"]],
+      raw: { duplicateItemId: "BI-4412", canonicalItemId: "BI-4309", reconcileOnly: false }
+    },
+    unknown: {
+      title: "Review this coworker request?",
+      posture: "Effect unverified", postureClass: "warn", due: "Due in 15 minutes",
+      byline: "AI · your Operations · needs your approval",
+      what: "Unresolved; review before authorizing.",
+      why: "Paused because this request has no verified approval summary.",
+      impact: "Reversibility is not established.",
+      hold: "Keep this on hold until its effect is clear.",
+      facts: "Amount: 1250 · Currency: USD · Recurrence: monthly · Recipient: supplier@example.test",
+      params: [["Valid until","Today, 5:49 AM"],["Scope","This single request only"]],
+      audit: [["Tool","unsupported_internal_operation"],["Coworker","AGT-OPS"],["Request","env-demo-3"],["Accountable authorizer","You"]],
+      raw: { payment: { amount: 1250, currency: "USD", recurrence: "monthly", recipient: "supplier@example.test" } }
+    }
+  };
+  function render() {
+    const c = cases[document.getElementById("scenario").value];
+    document.getElementById("title").textContent = c.title;
+    const p = document.getElementById("posture"); p.textContent = c.posture; p.className = "badge " + c.postureClass;
+    document.getElementById("due").textContent = c.due;
+    document.getElementById("byline").textContent = c.byline;
+    document.getElementById("what").textContent = c.what;
+    document.getElementById("why").textContent = c.why;
+    document.getElementById("impact").textContent = c.impact;
+    const h = document.getElementById("hold"); h.textContent = c.hold; h.hidden = !c.hold;
+    document.getElementById("facts").textContent = c.facts;
+    document.getElementById("params").innerHTML = c.params.map(([k,v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`).join("");
+    document.getElementById("audit").innerHTML = c.audit.map(([k,v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`).join("");
+    document.getElementById("raw").textContent = JSON.stringify(c.raw, null, 2);
+    document.getElementById("status").textContent = "";
+    document.getElementById("tech").open = false;
+    document.getElementById("raw-details").open = false;
+  }
+  document.getElementById("scenario").addEventListener("change", render);
+  for (const b of document.querySelectorAll("button")) b.addEventListener("click", () => {
+    document.getElementById("status").textContent = "Preview only. No decision was saved and no action ran.";
+  });
+  render();
+})();
+</script>
+</body>
+</html>

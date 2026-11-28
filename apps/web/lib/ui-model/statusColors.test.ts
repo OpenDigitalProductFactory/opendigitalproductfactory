@@ -75,6 +75,15 @@ describe("statusColors", () => {
     expect(resolveIntent("ownerDecisionImpact", "deadline")).toBe("warning");
   });
 
+  it("maps approval card posture badges through the shared intent registry", () => {
+    expect(resolveIntent("approvalPosture", "reversible")).toBe("success");
+    expect(resolveIntent("approvalPosture", "bounded")).toBe("info");
+    expect(resolveIntent("approvalPosture", "outward")).toBe("warning");
+    expect(resolveIntent("approvalPosture", "authority")).toBe("warning");
+    expect(resolveIntent("approvalPosture", "irreversible")).toBe("danger");
+    expect(resolveIntent("approvalPosture", "unverified")).toBe("warning");
+  });
+
   it("maps marketing lifecycle statuses to operational intents", () => {
     expect(resolveIntent("marketing", "draft")).toBe("neutral");
     expect(resolveIntent("marketing", "pending-review")).toBe("warning");

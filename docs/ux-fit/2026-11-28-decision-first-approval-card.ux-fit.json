@@ -1,0 +1,26 @@
+{
+  "version": "1",
+  "decidedOption": "registry-driven-decision-first",
+  "decisionInteractionId": "DI-CC33A7978BBB",
+  "scope": {
+    "files": [
+      "apps/web/components/attention/CoworkerEnvelopeApproval.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "registry-driven-decision-first",
+      "per-tool-allowlist-expansion",
+      "card-layout-only-raw-fallback"
+    ]
+  },
+  "verification": {
+    "designDecision": "Recorded kernel comparison DI-CC33A7978BBB (composite 17.72 vs 11.08 vs 8.10, 0 commandment conflicts, 0 flipping principles; core/contextual retrieval ran lexical-only while embeddings were disabled).",
+    "owningArea": "Workspace /workspace/inbox; operator deciding coworker approval envelopes on mobile and desktop; contextual card layout and disclosure only, no navigation change.",
+    "sourceTruth": "CoworkerActionEnvelope, pending ToolExecution.parameters, RegisteredToolDefinition (consequence + approvalPresentation), and viewer-checked loadTargetLabels.",
+    "fit": "fits-with-guardrails: reuses Surface, StatusBadge (approvalPosture domain), EnvelopeDecisionButtons, DPF theme tokens, and SOURCE_CATALOG localization; unregistered tools and unexpected arguments stay fail-closed with all material facts visible.",
+    "servedChecks": "Protected approval-disclosure-verification scenarios cover desktop/mobile (320px) in light/dark themes, keyboard disclosure, and state retention, extended with a run_discovery_triage scenario.",
+    "baseline": "Existing committed /workspace/inbox route-budget baseline remains frozen (376 default-visible words). No baseline relaxation is requested."
+  }
+}

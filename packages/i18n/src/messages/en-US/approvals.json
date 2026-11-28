@@ -149,8 +149,21 @@
       "targetUnavailable": "Work name unavailable",
       "permissionScope": "Coworker permissions",
       "notProvided": "Not provided",
-      "effectUnknown": "Reversibility is not established."
+      "effectUnknown": "Reversibility is not established.",
+      "whatLabel": "What",
+      "whyLabel": "Why now",
+      "impactLabel": "Impact",
+      "posture": {
+        "reversible": "Internal · Reversible",
+        "bounded": "Internal · Bounded",
+        "outward": "Reaches outside",
+        "authority": "Changes access",
+        "irreversible": "Cannot be undone",
+        "unverified": "Effect unverified"
+      }
     },
+    "requestParameters": "Request details",
+    "auditRecord": "Audit record",
     "saving": "Saving your decision. This can take a few seconds.",
     "notReached": "Your decision did not reach the platform. Nothing was approved. You can decide again.",
     "unknownResult": "We could not confirm whether your decision was saved. Do not approve again until you have checked its result.",

@@ -12,6 +12,7 @@
 // The primary block is the proposed decision and the human authorization to
 // record it. Identity plumbing lives under Technical detail.
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, type ReactNode } from "react";
 
@@ -43,9 +44,11 @@ type Execution = { status: "executed" | "failed" | "not-run"; message: string };
 export function CoworkerEnvelopeApproval({
   approval,
   technicalDetail,
+  builderLinks,
 }: {
   approval: AttentionEnvelopeApproval;
   technicalDetail?: ReactNode;
+  builderLinks?: Array<{ label: string; href: string }>;
 }) {
   const router = useRouter();
   const [outcome, setOutcome] = useState<Outcome | null>(null);
@@ -216,13 +219,30 @@ export function CoworkerEnvelopeApproval({
     }
   }
 
+  const concreteTarget = isConcreteTarget(decision.target) ? decision.target : null;
+  const recordedWhy =
+    decision.whyAPerson && decision.whyAPerson !== "No reason was recorded for asking a person."
+      ? decision.whyAPerson
+      : null;
+
   return (
     <div className="space-y-3">
-      <section className="space-y-2 break-words text-dpf-body text-dpf-text">
+      <section className="space-y-2.5 break-words text-dpf-body text-dpf-text">
         {primary.target ? <p className="text-dpf-caption text-dpf-muted">{primary.target}</p> : null}
-        <p>{primary.description}</p>
-        <p>{primary.consequence}</p>
-        {primary.recommendation ? <p className="text-dpf-caption text-dpf-muted">{primary.recommendation}</p> : null}
+        <dl className="space-y-2 border-y border-dpf-border py-2.5">
+          <SummaryRow label={COPY.primary.whatLabel} value={primary.description} />
+          {primary.why ? <SummaryRow label={COPY.primary.whyLabel} value={primary.why} /> : null}
+          <SummaryRow label={COPY.primary.impactLabel} value={primary.consequence} />
+        </dl>
+        {primary.recommendation ? (
+          primary.unresolved ? (
+            <p className="rounded-dpf-md border border-dpf-border bg-dpf-surface-2 px-3 py-2 text-dpf-caption text-dpf-text">
+              {primary.recommendation}
+            </p>
+          ) : (
+            <p className="text-dpf-caption text-dpf-muted">{primary.recommendation}</p>
+          )
+        ) : null}
         {primary.facts.length > 0 ? <dl className="grid gap-2 sm:grid-cols-2">
           {primary.facts.map((fact, index) => <Fact key={`${fact.label}-${index}`} label={fact.label} value={fact.value} wide />)}
         </dl> : null}
@@ -286,6 +306,9 @@ export function CoworkerEnvelopeApproval({
           onAuthorize={() => void decide("approve")}
           onDecline={() => void decide("decline")}
         />
+        {primary.declineDoes ? (
+          <p className="text-dpf-caption text-dpf-muted">{primary.declineDoes}</p>
+        ) : null}
         </div>
       ) : (
         <p className="text-xs text-[var(--dpf-muted)]">
@@ -298,95 +321,122 @@ export function CoworkerEnvelopeApproval({
           {error}
         </p>
       ) : null}
-      <details>
-        <summary className="cursor-pointer py-2 text-dpf-caption text-dpf-muted">{COPY.whyDisclosure}</summary>
-        <p className="text-dpf-body text-dpf-text">{COPY.whyPlain}</p>
-      </details>
-      <details>
-        <summary className="cursor-pointer py-2 text-dpf-caption text-dpf-muted">{COPY.technicalEvidence}</summary>
-      <Surface padding="sm" rounded="md">
-        {plainChange ? (
-          <HandoverDecision approval={approval} decision={decision} handover={plainChange} />
-        ) : (
-        <section>
-        <p className="text-dpf-caption font-semibold uppercase tracking-wider text-[var(--dpf-accent)]">
-          {COPY.authorizationNeeded}
-        </p>
-        <p className="mt-1 text-xs leading-relaxed text-[var(--dpf-text)]">
-          {decision.authorization}.
-        </p>
-        <dl className="mt-3 grid gap-x-6 gap-y-2 sm:grid-cols-2">
-          <Fact label="Action" value={decision.action} wide />
-          <Fact label="Destination" value={decision.target} wide />
-          {decision.kind === "known" ? (
-            <Fact
-              label="Findings"
-              value={
-                decision.findings.length === 0
-                  ? "None"
-                  : decision.findings.map((finding) => finding.issue).join(" ")
-              }
-              wide
-            />
+      <details className="border-t border-dpf-border pt-2">
+        <summary className="cursor-pointer py-1.5 text-dpf-caption text-dpf-muted">{COPY.technicalEvidence}</summary>
+        <Surface padding="sm" rounded="md" className="mt-2 space-y-3">
+          {plainChange ? (
+            <HandoverDecision approval={approval} decision={decision} handover={plainChange} />
+          ) : (
+            <section className="space-y-3">
+              {decision.kind === "unknown" ? (
+                <div className="space-y-1">
+                  <p className="text-xs font-semibold text-[var(--dpf-text)]" role="note">
+                    {decision.recordedIfAuthorized}
+                  </p>
+                  <p className="text-xs text-[var(--dpf-muted)]">{decision.authorization}.</p>
+                </div>
+              ) : null}
+
+              <div>
+                <p className="text-dpf-caption font-semibold uppercase tracking-wider text-[var(--dpf-muted)]">
+                  {COPY.requestParameters}
+                </p>
+                <dl className="mt-2 grid gap-x-6 gap-y-2 sm:grid-cols-2">
+                  {decision.kind === "exact"
+                    ? decision.proposed.map((field, index) => (
+                      <Fact key={`${field.label}-${index}`} label={field.label} value={field.value} wide />
+                    ))
+                    : null}
+                  {concreteTarget ? <Fact label="Destination" value={concreteTarget} wide /> : null}
+                  {decision.kind === "known" ? (
+                    <Fact
+                      label="Findings"
+                      value={
+                        decision.findings.length === 0
+                          ? "None"
+                          : decision.findings.map((finding) => finding.issue).join(" ")
+                      }
+                      wide
+                    />
+                  ) : null}
+                  {decision.reason ? <Fact label="Reason" value={decision.reason} wide /> : null}
+                  {recordedWhy ? <Fact label={COPY.whyAsked} value={recordedWhy} wide /> : null}
+                  {!approval.actionable ? <Fact label={COPY.status} value={statusLabel(approval)} /> : null}
+                  <Fact label="Valid until" value={validUntilLabel(approval.expiresAtIso)} />
+                  <Fact label={COPY.covers} value={decision.scope} wide />
+                </dl>
+              </div>
+
+              <div className="border-t border-dpf-border pt-3">
+                <p className="text-dpf-caption font-semibold uppercase tracking-wider text-[var(--dpf-muted)]">
+                  {COPY.auditRecord}
+                </p>
+                <dl className="mt-2 grid gap-x-6 gap-y-1.5 sm:grid-cols-2">
+                  <Fact label={COPY.tool} value={decision.toolName} />
+                  <Fact label={COPY.assistant} value={approval.coworkerAgentId} />
+                  <Fact label={COPY.request} value={approval.envelopeId} />
+                  <Fact label="Accountable authorizer" value={decision.authorizerLabel} />
+                  {decision.subjectId ? <Fact label="Subject" value={decision.subjectId} /> : null}
+                  {decision.gate ? <Fact label="Gate" value={decision.gate} /> : null}
+                  {decision.decision ? <Fact label="Decision" value={decision.decision} /> : null}
+                  {approval.reviewBinding ? (
+                    <>
+                      <Fact label="Repository" value={approval.reviewBinding.repositoryFullName} wide />
+                      <Fact label="Commit" value={approval.reviewBinding.commitSha} wide />
+                      <Fact label="File" value={approval.reviewBinding.path} wide />
+                      <Fact label="Blob" value={approval.reviewBinding.providerBlobId} wide />
+                    </>
+                  ) : null}
+                </dl>
+              </div>
+            </section>
+          )}
+          {decision.completeProposedContent ? (
+            <details className="border-t border-dpf-border pt-2">
+              <summary className="cursor-pointer text-dpf-caption font-semibold text-dpf-accent">
+                {COPY.completeContent}
+              </summary>
+              <pre tabIndex={0} aria-label={COPY.completeProposal} className="mt-2 max-h-80 overflow-auto whitespace-pre-wrap break-all rounded-dpf-md border border-dpf-border bg-dpf-surface-2 p-3 text-dpf-caption text-dpf-text">
+                {decision.completeProposedContent}
+              </pre>
+            </details>
           ) : null}
-          {decision.reason ? <Fact label="Reason" value={decision.reason} wide /> : null}
-          <Fact label="Consequence" value={decision.consequence} wide />
-          <Fact label="Status" value={statusLabel(approval)} />
-          <Fact label="Valid until" value={validUntilLabel(approval.expiresAtIso)} />
-        </dl>
-        {decision.kind === "known" ? null : decision.kind === "exact" ? (
-          <div className="mt-3">
-            <p className="text-dpf-caption font-semibold uppercase tracking-wider text-[var(--dpf-muted)]">
-              Proposed content
-            </p>
-            <dl className="mt-1 grid gap-y-1.5">
-              {decision.proposed.map((field, index) => (
-                <Fact key={`${field.label}-${index}`} label={field.label} value={field.value} wide />
+          {builderLinks && builderLinks.length > 0 ? (
+            <div className="flex flex-wrap gap-x-4 gap-y-2 border-t border-dpf-border pt-3">
+              {builderLinks.map((action) => (
+                <Link
+                  key={`${action.label}:${action.href}`}
+                  href={action.href}
+                  className="text-xs font-semibold text-[var(--dpf-accent)] hover:opacity-80 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--dpf-accent)]"
+                >
+                  {action.label} →
+                </Link>
               ))}
-            </dl>
-          </div>
-        ) : (
-          <p className="mt-3 text-xs font-semibold text-[var(--dpf-text)]" role="note">
-            {decision.recordedIfAuthorized}
-          </p>
-        )}
-        <Effects decision={decision} />
-        </section>
-        )}
-        {plainChange ? null : (
-          <details className="mt-3">
-            <summary className="cursor-pointer text-xs font-semibold text-[var(--dpf-muted)]">
-              {COPY.technical}
-            </summary>
-            <dl className="mt-2 grid gap-x-6 gap-y-1.5 sm:grid-cols-2">
-              <Fact label={COPY.tool} value={decision.toolName} wide />
-              <Fact label={COPY.request} value={approval.envelopeId} wide />
-              <Fact label={COPY.assistant} value={approval.coworkerAgentId} wide />
-              {decision.subjectId ? <Fact label="Subject" value={decision.subjectId} /> : null}
-              {decision.gate ? <Fact label="Gate" value={decision.gate} /> : null}
-              {decision.decision ? <Fact label="Decision" value={decision.decision} /> : null}
-              <Fact label="Recommender" value={decision.recommenderLabel} />
-              <Fact label="Accountable authorizer" value={decision.authorizerLabel} />
-              <Fact label={COPY.whyAsked} value={decision.whyAPerson} wide />
-              <Fact label={COPY.covers} value={decision.scope} wide />
-            </dl>
-          </details>
-        )}
-        {decision.completeProposedContent ? (
-          <details className="mt-3">
-            <summary className="cursor-pointer text-dpf-caption font-semibold text-dpf-accent">
-              {COPY.completeContent}
-            </summary>
-            <pre tabIndex={0} aria-label={COPY.completeProposal} className="mt-2 max-h-80 overflow-auto whitespace-pre-wrap break-all rounded-dpf-md border border-dpf-border bg-dpf-surface-2 p-3 text-dpf-caption text-dpf-text">
-              {decision.completeProposedContent}
-            </pre>
-          </details>
-        ) : null}
-      </Surface>
-      {technicalDetail}
+            </div>
+          ) : null}
+        </Surface>
+        {technicalDetail}
       </details>
+    </div>
+  );
+}
 
+function isConcreteTarget(target: string | undefined): boolean {
+  if (!target) return false;
+  const trimmed = target.trim();
+  return Boolean(trimmed)
+    && trimmed !== "Not named in the proposal"
+    && trimmed !== COPY.primary.notProvided
+    && trimmed !== "Unknown: the proposal could not be loaded";
+}
 
+function SummaryRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="grid grid-cols-1 gap-x-3 gap-y-0.5 sm:grid-cols-[4.75rem_minmax(0,1fr)] sm:items-baseline">
+      <dt className="text-dpf-caption font-semibold uppercase tracking-wider text-dpf-muted">
+        {label}
+      </dt>
+      <dd className="min-w-0 break-words text-dpf-body text-dpf-text">{value}</dd>
     </div>
   );
 }
@@ -442,12 +492,9 @@ function HandoverDecision({ approval, decision, handover }: {
   handover: NonNullable<AttentionEnvelopeApproval["decision"]["handover"]>;
 }) {
   return (
-    <>
+    <div className="space-y-3">
       <section>
-        <p className="text-dpf-caption font-semibold uppercase tracking-wider text-[var(--dpf-accent)]">
-          {COPY.authorizationNeeded}
-        </p>
-        <h3 className="mt-1 text-sm font-semibold text-[var(--dpf-text)]">{decision.headline}</h3>
+        <h4 className="text-sm font-semibold text-[var(--dpf-text)]">{decision.headline}</h4>
         <p className="mt-2 text-dpf-caption font-semibold uppercase tracking-wider text-[var(--dpf-muted)]">{COPY.whatChanges}</p>
         <ul className="mt-1 list-disc space-y-1 ps-4 text-xs leading-relaxed text-[var(--dpf-text)]">
           {handover.changes.map((line) => <li key={line}>{line}</li>)}
@@ -460,24 +507,22 @@ function HandoverDecision({ approval, decision, handover }: {
           <p className="mt-2 text-xs text-[var(--dpf-text)]">{COPY.nextStep}: {handover.nextStep}</p>
         ) : null}
         <Effects decision={decision} />
-        <dl className="mt-3 grid gap-y-2">
-          <Fact label={COPY.status} value={statusLabel(approval)} />
-        </dl>
       </section>
-      <details className="mt-3">
-        <summary className="cursor-pointer text-xs font-semibold text-[var(--dpf-muted)]">{COPY.technical}</summary>
-        <dl className="mt-2 grid gap-y-1.5">
-          <Fact label={COPY.tool} value={decision.toolName} wide />
-          <Fact label={COPY.request} value={approval.envelopeId} wide />
-          <Fact label={COPY.assistant} value={approval.coworkerAgentId} wide />
+      <div className="border-t border-dpf-border pt-3">
+        <p className="text-dpf-caption font-semibold uppercase tracking-wider text-[var(--dpf-muted)]">{COPY.auditRecord}</p>
+        <dl className="mt-2 grid gap-x-6 gap-y-1.5 sm:grid-cols-2">
+          <Fact label={COPY.tool} value={decision.toolName} />
+          <Fact label={COPY.assistant} value={approval.coworkerAgentId} />
+          <Fact label={COPY.request} value={approval.envelopeId} />
+          {!approval.actionable ? <Fact label={COPY.status} value={statusLabel(approval)} /> : null}
           <Fact label={COPY.whyAsked} value={decision.whyAPerson} wide />
           <Fact label={COPY.covers} value={decision.scope} wide />
           {decision.proposed.map((field, index) => (
             <Fact key={`${field.label}-${index}`} label={field.label} value={field.value} wide />
           ))}
         </dl>
-      </details>
-    </>
+      </div>
+    </div>
   );
 }
 

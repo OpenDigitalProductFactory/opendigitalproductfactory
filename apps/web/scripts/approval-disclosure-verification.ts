@@ -113,6 +113,8 @@ export async function verifyApprovalDisclosure() {
     fixturesOwned = true;
     const long = "The release candidate was not supplied. " + "Internal verification detail. ".repeat(40);
     const cases: Case[] = [
+      { key: "discovery-triage", tool: "run_discovery_triage", args: { trigger: "cadence", includeDecisions: false },
+        primaryTitle: "Run inventory discovery triage?", primaryEffect: "high-confidence catalog matches" },
       { key: "app-update", tool: "request_self_upgrade", args: { reason: "Ready release batch" },
         primaryTitle: "Request an update for this app?" },
       { key: "merge-work", tool: "merge_backlog_items", args: { canonicalItemId: "BI-FIXTURE-KEEP", duplicateItemId: "BI-FIXTURE-DUP" },
@@ -167,9 +169,16 @@ export async function verifyApprovalDisclosure() {
           check(await card.getByRole("heading", { name: value.primaryTitle, exact: true }).count() === 1,
             value.key + ": operation missing from the initial question");
           if (value.primaryEffect) {
-            check(text.includes(value.primaryEffect) && text.includes("BI-FIXTURE-KEEP") && text.includes("BI-FIXTURE-DUP"),
-              value.key + ": requested effect or affected work missing from the initial card");
+            const requiresBacklogRefs = value.key === "merge-work" || value.key === "retire-duplicate";
+            check(
+              text.includes(value.primaryEffect)
+              && (!requiresBacklogRefs || (text.includes("BI-FIXTURE-KEEP") && text.includes("BI-FIXTURE-DUP"))),
+              value.key + ": requested effect or affected work missing from the initial card",
+            );
             check(!text.includes("Keep this on hold until its effect is clear."), value.key + ": known effect shown as unresolved");
+            if (value.key === "discovery-triage") {
+              check(!text.includes("Reversibility is not established."), "discovery-triage: ordinary internal tool shown with unknown reversibility");
+            }
           } else {
             check(text.includes("Keep this on hold until its effect is clear."), value.key + ": unresolved-effect recommendation lost");
             check(!text.includes("NPEL-FIXTURE"), value.key + ": technical identity leaked into the initial question");

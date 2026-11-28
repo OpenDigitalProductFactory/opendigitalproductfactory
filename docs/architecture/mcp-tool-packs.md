@@ -74,6 +74,8 @@ edge into the runner, the readiness composer or `lib/self-upgrade/quiescence.ts`
 
 A definition also declares its reach. `sideEffect` plus `consequence` (`outward` | `irreversible` | `authority`) is what puts a tool behind the consult-before-consequential-act gate, and an `outward` tool additionally names whose stance governs it with `consequenceScope`: `business` (default, WWWD-alignment-gated) or `platform` (platform development or operations that leave the install, such as `create_portal_pr` or `contribute_to_hive`; receipted and outward-reviewed, never scored against the customer business stance). Declare both on the tool; never infer them from the pack name (BI-63B14D4B).
 
+A tool definition may also co-locate an optional declarative `approvalPresentation` descriptor (`lib/tool-approval-presentation.ts`, BI-CF03AA73) naming its plain-language owner question, concrete `what` and `impact` lines, optional `whyDefault` and `declineDoes` copy, reversibility posture, strict `allowedParams` allowlist, and human-readable `paramLabels`. The approval card reads that descriptor only when the captured arguments match `allowedParams` (and `allowEmptyParams` when `{}`) and the declared posture never weakens `consequence`; unexpected arguments or unregistered tools fail closed to the unverified hold presentation with all material facts surfaced. Presentation never alters authorization or execution binding.
+
 ### Per-call effects under existing policy
 
 `consequenceForCall` may narrow a declared consequence when the exact call proves

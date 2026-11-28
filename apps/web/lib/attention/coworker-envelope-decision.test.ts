@@ -438,3 +438,80 @@ it("names a proposed merge without resolving an unknown effect", () => {
     facts: expect.arrayContaining([{ label: "Access", value: "false" }]),
   });
 });
+
+describe("registry-driven approvalPresentation (BI-CF03AA73)", () => {
+  const triagePresentation = {
+    question: "Run inventory discovery triage?",
+    what: "Reviews unmatched inventory items and applies safe high-confidence catalog matches.",
+    impact: "Stays inside DPF and touches no external systems. Any catalog match can be reassigned or dismissed later.",
+    whyDefault: "Scheduled inventory triage check. Your coworker needs sign-off before updating catalog records.",
+    declineDoes: "Declining skips this triage pass; inventory records stay unchanged.",
+    scopeLabel: "Inventory catalog",
+    reversibility: "reversible" as const,
+    allowedParams: ["trigger", "includeDecisions"] as const,
+    allowEmptyParams: true,
+    paramLabels: {
+      trigger: { label: "Trigger", valueLabels: { cadence: "Scheduled daily cadence" } },
+      includeDecisions: { label: "Detailed decisions", valueLabels: { false: "Compact summary only" } },
+    },
+  };
+
+  it("renders concrete What, Why now, Impact, posture, and human-labeled drawer parameters for run_discovery_triage", () => {
+    const decision = summarizeCoworkerEnvelopeDecision({
+      toolName: "run_discovery_triage",
+      proposedParameters: { trigger: "cadence", includeDecisions: false },
+      recommenderAgentId: "AGT-INVENTORY",
+      authorizerUserId: "user-1",
+      consequence: null,
+      approvalPresentation: triagePresentation,
+    });
+    const primary = envelopePrimaryDecision(decision);
+    expect(primary.unresolved).toBe(false);
+    expect(primary.title).toBe("Run inventory discovery triage?");
+    expect(primary.description).toContain("high-confidence catalog matches");
+    expect(primary.why).toContain("Scheduled inventory triage check");
+    expect(primary.consequence).toContain("Stays inside DPF");
+    expect(primary.posture).toBe("reversible");
+    expect(primary.recommendation).toBe("");
+    expect(primary.target).toBe("Inventory catalog");
+    expect(decision.proposed).toEqual([
+      { label: "Trigger", value: "Scheduled daily cadence" },
+      { label: "Detailed decisions", value: "Compact summary only" },
+    ]);
+  });
+
+  it("fails closed when an unexpected consequential parameter is present", () => {
+    const decision = summarizeCoworkerEnvelopeDecision({
+      toolName: "run_discovery_triage",
+      proposedParameters: { trigger: "cadence", payment: { amount: 500, currency: "USD" } },
+      recommenderAgentId: "AGT-INVENTORY",
+      authorizerUserId: "user-1",
+      consequence: null,
+      approvalPresentation: triagePresentation,
+    });
+    const primary = envelopePrimaryDecision(decision);
+    expect(primary.unresolved).toBe(true);
+    expect(primary.title).toBe("Review this coworker request?");
+    expect(primary.posture).toBe("unverified");
+    expect(primary.recommendation).toContain("Keep this on hold");
+    expect(primary.facts).toEqual(expect.arrayContaining([
+      { label: "Amount", value: "500" },
+      { label: "Currency", value: "USD" },
+    ]));
+  });
+
+  it("fails closed when presentation reversibility contradicts declared consequence", () => {
+    const decision = summarizeCoworkerEnvelopeDecision({
+      toolName: "run_discovery_triage",
+      proposedParameters: { trigger: "cadence" },
+      recommenderAgentId: "AGT-INVENTORY",
+      authorizerUserId: "user-1",
+      consequence: "irreversible",
+      approvalPresentation: triagePresentation,
+    });
+    const primary = envelopePrimaryDecision(decision);
+    expect(primary.unresolved).toBe(true);
+    expect(primary.posture).toBe("irreversible");
+    expect(primary.consequence).toContain("Cannot be undone");
+  });
+});
