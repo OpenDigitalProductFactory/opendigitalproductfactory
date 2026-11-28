@@ -6,6 +6,18 @@ status: draft
 
 **Scope:** BI-AFF3F2BD · WC-C0134995 · design admission IRD-DAF880A401D1. S8 BI-8B3DBAD8 consumes this output. Base: DPF `89cd7b12d4fb7fa89d4a74ac7a7c188859b0ca31`.
 
+## Scope manifest
+
+**OBJ-QUAL-ISSUE:** Allow the independent installation release owner to qualify one exact protected receiver route with auditable evidence, without letting its preparer approve it.
+
+**OBJ-QUAL-ENFORCE:** Bind route use to current issuer authority and keep revocation, receiver fencing, and original-result custody distinct.
+
+| ID | Objectives | Acceptance |
+| --- | --- | --- |
+| AC-QUAL-ISSUE | OBJ-QUAL-ISSUE | Record one exact current qualification linking the nonproduction installation, registration, receiver, route, build/profile, scope, epoch and expiry to its evidence and distinct approver. An exact retry returns the same audit receipt, while stale, foreign or self-approved input confers no grant. |
+| AC-QUAL-DISPATCH | OBJ-QUAL-ENFORCE | Before dispatch require current exact qualification and a separately admitted attempt and worktree. Missing, expired, mismatched or revoked proof holds before transport. A possibly-started attempt becomes readback-only. |
+| AC-QUAL-REVOKE | OBJ-QUAL-ENFORCE | Commit the issuer fence and durable revocation request atomically. Prove the competing receiver orderings in a governed nonproduction fixture. Accept only a complete authentic acknowledgement and never interpret it as an attempt outcome. |
+
 ## Problem and decision
 
 S6 can consume a current qualification and fence a revoked route, but its host registry is observation only. The production call graph at the base contains no issuer-side caller of `queueFencedHostRevocation`. Neither a registration nor a successful probe grants dispatch. A fixture acknowledgement is not current authority, and neither an acknowledgement nor silence settles an attempt.
