@@ -36,6 +36,7 @@ vi.mock("@dpf/db", () => ({
 import { recordInitiativeSpecApproval } from "./initiative-readiness/baseline-repository";
 import { recordInitiativeGateReceipt } from "./initiative-readiness/receipt-repository";
 import { createHash } from "node:crypto";
+import { parseInitiativeScopeManifest } from "./initiative-readiness/baseline-manifest";
 
 const canonical = `**OBJ-TEST-001:** Preserve the approved objective.
 
@@ -108,7 +109,7 @@ function boundPublication() {
     currentAgentId: boundApproval.reviewerAgentId, status: "working", progressPayload: {} as Record<string, unknown>, a2aMetadata: {
       trigger: "external-mcp", requestDigest: boundTask.requestDigest, initiativeReviewBinding: {
         writerToolName: "record_initiative_design_review", itemId: boundApproval.itemId, gate: "spec-approval",
-        artifactRef: locator, expectedCurrentBaselineId: null,
+        artifactRef: locator, expectedCurrentBaselineId: null as string | null,
       },
     } };
   const base = tx();
@@ -181,6 +182,33 @@ describe("recordInitiativeSpecApproval", () => {
     expect(state.activities.filter((row) => row.kind === "initiative_scope_baseline")).toHaveLength(1);
     expect(mocks.documentCreate).toHaveBeenCalledOnce();
     expect(mocks.pinCreate).toHaveBeenCalledOnce();
+  });
+
+  it("refuses incomplete reviewer dispositions, then records exactly one corrected receipt in the current fenced generation", async () => {
+    const state = boundPublication();
+    const prior = parseInitiativeScopeManifest(canonical.replace("Completion proves the objective.", "The preceding criterion needs revision."));
+    if (!prior.ok) throw Error(prior.error);
+    const baselineId = "baseline-previous";
+    state.activities.push({ id: "prior-baseline", backlogItemId: "bi-row", kind: "initiative_scope_baseline",
+      payload: { baselineId, supersedesBaselineId: null, artifactDigest: prior.artifactDigest,
+        objectiveStatements: prior.objectives, acceptanceStatements: prior.acceptance } });
+    const amended = { ...boundApproval, expectedCurrentBaselineId: baselineId };
+    state.task.a2aMetadata.initiativeReviewBinding.expectedCurrentBaselineId = baselineId;
+    expect(await recordInitiativeSpecApproval(amended)).toMatchObject({
+      ok: false, code: "supersession-dispositions-invalid",
+      correction: { expectedCurrentBaselineId: baselineId, requiredStatementIds: ["AC-TEST-001"], missingStatementIds: ["AC-TEST-001"] },
+    });
+    expect(state.activities).toHaveLength(1);
+    expect(state.pins).toHaveLength(0);
+    const corrected = { ...amended, supersessionDispositions: [{
+      statementId: "AC-TEST-001", reason: "The new statement directly verifies the preserved objective.",
+    }] };
+    const winner = await recordInitiativeSpecApproval(corrected);
+    expect(winner).toMatchObject({ ok: true });
+    expect(await recordInitiativeSpecApproval(corrected)).toMatchObject(winner);
+    expect(state.activities.filter(row => row.kind === "initiative_gate_receipt")).toHaveLength(1);
+    expect(state.activities.filter(row => row.kind === "initiative_scope_baseline")).toHaveLength(2);
+    expect(state.pins).toHaveLength(1);
   });
 
   it.each(["input-required", "completed", "failed"])("does not append a baseline for a %s task", async (status) => {

@@ -105,6 +105,7 @@ function inputSchemaFor(name: string, lane: Lane): RegisteredToolDefinition["inp
       expectedCurrentBaselineId: { type: ["string", "null"] },
       supersessionDispositions: {
         type: "array",
+        description: "For an amended approval, independently disposition each changed or removed objective or acceptance ID exactly once. The immutable design's Draft supersession dispositions section is author input, not your verdict. Use an empty list if none changed or was removed.",
         items: {
           type: "object",
           properties: {
@@ -653,7 +654,8 @@ function handlerFor(actionKey: string, lane: Lane): ToolPackHandler {
       }
       return approval.ok
         ? { success: true, entityId: approval.baselineId ?? approval.receiptId, message: `spec-approval receipt and canonical baseline recorded for ${String(params.itemId)}.`, data: approval }
-        : { success: false, error: approval.code, message: approval.error };
+        : { success: false, error: approval.code, message: approval.error,
+          ...(approval.correction ? { data: approval.correction } : {}) };
     }
     const result = await recordInitiativeGateReceipt({
       itemId: String(params.itemId ?? ""),

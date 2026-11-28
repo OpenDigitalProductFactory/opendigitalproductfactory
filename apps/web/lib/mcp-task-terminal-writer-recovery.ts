@@ -8,7 +8,7 @@ import type { ExistingRemoteTask } from "./mcp-task-submit-types";
 import type { RemoteTaskSubmitParams } from "./mcp-task-submit-params";
 import { IMMUTABLE_PAGE_READER_TOOLS, type createInitiativeReviewTerminalToolPolicy } from "./tak/terminal-tool-policy";
 import { needsTerminalReaderBootstrap, type PersistedTerminalReaderExecution } from "./mcp-task-terminal-writer-context";
-import { recoverTerminalWriterEscalation } from "./mcp-task-terminal-writer-escalation";
+import { isApprovalCorrectionHold, recoverTerminalWriterEscalation } from "./mcp-task-terminal-writer-escalation";
 import { parseTerminalWriterWait, type TerminalWriterWait } from "./mcp-task-replay-projection";
 function optionalString(value: unknown): string | null { return typeof value === "string" && value.trim() ? value.trim() : null; }
 
@@ -71,6 +71,7 @@ export async function reserveTerminalWriterReplay(input: {
   if (recoverTerminalWriterEscalation(input.existing.progressPayload)) return null;
 
   const existingWait = parseTerminalWriterWait(input.existing.progressPayload);
+  if (existingWait && isApprovalCorrectionHold(existingWait.writerToolName, existingWait.writerRejection)) return null;
   const isProjectedWait = existingWait !== null
     && ["input-required", "stalled", "failed"].includes(input.existing.status);
   // A legacy completed row with no receipt/exit evidence cannot prove that a

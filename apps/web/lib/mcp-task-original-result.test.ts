@@ -88,6 +88,35 @@ describe("original review read-only evidence collection", () => {
     }
   });
 
+  it("retains a bounded amendment correction on an uncertain original without advertising replay", async () => {
+    const value = structuredClone(rejectedRow());
+    const correction = { expectedCurrentBaselineId: "baseline-a", requiredStatementIds: ["AC-1", "AC-2", "AC-3", "AC-4"],
+      missingStatementIds: ["AC-3", "AC-4"] };
+    const binding = { ...raw.initiativeReviewBinding, gate: "spec-approval", expectedCurrentBaselineId: "baseline-a" };
+    const request = parseRemoteTaskSubmitParams({ ...raw, initiativeReviewBinding: binding });
+    if (typeof request === "string") throw Error(request);
+    const requestDigest = remoteTaskRequestDigest(request);
+    Object.assign(value.a2aMetadata, { initiativeReviewBinding: binding, requestDigest });
+    const executionUncertainty = { schemaVersion: 1, kind: "execution-uncertain", settlement: "unknown" };
+    Object.assign(value.progressPayload, { executionUncertainty });
+    Object.assign(value.progressPayload.terminalWriterWait.writerRejection, { error: "supersession-dispositions-invalid", approvalCorrection: correction });
+    db.task.mockResolvedValue(value);
+    db.writers.mockResolvedValue([{ ...writer, success: false, result: { success: false, error: "supersession-dispositions-invalid", data: correction } }]);
+    const read = () => readOriginalReviewResult({ ...input, expected: { ...input.expected, requestDigest } });
+    expect(await read()).toMatchObject({
+      classification: "unknown", replayAllowed: false,
+      terminalWriterRejection: { action: "reconcile-approval-correction", approvalCorrection: correction },
+    });
+    // The native writer can leave its audit before the worker can save a wait.
+    db.task.mockResolvedValue({ ...value, progressPayload: {
+      dispatch: value.progressPayload.dispatch, executionUncertainty,
+    } });
+    expect(await read()).toMatchObject({
+      classification: "unknown", replayAllowed: false, binding: { writerAttempt: null },
+      terminalWriterRejection: { attempt: null, action: "reconcile-approval-correction", approvalCorrection: correction },
+    });
+  });
+
   it("preserves fitting original evidence when JSON escaping pushes the rejection over budget", async () => {
     db.writers.mockResolvedValue([{ ...writer, success: false, result: { success: false } }]);
     db.task.mockResolvedValue(rejectedRow());

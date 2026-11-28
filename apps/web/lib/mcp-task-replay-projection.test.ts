@@ -36,6 +36,15 @@ describe("projectRemoteTaskReplay required terminal writer dispatch", () => {
     });
   });
 
+  it("reads a held approval correction without offering another reviewer execution", () => {
+    const writerRejection = { schemaVersion: 1, error: "supersession-dispositions-invalid",
+      message: "Expected AC-1.", observedAt: terminalWriterWait.observedAt,
+      approvalCorrection: { expectedCurrentBaselineId: "baseline-current", requiredStatementIds: ["AC-1"], missingStatementIds: ["AC-1"] } };
+    expect(project({ terminalWriterWait: { ...terminalWriterWait, writerToolName: "record_initiative_design_review", writerRejection } }))
+      .toMatchObject({ result: { resumable: false, waitReason: "terminal-writer-rejected",
+        structuredContent: { action: "reconcile-approval-correction", approvalCorrection: writerRejection.approvalCorrection } } });
+  });
+
   it.each([null, {}, { schemaVersion: 1, error: "CLASSIFICATION_REQUIRED" }])(
     "does not project an incomplete rejection as an actionable writer error", writerRejection => {
       expect(project({ terminalWriterWait: { ...terminalWriterWait, writerRejection } })).toMatchObject({

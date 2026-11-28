@@ -1,7 +1,7 @@
 vi.mock("@/lib/mcp-task-review-recovery", () => ({ issueOriginalReviewRecoveryTarget: async () => ({ kind: "none" }) }));
 import { beforeEach, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({ agent: vi.fn(), token: vi.fn(), room: vi.fn(), human: vi.fn(),
-  consent: vi.fn(), access: vi.fn(), item: vi.fn(), recovery: vi.fn(), task: vi.fn(), source: vi.fn(), outcome: vi.fn() }));
+  consent: vi.fn(), access: vi.fn(), item: vi.fn(), recovery: vi.fn(), task: vi.fn(), source: vi.fn(), outcome: vi.fn(), baseline: vi.fn() }));
 vi.mock("@dpf/db", () => ({ prisma: { agent: { findUnique: mocks.agent }, mcpApiToken: { findUnique: mocks.token },
   workroom: { findFirst: mocks.room }, taskRun: { findFirst: mocks.task } } }));
 vi.mock("@/lib/backlog/initiative-readiness/build-studio-owed-routes", () => ({ BUILD_STUDIO_ASSISTANT_AGENT_ID: "build", buildStudioOwedRoutes: vi.fn() }));
@@ -13,6 +13,8 @@ vi.mock("@/lib/work-management/workroom-agent-access.server", () => ({ resolveAg
 vi.mock("./packs/backlog-pack-read-tools", () => ({ getBacklogItem: mocks.item }));
 vi.mock("@/lib/backlog/initiative-readiness/terminal-recovery", () => ({ resolveTerminalInitiativeRecovery: mocks.recovery }));
 vi.mock("@/lib/backlog/initiative-readiness/artifact-resolver", () => ({ resolveInitiativeArtifact: mocks.source }));
+vi.mock("@/lib/backlog/initiative-readiness/baseline-source", () => ({ loadBaselineSource: mocks.baseline }));
+import { parseInitiativeScopeManifest } from "@/lib/backlog/initiative-readiness/baseline-manifest";
 import { authorizeCoworkerRequest } from "./independent-review-request";
 import type { ToolExecutionContext } from "@/lib/mcp-tool-types";
 import { remoteTaskRequestDigest } from "@/lib/mcp-task-capacity-contract";
@@ -78,4 +80,83 @@ it("joins matching existing work without depending on provider availability", as
   mocks.source.mockRejectedValue(new Error("DNS unavailable"));
   expect(await authorizeCoworkerRequest(packet, "human", context)).toEqual({ bounded: true });
   expect(mocks.source).not.toHaveBeenCalled();
+});
+
+const fourChangeIds = ["AC-1", "AC-2", "AC-3", "AC-4"];
+const scopeRevision = (edition: "old" | "new") => [
+  "**OBJ-1:** Keep the original proposal.",
+  "",
+  "| ID | Objectives | Criterion |",
+  "| --- | --- | --- |",
+  ...fourChangeIds.map(id => `| ${id} | OBJ-1 | ${id} ${edition} scope. |`),
+  "| AC-5 | OBJ-1 | Preserve the original effect count. |",
+].join("\n");
+
+function bindAmendment() {
+  const previous = parseInitiativeScopeManifest(scopeRevision("old"));
+  if (!previous.ok) throw new Error(previous.error);
+  const baselineId = "baseline-original";
+  const request = { ...packet, initiativeReviewBinding: { ...binding, expectedCurrentBaselineId: baselineId } };
+  mocks.recovery.mockResolvedValue({ reviewerRoutes: [{ independent: true, requestCoworker: request }] });
+  mocks.baseline.mockResolvedValue({ origin: "own", baselineRows: [{ payload: {
+    baselineId, supersedesBaselineId: null, artifactDigest: previous.artifactDigest,
+    objectiveStatements: previous.objectives, acceptanceStatements: previous.acceptance,
+  } }] });
+  return request;
+}
+
+it("reports all four missing amendment dispositions before paid review admission", async () => {
+  const amended = bindAmendment();
+  mocks.source.mockResolvedValue({ ok: true, artifact: { digest: "sha256:amended", bytes: Buffer.from(scopeRevision("new")) } });
+  expect(await authorizeCoworkerRequest(amended, "human", context)).toMatchObject({
+    bounded: true,
+    refusal: {
+      error: "supersession-dispositions-required",
+      data: { gateStatus: "unrun", expectedCurrentBaselineId: "baseline-original",
+        requiredStatementIds: fourChangeIds, missingStatementIds: fourChangeIds },
+    },
+  });
+});
+
+it("admits a complete amended input without treating author drafts as dispositions recorded by the reviewer", async () => {
+  const amended = bindAmendment();
+  const reasons = fourChangeIds.map(id => `- ${id}: Retain the earlier outcome and state the new verification detail.`).join("\n");
+  const body = `${scopeRevision("new")}\n\n## Draft supersession dispositions\n\n${reasons}\n`;
+  mocks.source.mockResolvedValue({ ok: true, artifact: { digest: "sha256:amended", bytes: Buffer.from(body) } });
+  expect(await authorizeCoworkerRequest(amended, "human", context)).toEqual({ bounded: true });
+  expect(mocks.baseline).toHaveBeenCalledWith(expect.anything(), "BI-DOC");
+  expect(amended.initiativeReviewBinding).not.toHaveProperty("supersessionDispositions");
+});
+
+it("does not take draft entries from a later subsection", async () => {
+  const amended = bindAmendment();
+  const reasons = fourChangeIds.map(id => `- ${id}: Retain the earlier outcome and state the new verification detail.`).join("\n");
+  const body = `${scopeRevision("new")}\n\n## Draft supersession dispositions\n\n### Other notes\n\n${reasons}\n`;
+  mocks.source.mockResolvedValue({ ok: true, artifact: { digest: "sha256:amended", bytes: Buffer.from(body) } });
+  expect(await authorizeCoworkerRequest(amended, "human", context)).toMatchObject({
+    refusal: { error: "supersession-dispositions-required", data: { missingStatementIds: fourChangeIds } },
+  });
+});
+
+it("does not resolve a request against a baseline that is no longer current", async () => {
+  const amended = bindAmendment();
+  const previous = parseInitiativeScopeManifest(scopeRevision("old"));
+  if (!previous.ok) throw new Error(previous.error);
+  const manifest = {
+    artifactDigest: previous.artifactDigest,
+    objectiveStatements: previous.objectives, acceptanceStatements: previous.acceptance,
+  };
+  mocks.baseline.mockResolvedValue({ origin: "own", baselineRows: [
+    { payload: { ...manifest, baselineId: "baseline-original", supersedesBaselineId: null } },
+    { payload: { ...manifest, baselineId: "baseline-later", supersedesBaselineId: "baseline-original" } },
+  ] });
+  expect(await authorizeCoworkerRequest(amended, "human", context)).toMatchObject({
+    refusal: { error: "approval-baseline-unavailable", data: { gateStatus: "unrun" } },
+  });
+});
+
+it("leaves an unchanged scope eligible without draft explanations", async () => {
+  const amended = bindAmendment();
+  mocks.source.mockResolvedValue({ ok: true, artifact: { digest: "sha256:unchanged", bytes: Buffer.from(scopeRevision("old")) } });
+  expect(await authorizeCoworkerRequest(amended, "human", context)).toEqual({ bounded: true });
 });

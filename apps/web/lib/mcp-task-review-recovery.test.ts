@@ -137,7 +137,7 @@ it("issues a locator for the exact saved request and refuses ambiguous or uncert
   expect(await issueOriginalReviewRecoveryTarget({ packet, userId: "human", actingAgentId: "AGT-EXT-CODEX", taskAuthorityKey: "oauth-family:new" }))
     .toEqual({ kind: "target", target: params.reviewRecovery });
   expect(await issueOriginalReviewRecoveryTarget({ packet, userId: "human", actingAgentId: "AGT-EXT-CODEX", taskAuthorityKey: "oauth-family:original" }))
-    .toEqual({ kind: "none" });
+    .toEqual({ kind: "existing" });
   mocks.tasks.mockResolvedValue([row, row]);
   expect(await issueOriginalReviewRecoveryTarget({ packet, userId: "human", actingAgentId: "AGT-EXT-CODEX", taskAuthorityKey: "oauth-family:new" })).toMatchObject({ kind: "refused" });
   mocks.tasks.mockResolvedValue([{ ...row, progressPayload: { executionUncertainty: {} } }]);

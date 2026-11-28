@@ -3,7 +3,10 @@ import { parseInitiativeScopeManifest } from "./backlog/initiative-readiness/bas
 import type { InitiativeReviewBinding } from "./mcp-task-review-contract";
 import { TERMINAL_WRITER_RECOVERY_MAX_CHARS } from "./mcp-task-terminal-writer-context";
 
-type ReviewDocumentRefusal = { error: string; message: string; gateStatus: "unrun" };
+import type { SupersessionInput } from "./backlog/initiative-readiness/supersession-preflight";
+
+type ReviewDocumentRefusal = { error: string; message: string; gateStatus: "unrun";
+  expectedCurrentBaselineId?: string; requiredStatementIds?: string[]; missingStatementIds?: string[] };
 
 /** Reviews of the design document itself, whose size the notice covers. */
 const DESIGN_DOCUMENT_GATES = new Set(["design-spec", "spec-approval"]);
@@ -35,6 +38,7 @@ export function reviewDocumentSizeNotice(charCount: number): string | null {
 export async function reviewDocumentPreflight(binding: InitiativeReviewBinding | undefined): Promise<{
   refusal: ReviewDocumentRefusal | null;
   notice: string | null;
+  supersession?: SupersessionInput;
 }> {
   const none = { refusal: null, notice: null };
   if (binding?.writerToolName !== "record_initiative_design_review" || !DESIGN_DOCUMENT_GATES.has(binding.gate)) return none;
@@ -64,6 +68,13 @@ export async function reviewDocumentPreflight(binding: InitiativeReviewBinding |
   if (mintsScope) {
     const manifest = parseInitiativeScopeManifest(text, resolved.artifact.digest);
     if (!manifest.ok) return refused(manifest.code, manifest.error);
+    if (binding.expectedCurrentBaselineId) {
+      const { preflightApprovalSupersession } = await import("./backlog/initiative-readiness/supersession-preflight");
+      const supersession = await preflightApprovalSupersession({ itemId: binding.itemId,
+        expectedCurrentBaselineId: binding.expectedCurrentBaselineId, sourceText: text, currentManifest: manifest });
+      if (supersession && "error" in supersession) return { refusal: supersession, notice: null };
+      if (supersession) return { refusal: null, notice: reviewDocumentSizeNotice(text.length), supersession };
+    }
   }
   return { refusal: null, notice: reviewDocumentSizeNotice(text.length) };
 }

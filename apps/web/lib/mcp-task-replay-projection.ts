@@ -2,6 +2,7 @@ import { parseResourceWaitProjection } from "./mcp-task-capacity-contract";
 import { hasExecutionUncertainty, EXECUTION_UNCERTAIN_MESSAGE } from "./shared/execution-uncertainty";
 import type { Prisma } from "@dpf/db";
 import {
+  isApprovalCorrectionHold,
   recoverTerminalWriterEscalation,
   terminalWriterEscalationMessage,
   terminalWriterEscalationStructuredContent,
@@ -158,7 +159,7 @@ export function projectRemoteTaskReplay(input: {
         structuredContent: { error: terminalWriterDispatchFailure.code },
         isError: true,
       } : terminalWriterWait && writerRejection ? {
-        resumable: true,
+        resumable: !isApprovalCorrectionHold(terminalWriterWait.writerToolName, writerRejection),
         waitReason: TERMINAL_WRITER_REJECTED_WAIT_REASON,
         content: remoteTaskContent(terminalWriterRejectionMessage(terminalWriterWait.writerToolName, writerRejection)),
         structuredContent: terminalWriterRejectionStructuredContent(

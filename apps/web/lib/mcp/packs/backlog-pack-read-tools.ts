@@ -3,7 +3,7 @@ import { FEDERATED_WORK_ORIGIN_MARKER_SQL_PREFIX } from "@dpf/db/federated-work-
 import { publicCompletionActivity } from "@/lib/backlog/initiative-readiness/completion-input-context";
 import { resolveEpicRowId, resolveListLimit } from "./backlog-read-helpers";
 import { addScopeFilters, backlogScopeSelect, scopeData } from "./backlog-scope-metadata";
-import { boundedBacklogRecoveryRead, canReadRecoveryPacket, isRecoveryReadGate, recoveryReadDecision } from "../backlog-recovery-read";
+import { boundedBacklogRecoveryRead, canReadRecoveryPacket, finalizeOriginalRecoveryRoute, isRecoveryReadGate, recoveryReadDecision } from "../backlog-recovery-read";
 import { designPhaseReviewDecision } from "@/lib/backlog/initiative-readiness/design-phase-recovery";
 import type { prepareCurrentDesignObservation as PrepareCurrentDesignObservation } from "@/lib/backlog/initiative-readiness/canonical-artifact-discovery";
 
@@ -576,12 +576,8 @@ export async function getBacklogItem(params: Record<string, unknown>, currentAge
         const issued = await issueOriginalReviewRecoveryTarget({ packet: route.requestCoworker,
           userId: currentUserId, actingAgentId: currentAgentId, taskAuthorityKey: key,
           tokenGrantScopes: context.tokenGrantScopes });
-        if (issued.kind === "refused") return { success: false, error: "original_review_recovery_required",
-          message: "The existing review needs reconciliation before any new dispatch. No replacement request was delivered.",
-          data: { reason: issued.reason, itemId: item.itemId, recoveryGate: requestedGate,
-            ...(issued.originalResult ? { originalResult: issued.originalResult } : {}),
-            ...(issued.resultRead ? { resultRead: issued.resultRead } : {}) } };
-        if (issued.kind === "target") route.requestCoworker = { ...route.requestCoworker, ...{ reviewRecovery: issued.target } };
+        const refusal = await finalizeOriginalRecoveryRoute(route, issued, item.itemId, selected?.ok ? () => selected.isCurrent() : undefined);
+        if (refusal) return refusal;
       }
     }
     if (selected?.ok && !await selected.isCurrent()) return selectionRefusal;

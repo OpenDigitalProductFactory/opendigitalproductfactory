@@ -178,3 +178,11 @@ OAuth task family for existing retry history; caller input cannot select or
 reset that authority. The shared projection lives in
 `apps/web/lib/mcp/backlog-recovery-read.ts`; existing readiness and dispatch
 remain the authority for eligibility and immutable packet equality.
+
+An amended spec-approval read reports which objective and acceptance statements
+changed from the approved baseline. Provide a draft explanation for each under
+`## Draft supersession dispositions` in the amended spec, then refresh the exact
+request. An incomplete draft leaves the review unrun. The independent reviewer
+owns the final dispositions. An original writer refusal remains readable under
+current Workroom content access, but a refusal or missing reply does not
+authorize a new review or replay of an uncertain execution.

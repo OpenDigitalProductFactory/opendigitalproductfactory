@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { validateInitiativeDisposition } from "./disposition-contract";
+import { APPROVAL_CORRECTION_ERROR, parseApprovalCorrection, type ApprovalCorrection, validateInitiativeDisposition } from "./disposition-contract";
 
 import { Prisma, prisma } from "@dpf/db";
 
@@ -215,7 +215,7 @@ export function validateInitiativeSupersessionDispositions(
 export type RecordInitiativeSpecApprovalResult =
   | { ok: true; receiptId: string; baselineId: string; artifactDigest: string }
   | (ActionSuccess & { receiptId: string; baselineId: string | null; artifactDigest: string; deduplicated: true; receipt: InitiativeGateReceipt })
-  | { ok: false; code: string; error: string };
+  | { ok: false; code: string; error: string; correction?: ApprovalCorrection };
 
 class InitiativeApprovalRollback extends Error {
   constructor(readonly result: Extract<RecordInitiativeSpecApprovalResult, { ok: false }>) {
@@ -436,7 +436,16 @@ export async function recordInitiativeSpecApproval(args: {
       const semanticDiff = diffInitiativeScopeManifests(previousManifest, manifest);
       const required = [...semanticDiff.removedOrChangedObjectiveIds, ...semanticDiff.removedOrChangedAcceptanceIds];
       if (!validateInitiativeSupersessionDispositions(required, args.supersessionDispositions)) {
-        return { ok: false, code: "CANONICAL_DESIGN_AMBIGUOUS", error: "Scope-reducing supersession requires an explicit disposition for every removed or changed statement." };
+        const correction = parseApprovalCorrection({
+          expectedCurrentBaselineId: args.expectedCurrentBaselineId,
+          requiredStatementIds: required,
+          missingStatementIds: required.filter(id => !args.supersessionDispositions.some(entry =>
+            entry.statementId === id && entry.reason.trim().length >= 20)),
+        });
+        const error = "Scope-reducing supersession requires one independent disposition for each removed or changed statement.";
+        return correction ? { ok: false, code: APPROVAL_CORRECTION_ERROR, correction,
+          error: `${error} Required IDs: ${required.join(", ")}.` }
+          : { ok: false, code: "CANONICAL_DESIGN_AMBIGUOUS", error };
       }
     } else if (args.supersessionDispositions.length > 0) {
       return { ok: false, code: "CANONICAL_DESIGN_AMBIGUOUS", error: "An initial baseline cannot carry supersession dispositions." };

@@ -270,6 +270,9 @@ export async function authorizeCoworkerRequest(
     if (documentRefusal) return { bounded: true, refusal: { success: false,
       error: documentRefusal.error, message: documentRefusal.message,
       data: { gateStatus: documentRefusal.gateStatus,
+        ...(documentRefusal.expectedCurrentBaselineId && { expectedCurrentBaselineId: documentRefusal.expectedCurrentBaselineId }),
+        ...(documentRefusal.requiredStatementIds && { requiredStatementIds: documentRefusal.requiredStatementIds }),
+        ...(documentRefusal.missingStatementIds && { missingStatementIds: documentRefusal.missingStatementIds }),
         action: "Correct the scope document and refresh its immutable review request, or retry the same request after source access is restored." },
     } };
     if (notice) return { bounded: true, notice };

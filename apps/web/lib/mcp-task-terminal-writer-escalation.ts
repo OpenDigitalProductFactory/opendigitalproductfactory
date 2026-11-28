@@ -1,3 +1,4 @@
+import { APPROVAL_CORRECTION_ERROR, parseApprovalCorrection, type ApprovalCorrection } from "./backlog/initiative-readiness/disposition-contract";
 import { hasExecutionUncertainty } from "./shared/execution-uncertainty";
 
 export const TERMINAL_WRITER_MAX_ATTEMPTS = 3;
@@ -23,13 +24,14 @@ export type TerminalWriterRejection = {
   error: string;
   message: string;
   observedAt: string;
+  approvalCorrection?: ApprovalCorrection;
 };
 
 export const TERMINAL_WRITER_REJECTED_WAIT_REASON = "terminal-writer-rejected";
 
 type WriterExecutionRecord = {
   name: string;
-  result: { success: boolean; error?: string; message?: string };
+  result: { success: boolean; error?: string; message?: string; data?: unknown };
 };
 
 /** Last failed call of the writer, as a rejection, or null when the writer never ran or succeeded. */
@@ -40,29 +42,45 @@ export function lastTerminalWriterRejection(
 ): TerminalWriterRejection | null {
   const last = records.filter((record) => record.name === writerToolName).at(-1);
   if (!last || last.result.success) return null;
+  const correction = readApprovalWriterCorrection(writerToolName, last.result.error, last.result.data);
   return {
     schemaVersion: 1,
     error: nonEmptyString(last.result.error) ?? "writer-rejected",
     message: nonEmptyString(last.result.message) ?? "The writer returned no message.",
     observedAt,
+    ...(correction ? { approvalCorrection: correction } : {}),
   };
 }
 
+export function readApprovalWriterCorrection(writerToolName: string, error: unknown, value: unknown) {
+  return writerToolName === "record_initiative_design_review" && error === APPROVAL_CORRECTION_ERROR
+    ? parseApprovalCorrection(value) : null;
+}
+
+export function isApprovalCorrectionHold(writerToolName: string, rejection: TerminalWriterRejection | undefined) {
+  return writerToolName === "record_initiative_design_review" && rejection?.error === APPROVAL_CORRECTION_ERROR;
+}
+
 export function terminalWriterRejectionMessage(writerToolName: string, rejection: TerminalWriterRejection): string {
-  return `${writerToolName} was called and rejected the packet: ${rejection.error}: ${rejection.message} Fix the packet and resume the same TaskRun; switching reviewer will not help.`;
+  const action = isApprovalCorrectionHold(writerToolName, rejection)
+    ? "Keep the original approval held. The independent reviewer can correct the packet only under current writer authority. Do not start another execution."
+    : "Fix the packet and resume the same TaskRun; switching reviewer will not help.";
+  return `${writerToolName} was called and rejected the packet: ${rejection.error}: ${rejection.message} ${action}`;
 }
 
 export function terminalWriterRejectionStructuredContent(
   writerToolName: string,
-  attempt: number,
+  attempt: number | null,
   rejection: TerminalWriterRejection,
 ) {
+  const correction = readApprovalWriterCorrection(writerToolName, rejection.error, rejection.approvalCorrection);
   return {
     error: "terminal_writer_rejected",
     attempt,
     writerToolName,
     writerRejection: { error: rejection.error, message: rejection.message },
-    action: "fix-packet-and-resume",
+    action: isApprovalCorrectionHold(writerToolName, rejection) ? "reconcile-approval-correction" : "fix-packet-and-resume",
+    ...(correction ? { approvalCorrection: correction } : {}),
   };
 }
 

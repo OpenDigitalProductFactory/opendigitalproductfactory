@@ -1,4 +1,6 @@
 import { createHash } from "node:crypto";
+import type { InitiativeReviewerRecovery } from "@/lib/tak/initiative-readiness-tool-grants";
+import type { issueOriginalReviewRecoveryTarget } from "@/lib/mcp-task-review-recovery";
 import { canonicalJson } from "@dpf/integration-shared/canonical-json";
 import { INITIATIVE_GATE_KEYS } from "@/lib/backlog/initiative-readiness/receipt-schema";
 import type { InitiativeReadinessDecision, ReadinessProfile, ReadinessRequirementResult } from "@/lib/backlog/initiative-readiness/types";
@@ -91,4 +93,35 @@ export function boundedBacklogRecoveryRead(args: {
     data: { ...identity, requiredChars, limitChars: MAX_RECOVERY_READ_CHARS,
       requestDigest: `sha256:${createHash("sha256").update(canonicalJson(result.data)).digest("hex")}`,
       nextAction: "Retain this digest and report the issuer's oversized packet to the delivery coordinator. Do not reconstruct it, alter it or retry the full item response." } };
+}
+
+/** Called only after exact-room content and current connection admission. */
+export async function finalizeOriginalRecoveryRoute(
+  route: InitiativeReviewerRecovery["reviewerRoutes"][number],
+  issued: Awaited<ReturnType<typeof issueOriginalReviewRecoveryTarget>>,
+  itemId: string,
+  isCurrent?: () => Promise<boolean>,
+): Promise<ToolResult | null> {
+  if (issued.kind === "refused") return { success: false, error: "original_review_recovery_required",
+    message: "The existing review needs reconciliation before any new dispatch. No replacement request was delivered.",
+    data: { reason: issued.reason, itemId, recoveryGate: route.gate,
+      ...(issued.originalResult ? { originalResult: issued.originalResult } : {}),
+      ...(issued.resultRead ? { resultRead: issued.resultRead } : {}) } };
+  if (issued.kind === "target") {
+    route.requestCoworker = { ...route.requestCoworker, ...{ reviewRecovery: issued.target } };
+    return null;
+  }
+  const binding = route.requestCoworker.initiativeReviewBinding;
+  if (issued.kind !== "none" || route.gate !== "spec-approval" || !binding?.expectedCurrentBaselineId) return null;
+  // This previews required input without changing the immutable request. The
+  // admission path checks it again before committing to new reviewer work.
+  const { reviewDocumentPreflight } = await import("@/lib/mcp-task-review-document");
+  const { refusal, supersession } = await reviewDocumentPreflight(binding);
+  if (isCurrent && !await isCurrent()) return (await import("./backlog-workroom-read-source")).selectionRefusal;
+  if (refusal) {
+    const { error, message, ...details } = refusal;
+    return { success: false, error, message, data: { ...details, itemId, recoveryGate: route.gate } };
+  }
+  if (supersession) Object.assign(route, { approvalInput: supersession });
+  return null;
 }

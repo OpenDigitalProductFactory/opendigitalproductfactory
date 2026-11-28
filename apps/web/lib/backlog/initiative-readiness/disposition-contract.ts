@@ -19,6 +19,26 @@ export function validateInitiativeDisposition(
   return null;
 }
 
+export const APPROVAL_CORRECTION_ERROR = "supersession-dispositions-invalid";
+export type ApprovalCorrection = {
+  expectedCurrentBaselineId: string;
+  requiredStatementIds: string[];
+  missingStatementIds: string[];
+};
+
+/** Closed, bounded subset of the canonical writer failure. Not a replay permit. */
+export function parseApprovalCorrection(value: unknown): ApprovalCorrection | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const { expectedCurrentBaselineId, requiredStatementIds, missingStatementIds } = value as Record<string, unknown>;
+  const validIds = (ids: unknown): ids is string[] => Array.isArray(ids) && ids.length <= 128
+    && ids.every(id => typeof id === "string" && /^(?:OBJ|AC)-[A-Z0-9-]{1,96}$/u.test(id))
+    && new Set(ids).size === ids.length;
+  if (typeof expectedCurrentBaselineId !== "string" || !/^baseline-[A-Za-z0-9-]{1,96}$/u.test(expectedCurrentBaselineId)
+    || !validIds(requiredStatementIds) || requiredStatementIds.length === 0 || !validIds(missingStatementIds)
+    || missingStatementIds.some(id => !requiredStatementIds.includes(id))) return null;
+  return { expectedCurrentBaselineId, requiredStatementIds, missingStatementIds };
+}
+
 export const INITIATIVE_WRITER_CORRECTION_LIMIT = 2;
 export const INITIATIVE_CORRECTABLE_ERRORS = new Set([
   "malformed-receipt", "reason-required", "finding-resolution-invalid",
