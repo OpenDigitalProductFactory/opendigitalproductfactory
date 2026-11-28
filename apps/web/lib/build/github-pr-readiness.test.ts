@@ -118,6 +118,41 @@ describe("projectGithubPrReadiness", () => {
     });
   });
 
+  it("keeps an armed PR armed while flagging terminal failing required checks (BI-BE9A160D)", () => {
+    expect(projectGithubPrReadiness(observed({
+      autoMergeEnabled: true,
+      mergeStateStatus: "BLOCKED",
+      checks: [
+        { name: "Merge Readiness", status: "COMPLETED", conclusion: "FAILURE", required: true },
+        { name: "DCO", status: "COMPLETED", conclusion: "SUCCESS", required: true },
+      ],
+    }))).toEqual({
+      kind: "armed",
+      headSha: "abc123",
+      checksFailing: true,
+    });
+    // Still pending, incomplete check page, or non-required failure only: stay plain armed.
+    expect(projectGithubPrReadiness(observed({
+      autoMergeEnabled: true,
+      checks: [
+        { name: "Merge Readiness", status: "COMPLETED", conclusion: "FAILURE", required: true },
+        { name: "UX Route Budget Sweep", status: "IN_PROGRESS", conclusion: null, required: true },
+      ],
+    }))).toEqual({ kind: "armed", headSha: "abc123" });
+    expect(projectGithubPrReadiness(observed({
+      autoMergeEnabled: true,
+      checksComplete: false,
+      checks: [{ name: "Merge Readiness", status: "COMPLETED", conclusion: "FAILURE", required: true }],
+    }))).toEqual({ kind: "armed", headSha: "abc123" });
+    expect(projectGithubPrReadiness(observed({
+      autoMergeEnabled: true,
+      checks: [
+        { name: "Merge Readiness", status: "COMPLETED", conclusion: "SUCCESS", required: true },
+        { name: "Failure Readiness", status: "COMPLETED", conclusion: "FAILURE", required: false },
+      ],
+    }))).toEqual({ kind: "armed", headSha: "abc123" });
+  });
+
   it("fails closed on missing identity or an unstable merge state", () => {
     expect(projectGithubPrReadiness(observed({ headSha: "" }))).toEqual({
       kind: "unknown",

@@ -76,7 +76,7 @@ export type GithubPrConversationHold = {
 
 export type GithubPrReadiness =
   | { kind: "ready" | "behind" | "conflict" | "queued" | "merged" | "closed"; headSha: string }
-  | { kind: "armed"; headSha: string; conversationHold?: GithubPrConversationHold }
+  | { kind: "armed"; headSha: string; checksFailing?: true; conversationHold?: GithubPrConversationHold }
   | { kind: "queue-hold"; headSha: string; event: GithubQueueEvent }
   | { kind: "checking" | "unknown"; headSha: string | null; reason: string };
 
@@ -109,6 +109,15 @@ function armedConversationHold(observation: GithubPrObservation): GithubPrConver
   };
 }
 
+/** Observation only: an armed PR still needs follow-through when required checks terminally fail (BI-BE9A160D). */
+function armedChecksFailing(observation: GithubPrObservation): boolean {
+  if (!observation.checksComplete) return false;
+  const blocking = observation.checks.filter(checkBlocksMerge);
+  return blocking.length > 0
+    && blocking.every((check) => check.status.toUpperCase() === "COMPLETED")
+    && blocking.some((check) => !checkPassed(check));
+}
+
 export function projectGithubPrReadiness(observation: GithubPrObservation): GithubPrReadiness {
   const headSha = observation.headSha.trim();
   if (!headSha) return { kind: "unknown", headSha: null, reason: "missing-head-sha" };
@@ -121,7 +130,8 @@ export function projectGithubPrReadiness(observation: GithubPrObservation): Gith
   const enabledAfterEvent = event && Date.parse(observation.autoMergeEnabledAt ?? "") > Date.parse(event.at);
   if (observation.autoMergeEnabled && (!event || enabledAfterEvent)) {
     const conversationHold = armedConversationHold(observation);
-    return conversationHold ? { kind: "armed", headSha, conversationHold } : { kind: "armed", headSha };
+    if (conversationHold) return { kind: "armed", headSha, conversationHold };
+    return armedChecksFailing(observation) ? { kind: "armed", headSha, checksFailing: true } : { kind: "armed", headSha };
   }
   if (event) return { kind: "queue-hold", headSha, event };
 
