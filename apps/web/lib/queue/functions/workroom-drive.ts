@@ -219,7 +219,7 @@ export async function applyDrivePlan(input: {
   /** Sequential rooms only (BI-853120EE): the run this tick belongs to. Stamped on the snapshot and on a new blocked receipt. */
   runKey?: string;
   review?: ReviewStageOverlay | null; // set when the stage was rebound to its readiness reviewer
-}): Promise<"dispatched" | "attention" | "stopped" | "skipped"> {
+}): Promise<"dispatched" | "attention" | "stopped" | "skipped" | "lease_rejected_before_enqueue"> {
   const { now, effects, runKey } = input;
   // Graph shapes only (Phase 3c): marking carry-forward and the marked keys. Null for every sequential room.
   const graph = graphSnapshotFields(input.plan, input.room.workspaceState);
@@ -357,7 +357,7 @@ export async function applyDrivePlan(input: {
         payload: { ...snapshot, reason: "lease_held" satisfies DriveReasonFor<"dispatch_agent"> },
         observationOnly: true,
       });
-      return "skipped";
+      return "lease_rejected_before_enqueue";
     }
     if (input.review?.binding.requestCoworker && input.review.binding.stageKey === plan.stageKey) return applyReviewerDispatch({
       room, plan, overlay: input.review, snapshot, now, persist, lease: { expiresAt, holderPrincipalId: room.leaseHolderPrincipalId }, dispatch: effects.dispatchReviewer });
@@ -529,7 +529,8 @@ export async function runWorkroomDriveJob(
     // BI-7C0B2BD6: then the capacity cap, so a stood-down room never takes a dispatch slot.
     const itemPlan = gateDrivePlanOnWorkItem(resolved.plan, room.workItemStatus);
     // BI-9CD95438: applyDrivePlan still records the hold; known-held rooms do not spend a slot.
-    const plan = readWorkroomQueueHold(room.workspaceState) ? itemPlan : admit(itemPlan);
+    const admission = readWorkroomQueueHold(room.workspaceState) ? null : admit(itemPlan);
+    const plan = admission?.plan ?? itemPlan;
     const review = plan === resolved.plan ? resolved.review : null;
     plans.push({
       roomId: room.capsuleId,
@@ -538,6 +539,7 @@ export async function runWorkroomDriveJob(
       taskId: plan.taskId,
     });
     const outcome = await applyDrivePlan({ room: { ...room, receipts }, plan, now, effects, review, ...(run ? { runKey: run.runKey } : {}) });
+    if (outcome === "lease_rejected_before_enqueue") admission?.releaseBeforeEnqueue?.();
     if (outcome === "dispatched") dispatched += 1;
     else if (outcome === "attention") attention += 1;
     else if (outcome === "stopped") stopped += 1;
