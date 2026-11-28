@@ -9,7 +9,7 @@ import { OAUTH_EXECUTION_AUTHORITY_SELECT, isCurrentOAuthExecutionAuthority } fr
 import { deterministicExternalTaskRunId, matchingRemoteTaskRequestDigest, reconcileReviewReplayScope } from "./mcp-task-capacity-contract";
 import { parseTerminalWriterWait } from "./mcp-task-replay-projection";
 import { nextTerminalWriterAttempt } from "./mcp-task-terminal-writer-recovery";
-import { recoverTerminalWriterEscalation, TERMINAL_WRITER_MAX_ATTEMPTS } from "./mcp-task-terminal-writer-escalation";
+import { isApprovalCorrectionHold, recoverTerminalWriterEscalation, TERMINAL_WRITER_MAX_ATTEMPTS } from "./mcp-task-terminal-writer-escalation";
 import { hasExecutionUncertainty } from "./shared/execution-uncertainty";
 import { expandGrants } from "./tak/agent-grants";
 import { isRecord } from "./shared/coerce";
@@ -57,6 +57,7 @@ export async function loadExplicitReviewRecovery(input: {
   const wait = parseTerminalWriterWait(original.progressPayload);
   const progress = isRecord(original.progressPayload) ? original.progressPayload : {};
   if (original.status !== "input-required" || !wait || wait.writerToolName !== binding.writerToolName
+    || isApprovalCorrectionHold(wait.writerToolName, wait.writerRejection)
     || hasExecutionUncertainty(progress) || recoverTerminalWriterEscalation(progress)
     || nextTerminalWriterAttempt(wait) > TERMINAL_WRITER_MAX_ATTEMPTS) return refuse("checkpoint-not-safely-resumable");
   if (!recoveryWindowOpen(meta, progress)) return refuse("recorded-recovery-window-expired");
@@ -184,7 +185,7 @@ export async function isProvenExhaustedReviewAlternate(input: {
 export async function issueOriginalReviewRecoveryTarget(input: {
   packet: Record<string, unknown>; userId: string; actingAgentId: string; taskAuthorityKey: string;
   tokenGrantScopes?: readonly string[];
-}, db: Prisma.TransactionClient = prisma): Promise<{ kind: "none" } | { kind: "refused"; reason: string;
+}, db: Prisma.TransactionClient = prisma): Promise<{ kind: "none" | "existing" } | { kind: "refused"; reason: string;
   originalResult?: import("./mcp-task-original-result").OriginalReviewResult;
   resultRead?: { method: "tasks/result"; params: { taskId: string; requestDigest: string } };
 } | { kind: "target"; target: import("./mcp-task-submit-params").ReviewTaskRecoveryTarget }> {
@@ -247,7 +248,8 @@ export async function issueOriginalReviewRecoveryTarget(input: {
     || resolveCanonicalAgentId(origin.agentId) !== resolveCanonicalAgentId(input.actingAgentId)) {
     return { kind: "refused", reason: "original-human-or-coworker-mismatch" };
   }
-  if (savedKey !== packet.requestKey || row.status !== "input-required" || !wait || hasExecutionUncertainty(row.progressPayload)
+  if (savedKey !== packet.requestKey || row.status !== "input-required" || !wait
+    || isApprovalCorrectionHold(wait.writerToolName, wait.writerRejection) || hasExecutionUncertainty(row.progressPayload)
     || recoverTerminalWriterEscalation(row.progressPayload)
     || nextTerminalWriterAttempt(wait) > TERMINAL_WRITER_MAX_ATTEMPTS
     || !recoveryWindowOpen(metadata, row.progressPayload)) {
@@ -261,7 +263,7 @@ export async function issueOriginalReviewRecoveryTarget(input: {
       ...(originalResult ? { originalResult } : {}),
       resultRead: { method: "tasks/result", params: { taskId: row.taskRunId, requestDigest: metadata.requestDigest } } };
   }
-  if (metadata.taskAuthorityKey === input.taskAuthorityKey) return { kind: "none" };
+  if (metadata.taskAuthorityKey === input.taskAuthorityKey) return { kind: "existing" };
   return { kind: "target", target: { taskRunId: row.taskRunId, requestDigest: metadata.requestDigest,
     expectedUpdatedAt: row.updatedAt.toISOString() } };
 }

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { recoverTerminalWriterEscalation } from "./mcp-task-terminal-writer-escalation";
+import { INITIATIVE_CORRECTABLE_ERRORS, APPROVAL_CORRECTION_ERROR } from "./backlog/initiative-readiness/disposition-contract";
+import { lastTerminalWriterRejection, recoverTerminalWriterEscalation, terminalWriterRejectionStructuredContent } from "./mcp-task-terminal-writer-escalation";
 
 function legacyWait(attempt: number, returnedExecution = true) {
   return {
@@ -47,5 +48,34 @@ describe("recoverTerminalWriterEscalation", () => {
       observedAt: "2026-09-06T19:07:46.000Z",
     };
     expect(recoverTerminalWriterEscalation(wait)).toBeNull();
+  });
+});
+
+describe("amended approval correction", () => {
+  it("does not admit the approval refusal to automatic writer correction", () => {
+    expect(INITIATIVE_CORRECTABLE_ERRORS.has(APPROVAL_CORRECTION_ERROR)).toBe(false);
+  });
+
+  const writer = "record_initiative_design_review";
+  const correction = { expectedCurrentBaselineId: "baseline-a", requiredStatementIds: ["AC-1", "AC-2", "AC-3", "AC-4"],
+    missingStatementIds: ["AC-3", "AC-4"] };
+  const record = { name: writer, result: { success: false, error: "supersession-dispositions-invalid",
+    message: "Reviewer dispositions are incomplete.", data: { ...correction, privateEvidence: "do not copy" } } };
+
+  it("retains only bounded correction facts and does not advertise a provider replay", () => {
+    const rejection = lastTerminalWriterRejection(writer, [record]);
+    expect(rejection).toMatchObject({ approvalCorrection: correction });
+    const projected = terminalWriterRejectionStructuredContent(writer, 1, rejection!);
+    expect(projected).toMatchObject({ action: "reconcile-approval-correction", approvalCorrection: correction });
+    expect(JSON.stringify(projected)).not.toContain("privateEvidence");
+  });
+
+  it("does not reinterpret a malformed or unrelated writer error as an approval correction", () => {
+    expect(lastTerminalWriterRejection("record_initiative_evidence", [
+      { ...record, name: "record_initiative_evidence" },
+    ])).not.toHaveProperty("approvalCorrection");
+    expect(lastTerminalWriterRejection(writer, [{ ...record,
+      result: { ...record.result, data: { ...correction, missingStatementIds: ["AC-5"] } },
+    }])).not.toHaveProperty("approvalCorrection");
   });
 });

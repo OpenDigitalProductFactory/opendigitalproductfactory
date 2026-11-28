@@ -5,7 +5,7 @@ import { canonicalJson } from "@dpf/integration-shared/canonical-json";
 import { deterministicExternalTaskRunId, parseResourceWaitProjection } from "./mcp-task-capacity-contract";
 import { reconstructPersistedRemoteTask, type PersistedRemoteTask } from "./mcp-task-persisted-request";
 import { parseInitiativeReviewBinding, validateInitiativeReviewAuthorityScope, type InitiativeReviewBinding } from "./mcp-task-review-contract";
-import { TERMINAL_WRITER_REJECTED_WAIT_REASON, terminalWriterRejectionStructuredContent } from "./mcp-task-terminal-writer-escalation";
+import { readApprovalWriterCorrection, TERMINAL_WRITER_REJECTED_WAIT_REASON, terminalWriterRejectionStructuredContent, type TerminalWriterRejection } from "./mcp-task-terminal-writer-escalation";
 import { parseTerminalWriterWait, projectRemoteTaskReplay } from "./mcp-task-replay-projection";
 import { loadInitiativeReviewOutcome } from "./mcp-task-review-outcome";
 import { sanitizeNativeCliDiagnostics } from "./shared/execution-uncertainty";
@@ -225,6 +225,7 @@ export async function readOriginalReviewResult(input: ReadInput): Promise<Origin
     if (writers.length > MAX_WRITER_OBSERVATIONS) return unknown(input.taskRunId, "original-result-over-budget");
     const proofBefore = await loadProofInventory(task);
     const receipts: Array<NonNullable<OriginalReviewResult["receipt"]>> = [];
+    let auditedRejection: TerminalWriterRejection | null = null;
     for (const writer of writers) {
       if (writer.taskRunId !== task.taskRunId || writer.userId !== input.userId || writer.threadId !== task.threadId
         || writer.agentId !== reconstructed.data.parsed.agentId || writer.toolName !== binding.writerToolName
@@ -236,6 +237,13 @@ export async function readOriginalReviewResult(input: ReadInput): Promise<Origin
       }));
       const stored = isRecord(writer.result) ? writer.result : {};
       const data = isRecord(stored.data) ? stored.data : {};
+      if (writer === writers[0] && !writer.success && stored.success === false) {
+        const correction = readApprovalWriterCorrection(writer.toolName, stored.error, data);
+        if (correction && typeof stored.error === "string") auditedRejection = {
+          schemaVersion: 1, error: stored.error, message: "The original writer requires the listed independent dispositions.",
+          observedAt: writer.createdAt.toISOString(), approvalCorrection: correction,
+        };
+      }
       const receiptId = text(data.receiptId);
       if (!writer.success || stored.success !== true || !receiptId) continue;
       const activity = await prisma.backlogItemActivity.findUnique({ where: { id: receiptId }, select: { id: true, payload: true, recordedAt: true } });
@@ -279,9 +287,18 @@ export async function readOriginalReviewResult(input: ReadInput): Promise<Origin
     // Reuse the public hold classification, not the replay response payload.
     // This is a pure projection and never submits or resumes the original task.
     const rejection = wait?.writerRejection;
-    if (task.status === "input-required" && wait && rejection
-      && projectRemoteTaskReplay({ existing: task, requestMatches: true }).result.waitReason === TERMINAL_WRITER_REJECTED_WAIT_REASON) {
-      result.terminalWriterRejection = terminalWriterRejectionStructuredContent(wait.writerToolName, wait.attempt, rejection);
+    const correction = rejection && readApprovalWriterCorrection(binding.writerToolName, rejection.error, rejection.approvalCorrection);
+    const audited = binding.gate === "spec-approval" && auditedRejection?.approvalCorrection
+      && auditedRejection.approvalCorrection.expectedCurrentBaselineId === binding.expectedCurrentBaselineId
+      && (!rejection || (correction && canonicalJson(correction) === canonicalJson(auditedRejection.approvalCorrection)))
+      && !result.missingProof.some(value => value.endsWith("binding-mismatch"));
+    const projectedRejection = audited ? rejection ?? auditedRejection
+      : rejection && projectRemoteTaskReplay({ existing: task, requestMatches: true }).result.waitReason === TERMINAL_WRITER_REJECTED_WAIT_REASON
+      ? { ...rejection, approvalCorrection: undefined } : null;
+    if (task.status === "input-required" && projectedRejection && result.classification !== "receipt-complete") {
+      // The newest bound audit may outlive a worker that never saved its wait.
+      // Preserve the correction without inventing a writer attempt or replay right.
+      result.terminalWriterRejection = terminalWriterRejectionStructuredContent(binding.writerToolName, wait?.attempt ?? null, projectedRejection);
       if (JSON.stringify(result).length > ORIGINAL_REVIEW_RESULT_CHAR_CAP) {
         delete result.terminalWriterRejection;
         result.terminalWriterRejectionUnavailable = "budget";

@@ -21,6 +21,7 @@ const mocks = vi.hoisted(() => ({
   taskAuthority: vi.fn(),
   recoveryTarget: vi.fn(),
   presentRequest: vi.fn(),
+  documentPreflight: vi.fn(),
   loadBuildFacts: vi.fn(),
 }));
 
@@ -63,6 +64,7 @@ vi.mock("@/lib/work-management/workroom-agent-access.server", () => ({
   resolveHumanWorkroomAccess: mocks.roomAccess,
 }));
 vi.mock("@/lib/mcp-task-review-recovery", () => ({ issueOriginalReviewRecoveryTarget: mocks.recoveryTarget }));
+vi.mock("@/lib/mcp-task-review-document", () => ({ reviewDocumentPreflight: mocks.documentPreflight }));
 vi.mock("@/lib/mcp-task-review-reassessment", () => ({ issuePresentReassessmentRequest: mocks.presentRequest }));
 vi.mock("@/lib/auth/oauth-task-authority", () => ({ resolveMcpTaskAuthorityKey: mocks.taskAuthority }));
 vi.mock("@/lib/build/build-entry-gate", () => ({ loadBuildReadinessFacts: mocks.loadBuildFacts }));
@@ -271,6 +273,40 @@ describe("backlog deferral read projection", () => {
     const denied = await getBacklogItem({ itemId: baseItem.itemId, recoveryGate: "plan-review" }, "AGT-AUTHOR", "user-1");
     expect(denied).toMatchObject({ success: false, error: "workroom_data_access_required" });
     expect(denied.data ?? {}).not.toHaveProperty("recovery");
+  });
+
+  it("withholds a fresh amended approval packet and returns its exact draft inputs after content admission", async () => {
+    mocks.findUnique.mockResolvedValue({ ...baseItem, id: "row-bi", status: "in-progress", body: null,
+      deferOwnerPrincipal: null, epic: null, digitalProduct: null, organization: null, productLine: null,
+      businessProduct: null, demandEvidenceLinks: [], activities: [], completedAt: null });
+    const decision = { verdict: "input-required", blockers: [], unmet: [{ code: "SPEC_APPROVAL_REQUIRED" }] };
+    mocks.projectReadiness.mockReturnValue({ decisions: { plan: decision, completion: decision } });
+    const binding = { writerToolName: "record_initiative_design_review", gate: "spec-approval",
+      itemId: baseItem.itemId, expectedCurrentBaselineId: "baseline-original" };
+    const packet = { targetAgent: "reviewer", requestKey: "original", initiativeReviewBinding: binding };
+    mocks.resolveTerminalRecovery.mockResolvedValue({ reviewerRoutes: [{ gate: "spec-approval", independent: true,
+      workroomId: "WC-BOUND", requestCoworker: packet }], escalations: [], unroutable: [] });
+    mocks.recoveryTarget.mockResolvedValue({ kind: "none" });
+    const statements = { expectedCurrentBaselineId: "baseline-original", requiredStatementIds: ["AC-1", "AC-2"] };
+    mocks.documentPreflight.mockResolvedValueOnce({ refusal: { error: "supersession-dispositions-required",
+      gateStatus: "unrun", message: "Draft required.", ...statements, missingStatementIds: ["AC-2"] } });
+    const read = () => getBacklogItem({ itemId: baseItem.itemId, recoveryGate: "spec-approval" }, "AGT-AUTHOR", "user-1",
+      { authSource: "oauth", apiTokenId: "token-row", tokenGrantScopes: ["backlog_read"] });
+    expect(await read()).toMatchObject({ success: false, error: "supersession-dispositions-required",
+      data: { gateStatus: "unrun", missingStatementIds: ["AC-2"], ...statements } });
+    expect(mocks.documentPreflight).toHaveBeenCalledWith(binding);
+    mocks.documentPreflight.mockResolvedValueOnce({ refusal: null, supersession: statements });
+    expect(await read()).toMatchObject({ success: true, data: { recovery: { reviewerRoutes: [
+      { requestCoworker: packet, approvalInput: statements },
+    ] } } });
+    expect(packet).not.toHaveProperty("approvalInput");
+    mocks.documentPreflight.mockClear();
+    mocks.recoveryTarget.mockResolvedValueOnce({ kind: "existing" });
+    expect(await read()).toMatchObject({ success: true, data: { recovery: { reviewerRoutes: [{ requestCoworker: packet }] } } });
+    expect(mocks.documentPreflight).not.toHaveBeenCalled();
+    mocks.roomAccess.mockResolvedValue({ decision: { level: "none" } });
+    expect(await read()).toMatchObject({ success: false, error: "workroom_data_access_required" });
+    expect(mocks.documentPreflight).not.toHaveBeenCalled();
   });
 
   it("explains why a doc item's data-owner criterion uses the acceptance lane", async () => {

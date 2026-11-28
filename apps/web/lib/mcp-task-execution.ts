@@ -39,6 +39,7 @@ import { withTaskRunApprovalLocation } from "./mcp/external-approval-location-lo
 import {
   TERMINAL_WRITER_REJECTED_WAIT_REASON,
   createTerminalWriterEscalation,
+  isApprovalCorrectionHold,
   lastTerminalWriterRejection,
   terminalWriterRejectionMessage,
   terminalWriterRejectionStructuredContent,
@@ -571,7 +572,7 @@ export async function executeRemoteTaskAttempt(input: RemoteTaskAttemptInput): P
           idempotentReplay: input.idempotentReplay,
           ...resumedFlag,
           requiresApproval: false,
-          resumable: escalation ? false : true,
+          resumable: !escalation && !isApprovalCorrectionHold(terminalToolPolicy.writerToolName, writerRejection ?? undefined),
           waitReason: escalation
             ? terminalWriterEscalationWaitReason(escalation)
             : writerRejection
