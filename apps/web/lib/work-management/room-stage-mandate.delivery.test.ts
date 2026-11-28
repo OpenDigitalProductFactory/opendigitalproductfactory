@@ -118,6 +118,18 @@ describe("delivery authority negative controls (BI-D95FD249)", () => {
     f.deps.loadAuthorStageAutonomy.mockResolvedValue(() => ({ roleBindings: {}, withheldBecause: because }));
     expect(await loadScheduledRoomMandate(f.db, f.input, f.deps)).toEqual([]);
   });
+  it("admits scheduled evidence when only a quarterly planning advisory is present, while keeping grant and membership refusals independent (BI-A59837E5)", async () => {
+    const f = scheduledDeliveryFixture();
+    f.deps.loadAuthorStageAutonomy.mockResolvedValue(() => ({
+      roleBindings: { author: "agent:build-specialist" },
+      withheldBecause: null,
+      planningAdvisory: "Planning warning (advisory, not a stop): 11 of 8 points committed.",
+    }));
+    expect(await loadScheduledRoomMandate(f.db, f.input, f.deps)).toEqual(["record_workroom_evidence"]);
+
+    f.deps.loadAgentGrants.mockResolvedValue([]);
+    expect(await loadScheduledRoomMandate(f.db, f.input, f.deps)).toEqual([]);
+  });
   it("fails closed on an authority read failure", async () => {
     const f = scheduledDeliveryFixture(); f.deps.loadAuthorStageAutonomy.mockRejectedValue(new Error("unavailable"));
     expect(await loadScheduledRoomMandate(f.db, f.input, f.deps)).toEqual([]);

@@ -87,4 +87,68 @@ describe("AI beside points in the tie-out (BI-0CA5DA2B)", () => {
     expect(t.rows[1]!.ai.runs).toBe(0);
     expect(t.aiNotTraced).toMatchObject({ runs: 4, tokens: 120, recordedUsd: 0.2 });
   });
+
+  it("reports planned, committed, overage, delivered-vs-in-flight drivers, and honest spend forecast basis or unknown (BI-A59837E5)", () => {
+    const quarterItems = [
+      delivered("BI-D1", "large", 3, true),
+      item({ itemId: "BI-FLIGHT", status: "in-progress", effortSize: "medium" }),
+    ];
+    // 1. Configured rate basis
+    const withRate = assembleTieOut({
+      now,
+      portfolios: [{ id: "p1", name: "Foundational" }],
+      historyStart: daysAgo(300),
+      budgets: new Map([["p1", { id: "b", allocatedPoints: 8, usdPerPoint: 200, wipAllowancePoints: null, setById: "u", setByAgentId: null, reason: "r", supersedesId: null, createdAt: now }]]),
+      openReservations: [],
+      untracedChanges: 0,
+      quarterItems,
+      windowItems: quarterItems,
+    }).rows[0]!;
+    expect(withRate.planSummary).toMatchObject({
+      plannedPoints: 8,
+      quarterCommittedPoints: 11,
+      overagePoints: 3,
+      drivers: { deliveredPoints: 8, inFlightPoints: 3 },
+      projectedQuarterEndSpend: { status: "known", basis: "configured-rate", usdPerPoint: 200 },
+    });
+
+    // 2. Observed recorded AI cost basis (no configured rate, non-subscription recorded USD)
+    const withObserved = assembleTieOut({
+      now,
+      portfolios: [{ id: "p1", name: "Foundational" }],
+      historyStart: daysAgo(300),
+      budgets: new Map([["p1", { id: "b", allocatedPoints: 8, usdPerPoint: null, wipAllowancePoints: null, setById: "u", setByAgentId: null, reason: "r", supersedesId: null, createdAt: now }]]),
+      openReservations: [],
+      untracedChanges: 0,
+      quarterItems,
+      windowItems: quarterItems,
+      aiByItem: new Map([["BI-D1", { runs: 2, tokens: 5000, recordedUsd: 80, subscriptionTokens: 0, durationMs: 1000 }]]),
+    }).rows[0]!;
+    expect(withObserved.planSummary?.projectedQuarterEndSpend).toMatchObject({
+      status: "known",
+      basis: "observed-cost",
+      usdPerPoint: 10,
+    });
+
+    // 3. No rate & subscription-only or no recorded USD -> unknown (never $0 or fabricated)
+    const unknownSpend = assembleTieOut({
+      now,
+      portfolios: [{ id: "p1", name: "Foundational" }],
+      historyStart: daysAgo(300),
+      budgets: new Map([["p1", { id: "b", allocatedPoints: 8, usdPerPoint: null, wipAllowancePoints: null, setById: "u", setByAgentId: null, reason: "r", supersedesId: null, createdAt: now }]]),
+      openReservations: [],
+      untracedChanges: 0,
+      quarterItems,
+      windowItems: quarterItems,
+      aiByItem: new Map([["BI-D1", { runs: 2, tokens: 5000, recordedUsd: null, subscriptionTokens: 5000, durationMs: 1000 }]]),
+    }).rows[0]!;
+    expect(unknownSpend.planSummary?.projectedQuarterEndSpend).toEqual({
+      status: "unknown",
+      basis: "none",
+      usdPerPoint: null,
+      lowUsd: null,
+      medianUsd: null,
+      highUsd: null,
+    });
+  });
 });

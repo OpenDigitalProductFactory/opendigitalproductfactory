@@ -128,11 +128,17 @@ export type DriveResolutionInput = {
   roleBindings?: Readonly<Record<string, string>> | null;
   /**
    * Why an agent may not run this room's role:author stage (BI-8A32EBFF): the
-   * operator pre-authorisation is not in force, or the work is not funded
-   * within budget (author-stage-autonomy.ts). Read only to name the missing
-   * condition on the attention the stage raises; it grants nothing.
+   * operator pre-authorisation is not in force, or hard eligibility failed
+   * (author-stage-autonomy.ts). Read only to name the missing condition on the
+   * attention the stage raises; it grants nothing.
    */
   authorStageWithheldBecause?: string | null;
+  /**
+   * Advisory quarterly planning warning/forecast for a dispatched role:author
+   * stage (BI-A59837E5). Recorded on the drive ledger; never withholds dispatch
+   * and never bypasses authority, grant, spend, or capacity refusals.
+   */
+  authorStagePlanningAdvisory?: string | null;
 };
 
 /** Host dispatch policy, deliberately outside the portable marking kernel. */

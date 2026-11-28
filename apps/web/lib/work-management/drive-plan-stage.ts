@@ -283,6 +283,9 @@ export function planStage(args: {
     };
   }
 
+  const planningAdvisory = stage.accountablePrincipalRef === `role:${DELIVERY_AUTHOR_ROLE}`
+    ? input.authorStagePlanningAdvisory ?? null
+    : null;
   return {
     action: "dispatch_agent",
     reason: "agent_stage",
@@ -298,7 +301,10 @@ export function planStage(args: {
     conformance,
     cycle,
     deviations: [],
-    ledger: [`Dispatch agent:${parsed.value} for stage ${stage.key}.`],
+    ledger: [
+      `Dispatch agent:${parsed.value} for stage ${stage.key}.`,
+      ...(planningAdvisory ? [planningAdvisory] : []),
+    ],
     ...retryFields,
     // A retry is a new dispatch in the same cycle, so the scheduler re-queues it rather than replaying the last one.
     ...(args.run !== undefined && latch?.retry ? { dispatchAttempt: latch.retry.failures } : {}),

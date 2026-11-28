@@ -25,4 +25,23 @@ describe("resolved author/funding conjunction", () => {
     expect(decideFundedAuthor(facts)).toEqual({ roleBindings: { author: "agent:synthetic-author" }, withheldBecause: null });
     expect(facts.funding).toEqual({ funded: true, portfolioId: "synthetic-portfolio", summary: "Supplied current budget facts" });
   });
+  it("preserves an advisory planning warning without withholding the bound candidate, and never lets it bypass authority or exclusion (BI-A59837E5)", () => {
+    const advisory = "Planning warning (advisory, not a stop): 11 of 8 points committed.";
+    expect(decideFundedAuthor({
+      ...facts,
+      funding: { funded: true, portfolioId: null, summary: "over plan", advisory },
+    })).toEqual({ roleBindings: { author: "agent:synthetic-author" }, withheldBecause: null, planningAdvisory: advisory });
+
+    expect(decideFundedAuthor({
+      ...facts,
+      preauthorisation: { state: "not-in-force", because: "authority revoked" },
+      funding: { funded: true, portfolioId: "synthetic-portfolio", summary: "over plan", advisory },
+    })).toEqual({ roleBindings: {}, withheldBecause: "authority revoked" });
+
+    expect(decideFundedAuthor({
+      ...facts,
+      excludedBecause: "xlarge excluded",
+      funding: { funded: true, portfolioId: "synthetic-portfolio", summary: "over plan", advisory },
+    })).toEqual({ roleBindings: {}, withheldBecause: "xlarge excluded" });
+  });
 });
