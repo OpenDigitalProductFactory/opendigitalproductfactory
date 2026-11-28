@@ -174,6 +174,48 @@ describe("buildTriageDrainPrompt", () => {
     expect(prompt).not.toContain("AUTHOR_EFFORT_SIZE (prior");
     expect(prompt).not.toContain("AUTHOR_PROPOSED_OUTCOME (prior");
   });
+
+  // BI-026DBD4A / Red cmx09w7w6295k0ekjk01dc20s: controlled BI-A59837E5 brief
+  // (later staffing notes removed) places "## Acceptance criteria" at offset 1462.
+  it("preserves stored acceptance criteria past the 1200-character preview boundary (BI-026DBD4A)", () => {
+    const controlledBrief = [
+      "## Operator direction and observed defect",
+      "",
+      "Quarterly points are planning guidance for measuring delivery against a threshold and forecasting spend, not an execution stop by themselves. In S5 compatibility (BI-5EF67818 / WC-75CCF40B), the spec stage was held at 2,993 committed points against the 2,863-point Foundational plan. Applying the supported 4,034-point estimate cleared that instance (receipt cmwz7ovzy03ap0emwyw4qu49p), but the same overage-only stop can recur. This was not evidence of a machine shortage or an exhausted monetary budget.",
+      "",
+      "At main 34e2d13f723cc6d080ea4ad01f5c59b0261f1335, `apps/web/lib/work-management/author-stage-autonomy.ts` computes committed points from delivered plus in-flight work and returns `funded: false` solely when `committed > allocated`. Workroom Drive projects that result as `role_stage` attention instead of running the author stage.",
+      "",
+      "## Scope and design anchor",
+      "",
+      "Amend the existing [Portfolio budgets and investment-weighted WIP design](docs/superpowers/specs/2026-09-24-portfolio-budget-and-investment-wip-design.md), especially §5.5–5.7, before implementation. Keep existing attribution, accounting and forecasting primitives. This narrowly changes how an overage against the **quarterly planning estimate** affects continuation of already-authorized author stages. It is a follow-up to BI-8A32EBFF and BI-77313ADD, not a request to reopen either, redo BI-3430B3A4's separate new-work WIP control, or expand S5.",
+      "",
+      "## Acceptance criteria",
+      "",
+      "- For an otherwise eligible author stage, crossing the quarterly estimate changes the recorded warning and forecast, not the dispatch decision. Pin below, at, and above the threshold through the real Workroom Drive path.",
+      "- Existing reporting shows planned, committed and overage points, what is driving the overage (delivered versus in flight), and projected quarter-end delivery or spend where supported. Monetary forecasts identify the configured rate or observed cost basis. Without one, show unknown, never a fabricated dollar estimate or zero.",
+      "- Missing action authority or grant, unresolved funding where paid work requires it, explicit monetary caps, separate new-work WIP rules, and real runner capacity retain their current independent decisions and reasons. Add negative regressions so a warning cannot bypass them.",
+      "- Keep operator guides and Workroom diagnostics consistent with the distinction. Do not change any current portfolio allocation, funding binding, purchase or provider authorization, or independent approval gate.",
+      "",
+      "## Next step",
+      "",
+      "Portfolio Management and the canonical Workroom Drive design owner should align the existing spec with this operator direction and route normal source admission. This intake neither changes policy in the live install nor authorizes implementation or spending.",
+    ].join("\n");
+
+    expect(controlledBrief.indexOf("## Acceptance criteria")).toBe(1462);
+
+    const prompt = buildTriageDrainPrompt({
+      itemId: "BI-A59837E5",
+      title: "Treat quarterly portfolio point overruns as guidance, not author-stage stops",
+      body: controlledBrief,
+      type: "portfolio",
+      workType: "bug",
+      effortSize: "medium",
+    });
+
+    expect(prompt).toContain("## Acceptance criteria");
+    expect(prompt).toContain("crossing the quarterly estimate changes the recorded warning and forecast");
+    expect(prompt).toContain("Missing action authority or grant");
+  });
 });
 
 describe("runBacklogTriageDrain", () => {
