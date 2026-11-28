@@ -143,7 +143,10 @@ export async function runBuildPrDeliveryReconcile(): Promise<{
     writeBuildPrDeliveryState,
   } = await import("@/lib/build/build-pr-delivery-state");
   const {
-    announcePrFollowThrough,
+    followThroughRouteDisposition,
+    planPrFollowThroughAnnouncement,
+    PR_FOLLOW_THROUGH_HANDOFF_KEY,
+    readPrFollowThroughHandoff,
     resolvePrFollowThroughPosture,
   } = await import("@/lib/build/pr-follow-through-announce");
   const { getWorkroomPostureDefault } = await import("@/lib/work-management/workroom-posture-defaults");
@@ -344,6 +347,10 @@ export async function runBuildPrDeliveryReconcile(): Promise<{
         ?? capsule.requestedByPrincipalId
         ?? capsule.createdByPrincipalId
         ?? null;
+      // Build Studio builds and eligible custody rooms retain bounded repair
+      // authority unless quiet or advise-only. Other rooms keep their posture.
+      const repairAuthority = (capsule.featureBuildId || prCustodyEligible) && posture.authority !== "record"
+        ? "dispatch" : posture.authority;
       const outcome = await executeBuildPrDeliveryAction({
         state,
         observation,
@@ -405,12 +412,7 @@ export async function runBuildPrDeliveryReconcile(): Promise<{
           return filed.error ? null : filed.reportId;
         },
         prOnlyCustody: prOnlyCloseout,
-        // BI-085A37EC / BI-C3EBDCEC: Build Studio builds and eligible PR-only
-        // Build Studio custody rooms dispatch bounded CI repair unless the room
-        // is quiet or advise-only. Observe-only and other rooms keep their posture.
-        repairAuthority: (capsule.featureBuildId || prCustodyEligible) && posture.authority !== "record"
-          ? "dispatch"
-          : posture.authority,
+        repairAuthority,
         ...(capsule.featureBuildId
           ? {
               dispatchRepair: async (packet: PrRepairPacket) => {
@@ -447,6 +449,27 @@ export async function runBuildPrDeliveryReconcile(): Promise<{
       });
       if (outcome.actuated) actuated += 1;
 
+      const announcement = planPrFollowThroughAnnouncement({
+        room: { id: capsule.id, capsuleId: capsule.capsuleId, featureBuildId: capsule.featureBuildId, prNumber, prUrl },
+        priorAttentionKey: state.followThrough.attentionKey,
+        decision: outcome.followThrough,
+      });
+      const priorHandoff = readPrFollowThroughHandoff(capsule.workspaceState);
+      const authorityKey = JSON.stringify([
+        mode, repairAuthority, posture.level, posture.boundary, accountableOwnerPrincipalId, capsule.leaseHolderPrincipalId,
+        capsule.executorKind, capsule.featureBuildId, custody?.mode, custody?.standingRoomCapsuleId, repository, prNumber,
+      ]);
+      const attentionKey = outcome.state.followThrough.attentionKey;
+      const headSha = observation.headSha;
+      const mayRoute = mode === "enforce" && repairAuthority !== "record" && observation.state === "OPEN"
+        && !observation.merged && observation.number === prNumber && observation.url === prUrl
+        && headSha !== "" && outcome.state.followThrough.judgedHeadSha === headSha;
+      const handoff = priorHandoff?.headSha === headSha && priorHandoff.attentionKey === attentionKey
+        && priorHandoff.authorityKey === authorityKey
+        ? priorHandoff
+        : mayRoute && announcement?.issue && attentionKey
+          ? { headSha, authorityKey, attentionKey, issue: announcement.issue, disposition: { kind: "pending" as const } }
+          : null;
       const nextWorkspaceState = writeBuildPrDeliveryState(
         closeoutPlan.kind === "close"
           ? {
@@ -466,10 +489,12 @@ export async function runBuildPrDeliveryReconcile(): Promise<{
           : capsule.workspaceState,
         outcome.state,
       );
+      if (handoff || priorHandoff) nextWorkspaceState[PR_FOLLOW_THROUGH_HANDOFF_KEY] = handoff;
+      const workspacePayload = nextWorkspaceState as unknown as import("@dpf/db").Prisma.InputJsonValue;
       const saved = await prisma.workroom.updateMany({
         where: { id: capsule.id, updatedAt: capsule.updatedAt },
         data: {
-          workspaceState: nextWorkspaceState as unknown as import("@dpf/db").Prisma.InputJsonValue,
+          workspaceState: workspacePayload,
           // Never erase a room's recorded head on an observation that lacked one.
           ...(outcome.state.lastObservedHeadSha ? { headSha: outcome.state.lastObservedHeadSha } : {}),
         },
@@ -542,40 +567,42 @@ export async function runBuildPrDeliveryReconcile(): Promise<{
         });
       }
 
-      await announcePrFollowThrough({
-        room: { id: capsule.id, capsuleId: capsule.capsuleId, featureBuildId: capsule.featureBuildId, prNumber, prUrl },
-        priorAttentionKey: state.followThrough.attentionKey,
-        decision: outcome.followThrough,
-        deps: {
-          recordActivity: async (activity) => {
-            await prisma.workroomActivity.create({
-              data: {
-                workCapsuleId: activity.roomId,
-                kind: activity.kind,
-                summary: activity.summary,
-                payload: activity.payload as import("@dpf/db").Prisma.InputJsonValue,
-              },
-            });
+      if (announcement) {
+        const { activity } = announcement;
+        await prisma.workroomActivity.create({
+          data: {
+            workCapsuleId: activity.roomId, kind: activity.kind, summary: activity.summary,
+            payload: activity.payload as import("@dpf/db").Prisma.InputJsonValue,
           },
-          raiseIssue: async (issue) => {
-            await routeToHuman({
-              producer: "pull-request-follow-through",
-              subject: { kind: "workroom", id: capsule.capsuleId },
-              blockingFacts: issue.blockingFacts,
-              declarations: { proposeBoundary: issue.proposeBoundary },
-              report: {
-                source: "workroom-pr-follow-through",
-                severity: "high",
-                title: issue.title,
-                description: issue.description,
-                featureBuildId: issue.featureBuildId,
-                triggerKind: "build-pr-delivery-reconcile",
-                dedupeKey: issue.dedupeKey,
-              },
-            });
+        });
+      }
+      // Re-enter only the existing notice seam on a current red hold. A clean,
+      // unreadable, stale or newly governed head does not authorize this ask.
+      if (mayRoute && handoff && handoff.disposition.kind !== "routed"
+        && (announcement?.issue || outcome.followThrough.kind === "hold" || outcome.followThrough.kind === "attention")) {
+        const { issue } = handoff;
+        const filed = await routeToHuman({
+          producer: "pull-request-follow-through",
+          subject: { kind: "workroom", id: capsule.capsuleId },
+          blockingFacts: issue.blockingFacts,
+          declarations: { proposeBoundary: issue.proposeBoundary },
+          report: {
+            source: "workroom-pr-follow-through", severity: "high", title: issue.title, description: issue.description,
+            featureBuildId: issue.featureBuildId, triggerKind: "build-pr-delivery-reconcile", dedupeKey: issue.dedupeKey,
           },
-        },
-      });
+          notice: { deepLink: "/admin/issue-reports", requireDelivery: true },
+        }).catch(() => null);
+        const disposition = followThroughRouteDisposition(filed);
+        if (disposition.kind !== handoff.disposition.kind) {
+          const receipt = await prisma.workroom.updateMany({
+            where: { id: capsule.id, headSha, workspaceState: { equals: workspacePayload } },
+            data: { workspaceState: {
+              ...nextWorkspaceState, [PR_FOLLOW_THROUGH_HANDOFF_KEY]: { ...handoff, disposition },
+            } as unknown as import("@dpf/db").Prisma.InputJsonValue },
+          });
+          if (receipt.count === 0) compareAndSwapLost += 1;
+        }
+      }
 
       if (
         semanticBuildId

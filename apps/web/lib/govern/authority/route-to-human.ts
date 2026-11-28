@@ -388,7 +388,7 @@ export type OwnerAttentionReport = {
   routeContext?: string | null;
 };
 
-export type OwnerAttentionNotice = { deepLink: string; title?: string };
+export type OwnerAttentionNotice = { deepLink: string; title?: string; requireDelivery?: true };
 
 export type OwnerAttentionWriteDeps = {
   createReport: (input: Record<string, unknown>) => Promise<{ reportId: string }>;
@@ -396,7 +396,7 @@ export type OwnerAttentionWriteDeps = {
   notify: (input: { source: "escalation"; itemKey: string; userId: string; title: string; deepLink: string; riskClass: "high-risk" }) => Promise<void>;
 };
 
-async function liveWriteDeps(): Promise<OwnerAttentionWriteDeps> {
+async function liveWriteDeps(requireDelivery = false): Promise<OwnerAttentionWriteDeps> {
   const [{ createPlatformIssueReport }, attention] = await Promise.all([
     import("@/lib/quality/platform-issue-reports"),
     import("@/lib/attention/notify-live"),
@@ -404,7 +404,9 @@ async function liveWriteDeps(): Promise<OwnerAttentionWriteDeps> {
   return {
     createReport: (input) => createPlatformIssueReport(input as unknown as Parameters<typeof createPlatformIssueReport>[0]),
     resolveOwner: attention.resolveOperatorRecipient,
-    notify: attention.notifyAttentionLive,
+    notify: requireDelivery
+      ? async (input) => { await attention.notifyAttentionLiveOrThrow(input); }
+      : attention.notifyAttentionLive,
   };
 }
 
@@ -443,7 +445,7 @@ export async function fileOwnerAttentionRoute(
 ): Promise<OwnerAttentionFiled> {
   const decided = describeOwnerAttentionDecision(decision);
   try {
-    const d = deps ?? await liveWriteDeps();
+    const d = deps ?? await liveWriteDeps(notice?.requireDelivery);
     if (decision.route === "human") {
       const { reportId } = await d.createReport({
         type: report.type ?? "build-stall-escalation",

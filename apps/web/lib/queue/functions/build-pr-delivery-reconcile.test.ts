@@ -8,6 +8,8 @@ const mocks = vi.hoisted(() => ({
   activityCreate: vi.fn(),
   observe: vi.fn(),
   createIssue: vi.fn(),
+  resolveRecipient: vi.fn(),
+  notifyStrict: vi.fn(),
   postureDefault: vi.fn(),
   fetch: vi.fn(),
   verdict: vi.fn(),
@@ -41,6 +43,11 @@ vi.mock("@/lib/work-management/workroom-posture-defaults", () => ({
 vi.mock("@/lib/quality/platform-issue-reports", () => ({
   createPlatformIssueReport: mocks.createIssue,
 }));
+vi.mock("@/lib/attention/notify-live", () => ({
+  resolveOperatorRecipient: mocks.resolveRecipient,
+  notifyAttentionLiveOrThrow: mocks.notifyStrict,
+  notifyAttentionLive: vi.fn(),
+}));
 vi.mock("@/lib/build/build-studio-config", () => ({
   getAutonomousPlaybookMode: () => mocks.playbookMode(),
 }));
@@ -67,6 +74,7 @@ vi.mock("@/lib/work-capsules/work-capsule-store", () => ({
 import { observesRoomHead, planPrTerminalCloseout, runBuildPrDeliveryReconcile } from "./build-pr-delivery-reconcile";
 import { createBuildPrDeliveryState, writeBuildPrDeliveryState } from "@/lib/build/build-pr-delivery-state";
 import { registerQueueTransitionTests } from "./build-pr-delivery-reconcile-queue.test-support";
+import { registerRepairHandoffTests } from "./build-pr-delivery-reconcile-handoff.test-support";
 
 function room(overrides: Record<string, unknown>) {
   return {
@@ -397,18 +405,7 @@ describe("runBuildPrDeliveryReconcile — Build Studio PR repair dispatch (BI-08
     expect(mocks.createIssue).not.toHaveBeenCalled();
   });
 
-  it("stages the repair for a person, spending nothing, when the build cannot take it", async () => {
-    mocks.dispatch.mockResolvedValue("unavailable");
-    mocks.findMany.mockResolvedValue([buildRoom()]);
-    mocks.observe.mockResolvedValue(red());
-
-    await runBuildPrDeliveryReconcile();
-
-    const write = mocks.updateMany.mock.calls.find((call) => call[0].where.id === "build-room")?.[0];
-    expect(write.data.workspaceState.prDelivery.followThrough.hold).toBe("awaiting-person");
-    expect(write.data.workspaceState.prDelivery.followThrough.attempts.attempts["post-push-ci-failure"]).toBeUndefined();
-    expect(mocks.createIssue).toHaveBeenCalledTimes(1);
-  });
+  registerRepairHandoffTests({ mocks, buildRoom, red, runBuildPrDeliveryReconcile });
 
   it("escalates once, naming the failing check, when the repair budget is spent", async () => {
     const spent = createBuildPrDeliveryState({ repository: "o/r", prNumber: 9, prUrl: "https://github.com/o/r/pull/9" });
