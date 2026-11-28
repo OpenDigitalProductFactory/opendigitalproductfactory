@@ -27,8 +27,8 @@ importers:
         specifier: 3.15.1
         version: 3.15.1
       hyperframes:
-        specifier: 0.9.65
-        version: 0.9.65
+        specifier: 0.9.94
+        version: 0.9.94
 
 packages:
 
@@ -195,8 +195,8 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@hono/node-server@2.1.9':
-    resolution: {integrity: sha512-Sk4NQd3GFY0WZWCzndwFMPwJhtD0y9qjsQ+pjID0/03nK9pxyBCUoUHCho8QYBLBVhi0ssL8UkNPHqbgSOFPIQ==}
+  '@hono/node-server@2.1.11':
+    resolution: {integrity: sha512-KzKz9vl4vvr1vgLHamj+g5uonbrj5NwAdO3yzOS6cd2HjALVeOgTgeZOyAzNxejbkfOOPIcvuf/Tg8l1pEFLog==}
     engines: {node: '>=20'}
     peerDependencies:
       hono: ^4.12.34
@@ -522,8 +522,8 @@ packages:
   gsap@3.15.1:
     resolution: {integrity: sha512-63yjWRFWj3QRP1UOuD8kcidCcy3nxb1mMRpwHr/xJRvPfm9GtWOXFAYUiL0ro1fgPq2nY53LR+98pAgy9BumBg==}
 
-  hono@4.13.19:
-    resolution: {integrity: sha512-KmXvQAXwcAHV+muzbIwoJ23niEB5nMoDVr9WcRkU8mvjUECm/1+7v4Jgp7P7a+H6MLFrh+vXrGonGrGS+RQfkA==}
+  hono@4.13.22:
+    resolution: {integrity: sha512-wncKd5/40Pj8grx0RZ2fgNIicFEmVFwIHT5UFLTnphR8I6AQWFf9c2JoM6ZJ9g8y4pMzg3sNlCVNe0m2Yclg0Q==}
     engines: {node: '>=16.9.0'}
 
   http-response-object@3.0.2:
@@ -533,8 +533,8 @@ packages:
     resolution: {integrity: sha512-dFcAjpTQFgoLMzC2VwU+C/CbS7uRL0lWmxDITmqm7C+7F0Odmj6s9l6alZc6AELXhrnggM2CeWSXHGOdX2YtwA==}
     engines: {node: '>= 6'}
 
-  hyperframes@0.9.65:
-    resolution: {integrity: sha512-Rr/bhaA9e4ytXQRRsboG1m6kgOIzaE22FIFoHJsag2uls0mWbQW6MK/Vxm7plVBEn35p7piCv1SN7jCrfxdgNQ==}
+  hyperframes@0.9.94:
+    resolution: {integrity: sha512-fhRP3IGvkZFlDPo4/l+n2TKPguOJAPngh/YQWi7tIrajqg0BtAuAWeyUzc2Mwrm1lCF7zwa+KV29e/SFJrlOcw==}
     engines: {node: '>=22'}
     hasBin: true
 
@@ -636,6 +636,10 @@ packages:
   source-map-js@1.2.2:
     resolution: {integrity: sha512-KGj/8Y43x35aZVDtt+J4mK1hoLGHULMYfSkODJNQjNDC3oW1PqPoxMwo0pLUsWM/UEGzON/NxeHywEfNXNP3Vw==}
     engines: {node: '>=0.10.0'}
+
+  source-map-js@1.2.4:
+    resolution: {integrity: sha512-J7ZjMvHd9O1fcT/5V09QWaaSl2BbWx3F6O08spde82Namf9UB0GxRVIPiNbVsdKkoizHiSpTodo3vp2bAy91MA==}
+    engines: {node: '>=6.0.0'}
 
   string-width@7.2.0:
     resolution: {integrity: sha512-tsaTIkKW9b4N+AEj+SVA+WhJzV7/zMhcSu78mLKWSk7cXMOSHsBKFWUs0fWwq8QyK3MgJBQRX6Gbi4kYbdvGkQ==}
@@ -811,9 +815,9 @@ snapshots:
   '@esbuild/win32-x64@0.28.2':
     optional: true
 
-  '@hono/node-server@2.1.9(hono@4.13.19)':
+  '@hono/node-server@2.1.11(hono@4.13.22)':
     dependencies:
-      hono: 4.13.19
+      hono: 4.13.22
 
   '@img/colour@1.1.0':
     optional: true
@@ -1079,7 +1083,7 @@ snapshots:
 
   gsap@3.15.1: {}
 
-  hono@4.13.19: {}
+  hono@4.13.22: {}
 
   http-response-object@3.0.2:
     dependencies:
@@ -1092,9 +1096,9 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  hyperframes@0.9.65:
+  hyperframes@0.9.94:
     dependencies:
-      '@hono/node-server': 2.1.9(hono@4.13.19)
+      '@hono/node-server': 2.1.11(hono@4.13.22)
       '@puppeteer/browsers': 3.2.7(yauzl@3.4.0)
       acorn: 8.19.0
       adm-zip: 0.6.1
@@ -1105,7 +1109,7 @@ snapshots:
       esbuild: 0.28.2
       fontkit: 2.0.4
       giget: 3.3.1
-      hono: 4.13.19
+      hono: 4.13.22
       ignore: 5.3.2
       open: 10.2.0
       postcss: 8.5.33
@@ -1164,7 +1168,7 @@ snapshots:
     dependencies:
       nanoid: 3.3.20
       picocolors: 1.1.1
-      source-map-js: 1.2.2
+      source-map-js: 1.2.4
 
   progress@2.0.3: {}
 
@@ -1231,6 +1235,8 @@ snapshots:
     optional: true
 
   source-map-js@1.2.2: {}
+
+  source-map-js@1.2.4: {}
 
   string-width@7.2.0:
     dependencies:
