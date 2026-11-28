@@ -12,7 +12,7 @@
 // the demand start ranking (lib/demand/start-ranking.ts ranks backlog items
 // for the governed tee-up; drive rooms carry no demand score in hand), so the
 // drive goes oldest-waiting first: by when each room entered its current hold,
-// never-driven rooms first, then by capsule id.
+// then rooms without a current hold, with ties broken by capsule id.
 //
 // Pure: the caller reads the pools and passes them in.
 
@@ -47,20 +47,27 @@ export function driveDispatchCapacity(input: {
   };
 }
 
+type DispatchAdmission = { plan: DrivePlan; releaseBeforeEnqueue?: () => void };
+
 /**
- * An admission gate for one tick: dispatch plans pass until the cap is used,
- * then become a wait for agent capacity. Every other plan passes untouched.
+ * Reserve a slot for each capped dispatch. Only an explicit pre-enqueue lease
+ * rejection may return the reservation. Errors and unknown writes keep it.
  */
-export function createDispatchAdmission(capacity: DriveDispatchCapacity): (plan: DrivePlan) => DrivePlan {
+export function createDispatchAdmission(capacity: DriveDispatchCapacity): (plan: DrivePlan) => DispatchAdmission {
   let admitted = 0;
   return (plan) => {
     // A graph room's plan dispatches per token and is not capped here; graph rooms are few.
-    if (plan.action !== "dispatch_agent" || plan.tokens) return plan;
+    if (plan.action !== "dispatch_agent" || plan.tokens) return { plan };
     if (admitted < capacity.cap) {
       admitted += 1;
-      return plan;
+      let released = false;
+      return { plan, releaseBeforeEnqueue: () => {
+        if (released) return;
+        released = true;
+        admitted -= 1;
+      } };
     }
-    return {
+    return { plan: {
       ...plan,
       action: "do_not_wake",
       reason: AWAITING_AGENT_CAPACITY_REASON,
@@ -69,22 +76,23 @@ export function createDispatchAdmission(capacity: DriveDispatchCapacity): (plan:
       ledger: [
         `Stage ${plan.stageKey ?? "unknown"} is ready to dispatch, waiting for agent capacity: this tick allowed ${capacity.cap} (${capacity.reason}). It goes on a later tick, oldest-waiting rooms first.`,
       ],
-    };
+    } };
   };
 }
 
-function holdSince(workspaceState: unknown): string {
+function holdSince(workspaceState: unknown): number {
   const drive = isRecord(workspaceState) && isRecord(workspaceState.workroomDrive) ? workspaceState.workroomDrive : null;
   const hold = isRecord(drive?.hold) ? drive.hold : null;
-  return typeof hold?.since === "string" ? hold.since : "";
+  const since = typeof hold?.since === "string" ? Date.parse(hold.since) : NaN;
+  return Number.isFinite(since) ? since : Number.POSITIVE_INFINITY;
 }
 
-/** Rooms ordered oldest-waiting first: by when each entered its current hold (never-driven first), then by id. */
+/** Valid current holds first, oldest to newest. Break ties by capsule id. */
 export function orderRoomsOldestWaitingFirst<R extends { capsuleId: string; workspaceState: unknown }>(rooms: readonly R[]): R[] {
   return [...rooms].sort((left, right) => {
     const a = holdSince(left.workspaceState);
     const b = holdSince(right.workspaceState);
-    if (a !== b) return a < b ? -1 : 1;
+    if (a !== b) return a - b;
     return left.capsuleId.localeCompare(right.capsuleId);
   });
 }
