@@ -4,8 +4,7 @@
   "decisionInteractionId": "DI-CC33A7978BBB",
   "scope": {
     "files": [
-      "apps/web/components/attention/CoworkerEnvelopeApproval.tsx",
-      "apps/web/components/attention/OwnerDecisionCards.tsx"
+      "apps/web/components/attention/CoworkerEnvelopeApproval.tsx"
     ]
   },
   "evidence": {

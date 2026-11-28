@@ -119,4 +119,41 @@ describe("CoworkerEnvelopeApproval — decision-first card (BI-CF03AA73)", () =>
     expect(visible).toContain("450");
     expect(visible).toContain("USD");
   });
+
+  it("does not duplicate a Why now row on cards that already render a bespoke recommendation", () => {
+    const decision = summarizeCoworkerEnvelopeDecision({
+      toolName: "retire_backlog_item",
+      proposedParameters: {
+        itemId: "BI-FIXTURE-DUP",
+        duplicateOfId: "BI-FIXTURE-KEEP",
+        outcome: "duplicate",
+        rationale: "Same work",
+      },
+      recommenderAgentId: "AGT-WS-PORTFOLIO",
+      authorizerUserId: "owner-1",
+      rationale: "CI presentation only; no action is authorized or executed.",
+      consequence: null,
+    });
+    const approval: AttentionEnvelopeApproval = {
+      envelopeId: "env-retire-dup",
+      coworkerAgentId: "AGT-WS-PORTFOLIO",
+      delegatingUserId: "owner-1",
+      manifestActionId: "retire_backlog_item",
+      rationale: "CI presentation only; no action is authorized or executed.",
+      status: "proposed",
+      taskRunId: null,
+      expiresAtIso: "2099-01-01T00:00:00.000Z",
+      actionable: true,
+      approveHref: "/api/agent/envelope/env-retire-dup/approve",
+      declineHref: "/api/agent/envelope/env-retire-dup/deny",
+      decision,
+    };
+    const { container } = render(<CoworkerEnvelopeApproval approval={approval} />);
+    const visible = visibleUtterances(defaultVisibleHtml(container.innerHTML)).join(" ");
+    expect(visible).toContain("Authorize only if both records describe the same work");
+    expect(visible).not.toContain("Why now");
+    expect(visible).not.toContain("CI presentation only");
+    const drawer = screen.getByText("Technical evidence").closest("details")!;
+    expect(drawer.textContent).toContain("CI presentation only");
+  });
 });

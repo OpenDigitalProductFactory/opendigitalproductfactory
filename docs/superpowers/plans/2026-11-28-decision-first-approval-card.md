@@ -12,12 +12,12 @@ status: active
 
 ## Acceptance baseline (quoted from BI-CF03AA73)
 
-- **AC-1:** `RegisteredToolDefinition` supports an optional typed `approvalPresentation` descriptor (plain-language title, what-it-does summary, impact/reversibility note, and human-labeled parameter projection) used by `coworker-envelope-decision.ts` without changing authorization bindings or execution endpoints.
-- **AC-2:** `run_discovery_triage` (and other descriptor-equipped tools) renders a specific plain-language headline, concrete What / Why now / Impact rows, and an accurate internal/reversible posture instead of `"Review this coworker request?"` / `"Reversibility is not established."` / `"Keep this on hold"`.
-- **AC-3:** Genuinely unknown/unregistered tools, malformed parameter shapes, and unverified consequential operations fail closed: they remain visibly unverified, recommend holding, and surface all material facts (payments, recipients, permissions, destinations, deadlines, empty/false values) outside disclosure.
-- **AC-4:** The primary card surfaces the actual gate/coworker reason (`Why now`, from `envelope.rationale` / descriptor context, sanitized of raw internal IDs) and removes the static boilerplate `"Why am I being asked?"` disclosure.
-- **AC-5:** Expanding the single technical/details drawer shows non-empty human-labeled parameters, expiry/scope, compact audit identifiers, and exact raw JSON without duplicating the legacy card or rendering `"Not named in the proposal"` / `"Not attached"` filler rows.
-- **AC-6:** All UI changes reuse DPF theme tokens and report-kit primitives, pass unit/typecheck/style/UX-fit gates (including a committed `docs/ux-fit/*.ux-fit.json` manifest backed by the recorded `principle_decide` interaction), and preserve keyboard accessibility, mobile layout, on-behalf decisions, standing rulings, and pending/unknown reconciliation.
+- AC-1: `RegisteredToolDefinition` supports an optional typed `approvalPresentation` descriptor (plain-language title, what-it-does summary, impact/reversibility note, and human-labeled parameter projection) used by `coworker-envelope-decision.ts` without changing authorization bindings or execution endpoints.
+- AC-2: `run_discovery_triage` (and other descriptor-equipped tools) renders a specific plain-language headline, concrete What / Why now / Impact rows, and an accurate internal/reversible posture instead of "Review this coworker request?" / "Reversibility is not established." / "Keep this on hold".
+- AC-3: Genuinely unknown/unregistered tools, malformed parameter shapes, and unverified consequential operations fail closed: they remain visibly unverified, recommend holding, and surface all material facts (payments, recipients, permissions, destinations, deadlines, empty/false values) outside disclosure.
+- AC-4: The primary card surfaces the actual gate/coworker reason (`Why now`, from `envelope.rationale` / descriptor context, sanitized of raw internal IDs) and removes the static boilerplate "Why am I being asked?" disclosure.
+- AC-5: Expanding the single technical/details drawer shows non-empty human-labeled parameters, expiry/scope, compact audit identifiers, and exact raw JSON without duplicating the legacy card or rendering "Not named in the proposal" / "Not attached" filler rows.
+- AC-6: All UI changes reuse DPF theme tokens and report-kit primitives, pass unit/typecheck/style/UX-fit gates (including a committed `docs/ux-fit/*.ux-fit.json` manifest backed by the recorded `principle_decide` interaction), and preserve keyboard accessibility, mobile layout, on-behalf decisions, standing rulings, and pending/unknown reconciliation.
 
 ## Ordered implementation tasks
 

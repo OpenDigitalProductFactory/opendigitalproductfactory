@@ -676,7 +676,7 @@ export function envelopePrimaryDecision(decision: EnvelopeDecisionSummary, local
     return {
       title: merge ? copy.mergeWorkTitle : copy.retireDuplicateTitle,
       description: formatSource(locale, merge ? copy.mergeWorkDescription : copy.retireDuplicateDescription, args),
-      why: recordedWhy,
+      why: "",
       consequence: merge ? copy.mergeWorkConsequence : copy.retireDuplicateConsequence,
       posture: consequencePosture(decision, merge ? "irreversible" : "bounded"),
       recommendation: copy.duplicateWorkRecommendation,
@@ -756,7 +756,7 @@ export function envelopePrimaryDecision(decision: EnvelopeDecisionSummary, local
     }
   }
   if (unresolved) visit(params, [], false);
-  return { title, description, why: unresolved ? "" : recordedWhy, consequence, posture, facts, unresolved,
+  return { title, description, why: unresolved || recommendation ? "" : recordedWhy, consequence, posture, facts, unresolved,
     target: appUpdate ? copy.appScope : decision.toolName === "manage_coworker_tool_grant" ? copy.permissionScope : decision.targetLabel ?? "",
     recommendation, declineDoes: "",
   };
