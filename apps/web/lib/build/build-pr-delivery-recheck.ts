@@ -94,6 +94,8 @@ export function resumeClearedEscalation(
 export function isDeliveryObservationDue(state: BuildPrDeliveryStateV1 | null, now: Date): boolean {
   if (!state) return true;
   if (state.status === "closed" || state.status === "deployed") return false;
+  // Once GitHub has confirmed the PR merged, polling GitHub again cannot advance release state (BI-BE9A160D).
+  if (state.status === "awaiting-release" && state.lastReadiness === "merged") return false;
   if (state.status === "escalated") {
     if (!isReevaluableEscalation(state) && !isAutonomousEligibilityWithheld(state)) return false;
     const last = state.lastObservedAt ? Date.parse(state.lastObservedAt) : Number.NaN;

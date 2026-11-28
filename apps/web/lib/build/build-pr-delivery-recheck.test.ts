@@ -102,11 +102,13 @@ describe("isDeliveryObservationDue", () => {
     expect(isDeliveryObservationDue({ ...stopped6983, lastError: "local-evidence-not-cleared" }, now)).toBe(false);
   });
 
-  it("honours a backoff and never re-observes a closed or deployed PR", () => {
+  it("honours a backoff and never re-observes a closed, deployed, or already-merged awaiting-release PR", () => {
     expect(isDeliveryObservationDue({ ...base, status: "checking", nextObservationAt: new Date(now.getTime() + 1000).toISOString() }, now)).toBe(false);
     expect(isDeliveryObservationDue({ ...base, status: "checking", nextObservationAt: new Date(now.getTime() - 1000).toISOString() }, now)).toBe(true);
     expect(isDeliveryObservationDue({ ...base, status: "closed" }, now)).toBe(false);
     expect(isDeliveryObservationDue({ ...base, status: "deployed" }, now)).toBe(false);
+    expect(isDeliveryObservationDue({ ...base, status: "awaiting-release", lastReadiness: "merged" }, now)).toBe(false);
+    expect(isDeliveryObservationDue({ ...base, status: "awaiting-release", lastReadiness: null }, now)).toBe(true);
     expect(isDeliveryObservationDue(null, now)).toBe(true);
   });
 });

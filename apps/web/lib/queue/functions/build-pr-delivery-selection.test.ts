@@ -135,4 +135,13 @@ describe("bounded PR delivery cursor selection", () => {
     expect((await selectPrDeliveryRooms(f.db, now)).map(row => row.id)).toEqual(["row-0000", "row-0004"]);
     expect(f.job.runCursor).toBe("row-0004");
   });
+
+  it("skips already-merged awaiting-release rooms so active open PRs are not starved behind historical merges (BI-BE9A160D)", async () => {
+    const f = fixture(30);
+    for (const row of f.rows.slice(0, 28)) {
+      row.workspaceState = { prDelivery: { ...state("checking"), status: "awaiting-release", lastReadiness: "merged" } };
+    }
+    expect((await selectPrDeliveryRooms(f.db)).map(row => row.id)).toEqual(["row-0028", "row-0029"]);
+    expect(f.job.runCursor).toBe("row-0029");
+  });
 });

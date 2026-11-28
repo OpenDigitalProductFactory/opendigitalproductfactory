@@ -235,3 +235,35 @@ describe("decidePrFollowThrough ignores non-required checks (BI-D081EDD0)", () =
     expect(decision.followThrough.failing.map((check) => check.name)).toEqual(["Unit Tests"]);
   });
 });
+
+describe("decidePrFollowThrough acts on armed PRs with failing required checks (BI-BE9A160D)", () => {
+  it("dispatches bounded repair when an armed PR has terminal failed required checks", () => {
+    const decision = decide({
+      readiness: { kind: "armed", headSha: "sha1", checksFailing: true },
+      checks: [{ ...failing("Merge Readiness", "FAILURE", 9), required: true }, { ...failing("Failure Readiness", "FAILURE", 10), required: false }],
+      authority: "dispatch",
+    });
+    expect(decision.kind).toBe("repair");
+    if (decision.kind !== "repair") throw new Error("expected repair");
+    expect(decision.mode).toBe("dispatch");
+    expect(decision.packet.failingChecks.map((check) => check.name)).toEqual(["Merge Readiness"]);
+    expect(decision.followThrough.hold).toBe("repairing");
+    expect(decision.followThrough.judgedHeadSha).toBe("sha1");
+  });
+
+  it("re-runs an infrastructure failure on an armed PR and stays quiet when armed checks are not failing", () => {
+    const infra = decide({
+      readiness: { kind: "armed", headSha: "sha1", checksFailing: true },
+      checks: [{ ...failing("Merge Readiness", "TIMED_OUT", 15), required: true }],
+      authority: "dispatch",
+    });
+    expect(infra).toEqual(expect.objectContaining({ kind: "rerun-infrastructure", headSha: "sha1", workflowRunIds: [15] }));
+
+    const waiting = decide({
+      readiness: { kind: "armed", headSha: "sha1" },
+      checks: [{ ...failing("Merge Readiness", "FAILURE", 9), required: true }],
+      authority: "dispatch",
+    });
+    expect(waiting.kind).toBe("none");
+  });
+});

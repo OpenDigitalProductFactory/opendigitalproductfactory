@@ -295,6 +295,36 @@ describe("executeBuildPrDeliveryAction — PR follow-through (BI-88341B5D)", () 
     expect(replay.calls).toEqual([]);
   });
 
+  it("dispatches bounded repair for an already-armed PR with failed required checks without false queue-hold or duplicate arming (BI-BE9A160D)", async () => {
+    const dispatchRepair = vi.fn(async () => "dispatched" as const);
+    const armedPending = observation({
+      autoMergeEnabled: true,
+      mergeStateStatus: "BLOCKED",
+      checks: [{ name: "Merge Readiness", status: "IN_PROGRESS", conclusion: null, required: true }],
+    });
+    const first = await run({ observed: armedPending, from: state, repairAuthority: "dispatch", dispatchRepair });
+    expect(first.state.status).toBe("armed");
+    expect(dispatchRepair).not.toHaveBeenCalled();
+
+    const armedRed = observation({
+      autoMergeEnabled: true,
+      mergeStateStatus: "BLOCKED",
+      checks: [
+        { name: "Merge Readiness", status: "COMPLETED", conclusion: "FAILURE", detailsUrl: "https://x/run/9/job/1", workflowRunId: 9, required: true },
+        { name: "Failure Readiness", status: "COMPLETED", conclusion: "FAILURE", detailsUrl: "https://x/run/10/job/2", workflowRunId: 10, required: false },
+      ],
+    });
+    const repaired = await run({ observed: armedRed, from: first.state, repairAuthority: "dispatch", dispatchRepair });
+    expect(repaired.state.status).toBe("armed");
+    expect(repaired.state.queueHold ?? null).toBeNull();
+    expect(repaired.calls).toEqual([]);
+    expect(repaired.actuated).toBe(true);
+    expect(dispatchRepair).toHaveBeenCalledTimes(1);
+    expect(repaired.followThrough.kind).toBe("repair");
+    expect(repaired.state.followThrough.hold).toBe("repairing");
+    expect(repaired.state.followThrough.failing.map((c) => c.name)).toEqual(["Merge Readiness"]);
+  });
+
   it("withholds GitHub actuation when the room's boundary does, but still records the state", async () => {
     const outcome = await run({ observed: observation(), from: { ...state, queueIntentHeadSha: "sha1" }, actuationAllowed: false });
     expect(outcome.actuated).toBe(false);

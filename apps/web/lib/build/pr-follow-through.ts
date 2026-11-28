@@ -176,7 +176,8 @@ export function decidePrFollowThrough(input: {
 }): PrFollowThroughDecision {
   const prior = input.followThrough;
   const headSha = input.readiness.headSha;
-  const red = input.readiness.kind === "checking" && input.readiness.reason === "checks-failing";
+  const red = (input.readiness.kind === "checking" && input.readiness.reason === "checks-failing")
+    || (input.readiness.kind === "armed" && input.readiness.checksFailing === true);
 
   if (!red || !headSha) {
     // CI is not red. A hold survives only while its own head is still current

@@ -40,7 +40,9 @@ export async function refreshFailureReadinessForDelivery(input: {
   const failing = input.observation.checks.filter(check => checkBlocksMerge(check)
     && check.status.toUpperCase() === "COMPLETED" && check.conclusion?.toUpperCase() === "FAILURE");
   // Only a required red check that is nothing but Failure Readiness can be cleared by republishing.
-  const onlyReadinessRed = input.readiness.kind === "checking" && input.readiness.reason === "checks-failing"
+  const checksRed = (input.readiness.kind === "checking" && input.readiness.reason === "checks-failing")
+    || (input.readiness.kind === "armed" && input.readiness.checksFailing === true);
+  const onlyReadinessRed = checksRed
     && failing.length > 0 && failing.every(check => readinessSignal(check.name));
   if (input.readiness.kind !== "ready" && !onlyReadinessRed) return unchanged;
 

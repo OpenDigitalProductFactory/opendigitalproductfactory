@@ -119,4 +119,18 @@ describe("refreshFailureReadinessForDelivery ignores non-required checks (BI-D08
     expect(d.publish).not.toHaveBeenCalled();
     expect(result.refreshed).toBe(false);
   });
+
+  it("refreshes expired Failure Readiness on an armed PR when it is the only failing required check (BI-BE9A160D)", async () => {
+    const d = deps();
+    const armedFailing: GithubPrReadiness = { kind: "armed", headSha: "sha1", checksFailing: true };
+    const result = await refreshFailureReadinessForDelivery({
+      observation: observation([
+        { ...check(FAILURE_READINESS_CHECK_NAME, "FAILURE", 41), required: true },
+        { ...check("Merge Readiness", "SUCCESS", 42), required: true },
+      ]),
+      readiness: armedFailing, ...d });
+    expect(d.publish).toHaveBeenCalledOnce();
+    expect(d.rerun).toHaveBeenCalledWith(41);
+    expect(result).toMatchObject({ observeAgain: true, refreshed: true, rerunRunIds: [41] });
+  });
 });
