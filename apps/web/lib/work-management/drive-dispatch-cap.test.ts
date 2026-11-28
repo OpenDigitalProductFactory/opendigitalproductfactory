@@ -56,7 +56,7 @@ describe("driveDispatchCapacity (the dispatcher's own provider slots, BI-6DBA223
 describe("createDispatchAdmission", () => {
   it("admits dispatches up to the cap and turns the rest into an honest wait for agent capacity", () => {
     const admit = createDispatchAdmission({ cap: 2, reason: "pools healthy" });
-    const plans = ["A", "B", "C"].map((id) => admit(dispatch(id)));
+    const plans = ["A", "B", "C"].map((id) => admit(dispatch(id)).plan);
     expect(plans.slice(0, 2).map((plan) => plan.action)).toEqual(["dispatch_agent", "dispatch_agent"]);
     expect(plans[2]).toMatchObject({ action: "do_not_wake", reason: AWAITING_AGENT_CAPACITY_REASON, taskId: null, agentId: null, stageKey: "implement" });
     expect(plans[2]!.ledger[0]).toMatch(/waiting for agent capacity/i);
@@ -65,23 +65,38 @@ describe("createDispatchAdmission", () => {
   it("passes every other plan through untouched and does not count it", () => {
     const admit = createDispatchAdmission({ cap: 1, reason: "pools healthy" });
     const pause = { ...dispatch("P"), action: "pause", reason: "executor_writeback_unavailable" } as DrivePlan;
-    expect(admit(pause)).toBe(pause);
-    expect(admit(dispatch("A")).action).toBe("dispatch_agent");
+    expect(admit(pause)).toEqual({ plan: pause });
+    expect(admit(dispatch("A")).plan.action).toBe("dispatch_agent");
+  });
+
+  it("returns only the rejected dispatch's reservation, once", () => {
+    const admit = createDispatchAdmission({ cap: 1, reason: "one free slot" });
+    const first = admit(dispatch("A"));
+    expect(first.plan.action).toBe("dispatch_agent");
+    const capped = admit(dispatch("B"));
+    expect(capped.plan.action).toBe("do_not_wake");
+    expect(capped.releaseBeforeEnqueue).toBeUndefined();
+
+    first.releaseBeforeEnqueue!();
+    expect(admit(dispatch("B")).plan.action).toBe("dispatch_agent");
+    first.releaseBeforeEnqueue!();
+    expect(admit(dispatch("C")).plan.action).toBe("do_not_wake");
   });
 
   it("keeps the writeback retry record on a capped plan", () => {
     const admit = createDispatchAdmission({ cap: 0, reason: "an agent pool is rate-limited" });
     const retry = { stageKey: "implement", cycleKey: null, failures: 1, lastError: "x", lastFailedAt: NOW.toISOString(), countedRunAt: NOW.toISOString() };
-    expect(admit({ ...dispatch("A"), writebackRetry: retry }).writebackRetry).toEqual(retry);
+    expect(admit({ ...dispatch("A"), writebackRetry: retry }).plan.writebackRetry).toEqual(retry);
   });
 });
 
 describe("orderRoomsOldestWaitingFirst", () => {
-  it("orders by how long each room has held its current state, never-driven rooms first, then by id", () => {
+  it("orders current holds oldest first, then rooms with no valid hold, breaking ties by id", () => {
     const room = (capsuleId: string, since?: string) => ({ capsuleId, workspaceState: since ? { workroomDrive: { hold: { key: "k", since } } } : {} });
     const ordered = orderRoomsOldestWaitingFirst([
-      room("WC-3", "2026-10-14T03:00:00.000Z"), room("WC-2", "2026-10-14T01:00:00.000Z"), room("WC-NEW"), room("WC-1", "2026-10-14T01:00:00.000Z"),
+      room("WC-3", "2026-10-14T03:00:00.000Z"), room("WC-2", "2026-10-14T01:00:00.000Z"),
+      room("WC-NEW"), room("WC-BAD", "invalid"), room("WC-1", "2026-10-14T01:00:00.000Z"),
     ]);
-    expect(ordered.map((r) => r.capsuleId)).toEqual(["WC-NEW", "WC-1", "WC-2", "WC-3"]);
+    expect(ordered.map((r) => r.capsuleId)).toEqual(["WC-1", "WC-2", "WC-3", "WC-BAD", "WC-NEW"]);
   });
 });

@@ -9,11 +9,13 @@
 
 import { describe, expect, it, vi } from "vitest";
 
+import { driveDispatchCapacity } from "@/lib/work-management/drive-dispatch-cap";
 import { buildWorkShapeClaim } from "@/lib/work-management/workroom-shape-claim";
 import type { StageRunObservation, WritebackRetry } from "@/lib/work-management/writeback-latch";
 import { WRITEBACK_RETRY_BASE_MS, WRITEBACK_RETRY_LIMIT } from "@/lib/work-management/writeback-latch";
 
 import { runWorkroomDriveJob, type WorkroomDriveEffects, type WorkroomDriveRoom } from "./workroom-drive";
+import { scheduleWorkroomAgentTask } from "./workroom-drive-scheduling";
 import { loadStageRunTasks, stageRunFromTask, withStageRuns } from "./workroom-drive-stage-run";
 
 const NOW = new Date("2026-09-01T06:00:00.000Z");
@@ -323,5 +325,147 @@ describe("provider-held rooms preserve dispatch capacity (BI-9CD95438)", () => {
 
     expect(fx.upsertAgentTask.mock.calls.map(([task]) => task.taskId)).toEqual([TASK("WC-A")]);
     expect(snapshotFor(fx, "B")).toMatchObject({ action: "do_not_wake", reason: "awaiting_agent_capacity" });
+  });
+});
+
+
+describe("Drive dispatch fairness (BI-5C2506DB)", () => {
+  const makeRoom = (id: string, hold?: object) => room({
+    id, capsuleId: id, stageRun: null,
+    workspaceState: { workroomDrive: latchedSnapshot({
+      action: "do_not_wake", reason: "awaiting_agent_capacity", receipts: [],
+      ...(hold ? { hold } : {}),
+    }) },
+  });
+  const capacity = (now: Date) => driveDispatchCapacity({
+    pools: [{ isExhausted: false, weeklyUtilization: null, weeklyObservedAt: null }],
+    cli: { max: 4, inFlight: 3, queued: 0 }, now,
+  });
+  const tick = (now: Date, rooms: WorkroomDriveRoom[], fx: ReturnType<typeof effects>) =>
+    runWorkroomDriveJob(now, { listRooms: async () => rooms, effects: fx, dispatchCapacity: async () => capacity(now) });
+  const waiting = { key: "do_not_wake|awaiting_agent_capacity|sweep", since: "2026-09-01T04:00:00.000Z",
+    ticks: 4, stuckSince: null, stuckTicks: 0, notifiedAt: null };
+
+  // Keep the production enqueue transaction and receipt logic. Only the DB storage is synthetic.
+  function journal(now: Date) {
+    type Task = { agentId: string; ownerUserId: string; taskConfig: Record<string, unknown> };
+    const tasks = new Map<string, Task>();
+    const states = new Map<string, Record<string, unknown>>();
+    const tx = {
+      workroom: {
+        updateMany: async () => ({ count: 1 }),
+        findUnique: async ({ where }: { where: { id: string } }) => ({
+          capsuleId: where.id, workspaceState: states.get(where.id) ?? {},
+          repositoryFullName: null, headSha: null,
+        }),
+        update: async ({ where, data }: { where: { id: string }; data: { workspaceState: Record<string, unknown> } }) => {
+          states.set(where.id, data.workspaceState);
+        },
+      },
+      scheduledAgentTask: {
+        findUnique: async ({ where }: { where: { taskId: string } }) => tasks.get(where.taskId) ?? null,
+        upsert: async ({ where, create }: { where: { taskId: string }; create: Task }) => {
+          tasks.set(where.taskId, create);
+        },
+      },
+      workroomActivity: { create: vi.fn(async (_entry: { data: { kind: string; workCapsuleId: string } }) => ({})) },
+    };
+    const db = { $transaction: (run: (client: typeof tx) => Promise<boolean>) => run(tx) };
+    const writer = () => {
+      const fx = effects();
+      fx.upsertAgentTask.mockImplementation((input) =>
+        scheduleWorkroomAgentTask(db as unknown as Parameters<typeof scheduleWorkroomAgentTask>[0], input, () => now));
+      return fx;
+    };
+    return { tasks, states, receipts: tx.workroomActivity.create, writer };
+  }
+
+  it("gives the aged waiter a slot across repeated constrained passes", async () => {
+    const aged = makeRoom("WC-Z-AGED", waiting);
+    const store = journal(NOW);
+    const fx = store.writer();
+    expect(capacity(NOW)).toEqual({ cap: 1, reason: "1 free agent slot(s) of 4" });
+    for (let pass = 0; pass < 3; pass++) {
+      const next = new Date(NOW.getTime() + pass * 60_000);
+      const run = await tick(next, [aged, makeRoom(`WC-A-NEW-${pass}`)], fx);
+      expect(run.dispatched).toBe(1);
+      const taskId = TASK(aged.capsuleId);
+      const persisted = store.states.get(aged.id);
+      if (persisted) {
+        const task = store.tasks.get(taskId)!;
+        aged.workspaceState = { ...aged.workspaceState as object, ...persisted };
+        aged.stageRun = stageRunFromTask({ taskId, roomWorkspaceState: aged.workspaceState,
+          task: { ...task, taskId, lastRunAt: null, lastStatus: null, lastError: null } });
+      } else {
+        const observation = fx.persist.mock.calls.filter(([entry]) => entry.roomId === aged.id).at(-1)?.[0];
+        expect(observation?.snapshot).toMatchObject({ action: "do_not_wake", reason: "awaiting_agent_capacity" });
+        aged.workspaceState = { workroomDrive: observation?.snapshot };
+      }
+    }
+    const queued = store.receipts.mock.calls.map(([entry]) => entry.data.workCapsuleId);
+    expect(queued[0], `durable dispatches by pass: ${queued.join(", ")}`).toBe(aged.id);
+    expect(queued.filter((id) => id === aged.id)).toHaveLength(1);
+  });
+
+  it("keeps one durable enqueue when a restarted runner sees the same assignment", async () => {
+    const store = journal(NOW);
+    const same = () => makeRoom("WC-SAME", waiting);
+    const first = store.writer();
+    const restarted = store.writer();
+    expect((await tick(NOW, [same()], first)).dispatched).toBe(1);
+    const before = structuredClone(store.states.get("WC-SAME"));
+    await tick(NOW, [same()], restarted);
+    expect(restarted.upsertAgentTask.mock.calls[0]?.[0]).toMatchObject({
+      taskId: TASK("WC-SAME"), dispatchScope: first.upsertAgentTask.mock.calls[0]?.[0].dispatchScope,
+    });
+    expect(store.states.get("WC-SAME")).toEqual(before);
+    expect(store.receipts).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({
+      data: expect.objectContaining({ kind: "workroom-dispatch-confirmed", workCapsuleId: "WC-SAME" }),
+    }));
+  });
+
+  it("offers the slot to the next eligible room after a definite pre-enqueue lease rejection", async () => {
+    const store = journal(NOW);
+    const fx = store.writer();
+    fx.acquireLease.mockResolvedValueOnce("held");
+    const result = await tick(NOW, [makeRoom("WC-A-FENCED"), makeRoom("WC-B-ELIGIBLE")], fx);
+    expect(fx.persist.mock.calls[0]?.[0]).toMatchObject({
+      roomId: "WC-A-FENCED", snapshot: { reason: "lease_held" }, observationOnly: true,
+    });
+    expect(store.tasks.has(TASK("WC-A-FENCED"))).toBe(false);
+    expect(store.receipts.mock.calls.map(([entry]) => entry.data.workCapsuleId)).toEqual(["WC-B-ELIGIBLE"]);
+    expect(fx.acquireLease.mock.calls.map(([entry]) => entry.roomId)).toEqual(["WC-A-FENCED", "WC-B-ELIGIBLE"]);
+    expect(fx.upsertAgentTask.mock.calls.map(([input]) => input.taskId)).toEqual([TASK("WC-B-ELIGIBLE")]);
+    expect(result.dispatched).toBe(1);
+  });
+
+  it("keeps the slot charged after a committed enqueue", async () => {
+    const store = journal(NOW);
+    const fx = store.writer();
+    const result = await tick(NOW, [makeRoom("WC-A-FIRST"), makeRoom("WC-B-WAIT")], fx);
+    expect(result.dispatched).toBe(1);
+    expect(store.receipts.mock.calls.map(([entry]) => entry.data.workCapsuleId)).toEqual(["WC-A-FIRST"]);
+    expect(fx.acquireLease.mock.calls.map(([entry]) => entry.roomId)).toEqual(["WC-A-FIRST"]);
+    expect(result.plans).toContainEqual(expect.objectContaining({
+      roomId: "WC-B-WAIT", reason: "awaiting_agent_capacity",
+    }));
+  });
+
+  it("keeps the slot charged when the enqueue outcome is unknown", async () => {
+    const store = journal(NOW);
+    const fx = store.writer();
+    const enqueue = fx.upsertAgentTask.getMockImplementation()!;
+    fx.upsertAgentTask.mockImplementationOnce(async (input) => {
+      await enqueue(input);
+      throw new Error("enqueue acknowledgement lost");
+    });
+    const result = await tick(NOW, [makeRoom("WC-A-UNKNOWN"), makeRoom("WC-B-WAIT")], fx);
+    expect(result.dispatched).toBe(0);
+    expect(store.receipts.mock.calls.map(([entry]) => entry.data.workCapsuleId)).toEqual(["WC-A-UNKNOWN"]);
+    expect(fx.upsertAgentTask.mock.calls.map(([input]) => input.taskId)).toEqual([TASK("WC-A-UNKNOWN")]);
+    expect(result.plans).toEqual([
+      expect.objectContaining({ roomId: "WC-A-UNKNOWN", action: "error", reason: "enqueue acknowledgement lost" }),
+      expect.objectContaining({ roomId: "WC-B-WAIT", reason: "awaiting_agent_capacity" }),
+    ]);
   });
 });
