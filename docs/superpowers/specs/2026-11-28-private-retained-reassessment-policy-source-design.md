@@ -6,7 +6,7 @@ status: draft
 
 **Backlog:** BI-AE2EF5E4.
 
-Status: local design draft. This design creates no live policy, approval, allocation, test execution, or authority. It uses synthetic identifiers only. It does not alter or attach the unpublished policy candidate.
+Status: proposed compatibility design for independent review. This design creates no live policy, approval, allocation, test execution, or authority. It uses synthetic identifiers only. It does not alter or attach the unpublished policy candidate.
 
 ## Decision and boundary
 
@@ -51,4 +51,4 @@ Required future proof uses the existing resolver/retention test seam, reader and
 
 ## Admission and handback
 
-The existing design-intent Workroom is the authoring lane. This local design is separate from the protected candidate. The native design-spec route currently reports `no-canonical-artifact` because it has no admitted immutable design source for this Workroom. The next action is for the artifact/retention owner and reassessment framework owner to confirm the source route and admit this sanitized design through the ordinary process. Do not publish the protected candidate, start a review, run a test or change policy, grants, runtime or the original execution as part of this checkpoint.
+The existing design-intent Workroom is the authoring lane. This sanitized design is supplied for independent review at its exact repository commit and blob, separately from the protected candidate. The proposed private-source contract remains subject to the ordinary design and acceptance gates. This document does not publish, authorize, or approve the protected policy, and does not authorize tests, grant changes, runtime effects, or an assessment or replay of the original case.
