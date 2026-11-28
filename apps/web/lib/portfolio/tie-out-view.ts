@@ -3,6 +3,8 @@
 // (points and weeks), never by colour alone, and a missing budget reads "No
 // budget set", never zero.
 
+import { DEFAULT_LOCALE } from "@dpf/i18n/runtime";
+import { formatMoney } from "@/lib/org-locale/org-locale";
 import type { ProjectedQuarterEndSpend, QuarterlyPlanSummary, TieOutRow } from "./tie-out";
 import { portfolioBudgetLabel } from "./budget-label";
 
@@ -76,12 +78,19 @@ export function quarterlyPlanAdvisoryText(summary: QuarterlyPlanSummary): string
 }
 
 /** Explicit-basis projected quarter-end spend, or honest "Unknown" — never fabricated or $0 (BI-A59837E5). */
-export function projectedSpendText(spend: ProjectedQuarterEndSpend): string {
+export function projectedSpendText(spend: ProjectedQuarterEndSpend, formatLocale?: string | null): string {
   if (spend.status !== "known") return "Unknown (no configured rate or observed cost basis)";
-  const fmt = (n: number) => `$${n.toLocaleString("en-US")}`;
+  const locale = formatLocale ?? DEFAULT_LOCALE;
+  const fmt = (n: number) => formatMoney(n, "USD", locale, { maximumFractionDigits: 0 });
+  const rate = formatMoney(
+    spend.usdPerPoint,
+    "USD",
+    locale,
+    Number.isInteger(spend.usdPerPoint) ? { maximumFractionDigits: 0 } : undefined,
+  );
   const range = spend.lowUsd === spend.highUsd ? fmt(spend.lowUsd) : `${fmt(spend.lowUsd)}–${fmt(spend.highUsd)}`;
   const basisLabel = spend.basis === "configured-rate"
-    ? `configured rate $${spend.usdPerPoint}/pt`
-    : `observed cost $${spend.usdPerPoint}/pt`;
+    ? `configured rate ${rate}/pt`
+    : `observed cost ${rate}/pt`;
   return `${range} (${basisLabel})`;
 }

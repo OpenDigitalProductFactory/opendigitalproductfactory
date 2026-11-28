@@ -25,9 +25,11 @@
 // attention with nothing running, commit nothing. An unsized or unattributed item is not funded, as admission
 // refuses an unsized autonomous start.
 
+import { DEFAULT_LOCALE } from "@dpf/i18n/runtime";
 import { ACUMEN_ROOM_SHAPES } from "./acumen-room-shapes";
 import { DELIVERY_AUTHOR_ROLE, DELIVERY_XLARGE_SHAPE_KEY, isDeliveryShapeKey } from "./delivery-shapes";
 import type { AuthorStagePreauthorisation } from "./author-stage-preauthorisation";
+import { formatMoney } from "@/lib/org-locale/org-locale";
 import { quarterBounds } from "@/lib/portfolio/investment-points";
 import { resolveInvestmentItem, summarizePortfolioInvestment, type InvestmentItemRow } from "@/lib/portfolio/investment-read-model";
 import type { PortfolioBudgetStatus } from "@/lib/portfolio/portfolio-budget";
@@ -52,10 +54,16 @@ export function buildAuthorStageFunding(input: {
 
   const spendBasisText = (committed: number, usdPerPoint: number | null | undefined): string => {
     if (usdPerPoint != null && usdPerPoint > 0) {
-      const projected = Math.round(committed * usdPerPoint).toLocaleString("en-US");
-      return `projected spend ~$${projected} at configured $${usdPerPoint}/pt rate`;
+      const projected = formatMoney(Math.round(committed * usdPerPoint), "USD", DEFAULT_LOCALE, { maximumFractionDigits: 0 });
+      const rate = formatMoney(
+        usdPerPoint,
+        "USD",
+        DEFAULT_LOCALE,
+        Number.isInteger(usdPerPoint) ? { maximumFractionDigits: 0 } : undefined,
+      );
+      return `projected spend ~${projected} at configured ${rate}/pt rate`;
     }
-    return "spend forecast: unknown (no configured $/point rate or observed cost basis)";
+    return "spend forecast: unknown (no configured USD/point rate or observed cost basis)";
   };
 
   return (itemId) => {
