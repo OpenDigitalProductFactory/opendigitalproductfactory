@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { budgetText, forecastText, overCommitmentText, tieOutHeadline, tracedText } from "./tie-out-view";
+import { budgetText, forecastText, overCommitmentText, projectedSpendText, quarterlyPlanAdvisoryText, tieOutHeadline, tracedText } from "./tie-out-view";
 
 describe("tie-out display rules (BI-CBF5D708, design §6)", () => {
   it("never shows a missing budget as zero", () => {
@@ -61,5 +61,22 @@ describe("tieOutHeadline", () => {
   });
   it("says when everything fits and nothing has been delivered", () => {
     expect(tieOutHeadline({ rows: [row("a", -5, 0, null)] })).toBe("All 1 portfolios fit their measured capacity.");
+  });
+});
+
+describe("quarterly plan advisory and spend forecast text (BI-A59837E5)", () => {
+  it("shows planned, committed, overage, delivered vs in-flight drivers, and unknown spend when no basis exists", () => {
+    const text = quarterlyPlanAdvisoryText({
+      plannedPoints: 8,
+      quarterCommittedPoints: 11,
+      overagePoints: 3,
+      drivers: { deliveredPoints: 8, inFlightPoints: 3 },
+      projectedQuarterEndPoints: { low: 12, median: 16, high: 20 },
+      projectedQuarterEndSpend: { status: "unknown", basis: "none", usdPerPoint: null, lowUsd: null, medianUsd: null, highUsd: null },
+    });
+    expect(text).toMatch(/11 of 8 planned \(\+3 over; 8 delivered, 3 in flight\)/);
+    expect(projectedSpendText({ status: "unknown", basis: "none", usdPerPoint: null, lowUsd: null, medianUsd: null, highUsd: null })).toBe("Unknown (no configured rate or observed cost basis)");
+    expect(projectedSpendText({ status: "known", basis: "configured-rate", usdPerPoint: 200, lowUsd: 2400, medianUsd: 3200, highUsd: 4000 })).toMatch(/\$2,400–\$4,000.*configured rate/);
+    expect(projectedSpendText({ status: "known", basis: "observed-cost", usdPerPoint: 10, lowUsd: 120, medianUsd: 160, highUsd: 200 })).toMatch(/\$120–\$200.*observed cost/);
   });
 });

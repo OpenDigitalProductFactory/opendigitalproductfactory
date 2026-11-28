@@ -25,9 +25,11 @@
 // attention with nothing running, commit nothing. An unsized or unattributed item is not funded, as admission
 // refuses an unsized autonomous start.
 
+import { DEFAULT_LOCALE } from "@dpf/i18n/runtime";
 import { ACUMEN_ROOM_SHAPES } from "./acumen-room-shapes";
 import { DELIVERY_AUTHOR_ROLE, DELIVERY_XLARGE_SHAPE_KEY, isDeliveryShapeKey } from "./delivery-shapes";
 import type { AuthorStagePreauthorisation } from "./author-stage-preauthorisation";
+import { formatMoney } from "@/lib/org-locale/org-locale";
 import { quarterBounds } from "@/lib/portfolio/investment-points";
 import { resolveInvestmentItem, summarizePortfolioInvestment, type InvestmentItemRow } from "@/lib/portfolio/investment-read-model";
 import type { PortfolioBudgetStatus } from "@/lib/portfolio/portfolio-budget";
@@ -39,7 +41,7 @@ export const AUTHOR_STAGE_AGENT_REF = `agent:${
   ACUMEN_ROOM_SHAPES.find((shape) => shape.professionKey === "software-engineer")?.coworkerAgentId ?? "build-specialist"
 }`;
 
-/** One funding decision per item, from one read of the investment and budget models. */
+/** One funding/planning evaluation per item, from one read of the investment and budget models (BI-A59837E5). */
 export function buildAuthorStageFunding(input: {
   items: readonly InvestmentItemRow[];
   budgets: readonly PortfolioBudgetStatus[];
@@ -50,27 +52,72 @@ export function buildAuthorStageFunding(input: {
   const rows = new Map(summarizePortfolioInvestment([...input.items], input.now, period).rows.map((row) => [row.portfolioId, row]));
   const budgets = new Map(input.budgets.map((status) => [status.id, status]));
 
+  const spendBasisText = (committed: number, usdPerPoint: number | null | undefined): string => {
+    if (usdPerPoint != null && usdPerPoint > 0) {
+      const projected = formatMoney(Math.round(committed * usdPerPoint), "USD", DEFAULT_LOCALE, { maximumFractionDigits: 0 });
+      const rate = formatMoney(
+        usdPerPoint,
+        "USD",
+        DEFAULT_LOCALE,
+        Number.isInteger(usdPerPoint) ? { maximumFractionDigits: 0 } : undefined,
+      );
+      return `projected spend ~${projected} at configured ${rate}/pt rate`;
+    }
+    return "spend forecast: unknown (no configured USD/point rate or observed cost basis)";
+  };
+
   return (itemId) => {
     if (!itemId) return { funded: false, because: "The room is bound to no backlog item, so no budget funds it." };
     const item = byItem.get(itemId);
     if (!item) return { funded: false, because: `${itemId} is not live work this quarter, so no budget funds it.` };
     const { resolution, points } = resolveInvestmentItem(item, period);
     if (!resolution.portfolioId) {
-      return { funded: false, because: `${itemId} reaches no portfolio, so no budget can fund it.` };
+      return {
+        funded: true,
+        portfolioId: null,
+        summary: `Unallocated: ${itemId} reaches no portfolio; quarterly planning guidance is unresolved.`,
+        advisory: `Planning warning (advisory, not a stop): ${itemId} reaches no portfolio; unresolved planning attribution does not block authorized work (spend forecast: unknown).`,
+      };
     }
-    if (points === null) return { funded: false, because: `${itemId} has no size, so its investment is unknown and cannot be funded.` };
     const status = budgets.get(resolution.portfolioId);
     const name = status?.name ?? resolution.portfolioId;
-    if (!status?.budget) {
-      return { funded: false, because: `No budget is set for ${name} this quarter; unfunded work is not pre-authorised.` };
-    }
     const row = rows.get(resolution.portfolioId);
-    const committed = (row?.deliveredPoints ?? 0) + (row?.inFlightPoints ?? 0);
+    const delivered = row?.deliveredPoints ?? 0;
+    const inFlight = row?.inFlightPoints ?? 0;
+    const committed = delivered + inFlight;
+    if (points === null) {
+      return {
+        funded: true,
+        portfolioId: resolution.portfolioId,
+        summary: `${name}: ${itemId} has no size; quarterly planning points are unknown.`,
+        advisory: `Planning warning (advisory, not a stop): ${itemId} has no size, so its planning points are unknown; missing planning estimate does not block authorized work (spend forecast: unknown).`,
+      };
+    }
+    if (!status?.budget) {
+      return {
+        funded: true,
+        portfolioId: resolution.portfolioId,
+        summary: `${name}: No quarterly plan is set (${committed} points committed: ${delivered} delivered, ${inFlight} in flight).`,
+        advisory: `Planning warning (advisory, not a stop): No quarterly plan is set for ${name} (${committed} points committed: ${delivered} delivered, ${inFlight} in flight; spend forecast: unknown).`,
+      };
+    }
     const allocated = status.budget.allocatedPoints;
     if (committed > allocated) {
-      return { funded: false, because: `${name} has ${committed} of ${allocated} points committed this quarter (${committed - allocated} over).` };
+      const overage = committed - allocated;
+      const spend = spendBasisText(committed, status.budget.usdPerPoint);
+      return {
+        funded: true,
+        portfolioId: resolution.portfolioId,
+        summary: `${name}: ${committed} of ${allocated} points committed this quarter (${overage} over; ${delivered} delivered, ${inFlight} in flight).`,
+        advisory: `Planning warning (advisory, not a stop): ${name} has ${committed} of ${allocated} points committed this quarter (${overage} over; drivers: ${delivered} delivered, ${inFlight} in flight; ${spend}).`,
+      };
     }
-    return { funded: true, portfolioId: resolution.portfolioId, summary: `${name}: ${committed} of ${allocated} points committed this quarter.` };
+    const thresholdNote = committed === allocated ? " (at quarterly plan)" : "";
+    return {
+      funded: true,
+      portfolioId: resolution.portfolioId,
+      summary: `${name}: ${committed} of ${allocated} points committed this quarter${thresholdNote} (${delivered} delivered, ${inFlight} in flight).`,
+    };
   };
 }
 

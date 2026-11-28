@@ -14,6 +14,33 @@ import { deliveredPointsFrom, loadThroughput, measureThroughput, THROUGHPUT_WIND
 
 const WEEK_MS = 7 * 86_400_000;
 
+export type ProjectedQuarterEndSpend =
+  | {
+      status: "known";
+      basis: "configured-rate" | "observed-cost";
+      usdPerPoint: number;
+      lowUsd: number;
+      medianUsd: number;
+      highUsd: number;
+    }
+  | {
+      status: "unknown";
+      basis: "none";
+      usdPerPoint: null;
+      lowUsd: null;
+      medianUsd: null;
+      highUsd: null;
+    };
+
+export type QuarterlyPlanSummary = {
+  plannedPoints: number | null;
+  quarterCommittedPoints: number;
+  overagePoints: number | null;
+  drivers: { deliveredPoints: number; inFlightPoints: number };
+  projectedQuarterEndPoints: { low: number; median: number; high: number };
+  projectedQuarterEndSpend: ProjectedQuarterEndSpend;
+};
+
 export type TieOutRow = {
   /** null is the unallocated row. */
   portfolioId: string | null;
@@ -38,6 +65,8 @@ export type TieOutRow = {
   bySurface: PortfolioThroughput["bySurface"];
   /** AI tokens, recorded spend and run time this quarter, beside the points and never converted into them. */
   ai: AiUse;
+  /** Quarterly planning guidance summary: planned, committed, overage, drivers, and explicit-basis or unknown spend forecast (BI-A59837E5). */
+  planSummary?: QuarterlyPlanSummary;
 };
 
 export type PortfolioTieOut = {
@@ -110,10 +139,45 @@ export function assembleTieOut(input: {
       label: t?.label ?? (throughput.weeksOfHistory >= 4 ? "measured" as const : "estimated" as const),
     };
     const median = t?.range.median ?? 0;
+    const budget = portfolioId ? input.budgets.get(portfolioId) ?? null : null;
+    const ai = aiByPortfolio.get(portfolioId) ?? NO_AI_USE;
+    const plannedPoints = budget?.allocatedPoints ?? null;
+    const quarterCommittedPoints = a.delivered + a.inFlight;
+    const overagePoints = plannedPoints === null ? null : Math.max(0, quarterCommittedPoints - plannedPoints);
+    const projectedQuarterEndPoints = {
+      low: a.delivered + forecast.low,
+      median: a.delivered + forecast.median,
+      high: a.delivered + forecast.high,
+    };
+    const projectedQuarterEndSpend: ProjectedQuarterEndSpend = (() => {
+      if (budget?.usdPerPoint != null && budget.usdPerPoint > 0) {
+        const rate = budget.usdPerPoint;
+        return {
+          status: "known",
+          basis: "configured-rate",
+          usdPerPoint: rate,
+          lowUsd: Math.round(projectedQuarterEndPoints.low * rate),
+          medianUsd: Math.round(projectedQuarterEndPoints.median * rate),
+          highUsd: Math.round(projectedQuarterEndPoints.high * rate),
+        };
+      }
+      if (ai.recordedUsd != null && ai.recordedUsd > 0 && a.delivered > 0 && ai.subscriptionTokens === 0) {
+        const observedRate = Math.round((ai.recordedUsd / a.delivered) * 100) / 100;
+        return {
+          status: "known",
+          basis: "observed-cost",
+          usdPerPoint: observedRate,
+          lowUsd: Math.round(projectedQuarterEndPoints.low * observedRate),
+          medianUsd: Math.round(projectedQuarterEndPoints.median * observedRate),
+          highUsd: Math.round(projectedQuarterEndPoints.high * observedRate),
+        };
+      }
+      return { status: "unknown", basis: "none", usdPerPoint: null, lowUsd: null, medianUsd: null, highUsd: null };
+    })();
     return {
       portfolioId,
       name,
-      budget: portfolioId ? input.budgets.get(portfolioId) ?? null : null,
+      budget,
       reservedPoints: a.reserved,
       inFlightPoints: a.inFlight,
       deliveredPoints: a.delivered,
@@ -126,7 +190,15 @@ export function assembleTieOut(input: {
       },
       tracedShare: a.delivered > 0 ? Math.round((a.tracedDelivered / a.delivered) * 1000) / 1000 : null,
       bySurface: t?.bySurface ?? { "build-studio": 0, external: 0, other: 0 },
-      ai: aiByPortfolio.get(portfolioId) ?? NO_AI_USE,
+      ai,
+      planSummary: {
+        plannedPoints,
+        quarterCommittedPoints,
+        overagePoints,
+        drivers: { deliveredPoints: a.delivered, inFlightPoints: a.inFlight },
+        projectedQuarterEndPoints,
+        projectedQuarterEndSpend,
+      },
     };
   };
 

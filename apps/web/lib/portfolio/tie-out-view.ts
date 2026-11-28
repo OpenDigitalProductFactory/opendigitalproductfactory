@@ -3,7 +3,9 @@
 // (points and weeks), never by colour alone, and a missing budget reads "No
 // budget set", never zero.
 
-import type { TieOutRow } from "./tie-out";
+import { DEFAULT_LOCALE } from "@dpf/i18n/runtime";
+import { formatMoney } from "@/lib/org-locale/org-locale";
+import type { ProjectedQuarterEndSpend, QuarterlyPlanSummary, TieOutRow } from "./tie-out";
 import { portfolioBudgetLabel } from "./budget-label";
 
 /** An epic whose proposed portfolio no person has confirmed yet (BI-A73A7DA3). */
@@ -63,4 +65,32 @@ export function tieOutHeadline(tieOut: { rows: Array<Pick<TieOutRow, "portfolioI
     : `${over} of ${portfolios.length} portfolios are committed past capacity`;
   const tracing = delivered > 0 ? `; ${Math.round((traced / delivered) * 100)}% of delivered work is traced` : "";
   return `${commitment}${tracing}.`;
+}
+
+/** Advisory quarterly plan status with delivered vs in-flight drivers (BI-A59837E5). */
+export function quarterlyPlanAdvisoryText(summary: QuarterlyPlanSummary): string {
+  const drivers = `${summary.drivers.deliveredPoints} delivered, ${summary.drivers.inFlightPoints} in flight`;
+  if (summary.plannedPoints === null) {
+    return `No quarterly plan set (${summary.quarterCommittedPoints} committed: ${drivers})`;
+  }
+  const over = summary.overagePoints && summary.overagePoints > 0 ? `+${summary.overagePoints} over; ` : "";
+  return `${summary.quarterCommittedPoints} of ${summary.plannedPoints} planned (${over}${drivers})`;
+}
+
+/** Explicit-basis projected quarter-end spend, or honest "Unknown" — never fabricated or $0 (BI-A59837E5). */
+export function projectedSpendText(spend: ProjectedQuarterEndSpend, formatLocale?: string | null): string {
+  if (spend.status !== "known") return "Unknown (no configured rate or observed cost basis)";
+  const locale = formatLocale ?? DEFAULT_LOCALE;
+  const fmt = (n: number) => formatMoney(n, "USD", locale, { maximumFractionDigits: 0 });
+  const rate = formatMoney(
+    spend.usdPerPoint,
+    "USD",
+    locale,
+    Number.isInteger(spend.usdPerPoint) ? { maximumFractionDigits: 0 } : undefined,
+  );
+  const range = spend.lowUsd === spend.highUsd ? fmt(spend.lowUsd) : `${fmt(spend.lowUsd)}–${fmt(spend.highUsd)}`;
+  const basisLabel = spend.basis === "configured-rate"
+    ? `configured rate ${rate}/pt`
+    : `observed cost ${rate}/pt`;
+  return `${range} (${basisLabel})`;
 }

@@ -213,6 +213,94 @@ This is the capacity side in the **same unit** as the budget. That is what lets
 the two tie out. The 2026-09-15 design's weekly AI pool remains the capacity
 side for AI spend (§5.7).
 
+#### Amendment 2026-11-28 (BI-A59837E5): Quarterly planning estimates are advisory guidance, not author-stage execution stops
+
+**Operator direction (2026-11-28, evidence `cmx091g8324zs0ekjjvy38g69`).**
+Quarterly portfolio point allocations (`PortfolioBudgetPeriod.allocatedPoints`)
+and planning-only attribution or sizing facts exist to measure delivery against
+a planning threshold and forecast quarter-end delivery and spend. They are
+**planning guidance**, never an execution stop on already-authorized Workroom
+author stages.
+
+**Observed defect (verified at `main` `89cd7b12d4fb7fa89d4a74ac7a7c188859b0ca31`,
+originally filed against `34e2d13f723cc6d080ea4ad01f5c59b0261f1335`):**
+
+- Live instance: in S5 compatibility (`BI-5EF67818` / `WC-75CCF40B`), the spec
+  stage stalled at 2,993 committed points against a 2,863-point Foundational
+  plan with no machine shortage and no exhausted monetary cap.
+- Exact enforcement path: `buildAuthorStageFunding`
+  (`apps/web/lib/work-management/author-stage-autonomy.ts:43-75`) sums
+  `committed = deliveredPoints + inFlightPoints` from
+  `summarizePortfolioInvestment`
+  (`apps/web/lib/portfolio/investment-read-model.ts`) and returns
+  `{ funded: false, because }` solely when `committed > allocated` (lines 70–72)
+  or when planning-only metadata is absent (`!status?.budget`, `points === null`,
+  or `!resolution.portfolioId`, lines 56–66).
+- `decideAuthorStageAutonomy` (`author-stage-autonomy.ts:78-92`) passes that
+  flag into `decideFundedAuthor`
+  (`packages/validators/src/workroom-policy/funded-author.ts:27-33`), which
+  withholds `{ author: "agent:build-specialist" }` and populates
+  `withheldBecause`.
+- `runWorkroomDriveJob` (`apps/web/lib/queue/functions/workroom-drive.ts:470, 482, 524-525`)
+  feeds `author.roleBindings` and `authorStageWithheldBecause` into
+  `resolveDrivePlan` → `planStage`
+  (`apps/web/lib/work-management/drive-plan-stage.ts:189-205`), projecting the
+  planning overrun as `action: "attention", reason: "role_stage"` instead of
+  `action: "dispatch_agent", reason: "agent_stage"`.
+- `resolveScheduledRoomMandate`
+  (`apps/web/lib/work-management/room-stage-mandate.ts:319-332`) re-evaluates
+  `loadAuthorStageAutonomy` before admitting `record_workroom_evidence`, so the
+  same planning-only withholding also blocks scheduled stage writeback.
+
+**Amended continuation rule (narrow follow-up to BI-8A32EBFF and BI-77313ADD):**
+
+1. **Advisory separation.** For an already-authorized Workroom on an eligible
+   non-`delivery-xlarge` delivery shape whose backlog item is live and whose
+   operator pre-authorisation (`workroom-drive.author-stage-preauthorisation`,
+   active principal holding `manage_platform`) is `in-force`, crossing the
+   quarterly planning estimate (`committed > allocated`) — or lacking
+   planning-only attribution, size, or quarterly plan rows (`unallocated`,
+   `unsized`, `no budget set`) — **changes only the recorded advisory warning
+   and forecast telemetry, never the `role:author` dispatch or stage-mandate
+   decision**. Below, at, and above the quarterly planning threshold all bind
+   `agent:build-specialist` and dispatch (`action: "dispatch_agent", reason: "agent_stage"`).
+2. **Planning warning and forecast content.** Keep all existing attribution
+   (`resolveBudgetPortfolio`), accounting (`summarizePortfolioInvestment` and
+   the BI-77313ADD spend rule), and tie-out/throughput forecasting primitives
+   (`measureThroughput`, `assembleTieOut`). Surface on existing reporting and
+   Workroom Drive diagnostics:
+   - planned points (`allocatedPoints`, or explicit `no budget set` — never `0`),
+     committed points (`deliveredPoints + inFlightPoints`), and overage points
+     (`max(0, committed - allocated)` when a quarterly plan exists);
+   - overrun drivers split between **`deliveredPoints`** and
+     **`inFlightPoints`**;
+   - projected quarter-end delivery range (`p15–p85` from weekly throughput ×
+     weeks remaining) and projected quarter-end spend where supported (§5.7).
+3. **Hard gates preserved unchanged (advisory warnings never bypass them):**
+   - **Operator pre-authorisation:** absent, malformed, revoked, out-of-scope,
+     unreadable config/DB state, or demoted authorising principal still fails
+     closed to `attention` (`role_stage`) in `author-stage-preauthorisation.ts`
+     and `author-stage-autonomy-live.ts`.
+   - **Shape and governed-stage boundaries:** `delivery-xlarge` never enters
+     autonomous implementation; governed-decision stages (`merge`, `acceptance`,
+     `post-implementation-review`) still require their governed approval path
+     (`governed_decision`); unbound or non-live/done/delivered rooms remain
+     gated by `gateDrivePlanOnWorkItem`.
+   - **Action authority and TAK tool grants:** missing room membership,
+     disabled hands-on mode, missing/expired/superseded dispatch checkpoint, or
+     missing TAK tool grants (`room-turn-authority.server.ts`, `agent-grants.ts`,
+     `room-stage-mandate.ts`) still refuse independently with their own reasons.
+   - **Real funding, spend, and provider controls:** unresolved funding where
+     paid work requires it, explicit monetary spend caps, and purchase or
+     provider credential/authorization gates keep their independent decisions
+     and reasons. Optional inference investment context (`ai-inference.ts`) and
+     demand activation `fundingReady` scoring/evidence projections remain
+     distinct from Workroom author continuation.
+   - **Real execution capacity:** Workroom Drive dispatch capacity
+     (`loadDispatchCapacity` / `createDispatchAdmission` in `workroom-drive.ts`)
+     and the physical sandbox pool (`DPF_SANDBOX_POOL_SIZE`) remain independent
+     execution limits.
+
 ### 5.6 Admission: points in flight
 
 This rule replaces every use of `BUILD_WIP_CAP` as a count limit:
@@ -243,6 +331,14 @@ admit(item) ⇔ inFlightPoints(portfolio) + points(item) ≤ allowance(portfolio
 - **The sandbox limit** (`DPF_SANDBOX_POOL_SIZE`) stays as the separate physical
   constraint and is reported separately. It limits how many builds the machine
   can run, not how much the organisation has chosen to invest.
+- **Boundary with §5.5 author-stage continuation (BI-A59837E5).** Points-in-flight
+  admission (`apps/web/lib/build/investment-admission.ts`, BI-3430B3A4,
+  `PlatformDevConfig.wipAdmissionMode` `shadow`/`enforce`) governs **new-work
+  starts** and stays unchanged. An unapproved autonomous start past the
+  portfolio's WIP allowance is not equivalent to continuing an already-authorized
+  Workroom author stage; BI-A59837E5 neither alters `wipAdmissionMode`, nor
+  modifies live portfolio allocations or funding bindings, nor relaxes
+  `blocksStart()` enforcement for new starts.
 
 ### 5.7 Traced share and resource classes
 
@@ -255,10 +351,66 @@ tie-out row carries both figures.
 them, per the 2026-08-15 methodology:
 
 - **AI** is reported as tokens, recorded spend and latency, per item and per
-  portfolio. Subscription usage is labelled as *subscription: $0 recorded, N
-  tokens*, never as zero cost.
+  portfolio (`apps/web/lib/portfolio/ai-resource.ts`). Subscription usage is
+  labelled as *subscription: $0 recorded, N tokens*, never as zero cost.
+- **Monetary forecast honesty (BI-A59837E5).** When reporting projected
+  quarter-end spend alongside a quarterly point overrun (§5.5), the projection
+  must state its explicit basis — either the portfolio's configured
+  `PortfolioBudgetPeriod.usdPerPoint` rate or observed recorded AI spend
+  (`BuildPhaseRun.costUsd` over traced delivered points). When neither basis is
+  present (including subscription-only usage with no configured rate), the
+  monetary forecast must read **`unknown`** — never a fabricated dollar
+  estimate and never `$0`.
 - **Human and non-digital** classes follow BI-29F61030's own slices when they
   land.
+
+#### Verification and ordered delivery contract (BI-A59837E5)
+
+Implementation bound to `BI-A59837E5` follows this ordered sequence (test-first;
+no implementation or live settings mutation is authorized by this design
+amendment alone):
+
+1. **Pin first Red through the real Workroom Drive path.** Wire real
+   `buildAuthorStageFunding` → `decideAuthorStageAutonomy` → `resolveDrivePlan` /
+   `runWorkroomDriveJob` (not a stubbed `FUNDED` constant) in
+   `apps/web/lib/work-management/author-stage-autonomy.test.ts`,
+   `apps/web/lib/work-management/drive-author-stage.test.ts`, and
+   `apps/web/lib/queue/functions/workroom-drive-author-stage.test.ts`:
+   - **Below threshold** (`committed < allocated`, e.g., 4 of 8 points):
+     `dispatch_agent` / `agent_stage` (`agent:build-specialist`), no overrun warning.
+   - **At threshold** (`committed === allocated`, e.g., 8 of 8 points):
+     `dispatch_agent` / `agent_stage`, zero overage.
+   - **Above threshold — first Red** (`committed > allocated`, e.g., 11 of 8
+     points with 8 delivered + 3 in-flight, reproducing the live 2,993/2,863
+     failure mode): currently FAILS with `funded: false` → `action: "attention", reason: "role_stage"` and zero `upsertAgentTask` calls; expected Green is `dispatch_agent` / `agent_stage` with a recorded advisory warning carrying planned, committed, overage, delivered-vs-in-flight drivers, and forecast basis (configured rate, observed cost, or `unknown`).
+   - **Missing planning-only facts — companion Red** (`no budget set`,
+     `unsized`, or `unallocated` portfolio on an otherwise pre-authorized live
+     item): currently FAILS with `funded: false` → `action: "attention", reason: "role_stage"`; expected Green is `dispatch_agent` / `agent_stage` with an advisory planning warning and `unknown` spend forecast.
+2. **Independent hard-negative regressions (advisory warning must never bypass):**
+   - Revoked, absent, out-of-scope, unreadable, or demoted-operator
+     pre-authorisation still withholds author binding (`attention` / `role_stage`).
+   - `delivery-xlarge` and governed-decision stages (`merge`, `acceptance`,
+     `post-implementation-review`) retain `role_stage` / `governed_decision`
+     with `agentId: null`.
+   - Missing TAK tool grants, room membership, hands-on toggle, or valid
+     dispatch checkpoint in `room-stage-mandate.ts` still refuses
+     `record_workroom_evidence` with its exact authority reason.
+   - Real Workroom Drive dispatch capacity (`createDispatchAdmission`) and
+     `DPF_SANDBOX_POOL_SIZE` still hold/refuse when exhausted.
+   - Explicit monetary caps, unresolved paid-work funding, and provider/purchase
+     authorization denials keep their independent refusal decisions.
+   - Separate new-work WIP admission (`apps/web/lib/build/investment-admission.ts`,
+     `BI-3430B3A4`) in `enforce` mode still refuses autonomous starts past
+     `wipAllowancePoints`.
+3. **Implementation and diagnostics reconciliation.** Separate hard author
+   eligibility from advisory planning status across `funded-author.ts`,
+   `author-stage-autonomy.ts`, `author-stage-autonomy-live.ts`,
+   `drive-plan-stage.ts`, `workroom-drive.ts`, and `room-stage-mandate.ts`;
+   ensure `tie-out.ts` / `tie-out-view.ts`, Workroom diagnostics, and operator
+   guides (`docs/user-guide/investment-allocation.md`) reflect planned,
+   committed, overage, delivered-vs-in-flight drivers, and explicit-basis or
+   `unknown` spend forecasts without mutating current portfolio allocations,
+   funding bindings, provider/purchase authorizations, or approval gates.
 
 ### 5.8 Accountable owner (amendment 2026-09-29, BI-67B27832)
 
