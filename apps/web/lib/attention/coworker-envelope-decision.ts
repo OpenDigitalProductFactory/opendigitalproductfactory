@@ -1,4 +1,12 @@
 import { SOURCE_CATALOG, DEFAULT_LOCALE, formatSource } from "@dpf/i18n";
+import type { ToolConsequence } from "@dpf/validators/gpp/tool-facts";
+import {
+  formatPresentationParam,
+  isApprovalPresentationCompatibleWithConsequence,
+  matchesApprovalPresentationParams,
+  type ApprovalPosture,
+  type ToolApprovalPresentation,
+} from "@/lib/tool-approval-presentation";
 
 // Decision-first owner copy for a proposed CoworkerActionEnvelope (BI-F95B0795).
 //
@@ -80,6 +88,13 @@ export type EnvelopeDecisionSummary = {
   whyAPerson: string;
   /** What authorizing covers, and what it does not. */
   scope: string;
+  /** Declared consequence class from the tool registry, when present. */
+  declaredConsequence?: ToolConsequence | null;
+  /**
+   * Verified registry presentation metadata when the tool declared one AND
+   * the captured parameters strictly matched its `allowedParams` contract.
+   */
+  approvalPresentation?: ToolApprovalPresentation;
 };
 
 export function objectRecord(value: unknown): Record<string, unknown> | null {
@@ -210,14 +225,16 @@ function displayValue(value: unknown): string {
 }
 
 /** A bounded preview; completeProposedContent retains the full input. */
-export function proposedFields(params: Record<string, unknown>): EnvelopeProposedField[] {
+export function proposedFields(
+  params: Record<string, unknown>,
+  presentation?: ToolApprovalPresentation | null,
+): EnvelopeProposedField[] {
   const entries = Object.entries(params).filter(
     ([, value]) => value !== undefined,
   );
-  const shown = entries.slice(0, MAX_FIELDS).map(([key, value]) => ({
-    label: humanizeKey(key),
-    value: displayValue(value),
-  }));
+  const shown = entries.slice(0, MAX_FIELDS).map(([key, value]) =>
+    formatPresentationParam(presentation, key, value, humanizeKey(key), displayValue(value)),
+  );
   if (entries.length > MAX_FIELDS) {
     shown.push({ label: "More fields", value: `${entries.length - MAX_FIELDS} more not shown` });
   }
@@ -279,29 +296,54 @@ type SummaryContext = {
   /** Empty recorded content remains inspectable without becoming a classified action. */
   hasEmptyOriginal?: boolean;
   params: Record<string, unknown> | null;
-  consequence?: string | null;
+  consequence?: ToolConsequence | null;
   rationale?: string | null;
   targetLabel?: string;
   duplicateLabel?: string;
+  approvalPresentation?: ToolApprovalPresentation;
 };
 
 function sharedFacts(input: SummaryContext) {
+  const rawTarget = input.params
+    ? envelopeTarget(input.toolName, input.params)
+    : input.hasEmptyOriginal ? SOURCE_CATALOG.approvals.card.primary.notProvided : "Unknown: the proposal could not be loaded";
+  const target = rawTarget === "Not named in the proposal" && input.approvalPresentation?.scopeLabel
+    ? input.approvalPresentation.scopeLabel
+    : rawTarget;
   return {
     action: actionLabel(input.toolName),
-    target: input.params
-      ? envelopeTarget(input.toolName, input.params)
-      : input.hasEmptyOriginal ? SOURCE_CATALOG.approvals.card.primary.notProvided : "Unknown: the proposal could not be loaded",
-    proposed: input.params ? proposedFields(input.params) : [],
+    target,
+    proposed: input.params ? proposedFields(input.params, input.approvalPresentation) : [],
     completeProposedContent: input.params ? JSON.stringify(input.params, null, 2) : input.hasEmptyOriginal ? "{}" : null,
-    consequence: consequenceText(input.consequence),
+    consequence: input.approvalPresentation?.impact ?? consequenceText(input.consequence),
     whyAPerson: input.rationale?.trim() || "No reason was recorded for asking a person.",
     scope: SCOPE_TEXT,
+    declaredConsequence: input.consequence ?? null,
+    ...(input.approvalPresentation ? { approvalPresentation: input.approvalPresentation } : {}),
     ...(input.targetLabel ? { targetLabel: input.targetLabel } : {}),
     ...(input.duplicateLabel ? { duplicateLabel: input.duplicateLabel } : {}),
   };
 }
 
 function unknownSummary(input: SummaryContext): EnvelopeDecisionSummary {
+  if (input.approvalPresentation) {
+    const pres = input.approvalPresentation;
+    return {
+      kind: "exact",
+      headline: pres.question,
+      recommendation: pres.whyDefault ?? "your coworker asks to run this registered action",
+      authorization: `${pres.question.replace(/\?$/, "")}`,
+      recordedIfAuthorized: pres.what,
+      authorizeDoes: pres.what,
+      declineDoes: pres.declineDoes ?? "Nothing is changed. Your coworker stops.",
+      ifYouDoNothing: "the window closes and nothing is changed.",
+      findings: [],
+      recommenderLabel: "Your coworker",
+      authorizerLabel: "You",
+      toolName: input.toolName,
+      ...sharedFacts(input),
+    };
+  }
   if (input.params) {
     const action = actionLabel(input.toolName);
     return {
@@ -438,11 +480,13 @@ export function summarizeCoworkerEnvelopeDecision(input: {
   recommenderAgentId: string;
   authorizerUserId: string;
   /** The tool's declared consequence, when it declares one. */
-  consequence?: string | null;
+  consequence?: ToolConsequence | null;
   /** The governing reason stored on the envelope. */
   rationale?: string | null;
   targetLabel?: string;
   duplicateLabel?: string;
+  /** Co-located registry presentation metadata, validated fail-closed against params & consequence. */
+  approvalPresentation?: ToolApprovalPresentation | null;
 }): EnvelopeDecisionSummary {
   const fromExecution = originalToolParameters(input.proposedParameters);
   const fromEnvelope = originalToolParameters(input.argsJson);
@@ -453,6 +497,12 @@ export function summarizeCoworkerEnvelopeDecision(input: {
   const emptyOriginal = [rawEnvelope, rawExecution].find(record => record && Object.keys(record).length === 0);
   const resolvedParams = fromExecution ?? fromEnvelope;
   const params = resolvedParams ?? {};
+  const verifiedPresentation =
+    input.approvalPresentation
+    && isApprovalPresentationCompatibleWithConsequence(input.approvalPresentation, input.consequence)
+    && matchesApprovalPresentationParams(input.approvalPresentation, resolvedParams, !!emptyOriginal)
+      ? input.approvalPresentation
+      : undefined;
   const context: SummaryContext = {
     toolName: input.toolName.trim(),
     params: resolvedParams,
@@ -461,6 +511,7 @@ export function summarizeCoworkerEnvelopeDecision(input: {
     rationale: input.rationale ?? null,
     targetLabel: input.targetLabel,
     duplicateLabel: input.duplicateLabel,
+    ...(verifiedPresentation ? { approvalPresentation: verifiedPresentation } : {}),
   };
   const toolName = input.toolName.trim();
   const gate =
@@ -523,6 +574,37 @@ export function summarizeCoworkerEnvelopeDecision(input: {
   };
 }
 
+const INTERNAL_REF_RE = /\b(?:BI|WC|AGT|TR|NPEL|EP|DI|FB|PIR)-[A-Z0-9-]+\b/i;
+const RAW_SNAKE_ID_RE = /\b[a-z][a-z0-9]*(?:_[a-z0-9]+)+\b/;
+const GENERIC_RATIONALE_RE = /^No reason was recorded for asking a person\.?$|^This action is authorized to proceed only after employee approval\.?$/i;
+
+/**
+ * Surface a recorded gate/coworker rationale on the primary card only when it
+ * is concise owner-safe prose free of internal IDs and raw tool names.
+ */
+function cleanOwnerWhy(raw: string | undefined, toolName: string): string {
+  const text = (raw ?? "").trim();
+  if (!text || text.length > 160) return "";
+  if (GENERIC_RATIONALE_RE.test(text)) return "";
+  if (INTERNAL_REF_RE.test(text)) return "";
+  if (toolName && text.includes(toolName)) return "";
+  if (RAW_SNAKE_ID_RE.test(text)) return "";
+  return text;
+}
+
+function consequencePosture(decision: EnvelopeDecisionSummary, fallback: ApprovalPosture): ApprovalPosture {
+  if (decision.declaredConsequence === "irreversible" || decision.consequence.includes("Cannot be undone")) {
+    return "irreversible";
+  }
+  if (decision.declaredConsequence === "outward" || decision.consequence.includes("Reaches outside")) {
+    return "outward";
+  }
+  if (decision.declaredConsequence === "authority" || decision.consequence.includes("Changes who may do what")) {
+    return "authority";
+  }
+  return fallback;
+}
+
 /** Human presentation only. The original proposal remains the execution binding. */
 export function envelopePrimaryDecision(decision: EnvelopeDecisionSummary, locale: string = DEFAULT_LOCALE) {
   let params: Record<string, unknown> = {};
@@ -533,6 +615,7 @@ export function envelopePrimaryDecision(decision: EnvelopeDecisionSummary, local
     params = original ?? {};
   } catch { /* Older unresolved projection. */ }
   const copy = SOURCE_CATALOG.approvals.card.primary;
+  const recordedWhy = cleanOwnerWhy(decision.whyAPerson, decision.toolName);
   const recordsResult = decision.kind !== "unknown"
     && ["record_workroom_evidence", "record_execution_evidence"].includes(decision.toolName)
     && !!stringParam(params, "summary");
@@ -543,6 +626,25 @@ export function envelopePrimaryDecision(decision: EnvelopeDecisionSummary, local
   // A registered operation can be named without establishing its effects.
   // Only a standard self-update request establishes the app as its target.
   const exact = (decision.kind === "exact" || decision.kind === "unknown") && hasOriginal;
+
+  // Registry-driven declarative presentation (BI-CF03AA73): strictly matched
+  // against allowedParams and consequence compatibility in summarizeCoworkerEnvelopeDecision.
+  if (decision.approvalPresentation && hasOriginal && unresolved) {
+    const pres = decision.approvalPresentation;
+    return {
+      title: pres.question,
+      description: pres.what,
+      why: pres.whyDefault ?? recordedWhy,
+      consequence: pres.impact,
+      posture: consequencePosture(decision, pres.reversibility),
+      facts: [] as EnvelopeProposedField[],
+      unresolved: false,
+      target: decision.targetLabel ?? pres.scopeLabel ?? "",
+      recommendation: "",
+      declineDoes: pres.declineDoes ?? "",
+    };
+  }
+
   // Only the captured account toggle has these effects. Other provider actions
   // include credential and quota operations and must keep their own disclosure.
   if (exact && decision.consequence.startsWith("None declared.") && decision.toolName === "manage_provider_account"
@@ -555,8 +657,10 @@ export function envelopePrimaryDecision(decision: EnvelopeDecisionSummary, local
     return {
       title: formatSource(locale, disable ? copy.providerDisableTitle : copy.providerEnableTitle, { account }),
       description: formatSource(locale, disable ? copy.providerDisableDescription : copy.providerEnableDescription, { account }),
+      why: recordedWhy,
       consequence: disable ? copy.providerEnableAgain : copy.providerDisableAgain,
-      facts: [], unresolved: false, target: "", recommendation: "",
+      posture: "reversible" as ApprovalPosture,
+      facts: [], unresolved: false, target: "", recommendation: "", declineDoes: "",
     };
   }
   const appUpdate = exact && decision.toolName === "request_self_upgrade"
@@ -572,9 +676,11 @@ export function envelopePrimaryDecision(decision: EnvelopeDecisionSummary, local
     return {
       title: merge ? copy.mergeWorkTitle : copy.retireDuplicateTitle,
       description: formatSource(locale, merge ? copy.mergeWorkDescription : copy.retireDuplicateDescription, args),
+      why: recordedWhy,
       consequence: merge ? copy.mergeWorkConsequence : copy.retireDuplicateConsequence,
+      posture: consequencePosture(decision, merge ? "irreversible" : "bounded"),
       recommendation: copy.duplicateWorkRecommendation,
-      facts: [], unresolved: false, target: "",
+      facts: [], unresolved: false, target: "", declineDoes: "",
     };
   }
   const releaseReservation = exact && decision.toolName === "release_nonprod_environment_lease"
@@ -589,28 +695,33 @@ export function envelopePrimaryDecision(decision: EnvelopeDecisionSummary, local
   let description = copy.unresolvedDescription;
   let consequence = decision.consequence.startsWith("None declared.") ? copy.effectUnknown : decision.consequence;
   let recommendation = copy.unresolvedRecommendation;
+  let posture: ApprovalPosture = consequencePosture(decision, "unverified");
   if (handover) {
     const args = { assistant: handover.name };
     title = formatSource(locale, copy.handoverTitle, args);
     description = formatSource(locale, copy.handoverDescription, args);
     consequence = copy.handoverConsequence;
     recommendation = formatSource(locale, copy.handoverRecommendation, args);
+    posture = consequencePosture(decision, "authority");
   } else if (admission) {
     const args = { coworker: stringParam(params, "agentId") ?? "", level: stringParam(params, "raiseClearanceTo") ?? "" };
     title = formatSource(locale, copy.admissionTitle, args);
     description = formatSource(locale, copy.admissionDescription, args);
     consequence = copy.admissionConsequence;
     recommendation = formatSource(locale, copy.admissionRecommendation, args);
+    posture = consequencePosture(decision, "authority");
   } else if (recordsResult) {
     title = copy.recordTitle;
     description = params.outcome === "blocked" ? copy.blockedDescription : copy.recordDescription;
     consequence = params.stageKey && params.outcome === "completed" ? copy.stageConsequence : copy.recordConsequence;
     recommendation = copy.recordRecommendation;
+    posture = consequencePosture(decision, "bounded");
   } else if (research) {
     title = copy.reviewTitle;
     description = `${decision.authorization.charAt(0).toUpperCase()}${decision.authorization.slice(1)}.`;
     consequence = copy.reviewConsequence;
     recommendation = decision.recommendation;
+    posture = consequencePosture(decision, "bounded");
   } else if (appUpdate) {
     title = copy.appUpdateTitle;
     description = copy.appUpdateDescription;
@@ -645,7 +756,8 @@ export function envelopePrimaryDecision(decision: EnvelopeDecisionSummary, local
     }
   }
   if (unresolved) visit(params, [], false);
-  return { title, description, consequence, facts, unresolved,
-    target: appUpdate ? copy.appScope : decision.toolName === "manage_coworker_tool_grant" ? copy.permissionScope : decision.targetLabel ?? "", recommendation,
+  return { title, description, why: unresolved ? "" : recordedWhy, consequence, posture, facts, unresolved,
+    target: appUpdate ? copy.appScope : decision.toolName === "manage_coworker_tool_grant" ? copy.permissionScope : decision.targetLabel ?? "",
+    recommendation, declineDoes: "",
   };
 }

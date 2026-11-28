@@ -14,6 +14,7 @@ import type { AuthorizedSurfaceToolExecutionContext } from "@/lib/coworker/autho
 import type { OutcomeDisposition } from "@/lib/shared/outcome-disposition";
 import type { RoomAuthorityContext } from "@/lib/work-management/room-turn-authority";
 import type { McpToolAccess } from "@/lib/mcp/workroom-tool-access";
+import type { ToolApprovalPresentation } from "@/lib/tool-approval-presentation";
 import type { ToolCallConsequenceRefiner, ToolConsequence, ToolConsequenceScope } from "@/lib/tool-consequence";
 
 export type BuildPhaseTag = "ideate" | "plan" | "build" | "review" | "ship";
@@ -171,6 +172,13 @@ export type ToolDefinition = {
   consequenceScope?: ToolConsequenceScope;
   /** Narrows `consequence` for one call; may only narrow (tool-consequence.ts). */
   consequenceForCall?: ToolCallConsequenceRefiner;
+  /**
+   * Optional declarative approval-card presentation metadata (BI-CF03AA73).
+   * Co-located with `consequence` and `inputSchema` so owner approval cards
+   * show what happens, why now, and real reversibility without per-tool UI
+   * branching. Presentation never alters authorization or execution binding.
+   */
+  approvalPresentation?: ToolApprovalPresentation;
   /**
    * Tool captures the coworker's own recommendation or work product as a
    * structured artifact (e.g. save_marketing_review). Persistence-only; no

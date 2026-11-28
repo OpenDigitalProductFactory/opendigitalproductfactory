@@ -26,6 +26,8 @@
 
 import { standingRulingEligibility } from "@/lib/coworker/standing-ruling-policy";
 import type { prisma } from "@dpf/db";
+import type { ToolConsequence } from "@dpf/validators/gpp/tool-facts";
+import type { ToolApprovalPresentation } from "@/lib/tool-approval-presentation";
 
 import { observeEnvelopeBacklog } from "@/lib/coworker/envelope-observability";
 import {
@@ -76,7 +78,9 @@ export type CoworkerEnvelopeRow = {
   argsJson?: unknown;
   proposedParameters?: unknown;
   /** The tool's declared consequence, resolved from the tool registry. */
-  consequence?: string | null;
+  consequence?: ToolConsequence | null;
+  /** Co-located registry presentation metadata, resolved from the tool registry. */
+  approvalPresentation?: ToolApprovalPresentation | null;
   targetLabel?: string;
   duplicateLabel?: string;
   taskRun: { a2aMetadata: unknown } | null;
@@ -191,6 +195,7 @@ export function coworkerEnvelopeToAttentionItem(
     recommenderAgentId: row.coworkerAgentId,
     authorizerUserId: row.delegatingUserId,
     consequence: row.consequence ?? null,
+    approvalPresentation: row.approvalPresentation ?? null,
     rationale: row.rationale,
     targetLabel: row.targetLabel,
     duplicateLabel: row.duplicateLabel,
@@ -343,7 +348,7 @@ export async function loadCoworkerEnvelopeItems(
   ];
   const proposedByEnvelopeId = await loadProposedParameters(db, allRows);
   const targetLabels = await loadTargetLabels(db, allRows, proposedByEnvelopeId, delegatingUserId);
-  const consequenceByTool = await loadDeclaredConsequences(
+  const metadataByTool = await loadToolPresentationMetadata(
     allRows.map((row) => row.manifestActionId),
   );
   // Fire-and-forget backlog observation (BI-78D3CF1E). The query above
@@ -379,19 +384,21 @@ export async function loadCoworkerEnvelopeItems(
     // Observability must never affect the inbox it rides on.
   });
 
-  return allRows.map((row) =>
-    coworkerEnvelopeToAttentionItem(
+  return allRows.map((row) => {
+    const toolMeta = metadataByTool.get(row.manifestActionId);
+    return coworkerEnvelopeToAttentionItem(
       {
         ...row,
         ...(proposedByEnvelopeId.has(row.id)
           ? { proposedParameters: proposedByEnvelopeId.get(row.id) }
           : {}),
-        consequence: consequenceByTool.get(row.manifestActionId) ?? null,
+        consequence: toolMeta?.consequence ?? null,
+        approvalPresentation: toolMeta?.approvalPresentation ?? null,
         ...targetLabels.get(row.id),
       },
       nowMs,
-    ),
-  );
+    );
+  });
 }
 
 /**
@@ -424,17 +431,19 @@ export async function loadOnBehalfEnvelopeItem(
     },
   }) as unknown as CoworkerEnvelopeRow | null;
   if (!row) return [];
-  const [owner, proposed, consequences] = await Promise.all([
+  const [owner, proposed, metadata] = await Promise.all([
     db.user.findUnique({ where: { id: row.delegatingUserId }, select: { email: true } }).catch(() => null),
     loadProposedParameters(db, [row]),
-    loadDeclaredConsequences([row.manifestActionId]),
+    loadToolPresentationMetadata([row.manifestActionId]),
   ]);
   const ownerLabel = owner?.email ?? row.delegatingUserId;
   const targetLabels = await loadTargetLabels(db, [row], proposed, readerUserId);
+  const toolMeta = metadata.get(row.manifestActionId);
   const item = coworkerEnvelopeToAttentionItem({
     ...row,
     ...(proposed.has(row.id) ? { proposedParameters: proposed.get(row.id) } : {}),
-    consequence: consequences.get(row.manifestActionId) ?? null,
+    consequence: toolMeta?.consequence ?? null,
+    approvalPresentation: toolMeta?.approvalPresentation ?? null,
     ...targetLabels.get(row.id),
   }, nowMs);
   if (!item.envelope) return [item];
@@ -613,19 +622,26 @@ async function loadProposedParameters(
   return proposed;
 }
 
-/** Declared consequences, read from the tool registry. Display only: an
- *  unavailable registry leaves the card saying none is declared. */
-async function loadDeclaredConsequences(toolNames: string[]): Promise<Map<string, string>> {
+/** Declared consequence and co-located presentation metadata from the tool registry.
+ *  Display only: an unavailable registry fails closed to no presentation and none declared. */
+async function loadToolPresentationMetadata(
+  toolNames: string[],
+): Promise<Map<string, { consequence: ToolConsequence | null; approvalPresentation: ToolApprovalPresentation | null }>> {
   const wanted = new Set(toolNames);
-  const out = new Map<string, string>();
+  const out = new Map<string, { consequence: ToolConsequence | null; approvalPresentation: ToolApprovalPresentation | null }>();
   if (wanted.size === 0) return out;
   try {
     const { PLATFORM_TOOLS } = await import("@/lib/mcp-tools");
     for (const tool of PLATFORM_TOOLS) {
-      if (wanted.has(tool.name) && tool.consequence) out.set(tool.name, tool.consequence);
+      if (wanted.has(tool.name) && (tool.consequence || tool.approvalPresentation)) {
+        out.set(tool.name, {
+          consequence: tool.consequence ?? null,
+          approvalPresentation: tool.approvalPresentation ?? null,
+        });
+      }
     }
   } catch {
-    // Display-only enrichment; the card falls back to "none declared".
+    // Display-only enrichment; the card falls back to "none declared" and unverified.
   }
   return out;
 }

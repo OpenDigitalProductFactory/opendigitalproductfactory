@@ -192,6 +192,15 @@ export const STATUS_INTENT: Record<string, Record<string, Intent>> = {
     reversible: "info",
     deadline: "warning",
   },
+  // Owner approval card consequence & reversibility posture (BI-CF03AA73).
+  approvalPosture: {
+    reversible: "success",
+    bounded: "info",
+    outward: "warning",
+    authority: "warning",
+    irreversible: "danger",
+    unverified: "warning",
+  },
   // How much oversight an AI coworker runs under, stored as hitlTier 0..3
   // (BI-F2EC4699). Keyed by the plain-language slug rather than the tier number
   // so the registry reads the way the portal renders it. Six components used to

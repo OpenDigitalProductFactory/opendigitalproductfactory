@@ -358,3 +358,137 @@ titles only after the existing viewer content check, otherwise show the
 reference from the captured request. Do not resolve unknown argument shapes or
 change the authority binding. The existing protected disclosure sweep covers
 both effects without sending an approval.
+
+
+## Registry-driven decision-first approval card — BI-CF03AA73, 2026-11-28
+
+**OBJ-REGISTRY:** Any registered platform tool can declare its plain-language
+approval presentation alongside its `consequence` and `inputSchema` so routine
+and operational approvals stop falling into an unhelpful generic hold screen.
+**OBJ-SCANNABLE:** An operator reviewing an approval card on mobile or desktop
+can immediately scan what will happen, why they are being asked now, and the
+action's real impact and reversibility without assembling clues from nested
+technical disclosures.
+**OBJ-FAIL-CLOSED:** Unregistered tools, unexpected or malformed arguments, and
+undeclared consequences remain visibly unverified with a hold recommendation
+and every material fact surfaced outside optional disclosure.
+
+### Observed problem
+
+Operator review of a live mobile approval card for `run_discovery_triage`
+(with `{ trigger: "cadence", includeDecisions: false }`) exposed four
+compounding structural defects:
+
+1. **Per-tool hand-coding does not scale:** `envelopePrimaryDecision` in
+   `apps/web/lib/attention/coworker-envelope-decision.ts` explicitly handles
+   only ~8 of 283 side-effecting platform tools. Every other registered tool
+   falls through to `"Review this coworker request?"`,
+   `"Unresolved; review before authorizing."`, and
+   `"Keep this on hold until its effect is clear."`.
+2. **Ordinary internal tools are misreported as unknown reversibility:** On
+   `ToolDefinition`, omitting `consequence` means the action is internal and
+   ordinary (not `outward`, `irreversible`, or `authority`), yet
+   `consequenceText(null)` prints `"Reversibility is not established."`
+   identically to an unknown or unverified tool.
+3. **"Why am I being asked?" renders static boilerplate:**
+   `CoworkerEnvelopeApproval.tsx` renders static `COPY.whyPlain` in a separate
+   disclosure while the actual gate/coworker reason (`envelope.rationale`) sits
+   two disclosures deep inside `Technical evidence -> Technical details`.
+4. **Expanded "Technical evidence" stacks three legacy blocks:** Expanding
+   `Technical evidence` repeats the pre-progressive-disclosure card
+   (`HUMAN AUTHORIZATION NEEDED`, `DESTINATION: Not named in the proposal`,
+   `STATUS: Waiting for your decision`, `IF YOU AUTHORIZE`), a nested
+   `Technical details` accordion, `Complete proposed content`, and
+   `OwnerDecisionCards`'s 15-row `TechnicalDetail` (`Not attached` / `Not linked
+   to backlog`).
+
+### Research & benchmarking
+
+Kernel comparison `DI-CC33A7978BBB` scored three options on the founder
+platform profile (note: core/contextual retrieval ran `lexical-only` while
+provider embeddings were disabled; all 24 feature axes and commandments scored
+with 0 conflicts and 0 flipping principles):
+
+- `registry-driven-decision-first` (composite **17.72**): co-locate optional
+  typed `approvalPresentation` descriptors on `RegisteredToolDefinition`,
+  restructure the card into labeled **What / Why now / Impact** rows with a
+  semantic posture badge, and consolidate technical details into one clean
+  drawer.
+- `card-layout-only-raw-fallback` (composite **11.08**): clean up card markup
+  only while leaving ~275 registered tools on the generic unresolved fallback.
+- `per-tool-allowlist-expansion` (composite **8.10**): add one more hardcoded
+  tool branch for `run_discovery_triage` without fixing the drawer or scaling
+  model.
+
+External comparators reviewed alongside the prior GitHub / Linear / Slack /
+GOV.UK / WAI-ARIA benchmarks:
+
+| Product | Adopt | Reject |
+| --- | --- | --- |
+| **GitHub Actions Deployment Protection Rules** | Lead with the concrete operation, environment/scope badge, and concise structured summary rows before Approve/Reject; keep workflow run IDs and payloads in one secondary inspection view. | Do not introduce multi-step modal confirmation dialogs for routine internal actions. |
+| **Stripe Workbench / Radar Review Cards** | Pair a single semantic risk/reversibility pill with compact labeled key-value rows (`What`, `Why`, `Impact`) and omit empty metadata rows rather than printing `Not set` / `Not attached`. | Do not replace exact bound parameter inspection with an LLM-rewritten summary. |
+| **Kubernetes / Argo CD Diff & Sync Preview** | Co-locate declarative presentation metadata with the resource/action definition rather than scattering per-action conditionals in the UI renderer. | Do not allow presentation metadata to weaken or override server-side consequence or admission checks. |
+
+### Architectural alignment checklist
+
+1. **Deployment contracts:** No public API route, install path, compose
+   contract, or migration changes; envelope approve/decline/reraise/status
+   endpoints remain untouched.
+2. **Canonical identity:** Coworker role attribution continues to come from
+   `formatAttentionByline` / `resolveAgentRoleLabel` and viewer-checked target
+   names from `loadTargetLabels`.
+3. **No parallel utilities:** Reuses `StatusBadge` + central `STATUS_INTENT`
+   (`apps/web/lib/ui-model/statusColors.ts`), `Surface`, `EnvelopeDecisionButtons`,
+   `coworker-envelope-decision.ts`, and `SOURCE_CATALOG.approvals`. Adds one
+   dependency-free leaf type module (`apps/web/lib/tool-approval-presentation.ts`)
+   so `mcp-tool-types.ts` stays acyclic.
+4. **Rulebook & single source of truth:** Approval presentation lives once on
+   the tool's `RegisteredToolDefinition` alongside `consequence` and
+   `inputSchema`. A registry invariant test guarantees no descriptor may claim
+   `"reversible"` when the tool declares `consequence: "irreversible"`,
+   `"outward"`, or `"authority"`, and every `allowedParams` key must exist on
+   the tool's `inputSchema`.
+
+### Presentation contract
+
+- **Header:** Plain-language action question (`h3`), semantic risk/reversibility
+  posture `StatusBadge` (`domain="approvalPosture"`, `variant="soft"`,
+  `textTone="body"`), deadline badge when present, and concise AI attribution
+  byline.
+- **Primary decision rows (`<dl>`):** Scannable labeled rows for **What**,
+  **Why now** (real sanitized reason from descriptor context or
+  `envelope.rationale`, never leaking internal IDs or raw tool names), and
+  **Impact** (concrete scope and reversibility). Unresolved or unverified
+  requests retain explicit material-fact rows and a visible hold recommendation.
+- **Controls:** Existing `EnvelopeDecisionButtons`, standing-ruling checkbox
+  (when server-eligible), on-behalf flow, and expired-unanswered `Ask again`
+  stay outside disclosure with unchanged endpoint bindings.
+- **Single flat `Technical evidence` drawer:** Removes the static boilerplate
+  `Why am I being asked?` disclosure and replaces the three stacked technical
+  blocks with one clean drawer containing:
+  1. Human-labeled non-empty request parameters, target (only when named),
+     findings (only when present), validity window, and single-request scope.
+  2. Compact audit reference (tool name, coworker ID, request ID, accountable
+     authorizer, and bound review/backlog identifiers only when attached — no
+     `"Not named in the proposal"` or `"Not attached"` filler).
+  3. Collapsed `Complete proposed content` (`<pre tabIndex={0}>`) with exact
+     literal JSON parameters.
+
+### UX fit review
+
+- **Decision:** `fits-with-guardrails` (recorded under `DI-CC33A7978BBB`).
+- **Owning area:** Workspace (`/workspace/inbox`).
+- **Primary persona:** Operator/owner deciding coworker requests on mobile or
+  desktop.
+- **Navigation layer touched:** Contextual card layout and disclosure only; no
+  route or nav change.
+- **Source truth:** `CoworkerActionEnvelope`, pending `ToolExecution.parameters`,
+  `RegisteredToolDefinition` (`consequence` + `approvalPresentation`), and
+  viewer-checked `loadTargetLabels`.
+- **AI boundary:** Authorize/Decline post directly to the existing envelope
+  state-machine endpoints; no prompt is sent and no model-generated prose
+  replaces exact parameters.
+- **Prototype & plan:** Inert HTML prototype at
+  [2026-11-28-decision-first-approval-card-prototype.html](2026-11-28-decision-first-approval-card-prototype.html)
+  and ordered implementation plan at
+  [2026-11-28-decision-first-approval-card.md](../plans/2026-11-28-decision-first-approval-card.md).

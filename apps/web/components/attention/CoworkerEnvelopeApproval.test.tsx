@@ -164,17 +164,16 @@ describe("CoworkerEnvelopeApproval", () => {
     render(<CoworkerEnvelopeApproval approval={approval()} />);
 
     expect(screen.queryByText(/^AI recommendation:/)).toBeNull();
-    expect(screen.getByText("Human authorization needed")).toBeTruthy();
+    expect(screen.queryByText("Why am I being asked?")).toBeNull();
     expect(
-      screen.getByText("record that receipt so implementation planning may continue."),
+      screen.getByText("Record that receipt so implementation planning may continue."),
     ).toBeTruthy();
-    const technical = screen.getByText("Technical details").closest("details")!;
+    const technical = screen.getByText("Technical evidence").closest("details")!;
     expect(technical.open).toBe(false);
     expect(technical.textContent).toContain("BI-MCP-EFF-0285909C");
     expect(technical.textContent).toContain("research");
     expect(technical.textContent).toContain("pass");
     expect(screen.getByText("None")).toBeTruthy();
-    expect(screen.getByText("Your coworker")).toBeTruthy();
     expect(screen.getByText("You")).toBeTruthy();
     expect(screen.getByText("AGT-WS-PORTFOLIO").closest("details")).toBe(technical);
     expect(screen.getByText("record_initiative_evidence").closest("details")).toBe(technical);
@@ -182,10 +181,8 @@ describe("CoworkerEnvelopeApproval", () => {
     expect(
       screen.queryByText("TR-MCP-Y210Nmg3bjg3MDBnYTAxbXhheDU2MXV2aQ-7A98D78A3948"),
     ).toBeNull();
-    expect(
-      screen.queryByText("89e875eb49be0604ee8fa4156d0903b6a0932e62"),
-    ).toBeNull();
-    expect(screen.queryByText("bddca7c5a0b109f9460f84b2b0d886f5d794cbb6")).toBeNull();
+    expect(screen.getByText("89e875eb49be0604ee8fa4156d0903b6a0932e62").closest("details")).toBe(technical);
+    expect(screen.getByText("bddca7c5a0b109f9460f84b2b0d886f5d794cbb6").closest("details")).toBe(technical);
     expect(screen.getByRole("button", { name: "Authorize" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Decline" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Approve action" })).toBeNull();
@@ -218,7 +215,7 @@ describe("CoworkerEnvelopeApproval", () => {
     render(<CoworkerEnvelopeApproval approval={approval({ reviewBinding: undefined })} />);
 
     expect(screen.queryByText("BI-MCP-EFF-0285909C")).toBeNull();
-    expect(screen.getByText("Human authorization needed")).toBeTruthy();
+    expect(screen.getByText("Audit record")).toBeTruthy();
   });
 
   it("approves through the envelope endpoint and never the proposal actions", async () => {
@@ -348,7 +345,7 @@ describe("CoworkerEnvelopeApproval", () => {
     expect(screen.queryByRole("button", { name: "Authorize" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Decline" })).toBeNull();
     // The record itself stays readable: hiding a control must not hide evidence.
-    expect(screen.getByText("Human authorization needed")).toBeTruthy();
+    expect(screen.getByText("Audit record")).toBeTruthy();
   });
 });
 
@@ -479,8 +476,9 @@ describe("OwnerDecisionCards routing", () => {
     const { container } = render(<OwnerDecisionCards entries={[entryFor()]} />);
 
     expect(screen.getByText("Record the research review?")).toBeTruthy();
+    expect(screen.getByText("Internal · Bounded")).toBeTruthy();
     expect(screen.getByText(/research passes with no findings/i)).toBeTruthy();
-    expect(screen.getByText("Human authorization needed")).toBeTruthy();
+    expect(screen.getByText("Audit record")).toBeTruthy();
     expect(visibleUtterances(defaultVisibleHtml(container.innerHTML)).join(" ")).not.toContain("record_initiative_evidence");
     fireEvent.click(screen.getByRole("button", { name: "Authorize" }));
 
@@ -494,7 +492,7 @@ describe("OwnerDecisionCards routing", () => {
     expect(rejectProposal).not.toHaveBeenCalled();
   });
 
-  it("keeps identity plumbing under technical detail", () => {
+  it("keeps identity plumbing under one non-duplicated technical evidence drawer", () => {
     const { container } = render(<OwnerDecisionCards entries={[entryFor()]} />);
 
     const before = visibleUtterances(defaultVisibleHtml(container.innerHTML)).join(" ");
@@ -506,7 +504,8 @@ describe("OwnerDecisionCards routing", () => {
     fireEvent.click(screen.getByText("Technical evidence"));
     expect(disclosure.open).toBe(true);
 
-    expect(screen.getAllByText("record_initiative_evidence")).toHaveLength(2);
+    expect(screen.getAllByText("record_initiative_evidence")).toHaveLength(1);
+    expect(screen.queryByText("Not attached")).toBeNull();
     expect(
       screen.getByText("89e875eb49be0604ee8fa4156d0903b6a0932e62"),
     ).toBeTruthy();
@@ -539,18 +538,16 @@ describe("CoworkerEnvelopeApproval — exact effect (BI-12E5DD91)", () => {
       }),
     });
 
-  it("shows action, destination, proposed content, consequence, reason, scope and status", () => {
+  it("shows destination, proposed content, reason, scope and expiry without filler", () => {
     render(<CoworkerEnvelopeApproval approval={evidence()} />);
-    expect(screen.getByText("Add an evidence entry to a Workroom timeline")).toBeTruthy();
     expect(screen.getAllByText("Workroom WC-04ED087E").length).toBeGreaterThan(0);
-    expect(screen.getByText("Proposed content")).toBeTruthy();
+    expect(screen.getByText("Request details")).toBeTruthy();
     expect(screen.getByText("Acceptance A.")).toBeTruthy();
-    expect(screen.getByText(/None declared/)).toBeTruthy();
-    const technical = screen.getByText("Technical details").closest("details")!;
+    const technical = screen.getByText("Technical evidence").closest("details")!;
     expect(technical.open).toBe(false);
     expect(technical.textContent).toMatch(/no recorded delegation/);
     expect(technical.textContent).toMatch(/does not review the content/);
-    expect(screen.getByText("Waiting for your decision")).toBeTruthy();
+    expect(screen.queryByText("Waiting for your decision")).toBeNull();
     expect(screen.getByText("Valid until")).toBeTruthy();
     expect(screen.queryByText("Findings")).toBeNull();
   });
@@ -638,9 +635,9 @@ describe("CoworkerEnvelopeApproval — room handover", () => {
     expect(screen.getByText("If you decline")).toBeTruthy();
   });
 
-  it("keeps the tool name, ids and handoff manifest in collapsed technical details", () => {
+  it("keeps the tool name, ids and handoff manifest in collapsed technical evidence", () => {
     render(<CoworkerEnvelopeApproval approval={handover()} />);
-    const details = screen.getByText("Technical details").closest("details")!;
+    const details = screen.getByText("Technical evidence").closest("details")!;
     expect(details.open).toBe(false);
     expect(details.textContent).toContain("reassign_workroom_executor");
     expect(details.textContent).toContain(handover().envelopeId);
@@ -789,9 +786,9 @@ describe("CoworkerEnvelopeApproval — room admission with a data access raise",
     expect(screen.getByText("If you authorize")).toBeTruthy();
   });
 
-  it("keeps the tool name and parameters in collapsed technical details", () => {
+  it("keeps the tool name and parameters in collapsed technical evidence", () => {
     render(<CoworkerEnvelopeApproval approval={admission()} />);
-    const details = screen.getByText("Technical details").closest("details")!;
+    const details = screen.getByText("Technical evidence").closest("details")!;
     expect(details.open).toBe(false);
     expect(details.textContent).toContain("invite_room_participant");
   });

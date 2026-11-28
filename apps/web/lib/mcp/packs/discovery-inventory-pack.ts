@@ -80,6 +80,17 @@ const definitions: RegisteredToolDefinition[] = [
     // reaches a third party → consult-gated (TAK §8.4.1).
     consequence: "outward",
     consequenceScope: "platform",
+    approvalPresentation: {
+      question: "Run estate discovery sweep?",
+      what: "Scans configured network and provider sources to refresh discovered inventory, topology, and evidence quality.",
+      impact: "Queries configured external discovery sources and updates your inventory catalog inside DPF.",
+      whyDefault: "Discovery sweeps contact configured external sources, so your coworker needs sign-off before running.",
+      declineDoes: "Declining skips this discovery pass; existing inventory stays unchanged.",
+      scopeLabel: "Inventory & estate",
+      reversibility: "outward",
+      allowedParams: [],
+      allowEmptyParams: true,
+    },
   },
   {
     name: "run_discovery_triage",
@@ -101,6 +112,33 @@ const definitions: RegisteredToolDefinition[] = [
     requiredCapability: "manage_provider_connections",
     executionMode: "immediate",
     sideEffect: true,
+    approvalPresentation: {
+      question: "Run inventory discovery triage?",
+      what: "Reviews unmatched inventory items and applies safe high-confidence catalog matches.",
+      impact: "Stays inside DPF and touches no external systems. Any catalog match can be reassigned or dismissed later.",
+      whyDefault: "Scheduled inventory triage check. Your coworker needs sign-off before updating catalog records.",
+      declineDoes: "Declining skips this triage pass; inventory records stay unchanged.",
+      scopeLabel: "Inventory catalog",
+      reversibility: "reversible",
+      allowedParams: ["trigger", "includeDecisions"],
+      allowEmptyParams: true,
+      paramLabels: {
+        trigger: {
+          label: "Trigger",
+          valueLabels: {
+            cadence: "Scheduled daily cadence",
+            volume: "New inventory volume threshold",
+          },
+        },
+        includeDecisions: {
+          label: "Detailed decisions",
+          valueLabels: {
+            false: "Compact summary only",
+            true: "Include full per-item decisions",
+          },
+        },
+      },
+    },
   },
   {
     name: "run_hive_scout_ingest",
@@ -117,6 +155,17 @@ const definitions: RegisteredToolDefinition[] = [
     // reaches a third party → consult-gated (TAK §8.4.1).
     consequence: "outward",
     consequenceScope: "platform",
+    approvalPresentation: {
+      question: "Run external catalog scouting pass?",
+      what: "Checks external catalogs against current coworker and skill coverage and drafts backlog suggestions for uncovered gaps.",
+      impact: "Contacts external catalog sources and may add new suggested backlog items. Suggestions can be dismissed later.",
+      whyDefault: "Scouting reaches external catalogs and creates backlog suggestions, so your coworker needs sign-off.",
+      declineDoes: "Declining skips this scouting pass; no external requests or backlog items are created.",
+      scopeLabel: "Catalog & backlog",
+      reversibility: "outward",
+      allowedParams: [],
+      allowEmptyParams: true,
+    },
   },
   {
     name: "attribute_entity_to_product",
@@ -133,6 +182,21 @@ const definitions: RegisteredToolDefinition[] = [
     workroomAccess: "outside-workroom",
     requiredCapability: "manage_provider_connections",
     sideEffect: true,
+    approvalPresentation: {
+      question: "Link inventory item to a product category?",
+      what: "Attributes a discovered inventory item to the named portfolio taxonomy category so it counts toward your managed estate.",
+      impact: "Internal catalog update only. You can reassign or dismiss the attribution later.",
+      whyDefault: "Your coworker needs sign-off before updating inventory product attribution.",
+      declineDoes: "Declining leaves the inventory item unattributed.",
+      scopeLabel: "Inventory catalog",
+      reversibility: "reversible",
+      allowedParams: ["entityId", "taxonomyNodeId", "taxonomyNodeSlug"],
+      paramLabels: {
+        entityId: { label: "Inventory item" },
+        taxonomyNodeId: { label: "Taxonomy node" },
+        taxonomyNodeSlug: { label: "Product category" },
+      },
+    },
   },
   {
     name: "dismiss_entity",
@@ -149,6 +213,19 @@ const definitions: RegisteredToolDefinition[] = [
     sideEffect: true,
     // destroys state → consult-gated (TAK §8.4.1).
     consequence: "irreversible",
+    approvalPresentation: {
+      question: "Dismiss this discovered inventory item?",
+      what: "Marks the discovered inventory item as dismissed and removes it from the attribution review queue.",
+      impact: "Cannot be undone automatically once dismissed. Review the item ID in Technical evidence if unsure.",
+      whyDefault: "Dismissing removes an item from review, so your coworker needs sign-off first.",
+      declineDoes: "Declining keeps the item in your inventory review queue.",
+      scopeLabel: "Inventory catalog",
+      reversibility: "irreversible",
+      allowedParams: ["entityId"],
+      paramLabels: {
+        entityId: { label: "Inventory item" },
+      },
+    },
   },
   {
     name: "resolve_portfolio_quality_issue",
@@ -164,6 +241,26 @@ const definitions: RegisteredToolDefinition[] = [
     workroomAccess: "outside-workroom",
     requiredCapability: "manage_provider_connections",
     sideEffect: true,
+    approvalPresentation: {
+      question: "Close this portfolio quality issue?",
+      what: "Closes the flagged portfolio quality issue with the proposed resolution status.",
+      impact: "Internal portfolio record update only. The issue remains in history and future discovery sweeps can flag new issues.",
+      whyDefault: "Your coworker needs sign-off before closing a portfolio quality issue.",
+      declineDoes: "Declining leaves the quality issue open.",
+      scopeLabel: "Portfolio quality",
+      reversibility: "bounded",
+      allowedParams: ["issueId", "resolution"],
+      paramLabels: {
+        issueId: { label: "Quality issue" },
+        resolution: {
+          label: "Resolution",
+          valueLabels: {
+            resolved: "Mark as resolved",
+            dismissed: "Dismiss as not applicable",
+          },
+        },
+      },
+    },
   },
   {
     name: "enrich_digital_product",
@@ -182,6 +279,19 @@ const definitions: RegisteredToolDefinition[] = [
     // reaches a third party → consult-gated (TAK §8.4.1).
     consequence: "outward",
     consequenceScope: "platform",
+    approvalPresentation: {
+      question: "Refresh product lifecycle enrichment?",
+      what: "Looks up software identity and end-of-life support dates for one digital product and updates its enrichment status.",
+      impact: "Queries external lifecycle databases (such as endoflife.date) and updates the product's support metadata.",
+      whyDefault: "Enrichment contacts external lifecycle sources, so your coworker needs sign-off before running.",
+      declineDoes: "Declining leaves the product's current enrichment status unchanged.",
+      scopeLabel: "Digital products",
+      reversibility: "outward",
+      allowedParams: ["digitalProductId"],
+      paramLabels: {
+        digitalProductId: { label: "Digital product" },
+      },
+    },
   },
   {
     name: "request_re_enrichment",
@@ -200,6 +310,20 @@ const definitions: RegisteredToolDefinition[] = [
     // reaches a third party → consult-gated (TAK §8.4.1).
     consequence: "outward",
     consequenceScope: "platform",
+    approvalPresentation: {
+      question: "Queue item for catalog re-enrichment?",
+      what: "Flags the selected product or inventory item so the next catalog sweep re-resolves its identity and lifecycle dates.",
+      impact: "Triggers external catalog lookup on the next sweep. Human-confirmed identities are never overwritten.",
+      whyDefault: "Re-enrichment queues external catalog lookups, so your coworker needs sign-off first.",
+      declineDoes: "Declining leaves current catalog identity and enrichment status unchanged.",
+      scopeLabel: "Inventory & products",
+      reversibility: "outward",
+      allowedParams: ["digitalProductId", "inventoryEntityId"],
+      paramLabels: {
+        digitalProductId: { label: "Digital product" },
+        inventoryEntityId: { label: "Inventory item" },
+      },
+    },
   },
   {
     name: "list_discovery_connections",
