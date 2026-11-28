@@ -16,7 +16,7 @@
 #
 # Base pinned by digest (debian:trixie-slim, multi-arch index). Bump the digest
 # deliberately; the smoke test and size budget in publish-image.yml gate it.
-FROM debian:trixie-slim@sha256:a72b4433de1cf7d6bae0c4cee74d0547f58601a643b3375f070c51600d63b6b2
+FROM debian:trixie-slim@sha256:8aa5a7bf5a1955bddbe7d74fcdd0b91ab30e74362a8b73af672b0481b35b44a0
 
 ARG DPF_VERSION=unknown
 LABEL org.opencontainers.image.title="DPF Doctools"
